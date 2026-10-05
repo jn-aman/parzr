@@ -149,8 +149,9 @@ struct SelectionSnapshot {
     let richText: NSAttributedString?
     /// True when the text came from Cmd+C because the editor exposes no AX text (canvas editors). Never patchable.
     let copied: Bool
+    /// Whether the editor accepts a minimal range patch, asked once at capture: a live AX query on every card render could time out under load and grey out Apply.
+    let canPatch: Bool
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
-    var canPatch: Bool { fullText != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element)) != nil }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
         guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
@@ -180,7 +181,8 @@ struct SelectionSnapshot {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, selection.length > 0 else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536, text.utf16.count == selection.length else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
-                                 bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: AX.attributed(element, selection), copied: false)
+                                 bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: AX.attributed(element, selection), copied: false,
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element)) != nil)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -194,7 +196,7 @@ struct SelectionSnapshot {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536 else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
         let range = NSRange(location: 0, length: text.utf16.count)
-        return SelectionSnapshot(app: app, element: element, selection: range, expectedSelection: range, text: text, fullText: nil, bounds: nil, richText: nil, copied: true)
+        return SelectionSnapshot(app: app, element: element, selection: range, expectedSelection: range, text: text, fullText: nil, bounds: nil, richText: nil, copied: true, canPatch: false)
     }
     /// Two copies of the same range may differ only by trailing newlines.
     nonisolated static func sameCopiedText(_ a: String, _ b: String) -> Bool {

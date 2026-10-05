@@ -292,6 +292,9 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
           let bounds = AX.bounds(element, NSRange(location: prefix.utf16.count + edit.start_utf16, length: edit.range.length)) else { throw ParzrError.message("The pasted word has no visible range.") }
     try snapshot.validate()
     let point = CGPoint(x: bounds.midX, y: (NSScreen.screens.first?.frame.maxY ?? 0) - bounds.midY)
+    // A real pointer moves onto the word before it clicks; the mark overlay takes clicks only while the pointer is on an underline.
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
+    try await Task.sleep(for: .milliseconds(60))
     let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
     let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
     down?.post(tap: .cghidEventTap)
