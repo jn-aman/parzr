@@ -15,6 +15,8 @@
 #import <Foundation/Foundation.h>
 #import <NaturalLanguage/NaturalLanguage.h>
 #import <AppKit/AppKit.h>
+#import <CoreML/CoreML.h>
+#include <dlfcn.h>
 
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -318,4 +320,105 @@ extern "C" double parzr_model_name_log_odds(const char *file, const char *text, 
         if (!(yes > 0) || !(no > 0)) return nan;
         return std::log(yes) - std::log(no);
     } catch (...) { return nan; }
+}
+
+// GECToR (roberta-base, 5001 edit labels) on the Neural Engine: one static 80 token Core ML model, resident once prepared, never touching Qwen
+// state. Own mutex. The first load compiles for the ANE (a few seconds, cached by the OS); later loads take well under a second.
+namespace {
+constexpr int kGecLength = 80, kGecLabels = 5001, kGecDetect = 2, kGecPad = 1;
+struct Gec {
+    std::mutex mutex;
+    MLModel *model = nil;
+    std::string directory;
+    dispatch_source_t pressure = nullptr;
+};
+Gec &gec() { static auto *value = new Gec; return *value; }
+void gecRelease(Gec &g) {
+    g.model = nil; g.directory.clear();
+    malloc_zone_pressure_relief(nullptr, 0);
+}
+// PARZR_GEC_DIR, else `gector` beside the Qwen model file (PARZR_MODEL_PATH), else beside this library (dist/model) or in the app's Resources/Model.
+std::string gecDirectory(const char *given) {
+    if (given && *given) return given;
+    if (const char *env = std::getenv("PARZR_GEC_DIR"); env && *env) return env;
+    NSFileManager *files = NSFileManager.defaultManager;
+    NSMutableArray<NSString *> *candidates = [NSMutableArray array];
+    if (const char *model = std::getenv("PARZR_MODEL_PATH"); model && *model) [candidates addObject:[[@(model) stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"gector"]];
+    Dl_info info;
+    if (dladdr(reinterpret_cast<const void *>(&gecDirectory), &info) && info.dli_fname) {
+        NSString *library = [@(info.dli_fname) stringByDeletingLastPathComponent];
+        [candidates addObject:[library stringByAppendingPathComponent:@"gector"]];
+        [candidates addObject:[library stringByAppendingPathComponent:@"../Resources/Model/gector"]];
+    }
+    for (NSString *path in candidates) if ([files fileExistsAtPath:[path stringByAppendingPathComponent:@"gector.mlmodelc"]]) return path.UTF8String;
+    return candidates.count ? candidates.firstObject.UTF8String : "";
+}
+int32_t gecPrepare(Gec &g, const char *given) {
+    const std::string directory = gecDirectory(given);
+    if (g.model && g.directory == directory) return 0;
+    if (directory.empty()) return 1;
+    @autoreleasepool {
+        NSURL *url = [NSURL fileURLWithPath:[@(directory.c_str()) stringByAppendingPathComponent:@"gector.mlmodelc"] isDirectory:YES];
+        if (![url checkResourceIsReachableAndReturnError:nil]) return 2;
+        auto *configuration = [MLModelConfiguration new];
+        configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;  // .all picks the GPU, which is slow here
+        NSError *error = nil;
+        MLModel *model = [MLModel modelWithContentsOfURL:url configuration:configuration error:&error];
+        if (!model) return 3;
+        g.model = model; g.directory = directory;
+        if (!g.pressure) {
+            g.pressure = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+            dispatch_source_set_event_handler(g.pressure, ^{ auto &now = gec(); std::lock_guard lock(now.mutex); gecRelease(now); });
+            dispatch_resume(g.pressure);
+        }
+    }
+    return 0;
+}
+}
+extern "C" int32_t parzr_gec_prepare(const char *directory) {
+    auto &g = gec();
+    std::lock_guard lock(g.mutex);
+    try { return gecPrepare(g, directory); } catch (...) { return 4; }
+}
+extern "C" void parzr_gec_release(void) {
+    auto &g = gec();
+    std::lock_guard lock(g.mutex);
+    gecRelease(g);
+}
+// `ids` (count 1..80, <s> and </s> included by the caller) are padded to 80 with the pad id; the first `count` rows of the logits are written row-major as fp32.
+extern "C" int32_t parzr_gec_forward(const int32_t *ids, int32_t count, float *labels, float *detect) {
+    if (!ids || !labels || !detect || count < 1 || count > kGecLength) return 1;
+    auto &g = gec();
+    std::lock_guard lock(g.mutex);
+    try {
+        if (!g.model) { if (int32_t status = gecPrepare(g, nullptr)) return status; }
+        @autoreleasepool {
+            NSError *error = nil;
+            auto *input = [[MLMultiArray alloc] initWithShape:@[@1, @(kGecLength)] dataType:MLMultiArrayDataTypeInt32 error:&error];
+            if (!input) return 5;
+            auto *slots = static_cast<int32_t *>(input.dataPointer);
+            for (int i = 0; i < kGecLength; i++) slots[i] = i < count ? ids[i] : kGecPad;
+            auto *features = [[MLDictionaryFeatureProvider alloc] initWithDictionary:@{@"input_ids": input} error:&error];
+            id<MLFeatureProvider> result = features ? [g.model predictionFromFeatures:features error:&error] : nil;
+            if (!result) return 6;
+            // Outputs are fp16 (or fp32) and strided: read them through the strides, never as dense.
+            auto copyRows = [&](NSString *name, int width, float *destination) {
+                MLMultiArray *array = [result featureValueForName:name].multiArrayValue;
+                if (!array || array.shape.count != 3 || array.shape[2].intValue != width || array.shape[1].intValue < count) return false;
+                const long row = array.strides[1].longValue, column = array.strides[2].longValue;
+                const bool half = array.dataType == MLMultiArrayDataTypeFloat16;
+                if (!half && array.dataType != MLMultiArrayDataTypeFloat32) return false;
+                [array getBytesWithHandler:^(const void *bytes, NSInteger) {
+                    for (int t = 0; t < count; t++)
+                        for (int c = 0; c < width; c++) {
+                            const long at = t * row + c * column;
+                            destination[size_t(t) * width + c] = half ? float(static_cast<const _Float16 *>(bytes)[at]) : static_cast<const float *>(bytes)[at];
+                        }
+                }];
+                return true;
+            };
+            if (!copyRows(@"logits_labels", kGecLabels, labels) || !copyRows(@"logits_d", kGecDetect, detect)) return 7;
+        }
+    } catch (...) { return 4; }
+    return 0;
 }
