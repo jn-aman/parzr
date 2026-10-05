@@ -17,6 +17,21 @@ struct LRUCache<Value> {
     }
 }
 
+/// Results of a text scan remembered by the hash of the text (the text itself is never kept), shared by detached scans.
+final class ScanMemo: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cache: LRUCache<[String]>
+    init(capacity: Int) { cache = LRUCache(capacity: capacity) }
+    func value(for text: Substring, make: () -> [String]) -> [String] {
+        let key = String(text.hashValue)
+        lock.lock(); let hit = cache.value(for: key); lock.unlock()
+        if let hit { return hit }
+        let made = make()
+        lock.lock(); cache.set(made, for: key); lock.unlock()
+        return made
+    }
+}
+
 /// What the system spell checker says; injectable so the gate logic is testable without AppKit state.
 struct LexiconProbe: Sendable {
     /// Misspelled words of `text`, in order, as written.
@@ -79,7 +94,7 @@ struct NameGate {
 /// NSSpellChecker is not documented as thread-safe, so every lookup runs on this one serial queue, off the main actor (a 2 KB paragraph costs a few ms cold, near zero cached).
 final class SystemLexicon: @unchecked Sendable {
     static let shared = SystemLexicon()
-    private let queue = DispatchQueue(label: "app.parzr.lexicon", qos: .utility)
+    private let queue = DispatchQueue(label: "app.parzr.lexicon", qos: .userInitiated)
     private var gate = NameGate()
     func names(in text: String) async -> [String] {
         await withCheckedContinuation { continuation in queue.async { continuation.resume(returning: self.gate.names(in: text)) } }

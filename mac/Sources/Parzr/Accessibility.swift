@@ -40,15 +40,29 @@ enum AX {
         AXUIElementSetMessagingTimeout(element, 0.25)
         return element
     }
+    /// What one field's ancestry told us stays true for this long, or until focus moves; every capture, validation and mark check asks again.
+    private static let verdictLifetime: TimeInterval = 1.5
+    private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
+    private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
+    /// Focus moved: forget what was learned about the previous field.
+    static func forgetFocus() { verdicts = []; resolved = nil }
+    /// Several attributes in one round trip to the app; any that fail come back nil.
+    static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
+        var values: CFArray?
+        guard AXUIElementCopyMultipleAttributeValues(element, attributes as CFArray, [], &values) == .success, let array = values as? [AnyObject], array.count == attributes.count else { return attributes.map { get(element, $0) } }
+        return array.map { value in CFGetTypeID(value) == AXValueGetTypeID() && AXValueGetType(value as! AXValue) == .axError ? nil : value }
+    }
     static func focusedText(_ app: NSRunningApplication) -> AXUIElement? {
         guard let focused = focused(app), !isSecure(focused) else { return nil }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let known = resolved, now - known.time < verdictLifetime, CFEqual(known.raw, focused) { return known.text }
         var cursor: AXUIElement? = focused
         // Chat/rich-text hosts often focus a text leaf inside their editable field.
         // Resolve only the focus ancestry, never unrelated text elsewhere in the app.
         for _ in 0..<8 {
             guard let current = cursor, !isSecure(current) else { return nil }
             if selection(current) != nil,
-               text(current) != nil || string(current, kAXSelectedTextAttribute) != nil { return current }
+               text(current) != nil || string(current, kAXSelectedTextAttribute) != nil { resolved = (focused, current, now); return current }
             let role = string(current, kAXRoleAttribute) ?? ""
             if [kAXWindowRole, kAXApplicationRole, "AXWebArea"].contains(role) { break }
             guard let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
@@ -57,16 +71,21 @@ enum AX {
         return nil
     }
     static func isSecure(_ element: AXUIElement) -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let known = verdicts.first(where: { now - $0.time < verdictLifetime && CFEqual($0.element, element) }) { return known.secure }
         // Inspect ancestors because custom secure editors may put focus on a descendant.
-        var cursor: AXUIElement? = element
+        var cursor: AXUIElement? = element, walked: [AXUIElement] = [], secure = false
         for _ in 0..<12 {
             guard let current = cursor else { break }
-            let role = string(current, kAXRoleAttribute) ?? ""
-            let subrole = string(current, kAXSubroleAttribute) ?? ""
-            if subrole == kAXSecureTextFieldSubrole || role.lowercased().contains("secure") || subrole.lowercased().contains("password") { return true }
-            if let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() { cursor = (parent as! AXUIElement) } else { break }
+            walked.append(current)
+            let values = multiple(current, [kAXRoleAttribute, kAXSubroleAttribute, kAXParentAttribute])
+            let role = values[0] as? String ?? "", subrole = values[1] as? String ?? ""
+            if subrole == kAXSecureTextFieldSubrole || role.lowercased().contains("secure") || subrole.lowercased().contains("password") { secure = true; break }
+            if let parent = values[2], CFGetTypeID(parent) == AXUIElementGetTypeID() { cursor = (parent as! AXUIElement) } else { break }
         }
-        return false
+        // One walk answers for every level it passed: all clear below no secure ancestor, all secure below a secure one.
+        verdicts = Array((verdicts.filter { now - $0.time < verdictLifetime } + walked.map { ($0, secure, now) }).suffix(32))
+        return secure
     }
     static func bounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
         var cf = CFRange(location: range.location, length: range.length)

@@ -56,7 +56,7 @@ final class PassiveObserver {
     }
     func attach() {
         guard !stopped else { return }
-        work?.cancel(); pending = false; focusRetry?.cancel(); firefoxKeystrokes = 0; onDismiss?()
+        work?.cancel(); pending = false; focusRetry?.cancel(); firefoxKeystrokes = 0; AX.forgetFocus(); onDismiss?()
         if let observer {
             for (element, notification) in observed { AXObserverRemoveNotification(observer, element, notification as CFString) }
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
@@ -73,6 +73,7 @@ final class PassiveObserver {
             MainActor.assumeIsolated {
                 let owner = Unmanaged<PassiveObserver>.fromOpaque(context).takeUnretainedValue()
                 if notification as String == kAXFocusedUIElementChangedNotification {
+                    AX.forgetFocus()
                     if let app = NSWorkspace.shared.frontmostApplication { AX.prepare(app, force: true) }
                     owner.attachFocused()
                 }

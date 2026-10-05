@@ -18,6 +18,8 @@ enum CorrectionPlacement {
 final class InlineSuggestions {
     private let overlay = MarkOverlay()
     private var correction: FloatingPanel?
+    /// The card's SwiftUI host lives as long as the card: a click swaps its root view instead of building a new one.
+    private var host: NSHostingView<RewritePanel>?
     private var scrollMonitor: Any?
     private var keyMonitor: Any?
     private let model = AppModel()
@@ -46,6 +48,7 @@ final class InlineSuggestions {
             self.model.selectedEdits.subtract(self.ignored)
         }
         installMonitor()
+        Task { @MainActor [weak self] in try? await Task.sleep(for: .milliseconds(1500)); self?.prewarm() }
         // A global monitor made before Accessibility was granted never delivers; make a new one on grant.
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitor() } }
@@ -88,16 +91,13 @@ final class InlineSuggestions {
         return abs(now.minX - p.rect.minX) < 1.5 && abs(now.minY - p.rect.minY) < 1.5
     }
     private func closeCard() {
-        correction?.orderOut(nil); correction?.contentView = nil
+        correction?.orderOut(nil)
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         model.clearSession()
     }
-    func dismiss() {
-        overlay.clear(); reset()
-        relayout?.cancel(); relayout = nil
-    }
+    func dismiss() { overlay.clear(); reset() }
     /// Forgets the shown result and the card but leaves the marks on screen, so the next show can keep the unchanged ones.
-    private func reset() { closeCard(); shown = nil; overflow = 0 }
+    private func reset() { closeCard(); shown = nil; overflow = 0; relayout?.cancel(); relayout = nil }
     func dismissIfStale() {
         // Marks and an open card persist across clicks and caret moves; they go only
         // when the text, focus, position or the passive/app settings no longer match.
@@ -110,6 +110,7 @@ final class InlineSuggestions {
     }
     func stop() {
         stopped = true; relayout?.cancel(); dismiss()
+        correction?.contentView = nil; host = nil; correction = nil; overlay.close()
         if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor); self.scrollMonitor = nil }
         subscriptions.removeAll(); ignored = []; revision = nil
     }
@@ -163,21 +164,45 @@ final class InlineSuggestions {
         shown = (snapshot, result, probe)
         return overlay.hasMarks
     }
+    private func card() -> FloatingPanel {
+        if let correction { return correction }
+        let panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: RewritePanel.size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false; panel.level = .floating; panel.hasShadow = true; panel.isOpaque = false; panel.backgroundColor = .clear
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.hidesOnDeactivate = false
+        correction = panel
+        return panel
+    }
+    private func setHost(_ root: RewritePanel, in panel: FloatingPanel) {
+        if let host { host.rootView = root; return }
+        let host = NSHostingView(rootView: root)
+        // The card has a fixed size, so SwiftUI need not also measure its minimum and maximum size on every update.
+        host.sizingOptions = []
+        host.wantsLayer = true; host.layer?.cornerRadius = 10; host.layer?.masksToBounds = true
+        panel.contentView = host; self.host = host
+    }
+    /// Renders the card once, invisible and off screen, so the first click does not pay for SwiftUI's first layout.
+    func prewarm() {
+        let sampleJSON = #"{"version":"","text":"This is a sample.","edits":[{"start_utf16":0,"end_utf16":4,"replacement":"This","original":"Ths","category":"Spelling","rule_id":"warm","explanation":"Sample.","confidence":1}],"source_map":[],"elapsed_ms":0,"protected_count":0}"#
+        guard !stopped, correction == nil, shown == nil, let sample = try? JSONDecoder().decode(RewriteResult.self, from: Data(sampleJSON.utf8)), let edit = sample.edits.first else { return }
+        let panel = card()
+        model.source = sample.text; model.result = sample; model.selectedEdits = [edit.id]; model.focusedEditID = edit.id
+        setHost(RewritePanel(model: model, ignore: nil, showsModes: false), in: panel)
+        panel.alphaValue = 0; panel.ignoresMouseEvents = true; panel.setFrameOrigin(CGPoint(x: -20_000, y: -20_000))
+        panel.orderFrontRegardless(); host?.layoutSubtreeIfNeeded(); host?.displayIfNeeded(); CATransaction.flush()
+        Task { @MainActor [weak self] in
+            self?.correction?.orderOut(nil); self?.correction?.alphaValue = 1; self?.correction?.ignoresMouseEvents = false
+            if self?.shown == nil { self?.model.clearSession() }
+        }
+    }
     @discardableResult
     func present(snapshot: SelectionSnapshot, result: RewriteResult, focused: WritingEdit? = nil, anchor: CGRect, activate: Bool = true) -> Bool {
         do { try snapshot.validate() } catch { dismiss(); return false }
         prepareRevision(snapshot)
         model.select(snapshot, result: result, focused: focused)
         model.selectedEdits.subtract(ignored)
-        if correction == nil {
-            let panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: RewritePanel.size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            panel.isReleasedWhenClosed = false; panel.level = .floating; panel.hasShadow = true; panel.isOpaque = false; panel.backgroundColor = .clear
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.hidesOnDeactivate = false
-            correction = panel
-        }
-        let host = NSHostingView(rootView: RewritePanel(model: model, ignore: { [weak self] edit in self?.ignore(edit) }, showsModes: snapshot.expectedSelection.length > 0))
-        host.wantsLayer = true; host.layer?.cornerRadius = 10; host.layer?.masksToBounds = true
-        correction?.contentView = host
+        let panel = card()
+        let root = RewritePanel(model: model, ignore: { [weak self] edit in self?.ignore(edit) }, showsModes: snapshot.expectedSelection.length > 0)
+        setHost(root, in: panel)
         let wasVisible = correction?.isVisible == true
         guard let visible = (NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main)?.visibleFrame else { dismiss(); return false }
         let final = CorrectionPlacement.origin(anchor: anchor, size: RewritePanel.size, visible: visible)

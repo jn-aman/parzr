@@ -171,24 +171,32 @@ enum KnownNames {
         return merge(tokens, phrase)
     }
     /// Capitalized people, places and organizations already in the text (first 64 KB, at most 200), so a lowercase repeat is treated as the same name.
+    /// Scanned per sentence and per line and remembered by hash, so typing rescans only what changed.
     nonisolated static func documentNames(in text: String) -> [String] {
+        var found: [String] = [], mid: [String] = []
+        for line in String(text.prefix(65_536)).split(whereSeparator: \.isNewline) where found.count < 400 || mid.count < 400 {
+            // Per sentence: one lowercase sentence start ("aman agreed") makes NLTagger tag a whole longer string as nothing.
+            for sentence in line.split(whereSeparator: { ".!?".contains($0) }) where found.count < 400 { found += scans.sentences.value(for: sentence) { taggedNames(in: String(sentence)) } }
+            mid += scans.lines.value(for: line) { capitalizedMidSentence(in: String(line)) }
+        }
+        return Array(merge(found, mid).prefix(200))
+    }
+    private static let scans = (sentences: ScanMemo(capacity: 4096), lines: ScanMemo(capacity: 2048))
+    /// NLTagger names of one sentence.
+    nonisolated private static func taggedNames(in sentence: String) -> [String] {
         let tagger = NLTagger(tagSchemes: [.nameType])
         var found: [String] = []
-        // Per sentence: one lowercase sentence start ("aman agreed") makes NLTagger tag a whole longer string as nothing.
-        for sentence in String(text.prefix(65_536)).split(whereSeparator: { ".!?\n".contains($0) }) where found.count < 400 {
-            let sentence = String(sentence)
-            tagger.string = sentence
-            // Without a language short texts get no tags at all.
-            tagger.setLanguage(.english, range: sentence.startIndex..<sentence.endIndex)
-            tagger.enumerateTags(in: sentence.startIndex..<sentence.endIndex, unit: .word, scheme: .nameType, options: [.omitWhitespace, .omitPunctuation, .omitOther]) { tag, range in
-                guard let tag, [.personalName, .placeName, .organizationName].contains(tag) else { return true }
-                var word = String(sentence[range])
-                for suffix in ["'s", "\u{2019}s"] where word.hasSuffix(suffix) { word.removeLast(suffix.count) }
-                if word.count >= 2, word.contains(where: \.isUppercase) { found.append(word) }
-                return true
-            }
+        tagger.string = sentence
+        // Without a language short texts get no tags at all.
+        tagger.setLanguage(.english, range: sentence.startIndex..<sentence.endIndex)
+        tagger.enumerateTags(in: sentence.startIndex..<sentence.endIndex, unit: .word, scheme: .nameType, options: [.omitWhitespace, .omitPunctuation, .omitOther]) { tag, range in
+            guard let tag, [.personalName, .placeName, .organizationName].contains(tag) else { return true }
+            var word = String(sentence[range])
+            for suffix in ["'s", "\u{2019}s"] where word.hasSuffix(suffix) { word.removeLast(suffix.count) }
+            if word.count >= 2, word.contains(where: \.isUppercase) { found.append(word) }
+            return true
         }
-        return Array(merge(found, capitalizedMidSentence(in: text)).prefix(200))
+        return found
     }
     /// Words capitalized in the middle of a sentence ("Hi Aman,"), which NLTagger can miss. Sentence starts, "I" and ALL CAPS words are skipped.
     nonisolated static func capitalizedMidSentence(in text: String) -> [String] {
@@ -219,11 +227,12 @@ enum KnownNames {
         let prefs = Preferences.shared
         return merge(user, prefs.learnedNames, prefs.useContactNames ? prefs.contactNames : [], limit: maxNames)
     }
-    /// Persistent names plus names found in `text` and lowercase names the system lexicon knows in `request` (both scans run off the main actor). Session names rank above Contacts when the cap bites.
+    /// Persistent names plus names found in `text` and lowercase names the system lexicon knows in `request` (both scans run off the main actor, side by side). Session names rank above Contacts when the cap bites.
     @MainActor static func names(for text: String, request: String? = nil) async -> [String] {
         let prefs = Preferences.shared
-        let document = await Task.detached(priority: .utility) { documentNames(in: text) }.value
-        let lexicon = await SystemLexicon.shared.names(in: request ?? text)
+        async let scan = Task.detached(priority: .userInitiated) { documentNames(in: text) }.value
+        async let known = SystemLexicon.shared.names(in: request ?? text)
+        let (document, lexicon) = await (scan, known)
         return merge(user, prefs.learnedNames, document, lexicon, prefs.useContactNames ? prefs.contactNames : [], limit: maxNames)
     }
     @MainActor static func dictionary() -> [String] { merge(Preferences.shared.dictionary) }

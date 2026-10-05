@@ -195,6 +195,8 @@ final class MarkOverlay {
         guard !items.isEmpty || !monitors.isEmpty else { return }
         apply([])
     }
+    /// Closes the windows for good (the controller is stopping).
+    func close() { clear(); for window in windows.values { window.close() }; windows = [:] }
     /// Drops the marks and highlights of the given edits (Ignore), keeping the rest.
     func remove(owners: Set<String>) { apply(items.filter { !owners.contains($0.owner) }) }
     private func monitorPointer(_ on: Bool) {

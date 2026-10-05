@@ -58,4 +58,22 @@ final class OverlayPacerTests: XCTestCase {
         for ended in [" ", "\r", "\n", "\t", ".", ",", "!", "?", ";", ")", "\u{201D}"] { XCTAssertTrue(CheckPacer.endsWord(ended), ended) }
         for inside in ["a", "Z", "7", "é", "", nil] { XCTAssertFalse(CheckPacer.endsWord(inside), inside ?? "nil") }
     }
+
+    func testScanMemoRunsEachDistinctTextOnce() {
+        let memo = ScanMemo(capacity: 8)
+        var runs = 0
+        XCTAssertEqual(memo.value(for: Substring("alpha beta")) { runs += 1; return ["x"] }, ["x"])
+        XCTAssertEqual(memo.value(for: Substring("alpha beta")) { runs += 1; return ["y"] }, ["x"], "the second ask is answered from memory")
+        XCTAssertEqual(runs, 1)
+        _ = memo.value(for: Substring("gamma")) { runs += 1; return [] }
+        XCTAssertEqual(runs, 2)
+    }
+    func testDocumentNamesAreStableAcrossRescansAndFollowEdits() {
+        let text = "Hi Aman, welcome.\nYesterday Priya Nair met Satya Nadella in London.\nNothing else."
+        let first = KnownNames.documentNames(in: text)
+        XCTAssertEqual(KnownNames.documentNames(in: text), first, "a rescan answered from memory is the same")
+        let edited = KnownNames.documentNames(in: text.replacingOccurrences(of: "Nothing else.", with: "Ask Maria."))
+        XCTAssertTrue(edited.contains("Maria"), "a changed line is scanned afresh")
+        XCTAssertTrue(first.allSatisfy { edited.contains($0) }, "the unchanged lines keep their names")
+    }
 }
