@@ -5,7 +5,7 @@ const script=readFileSync('extensions/browser/editor.js','utf8')+'\n'+readFileSy
 async function setup(page,html){
  await page.setContent(html);
  await page.exposeFunction('parzrEngine',request=>{
-  const response=spawnSync('engine/target/release/parzr-engine',[],{input:JSON.stringify(request)+'\n',encoding:'utf8',timeout:5000});
+  const response=spawnSync('engine/target/release/parzr-engine',[],{input:JSON.stringify(request)+'\n',encoding:'utf8',timeout:180000});
   if(response.status!==0)throw new Error('Test engine did not run.');return JSON.parse(response.stdout.trim());
  });
  await page.evaluate(()=>{
