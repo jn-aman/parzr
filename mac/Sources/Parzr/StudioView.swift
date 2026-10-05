@@ -301,9 +301,9 @@ struct StudioView: View {
                     }.padding(20)
                 }
                 group("HELP & SUPPORT") {
-                    settingRow("Report an issue", detail: "Tell us what happened. You choose what to include.") { NativeButton(title: "Report an issue", symbol: "envelope", action: Support.reportIssue).fixedSize() }
+                    settingRow("Report an issue", detail: "Tell us what happened. You choose what to include.") { NativeButton(title: "Report an issue", symbol: "exclamationmark.bubble", action: Support.reportIssue).fixedSize() }
                     divider
-                    settingRow("Contact", detail: Support.email) { NativeButton(title: "Email support", kind: .utility, action: { if let url = URL(string: "mailto:\(Support.email)") { NSWorkspace.shared.open(url) } }).fixedSize() }
+                    settingRow("Help and discussion", detail: "github.com/jn-aman/parzr/issues") { NativeButton(title: "Open issues", kind: .utility, action: { NSWorkspace.shared.open(Support.issues) }).fixedSize() }
                     divider
                     settingRow("Open-source licenses", detail: "Credits for the libraries and local model bundled with Parzr.") { NativeButton(title: "View notices", action: { if let url = Bundle.main.resourceURL?.appendingPathComponent("THIRD_PARTY_NOTICES") { NSWorkspace.shared.open(url) } }).fixedSize() }
                 }

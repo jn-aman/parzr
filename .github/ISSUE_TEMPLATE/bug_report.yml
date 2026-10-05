@@ -1,0 +1,45 @@
+name: Bug report
+description: Something went wrong in Parzr.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping. Please do not paste private writing; a short synthetic example is enough. For security problems, use the Security tab instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open TextEdit\n2. Type ...\n3. Click the underlined word"
+  - type: input
+    id: version
+    attributes:
+      label: Parzr version
+      description: Settings, About.
+      placeholder: "0.1.1"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      description: Apple menu, About This Mac.
+      placeholder: "MacBook Air M3, 16 GB, macOS 26.6"
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App you were writing in
+      placeholder: "TextEdit, Mail, Slack, Chrome (Google Docs), VS Code"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Freeze or crash details
+      description: For a freeze or forced restart, attach any recent .panic, .hang, .spin or .ips file from /Library/Logs/DiagnosticReports or ~/Library/Logs/DiagnosticReports.

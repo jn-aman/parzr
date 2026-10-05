@@ -44,12 +44,24 @@ struct ModeChoices: View {
     }
 }
 @MainActor enum Support {
-    static let email = "support@parzr.app"
+    static let issues = URL(string: "https://github.com/jn-aman/parzr/issues")!
     static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development" }
     static var build: String { Bundle.main.object(forInfoDictionaryKey: "ParzrBuildRevision") as? String ?? "development" }
+    private static func sysctl(_ name: String) -> String? {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var value = [CChar](repeating: 0, count: size)
+        return sysctlbyname(name, &value, &size, nil, 0) == 0 ? String(cString: value) : nil
+    }
+    /// Hardware facts only; a report never includes writing unless the user adds it.
+    static var mac: String {
+        let memory = ProcessInfo.processInfo.physicalMemory / 1_073_741_824
+        return "\(sysctl("hw.model") ?? "Mac") · \(sysctl("machdep.cpu.brand_string") ?? "Apple Silicon") · \(memory) GB"
+    }
+    /// support@parzr.app has no mailbox; reports go to the public issue tracker, prefilled.
     static func reportIssue() {
-        var components = URLComponents(); components.scheme = "mailto"; components.path = email
-        components.queryItems = [URLQueryItem(name: "subject", value: "Parzr \(version) — issue report"), URLQueryItem(name: "body", value: "What happened?\n\nWhat did you expect?\n\nSteps to reproduce:\n\nParzr: \(version) (\(build))\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nArchitecture: Apple Silicon\n\nOnly include writing or screenshots you choose to share.")]
+        var components = URLComponents(url: issues.appendingPathComponent("new"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "title", value: "Parzr \(version): "), URLQueryItem(name: "body", value: "What happened?\n\nWhat did you expect?\n\nSteps to reproduce:\n\nParzr: \(version) (\(build))\nmacOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nMac: \(mac)\n\nOnly include writing or screenshots you choose to share.")]
         if let url = components.url { NSWorkspace.shared.open(url) }
     }
 }

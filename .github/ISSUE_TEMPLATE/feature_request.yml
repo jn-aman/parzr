@@ -1,0 +1,11 @@
+name: Idea or missing correction
+description: Suggest a feature, or a grammar or spelling case Parzr should catch.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: For a missed correction, give the sentence, the fix you expected, and a similar sentence that should NOT change.
+    validations:
+      required: true
