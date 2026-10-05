@@ -79,6 +79,25 @@ Revision dd266785c2595775001c1c714bd9d92b3ef34cde. The native runtime is
 built from source with embedded Metal for Apple Silicon arm64 only.
 The app includes the upstream license in Model/llama-LICENSE.txt.
 
+GECToR grammatical error correction model
+Weights: gotutiyan/gector-roberta-base-5k, revision
+adaac6fb919431fb5a038b1e449055ae638613a4, https://huggingface.co/gotutiyan/gector-roberta-base-5k
+Copyright gotutiyan. Its model card states: "Only non-commercial purposes".
+Parzr is free software distributed without charge and uses these weights only
+on that basis; anyone who redistributes or sells a build must check that
+condition for themselves. The model implements GECToR: Omelianchuk, Atrasevych,
+Chernodub, Skurzhanskyi, "GECToR: Grammatical Error Correction: Tag, Not
+Rewrite" (BEA 2020), a Grammarly project. The app bundles a Core ML conversion
+(static 80 token input, fp16 or int8 weight-only) made by scripts/convert-gector.py;
+revisions, versions and SHA-256 hashes are in Model/gector/manifest.json.
+roberta-base: Copyright Facebook AI Research. MIT license. https://huggingface.co/roberta-base
+Its byte level BPE vocabulary (vocab.json, merges.txt) ships with the model.
+Output label vocabulary and verb form vocabulary (verb-form-vocab.txt):
+grammarly/gector, commit 4ad259f25c6bb408a99788d468cd8958845e647e,
+https://github.com/grammarly/gector. Copyright Grammarly, Inc. Apache License 2.0
+(resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt).
+The model runs entirely on the device; nothing is downloaded or sent.
+
 Production edit alignment uses similar 2.7.0 (Apache-2.0),
 unicode-segmentation (MIT/Apache-2.0), and bstr (MIT/Apache-2.0).
 The rule and frequency credits above cover production grammar/spelling passes
