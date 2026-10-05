@@ -540,6 +540,35 @@ fn plausible(original: &str, replacement: &str) -> bool {
     extra_run(&long, &short).is_some_and(|extra| !extra.contains(' ') && closed(&extra))
 }
 
+/// A lowercase name ("aman jain") is never respelled or split: only case and punctuation may change.
+/// "aman" to "Am" passes the closeness test below, so names are screened first.
+fn keep_names(text: &str, hints: &[crate::TokenHint], all: Vec<Edit>) -> Vec<Edit> {
+    let tokens = crate::tokenizer::tokenize(text, hints);
+    let alnum = |s: &str| {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase()
+    };
+    let words = |s: &str| {
+        s.split_whitespace()
+            .filter(|w| w.chars().any(char::is_alphanumeric))
+            .count()
+    };
+    all.into_iter()
+        .filter(|e| {
+            alnum(&e.original) == alnum(&e.replacement)
+                && words(&e.original) == words(&e.replacement)
+                || !tokens.iter().enumerate().any(|(i, t)| {
+                    t.is_word
+                        && t.start_utf16 >= e.start_utf16
+                        && t.end_utf16 <= e.end_utf16
+                        && crate::spelling::lowercase_name(&tokens, i)
+                })
+        })
+        .collect()
+}
+
 /// A small model hallucinates in Fix mode ("do" to "a", "bod" to "a body"). Keep only plausible
 /// corrections. An edit touching a rejected one is part of the same rewrite and goes with it;
 /// linked move pairs stay together. The caller recomposes the text from what remains.
@@ -785,7 +814,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         return Err("The model returned an inconsistent edit plan.".into());
     }
     let changes = if req.mode == Mode::Fix {
-        plausible_edits(all)
+        plausible_edits(keep_names(&req.text, &req.tokens, all))
     } else {
         all
     };
@@ -909,6 +938,41 @@ mod tests {
         ] {
             assert!(!plausible(o, r), "{o:?} -> {r:?}");
         }
+    }
+    #[test]
+    fn model_cannot_respell_or_split_a_lowercase_name() {
+        let kept = |a: &str, b: &str| {
+            keep_names(a, &[], edits(a, b, Mode::Fix, &[]))
+                .into_iter()
+                .map(|e| (e.original, e.replacement))
+                .collect::<Vec<_>>()
+        };
+        assert!(kept("aman jain", "Am jain").is_empty());
+        assert_eq!(
+            kept("aman jain", "Am An Jain"),
+            [("jain".to_string(), "Jain".to_string())]
+        );
+        assert_eq!(
+            kept("thanks, jain", "Thanks, join."),
+            [
+                ("thanks".to_string(), "Thanks".to_string()),
+                ("".to_string(), ".".to_string())
+            ]
+        );
+        assert_eq!(
+            kept("hi aman, thanks", "Hi Aman, thanks"),
+            [
+                ("hi".to_string(), "Hi".to_string()),
+                ("aman".to_string(), "Aman".to_string())
+            ]
+        );
+        assert_eq!(
+            kept("I recieved the file", "I received the file."),
+            [
+                ("recieved".to_string(), "received".to_string()),
+                ("".to_string(), ".".to_string())
+            ]
+        );
     }
     #[test]
     fn fix_guard_filters_edits_from_the_model_diff() {

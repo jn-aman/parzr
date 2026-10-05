@@ -546,6 +546,226 @@ pub fn slot_fix(
         _ => None,
     }
 }
+/// Words after which a lowercase unknown word is a person being greeted, thanked or addressed
+/// ("hi aman", "ask aman about it"), not a typo.
+const ADDRESSING: [&str; 23] = [
+    "hi", "hello", "hey", "dear", "thanks", "thank", "regards", "cheers", "bye", "ask", "asked",
+    "tell", "told", "ping", "pinged", "cc", "ccd", "see", "saw", "meet", "met", "call", "called",
+];
+/// Words that can precede an article + noun phrase, so a missing space in "aclear statement" or
+/// "is aman" can be read as "a clear statement" or "is a man". Perception, address and
+/// communication verbs are left out on purpose: "saw aman" is as likely a name as a man.
+const ARTICLE_LEAD: [&str; 60] = [
+    "am", "is", "are", "was", "were", "be", "been", "being", "it's", "that's", "he's", "she's",
+    "there's", "here's", "what's", "for", "with", "in", "on", "at", "by", "from", "of", "into",
+    "like", "as", "than", "have", "has", "had", "having", "need", "needs", "needed", "want",
+    "wants", "wanted", "get", "gets", "got", "make", "makes", "made", "take", "takes", "took",
+    "find", "finds", "found", "give", "gives", "gave", "buy", "and", "or", "but", "than", "that",
+    "if", "because",
+];
+fn line_start(tokens_before: &[Token<'_>], token: &Token<'_>) -> bool {
+    tokens_before
+        .last()
+        .is_none_or(|p| p.paragraph != token.paragraph || [".", "!", "?"].contains(&p.surface))
+}
+fn unknown_alphabetic(token: &Token<'_>) -> bool {
+    token.is_word && token.surface.chars().all(char::is_alphabetic) && !known(&token.normalized)
+}
+/// Strong typo evidence for an unknown word: it is one adjacent swap, one extra letter or one
+/// missing letter away from a frequent word, or it is two frequent words run together. A name
+/// like "aman" has none of these (the one-letter edits it has, "a man" or "amen", are exactly
+/// the false positives), so typo-shaped words keep their corrections even beside names.
+fn typo_shaped(word: &str) -> bool {
+    // Frequency prior 400 is Zipf 4.0, about the 6,000 most frequent words.
+    let frequent = |w: &str| known(w) && frequency(w) >= 400;
+    if !word.is_ascii() || word.len() < 4 {
+        return false;
+    }
+    let bytes = word.as_bytes();
+    let text = |b: &[u8]| String::from_utf8_lossy(b).into_owned();
+    for i in 0..bytes.len() - 1 {
+        let mut swapped = bytes.to_vec();
+        swapped.swap(i, i + 1);
+        if bytes[i] != bytes[i + 1] && frequent(&text(&swapped)) {
+            return true;
+        }
+    }
+    // Names are short; one-letter edits to a word of 6+ letters are real typos.
+    if word.len() >= 6 {
+        for i in 0..bytes.len() {
+            let mut shorter = bytes.to_vec();
+            shorter.remove(i);
+            if frequent(&text(&shorter)) {
+                return true;
+            }
+        }
+        for i in 0..=bytes.len() {
+            for letter in b'a'..=b'z' {
+                let mut longer = bytes.to_vec();
+                longer.insert(i, letter);
+                if frequent(&text(&longer)) {
+                    return true;
+                }
+            }
+        }
+    }
+    (2..word.len() - 1).any(|i| {
+        let (a, b) = word.split_at(i);
+        let glue = |w: &str| {
+            [
+                "the", "to", "of", "in", "on", "at", "by", "for", "and", "with",
+            ]
+            .contains(&w)
+        };
+        (frequent(a) && frequent(b) && a.len() >= 3 && b.len() >= 3)
+            || (glue(a) && b.len() >= 4 && frequent(b))
+            || (glue(b) && a.len() >= 4 && frequent(a))
+    })
+}
+/// A word beside `token` (no punctuation or line break between) that is a name, an unknown word
+/// that is not a typo, or a capitalized word in mid-sentence ("I" and its contractions are not
+/// names). Neighbouring unknown words only count on a line
+/// typed without capitals ("aman jain"): someone who capitalizes sentences would capitalize
+/// names, so an unknown lowercase word there is a typo, and typos cluster ("rzview alreazy").
+fn name_neighbor(
+    neighbor: &Token<'_>,
+    before_neighbor: &[Token<'_>],
+    token: &Token<'_>,
+    casual: bool,
+) -> bool {
+    // A capitalized word that opens a sentence is no evidence: "Clara atean apple".
+    let counts =
+        !line_start(before_neighbor, neighbor) || neighbor.surface.chars().all(char::is_lowercase);
+    neighbor.is_word
+        && neighbor.paragraph == token.paragraph
+        && counts
+        && (name_only(&neighbor.normalized) && !name_only_typo(&neighbor.normalized, "")
+            || casual && unknown_alphabetic(neighbor) && !typo_shaped(&neighbor.normalized)
+            || neighbor
+                .surface
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase)
+                && neighbor.normalized != "i"
+                && !neighbor.normalized.starts_with("i'"))
+}
+/// Words a bare name never follows or precedes ("the tran", "Clara wite the introduction").
+const DETERMINERS_AND_ARTICLES: [&str; 14] = [
+    "the", "a", "an", "my", "your", "his", "her", "our", "their", "its", "this", "that", "these",
+    "those",
+];
+/// Whether a lexicon entry listed only as a name ("Tran", "OT", "Peron") is really a damaged
+/// common word here: a determiner precedes it, or it is one swap from a top-1000 word ("ot").
+fn name_only_typo(word: &str, prev: &str) -> bool {
+    DETERMINERS_AND_ARTICLES.contains(&prev)
+        || word.is_ascii()
+            && (0..word.len().saturating_sub(1)).any(|i| {
+                let mut swapped = word.as_bytes().to_vec();
+                swapped.swap(i, i + 1);
+                let swapped = String::from_utf8_lossy(&swapped).into_owned();
+                swapped != word
+                    && lexicon().lowercase.contains(&swapped)
+                    && frequency(&swapped) >= 500
+            })
+}
+/// Whether a lowercase unknown word is most likely a person's name typed without capitals.
+/// Turning a name into unrelated common words is worse than leaving a typo alone, so every
+/// respelling and word split is skipped for these.
+fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) -> bool {
+    if typo_shaped(&token.normalized) {
+        return false;
+    }
+    let previous = history.last();
+    let next = following.first();
+    let before_previous = &history[..history.len().saturating_sub(1)];
+    let line: Vec<_> = history
+        .iter()
+        .rev()
+        .take_while(|t| t.paragraph == token.paragraph)
+        .chain(
+            following
+                .iter()
+                .take_while(|t| t.paragraph == token.paragraph),
+        )
+        .filter(|t| t.is_word)
+        .collect();
+    let casual = !line.iter().any(|t| {
+        t.surface.chars().next().is_some_and(char::is_uppercase)
+            && t.normalized != "i"
+            && !t.normalized.starts_with("i'")
+    });
+    if (previous.is_some_and(|p| name_neighbor(p, before_previous, token, casual))
+        || next.is_some_and(|n| name_neighbor(n, history, token, casual)))
+        && !next.is_some_and(|n| DETERMINERS_AND_ARTICLES.contains(&n.normalized.as_str()))
+    {
+        return true;
+    }
+    if previous.is_some_and(|p| ADDRESSING.contains(&p.normalized.as_str())) {
+        return true;
+    }
+    // "anoop said hi": an unknown word that opens a clause and takes a finite verb is a subject.
+    if line_start(history, token)
+        && next.is_some_and(|n| {
+            [
+                "is", "was", "has", "had", "will", "would", "can", "could", "should", "does",
+                "did", "are", "were",
+            ]
+            .contains(&n.normalized.as_str())
+                || morphology::verb(&n.normalized)
+                    .is_some_and(|v| v.past == n.normalized || v.third == n.normalized)
+        })
+    {
+        return true;
+    }
+    // A signature or greeting target: a whole line of at most three unknown or name-only words.
+    line.len() < 3
+        && line
+            .iter()
+            .all(|t| unknown_alphabetic(t) || name_only(&t.normalized))
+}
+/// A lowercase word that is a person's name typed without capitals: listed only as a name, or
+/// unknown and name-like in context. Callers must not respell it into a different word.
+pub fn lowercase_name(tokens: &[Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    token.is_word
+        && token.surface.chars().all(char::is_lowercase)
+        && (name_only(&token.normalized)
+            || unknown_alphabetic(token)
+                && name_like(token, &tokens[..index], &tokens[index + 1..]))
+}
+/// Whether splitting an unknown word into "a"/"an" + noun/adjective is safe. Names such as
+/// "aman" or "anoop" split into real words ("a man"), so the phrase must read as a determiner
+/// phrase: the tail is a frequent word (frequency prior 450 is Zipf 4.5, roughly the 2,800 most
+/// common words; "man", "lot", "clear", "separate" and "updated" pass, "kit" and "jay" do not)
+/// and a noun or adjective, the word before
+/// is a verb or preposition (or the split opens a line and more words follow), and the word
+/// after is not another unknown, name-only or capitalized word.
+fn article_split_ok(
+    split: &str,
+    token: &Token<'_>,
+    prev: &str,
+    history: &[Token<'_>],
+    following: &[Token<'_>],
+) -> bool {
+    let mut parts = split.split(' ');
+    let (Some(a), Some(tail), None) = (parts.next(), parts.next(), parts.next()) else {
+        return true;
+    };
+    if !["a", "an"].contains(&a) {
+        return true;
+    }
+    let next = following
+        .first()
+        .filter(|n| n.is_word && n.paragraph == token.paragraph);
+    frequency(tail) >= 450
+        && flags(tail) & (2 | 8) != 0
+        && (ARTICLE_LEAD.contains(&prev) || line_start(history, token) && next.is_some())
+        && !next.is_some_and(|n| {
+            unknown_alphabetic(n)
+                || name_only(&n.normalized)
+                || n.surface.chars().next().is_some_and(char::is_uppercase)
+        })
+}
 pub fn suggest(
     token: &Token<'_>,
     dialect: &str,
@@ -659,6 +879,12 @@ pub fn suggest(
     if lexicon().lowercase.contains(word) {
         return None;
     }
+    // "jain" is only listed as "Jain": a lowercase name is never respelled into another word.
+    if name_only(word) && !name_only_typo(word, prev)
+        || name_like(token, history, following_context)
+    {
+        return None;
+    }
     let split = joined(
         word,
         prev,
@@ -666,6 +892,10 @@ pub fn suggest(
         next.is_some_and(|t| t.surface.chars().next().is_some_and(char::is_uppercase)),
         next_flags,
     );
+    // "aclear" beside a damaged word waits for the next pass, when "planningand" is "planning
+    // and" and the split has a clear anchor.
+    let split =
+        split.filter(|(_, split)| article_split_ok(split, token, prev, history, following_context));
     if word.len() < 3 {
         return None;
     }
@@ -686,6 +916,9 @@ pub fn suggest(
     let mut candidates: Vec<String> = candidates
         .into_iter()
         .filter(|candidate| distance_one(word, candidate) && flags(candidate) & dialect_flag != 0)
+        // "aman" to "man" or "aclear" to "clear" drops a word's first letter and either loses an
+        // article or erases a name; neither is a correction.
+        .filter(|candidate| word.strip_prefix('a') != Some(candidate))
         .collect();
     let score = |candidate: &str| -> i32 {
         let mut score = i32::from(morphology::common(candidate)) * 14
@@ -1024,6 +1257,17 @@ mod tests {
         assert!(distance_one("mesage", "message"));
         assert!(!distance_one("mesage", "me sage"));
         assert!(!distance_one("a", "abc"));
+    }
+    #[test]
+    fn name_only_words_keep_their_spelling() {
+        let tokens = crate::tokenizer::tokenize("ask jain about it", &[]);
+        assert!(name_only("jain") && lowercase_name(&tokens, 1));
+        // A determiner or a swap of a frequent word shows the entry is a damaged common word.
+        assert!(
+            name_only_typo("tran", "the")
+                && name_only_typo("ot", "")
+                && !name_only_typo("jain", "")
+        );
     }
     #[test]
     fn dictionary_assets() {

@@ -842,6 +842,72 @@ mod tests {
         }
     }
     #[test]
+    fn lowercase_names_are_never_respelled() {
+        for input in [
+            "aman jain",
+            "Hi aman, thanks",
+            "thanks, jain",
+            "aman jain\nStaff Software Engineer",
+            "priya sharma",
+            "rahul",
+            "anoop said hi",
+            "ask aman about it",
+            "Thanks aman",
+            "Regards,\naman",
+            "Cheers\nanoop kumar",
+            "hey aman, are you free",
+            "I want to see aman jain",
+            "please ask jain",
+            "aman is here",
+            "we met rahul sharma",
+            "I saw aman yesterday",
+            "I met Priya sharma",
+        ] {
+            assert_eq!(fix(input), input, "{input}");
+        }
+    }
+    #[test]
+    fn typos_beside_names_and_other_typos_are_still_fixed() {
+        for (input, expected) in [
+            ("I have alot of work.", "I have a lot of work."),
+            ("I recieved the file.", "I received the file."),
+            ("teh cat", "the cat"),
+            ("This si bod.", "This is bad."),
+            ("I goes ot the maret", "I go to the market"),
+            (
+                "Clara atean apple before leaving.",
+                "Clara ate an apple before leaving.",
+            ),
+            (
+                "Priya wriets a careful schedule.",
+                "Priya writes a careful schedule.",
+            ),
+            (
+                "The team needs aclear summary.",
+                "The team needs a clear summary.",
+            ),
+            (
+                "Its success depends on planningand aclear summary.",
+                "Its success depends on planning and a clear summary.",
+            ),
+            ("We left rzview alreazy.", "We left review already."),
+            (
+                "The organizers brought tzeir summarimes.",
+                "The organizers brought their summaries.",
+            ),
+            ("It was on the tran.", "It was on the train."),
+            ("The peron is away.", "The person is away."),
+            (
+                "It should be clear ot everyzne.",
+                "It should be clear to everyone.",
+            ),
+            ("She has aclear plan.", "She has a clear plan."),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+            assert_eq!(fix(expected), expected, "idempotent: {expected}");
+        }
+    }
+    #[test]
     fn valid_uses_of_rare_words_are_kept() {
         for input in [
             "Do re mi fa so la si do.",
