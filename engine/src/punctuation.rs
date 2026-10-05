@@ -87,6 +87,46 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "nothing but", "all but", "is but" (only) and "but also" are not joining clauses, and a
+        // second clause needs a subject of its own ("He came but left early" shares one).
+        if token.normalized == "but"
+            && ([
+                "nothing",
+                "all",
+                "anything",
+                "everything",
+                "none",
+                "no",
+                "not",
+                "cannot",
+            ]
+            .contains(&tokens[i - 1].normalized.as_str())
+                || ["be", "is", "are", "was", "were", "been", "being"]
+                    .contains(&tokens[i - 1].normalized.as_str())
+                || tokens
+                    .get(i + 1)
+                    .is_none_or(|t| !t.is_word || ["for", "one"].contains(&t.normalized.as_str())))
+        {
+            continue;
+        }
+        // "but also they killed": the adverb does not stand in for a subject.
+        let subject_at = if tokens
+            .get(i + 1)
+            .is_some_and(|t| ["also", "then"].contains(&t.normalized.as_str()))
+        {
+            i + 2
+        } else {
+            i + 1
+        };
+        if !tokens.get(subject_at).is_some_and(own_subject)
+            || [
+                "and", "or", "but", "yet", "nor", "not", "even", "just", "do", "does", "did",
+                "doing", "done", "if", "that", "as", "than",
+            ]
+            .contains(&tokens[i - 1].normalized.as_str())
+        {
+            continue;
+        }
         let start = tokens[..i]
             .iter()
             .rposition(|t| {
@@ -118,7 +158,51 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
     }
 }
 
-fn finite(t: &Token<'_>) -> bool {
+/// The word can open a clause as its own subject: a pronoun, determiner, or name.
+fn own_subject(t: &Token<'_>) -> bool {
+    t.proper_name
+        || [
+            "i",
+            "we",
+            "you",
+            "he",
+            "she",
+            "it",
+            "they",
+            "there",
+            "the",
+            "a",
+            "an",
+            "this",
+            "that",
+            "these",
+            "those",
+            "my",
+            "our",
+            "your",
+            "his",
+            "her",
+            "their",
+            "its",
+            "some",
+            "many",
+            "most",
+            "all",
+            "no",
+            "every",
+            "each",
+            "everyone",
+            "everybody",
+            "nobody",
+            "someone",
+            "people",
+        ]
+        .contains(&t.normalized.as_str())
+        || t.surface.chars().next().is_some_and(char::is_uppercase)
+            && t.is_word
+            && !crate::spelling::known(&t.normalized)
+}
+pub fn finite(t: &Token<'_>) -> bool {
     [
         "am", "is", "are", "was", "were", "has", "have", "had", "can", "could", "may", "might",
         "must", "shall", "should", "will", "would", "do", "does", "did", "cannot", "don't",
@@ -140,6 +224,23 @@ fn clause(tokens: &[Token<'_>]) -> bool {
                         .contains(&words[i - 1].normalized.as_str()))
         })
 }
+/// Words that open a subordinate clause or a question, so a clause beginning with one is not a
+/// finished sentence.
+const SUBORDINATORS: [&str; 25] = [
+    "when", "while", "if", "as", "because", "although", "though", "since", "after", "before",
+    "once", "until", "unless", "whenever", "where", "wherever", "whether", "which", "who", "whom",
+    "whose", "what", "why", "how", "that",
+];
+const AUXILIARIES: [&str; 18] = [
+    "am", "is", "are", "was", "were", "has", "have", "had", "can", "could", "may", "might", "must",
+    "shall", "should", "will", "would", "did",
+];
+/// Beside the subordinators, first words that make a clause a modifier, not an independent one.
+const OPENERS: [&str; 26] = [
+    "in", "on", "at", "by", "for", "with", "from", "to", "of", "into", "during", "over", "under",
+    "through", "between", "that", "upon", "around", "behind", "beside", "across", "along", "above",
+    "below", "without", "within",
+];
 fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
     let mut start = 0;
@@ -270,24 +371,93 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
         if !clause(&tokens[start..i]) || !clause(&tokens[i..right_end]) {
             continue;
         }
+        // Only a run-on whose first clause is plainly independent: it opens with its subject (no
+        // subordinator, question word or preposition), no subordinate clause is still open at its
+        // end, and both sides are long. Published prose joins clauses far more often than it runs
+        // them together, so anything less certain stays untouched.
+        let words = |range: &[Token<'_>]| range.iter().filter(|x| x.is_word).count();
         let first = tokens
             .get(start)
             .map(|t| t.normalized.as_str())
             .unwrap_or("");
-        let mark = if [
-            "why", "where", "when", "how", "what", "who", "whose", "which",
+        // The run of words right before the name, since the last comma or dash, must itself be
+        // long: a short one is an adverbial or conjunction phrase ("and then I", "at least I").
+        let run = tokens[start..i]
+            .iter()
+            .rev()
+            .take_while(|x| x.is_word)
+            .count();
+        // A short pair is accepted only when the first clause plainly ends: on an adjective or an
+        // adverb ("The plan is clear We should"), not a noun that a reduced relative clause could
+        // modify ("the palaces I had explored").
+        let word = previous.normalized.as_str();
+        let predicate_adjective = crate::spelling::flags(word) & 8 != 0
+            && i >= 2
+            && ["is", "are", "was", "were", "be", "been"]
+                .contains(&tokens[i - 2].normalized.as_str());
+        // "Why is the door locked When will it open": an inverted question is a finished clause.
+        let question = ["why", "where", "when", "how", "what", "who"].contains(&first)
+            && tokens.get(start + 1).is_some_and(|x| {
+                AUXILIARIES.contains(&x.normalized.as_str())
+                    || ["do", "does"].contains(&x.normalized.as_str())
+            });
+        // A capitalized determiner or pronoun other than "I" mid-sentence is the writer's own
+        // sentence start; only "I" and names are always capitalized.
+        let opener = [
+            "The", "This", "That", "These", "Those", "A", "An", "My", "Our", "Their", "Her", "His",
+            "Its", "We", "He", "She", "They", "It", "You",
         ]
-        .contains(&first)
+        .contains(&t.surface);
+        let plain_end = question
+            || opener
+            || predicate_adjective
+            || word.ends_with("ly")
+            || [
+                "yesterday",
+                "today",
+                "tomorrow",
+                "now",
+                "here",
+                "there",
+                "away",
+                "home",
+            ]
+            .contains(&word);
+        let (left, right) = if plain_end { (3, 3) } else { (6, 5) };
+        if words(&tokens[start..i]) < left
+            || run < left
+            || tokens[start..i].iter().rev().take(3).any(|x| {
+                ["and", "but", "or", "so", "yet", "nor", "then"].contains(&x.normalized.as_str())
+            })
+            || words(&tokens[i..right_end]) < right
+            || OPENERS.contains(&first)
+            || !question && SUBORDINATORS.contains(&first)
+            || !question
+                && tokens[start..i]
+                    .iter()
+                    .rev()
+                    .take(10)
+                    .any(|x| SUBORDINATORS.contains(&x.normalized.as_str()))
+            // The verb follows the subject at once ("Aman will"), or after a determiner's noun
+            // ("The guard was"). A plural noun also looks finite ("Hollywood films"), so the verb
+            // must be unambiguous.
+            || !tokens[i + 1..]
+                .iter()
+                .take(if opener { 3 } else { 1 })
+                .any(|x| {
+                    finite(x)
+                        && x.surface.starts_with(char::is_lowercase)
+                        && (crate::spelling::flags(&x.normalized) & 2 == 0
+                            || AUXILIARIES.contains(&x.normalized.as_str()))
+                })
         {
-            "?"
-        } else {
-            "."
-        };
+            continue;
+        }
         if let Some(edit) = make_edit(
             &req.text,
             previous.end_utf16,
             previous.end_utf16,
-            mark.into(),
+            if question { "?" } else { "." }.into(),
             "Punctuation",
             "punctuation.missing_sentence_boundary",
             "Separate these complete clauses with sentence punctuation.",
@@ -351,8 +521,49 @@ mod name_tests {
     #[test]
     fn a_real_run_on_still_gets_its_period() {
         assert_eq!(
-            boundaries("The report is done Aman will send it tomorrow", &["Aman"]),
+            boundaries(
+                "The quarterly report for the finance team is done Aman will send it to everyone tomorrow morning",
+                &["Aman"]
+            ),
             ["."]
         );
+    }
+    #[test]
+    fn a_clause_that_is_not_plainly_finished_gets_no_period() {
+        for (text, names) in [
+            // Subordinate or modifying openers need a comma, not a period.
+            (
+                "When the harbour lights came on at dusk Priya walked down to the quay alone.",
+                &["Priya"][..],
+            ),
+            (
+                "Because the train from the coast was late again Priya missed her connection to Leeds.",
+                &["Priya"],
+            ),
+            // A relative or subordinating word right before the name keeps the clause open.
+            (
+                "The old cottage by the river is the place where Priya spent every summer as a child.",
+                &["Priya"],
+            ),
+            // Too short on either side to be sure.
+            ("It is done Priya will send it.", &["Priya"]),
+            // A question opener never gets a period.
+            (
+                "Why did the committee reject the proposal so late Priya asked her colleagues quietly.",
+                &["Priya"],
+            ),
+        ] {
+            assert!(boundaries(text, names).is_empty(), "{text}");
+        }
+    }
+    #[test]
+    fn an_i_after_a_finished_clause_is_not_split_off_mid_sentence() {
+        for text in [
+            "As I opened the door I seemed to hear a low whistle from the garden.",
+            "The shopkeeper said that he knew the road well and I trusted his directions all day.",
+            "She watched the harbour for an hour before I joined her on the quay.",
+        ] {
+            assert!(boundaries(text, &[]).is_empty(), "{text}");
+        }
     }
 }
