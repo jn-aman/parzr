@@ -3,17 +3,39 @@ use crate::tokenizer::Token;
 use crate::{context, morphology, names};
 use std::{
     collections::{HashMap, HashSet},
+    hash::{BuildHasherDefault, Hasher},
     sync::OnceLock,
 };
+/// Multiply-rotate hasher (as in rustc-hash) for the static dictionary maps: their keys are fixed
+/// data, so SipHash's flooding resistance buys nothing and costs a tenth of a pass.
+#[derive(Default)]
+struct FastHasher(u64);
+impl Hasher for FastHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.0 = (self.0.rotate_left(5) ^ u64::from_le_bytes(word))
+                .wrapping_mul(0xf135_7aea_2e62_a9c5);
+        }
+    }
+    fn write_u8(&mut self, byte: u8) {
+        self.0 = (self.0.rotate_left(5) ^ u64::from(byte)).wrapping_mul(0xf135_7aea_2e62_a9c5);
+    }
+    fn finish(&self) -> u64 {
+        self.0.rotate_left(26)
+    }
+}
+type Fast = BuildHasherDefault<FastHasher>;
 struct Lexicon {
-    words: HashMap<String, u8>,
-    lowercase: HashSet<String>,
+    words: HashMap<String, u8, Fast>,
+    lowercase: HashSet<String, Fast>,
     /// Original casing of entries that are neither plain capitalized nor acronyms ("McDonald", "iPhone").
     canonical: HashMap<String, String>,
-    deletes: HashMap<String, Vec<String>>,
+    deletes: HashMap<String, Vec<String>, Fast>,
 }
 fn frequency(word: &str) -> u16 {
-    static FREQUENCIES: OnceLock<HashMap<String, u16>> = OnceLock::new();
+    static FREQUENCIES: OnceLock<HashMap<String, u16, Fast>> = OnceLock::new();
     FREQUENCIES
         .get_or_init(|| {
             #[derive(serde::Deserialize)]
@@ -35,8 +57,8 @@ fn lexicon() -> &'static Lexicon {
     LEXICON.get_or_init(|| {
         let entries: Vec<(String, u8)> =
             serde_json::from_str(include_str!("../rules/lexicon.json")).unwrap_or_default();
-        let mut words = HashMap::with_capacity(entries.len());
-        let mut lowercase = HashSet::new();
+        let mut words = HashMap::with_capacity_and_hasher(entries.len(), Fast::default());
+        let mut lowercase = HashSet::with_hasher(Fast::default());
         let mut canonical: HashMap<String, String> = HashMap::new();
         for (word, flags) in entries {
             let lower = word.to_lowercase();
@@ -57,7 +79,8 @@ fn lexicon() -> &'static Lexicon {
             }
             *words.entry(lower).or_insert(0) |= flags;
         }
-        let mut deletes: HashMap<String, Vec<String>> = HashMap::new();
+        let mut deletes: HashMap<String, Vec<String>, Fast> =
+            HashMap::with_capacity_and_hasher(words.len() * 2, Fast::default());
         // Index common words only for suggestions; all words remain valid dictionary entries.
         for (word, flags) in &words {
             let common_form = flags & 1 != 0
@@ -71,7 +94,9 @@ fn lexicon() -> &'static Lexicon {
             if !common_form || word.len() > 24 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
                 continue;
             }
-            for deleted in deletions(word) {
+            // A letter repeated in the word yields one deletion twice; the dedup below drops it.
+            for i in 0..word.len() {
+                let deleted = format!("{}{}", &word[..i], &word[i + 1..]);
                 deletes.entry(deleted).or_default().push(word.clone());
             }
         }
