@@ -15,26 +15,44 @@ final class PassiveObserver {
     private var attachedPID: pid_t?
     private var subscriptions: Set<AnyCancellable> = []
     private var stopped = false
-    private let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "dev.zed.Zed", "com.jetbrains"]
-    init() {
+    private var focusRetry: Task<Void, Never>?
+    private var firefoxKeystrokes = 0
+    /// Counts monitor (re)installs; a grant after launch must install fresh ones, since monitors made before the grant never deliver.
+    private(set) var monitorInstalls = 0
+    private let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.zed.Zed", "com.jetbrains"]
+    /// VS Code and Cursor are checked only after the user opts in (Apps settings).
+    private func isExcluded(_ bundle: String) -> Bool {
+        excluded.contains { bundle.hasPrefix($0) } || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
+    }
+    func installMonitors() {
+        if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
         // Some editors omit AX value notifications after paste. Native input events
         // schedule the same bounded check; event text is never inspected or stored.
         inputMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
-            MainActor.assumeIsolated { self?.inputChanged() }
+            MainActor.assumeIsolated { self?.noteKeystroke(); self?.inputChanged() }
         }
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             MainActor.assumeIsolated { self?.inputChanged() }
         }
+        monitorInstalls += 1
+    }
+    init() {
+        installMonitors()
         activationToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.attach() }
         }
         Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps)
             .sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
-        Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
+        Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
+            if granted { MainActor.assumeIsolated { self?.installMonitors() } }
+            Task { @MainActor in self?.attach() }
+        }.store(in: &subscriptions)
+        Preferences.shared.$checkVSCode.dropFirst().removeDuplicates().sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
     }
     func attach() {
         guard !stopped else { return }
-        work?.cancel(); onDismiss?()
+        work?.cancel(); focusRetry?.cancel(); firefoxKeystrokes = 0; onDismiss?()
         if let observer {
             for (element, notification) in observed { AXObserverRemoveNotification(observer, element, notification as CFString) }
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
@@ -43,13 +61,17 @@ final class PassiveObserver {
         guard Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
               let app = NSWorkspace.shared.frontmostApplication, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, Preferences.shared.enabled(for: bundle),
-              !excluded.contains(where: { bundle.hasPrefix($0) }) else { return }
+              !isExcluded(bundle) else { return }
+        AX.prepare(app, force: true)
         var created: AXObserver?
         let result = AXObserverCreate(app.processIdentifier, { _, _, notification, context in
             guard let context else { return }
             MainActor.assumeIsolated {
                 let owner = Unmanaged<PassiveObserver>.fromOpaque(context).takeUnretainedValue()
-                if notification as String == kAXFocusedUIElementChangedNotification { owner.attachFocused() }
+                if notification as String == kAXFocusedUIElementChangedNotification {
+                    if let app = NSWorkspace.shared.frontmostApplication { AX.prepare(app, force: true) }
+                    owner.attachFocused()
+                }
                 owner.changed()
             }
         }, &created)
@@ -70,7 +92,16 @@ final class PassiveObserver {
         guard let observer else { return }
         if AXObserverAddNotification(observer, element, notification as CFString, Unmanaged.passUnretained(self).toOpaque()) == .success { observed.append((element, notification)) }
     }
-    private func attachFocused() {
+    /// Firefox stays silent when the user blocked accessibility services: after several keystrokes with no text field resolved, offer the hint.
+    private func noteKeystroke() {
+        guard !stopped, let app = NSWorkspace.shared.frontmostApplication, Compat.isFirefox(app.bundleIdentifier), !Preferences.shared.firefoxHintDismissed, !Preferences.shared.firefoxHint else { return }
+        firefoxKeystrokes += 1
+        guard firefoxKeystrokes >= Compat.firefoxHintKeystrokes else { return }
+        firefoxKeystrokes = 0
+        let role = AX.focused(app).flatMap { AX.string($0, kAXRoleAttribute) }
+        if Compat.firefoxHintNeeded(bundle: app.bundleIdentifier, focusedRole: role, hasText: AX.focusedText(app) != nil, keystrokes: Compat.firefoxHintKeystrokes, dismissed: Preferences.shared.firefoxHintDismissed) { Preferences.shared.firefoxHint = true }
+    }
+    private func attachFocused(retry: Bool = true) {
         // Focus changes detach old text observers so inactive fields are never analyzed.
         if let observer {
             for (element, notification) in observed where notification != kAXFocusedUIElementChangedNotification {
@@ -78,7 +109,19 @@ final class PassiveObserver {
             }
         }
         observed.removeAll { $0.1 != kAXFocusedUIElementChangedNotification }
-        guard let app = NSWorkspace.shared.frontmostApplication, let focused = AX.focusedText(app), !AX.isSecure(focused) else { return }
+        guard let app = NSWorkspace.shared.frontmostApplication else { return }
+        guard let focused = AX.focusedText(app), !AX.isSecure(focused) else {
+            // The first queries after activation can see only the menu bar while Firefox or VS Code switch accessibility on; look once more.
+            if retry, Compat.needsFocusRetry(bundle: app.bundleIdentifier, vscodeEnabled: Preferences.shared.checkVSCode) {
+                focusRetry?.cancel()
+                focusRetry = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(1500))
+                    guard !Task.isCancelled, let self, !self.stopped, NSWorkspace.shared.frontmostApplication?.processIdentifier == self.attachedPID else { return }
+                    self.attachFocused(retry: false); self.changed()
+                }
+            }
+            return
+        }
         add(focused, kAXValueChangedNotification); add(focused, kAXSelectedTextChangedNotification)
         if let window = AX.get(focused, kAXWindowAttribute), CFGetTypeID(window) == AXUIElementGetTypeID() {
             add(window as! AXUIElement, kAXMovedNotification); add(window as! AXUIElement, kAXResizedNotification)
@@ -109,7 +152,7 @@ final class PassiveObserver {
     }
     func suspend() { work?.cancel(); onDismiss?() }
     func stop() {
-        stopped = true; suspend()
+        stopped = true; suspend(); focusRetry?.cancel()
         if let observer {
             for (element, notification) in observed { AXObserverRemoveNotification(observer, element, notification as CFString) }
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)

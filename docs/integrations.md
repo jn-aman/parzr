@@ -2,17 +2,36 @@
 
 Parzr targets writing wherever it happens: native text fields, chat composers, browser rich text, prose in code editors, and editors with an LSP client. Integrations share the local grammar engine and bundled model. A route is implemented when the adapter exists; a particular application is verified only after its text, formatting, selection and Undo pass a fixture test.
 
+## No extension needed
+
+Parzr works through macOS Accessibility, so no browser or editor extension is required. Safari, Chrome, Brave, Edge, Arc and Firefox work natively, as do TextEdit, Mail and Microsoft Word. The browser extension, the VS Code extension and the language server below are optional extras for developers who want DOM-level or editor-level integration; skip them if the native route is enough.
+
+What has been checked, and how (macOS accessibility probes, not full acceptance suites):
+
+- **Verified by probes:** TextEdit, Safari, Chrome, Brave and Firefox with default settings (text fields, textareas and contenteditable): focus, text, selection and replacement.
+- **Read verified:** Microsoft Word 16 reads text and selection (replacement uses the typed path below); Mail compose reads text, selection, word bounds and attributed text through WebKit text markers. Typed replacement in Mail and Word was not exercised live.
+- **Unit-tested only:** Electron re-activation, the VS Code and Cursor opt-in, Xcode comment and string filtering, and the Firefox hint.
+- **Untested:** Slack, Teams and Notion were not installed for testing.
+
 ## Native macOS editors and desktop chat
 
 Install the Apple Silicon app in Applications, allow Accessibility, and start writing. Automatic checks examine the focused paragraph after 120 ms of idle time. Click an underline for a compact correction; select a passage for Fix all or use the global shortcut. Change Option+Space in **General → Global shortcut**. Pause or disable individual apps in Settings.
 
-The adapter resolves an editable field from the focused element or its nearest accessible ancestors. It uses Electron's documented `AXManualAccessibility` switch to expose supported desktop composers, without app-specific selectors. It observes only the focused field, excludes secure fields and code/terminal applications, and never submits a message. This is a shared route for desktop Teams, Slack, WhatsApp, Discord, Telegram, mail clients and other applications when their accessibility capabilities permit it. Those named hosts have not all been tested.
+The adapter resolves an editable field from the focused element or its nearest accessible ancestors. It uses Electron's documented `AXManualAccessibility` switch to expose supported desktop composers, without app-specific selectors. The switch is set again on every app activation and focus change (at most once per 2 seconds per app), because the first set builds the tree and a second one makes the editor switch modes. When an app answers the per-app focus query with an error, the system-wide focused element is used if it belongs to the same process. It observes only the focused field, excludes secure fields, JetBrains, Zed and terminals, and never submits a message. This is a shared route for desktop Teams, Slack, WhatsApp, Discord, Telegram, mail clients and other applications when their accessibility capabilities permit it. Those named hosts have not all been tested.
 
-Before applying, Parzr rechecks the host, focused field, selection and original text. It patches individual UTF-16 ranges and confirms the result. Links and attachments are protected when exposed as attributed text. TextEdit's real capture, typing, underlines, inline acceptance, formatting, caret restoration and Undo have been exercised using authored RTF fixtures.
+Before applying, Parzr rechecks the host, focused field, selection and original text. It patches individual UTF-16 ranges and confirms the result by reading the text back. Word, VS Code in screen-reader mode and Chrome textareas accept an `AXSelectedText` write and change nothing, so when the read-back shows no change Parzr selects the range and types the replacement as Unicode keyboard events posted to that app (20 UTF-16 units per event, no clipboard), then verifies again. It types only while the app is frontmost and the same field is still focused, and never when the text changed unexpectedly. A settable selection range is enough for this route. Links and attachments are protected when exposed as attributed text. Editable web areas without AXValue (Mail compose and other WebKit editors) are read through accessibility text markers: text, selection, word bounds and attributed text, with replacement by selecting the markers and typing. Xcode is checked in comments, documentation and string literals only: every other run of the file's semantic types is protected. TextEdit's real capture, typing, underlines, inline acceptance, formatting, caret restoration and Undo have been exercised using authored RTF fixtures.
 
 A host must expose text, selection, range bounds and safe range replacement for the complete inline experience. If replacement is unavailable, Copy remains available. Explicit paste fallback is off by default because it can change complex formatting and mentions. It restores supported clipboard types only when the clipboard has not changed again. macOS Accessibility permission requires the user's system approval; an app cannot grant it to itself.
 
-## Browser writing fields and web chat
+### Firefox, Chromium and Electron
+
+Firefox 121+ starts its accessibility engine when Parzr reads the application role, so default Firefox needs nothing. If a user has turned on "Prevent accessibility services from accessing your browser" (Settings, Privacy & Security, Permissions), Firefox exposes no text; after several keystrokes with no field found, the menu-bar panel shows a one-time dismissible hint explaining how to turn that off. Parzr never edits Firefox's profile. Chromium browsers also get `AXEnhancedUserInterface`, which Chrome needs to report word bounds for underlines. The first focus query after activation can see only the menu bar, so Parzr looks once more after 1.5 seconds.
+
+### VS Code and Cursor (opt-in)
+
+Off by default. Turn on **Settings, Apps, Check prose in VS Code and Cursor** to check Markdown and plain text files (.md, .markdown, .txt, .mdx, .rst, judged from the window title) in VS Code and Cursor without the extension. This enables VS Code's screen-reader mode, which shows a notice in the editor. VS Code exposes no word geometry in this mode (all bounds are 0x0), so there are no underlines: a review marker appears at the top right of the editor and opens the normal card, and corrections are typed in. Source files are never checked automatically.
+
+## Browser writing fields and web chat (optional extension)
 
 The shared extension supports Chrome 121+, Edge, Brave, Chromium, and Firefox 140+. Browser installation and an installed native-host connection are separate from DOM adapter verification. Safari currently uses the native accessibility route; a Safari extension wrapper is not shipped.
 
@@ -40,7 +59,7 @@ The extension requests `activeTab`, `scripting`, and `nativeMessaging`, with no 
 
 Teams web, Slack web, Gmail, Outlook web, WhatsApp web, Discord web, support consoles, CMS editors and form composers can use this common DOM route when they expose those capabilities. Their actual production sites are not established by a synthetic composer test. Canvas editors, custom document models, framework refusals and Google Docs' document canvas can require a dedicated host adapter; Copy and the native capability probe remain available.
 
-## VS Code and compatible forks
+## VS Code and compatible forks (optional extension)
 
 The local extension automatically underlines grammar in plaintext, Markdown, MDX and commit messages after 180 ms of idle time. Use the editor's quick-fix/lightbulb menu to accept a correction, including linked multi-part corrections, or choose **Parzr: Fix all grammar**. Corrections are atomic editor edits with Undo stops. Document versions and source text are checked again before applying. Disable automatic checks with `parzr.automatic`.
 
@@ -65,7 +84,10 @@ Neovim, Emacs, Zed, Helix and Sublime can use this route through compatible LSP 
 | Editor family / example | Implemented route | Evidence / remaining verification |
 |---|---|---|
 | TextEdit | Native AX | Authored RTF typing, inline application, formatting, caret and Undo tests |
-| Native text views; Notes, Mail, Pages, Word | Focus ancestry + AX capability probe | Native core tests; individual application fixtures required |
+| Mail compose | AX text markers (WebKit) | Read, selection, word bounds and attributed text verified live on a fixture compose; typed replacement not exercised |
+| Microsoft Word | Native AX, typed replacement | Text and selection read verified; replacement unverified |
+| Xcode | Native AX, comments and strings only | Semantic-type filtering unit-tested; works as a text editor today |
+| Native text views; Notes, Pages | Focus ancestry + AX capability probe | Native core tests; individual application fixtures required |
 | Teams, Slack, WhatsApp and other desktop chat | Native AX; supported Electron accessibility activation | Adapter implemented; actual named desktop hosts unverified |
 | Text input / textarea | Automatic browser underlines and inline corrections | Real Chromium DOM, engine, focus, single-correction Undo and stale-draft tests |
 | Teams/Slack-shaped rich composer | Shared rich-text browser adapter | Synthetic nested composer, mention, emoji, formatting, paragraphs and Undo tests; actual services unverified |
@@ -74,8 +96,9 @@ Neovim, Emacs, Zed, Helix and Sublime can use this route through compatible LSP 
 | Accessible embedded frames | Browser frame injection | Injection/queue tests; installed-browser frame smoke tests pending |
 | Chrome / Edge / Brave / Chromium | Extension + native host | Shared DOM and messaging protocol tested; full installed-browser smoke tests pending |
 | Firefox 140+ | Shared MV3 extension + native host | Manifest and registration implemented; Firefox DOM/native-host acceptance pending |
-| Safari | Native AX | Native route; no Safari extension wrapper |
-| VS Code | Automatic diagnostics, inline code actions, passage styles | Engine/API harness checks stale versions, linked fixes, Undo transactions and local prose restrictions; actual extension-host UI acceptance pending |
+| Safari / Chrome / Brave / Firefox (default settings) | Native AX, no extension | Verified by accessibility probes: focus, text, selection and replacement; Edge and Arc share the Chromium route and are unprobed |
+| VS Code and Cursor without the extension | Native AX, opt-in, prose files only, review marker | Focus, Electron switch and typed replacement probed in VS Code; Cursor and the review marker unit-tested only |
+| VS Code (extension) | Automatic diagnostics, inline code actions, passage styles | Engine/API harness checks stale versions, linked fixes, Undo transactions and local prose restrictions; actual extension-host UI acceptance pending |
 | Cursor and other VS Code forks | Same extension | Individual fork acceptance pending |
 | Neovim / Emacs / Zed / Helix / Sublime | Bundled LSP | Protocol tests; individual clients need setup/UI acceptance |
 | Google Docs canvas / closed shadow DOM / custom document models | Native probe, dedicated adapter where available, Copy fallback | Automatic formatting-safe editing not verified |

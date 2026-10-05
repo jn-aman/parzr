@@ -272,7 +272,10 @@ struct StudioView: View {
                 }
                 Text("Correction cards and the menu-bar panel follow this appearance.").font(.system(size: 11)).foregroundStyle(Color.textSecondary)
             case .apps:
-                notice("Control each app independently. Source-code editors use their integrations; terminals use explicit selection.", symbol: "square.grid.2x2")
+                notice("Control each app independently. Xcode is checked in comments and strings only; other source-code editors use their integrations; terminals use explicit selection.", symbol: "square.grid.2x2")
+                group("CODE EDITORS") {
+                    settingRow("Check prose in VS Code and Cursor", detail: "Checks Markdown and plain text files (.md, .markdown, .txt, .mdx, .rst) only, never code. VS Code will show a screen-reader-mode notice, and corrections appear as a review marker instead of underlines.") { toggle("Check prose in VS Code and Cursor", $preferences.checkVSCode) }
+                }
                 group("OPEN APPLICATIONS") {
                     ForEach(runningApps, id: \.bundleIdentifier) { app in
                         if let id = app.bundleIdentifier {
@@ -299,7 +302,7 @@ struct StudioView: View {
                 group("EDITOR ACCESS") {
                     settingRow(preferences.permissionGranted ? "Accessibility is enabled" : "Enable Accessibility", detail: "macOS requires this permission for corrections in other apps.") { NativeButton(title: preferences.permissionGranted ? "Refresh" : "Enable…", action: { if preferences.permissionGranted { preferences.refreshPermission() } else { preferences.requestPermission() } }).fixedSize() }
                     divider
-                    settingRow("Browser & editor extensions", detail: "Browser inline cards, VS Code diagnostics, and a language server for prose editors.") { NativeButton(title: "Open integrations", action: { if let url = Bundle.main.resourceURL?.appendingPathComponent("Integrations") { NSWorkspace.shared.open(url) } }).fixedSize() }
+                    settingRow("Optional extensions", detail: "Parzr works in browsers and native apps without them. These add browser inline cards, VS Code diagnostics, and a language server for developers.") { NativeButton(title: "Open integrations", action: { if let url = Bundle.main.resourceURL?.appendingPathComponent("Integrations") { NSWorkspace.shared.open(url) } }).fixedSize() }
                 }
                 group("CAPABILITY REPORT") {
                     VStack(alignment: .leading, spacing: 12) {

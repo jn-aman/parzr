@@ -22,7 +22,7 @@ Then just write. Underlines appear when you pause. Click the word itself to open
 
 - **Fixes the whole sentence at once.** The card leads with the corrected sentence, removed words struck through and fixes in mint, so one keystroke repairs every error in it.
 - **Five writing modes.** Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
-- **Works where you write.** Native Mac apps through Accessibility (tested end to end in TextEdit), a browser extension for Chrome, Edge, Brave, Chromium and Firefox, a VS Code extension, and a language server for other editors. In canvas editors such as Google Docs, Option+Space copies your selection, checks it and pastes the fix. See [integrations](docs/integrations.md) for exactly what is verified.
+- **Works where you write, with no extension.** Parzr uses macOS Accessibility, so Safari, Chrome, Brave, Edge, Arc and Firefox, TextEdit, Mail and Word work natively; the browser extension, VS Code extension and language server are optional extras for developers. Verified by probes: TextEdit, Safari, Chrome, Brave and Firefox with default settings; Word and Mail reads. Slack, Teams and Notion are untested. VS Code and Cursor prose files are an opt-in setting. In canvas editors such as Google Docs, Option+Space copies your selection, checks it and pastes the fix. See [integrations](docs/integrations.md) for exactly what is verified.
 - **Private by construction.** Writing stays in memory on your Mac. No account, telemetry, writing logs or HTTP server. The model ships inside the app; nothing downloads at runtime.
 
 ## How it works

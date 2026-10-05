@@ -10,6 +10,7 @@ struct StatusPopover: View {
     var settings: () -> Void
     var about: () -> Void
     var quit: () -> Void
+    static let firefoxHint = "Firefox is blocking accessibility. In Firefox, open Settings, Privacy & Security, Permissions, turn off \"Prevent accessibility services from accessing your browser\", then restart Firefox."
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack { Brand(); Spacer(); Circle().fill(engineReady ? Color.mintAccent : Color.textSecondary).frame(width: 6, height: 6) }
@@ -31,6 +32,12 @@ struct StatusPopover: View {
             }
             if !preferences.permissionGranted {
                 HStack { Text("Enable editor access").font(.system(size: 11)).foregroundStyle(Color.textSecondary); Spacer(); NativeButton(title: "Enable…", action: { preferences.requestPermission() }).fixedSize() }
+            }
+            if preferences.firefoxHint {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Self.firefoxHint).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    NativeButton(title: "Dismiss", kind: .utility, label: "Dismiss Firefox hint", action: { preferences.dismissFirefoxHint() }).fixedSize()
+                }.padding(13).graphiteSurface()
             }
             Rectangle().fill(Color.hairline).frame(height: 0.5)
             HStack { NativeButton(title: "Open editor", symbol: "square.and.pencil", label: "Open Parzr", action: editor); Spacer(); NativeButton(title: "Settings", symbol: "slider.horizontal.3", action: settings) }

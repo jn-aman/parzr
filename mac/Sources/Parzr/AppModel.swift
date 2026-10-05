@@ -105,7 +105,7 @@ final class AppModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(80))
-                try snapshot.apply(edits)
+                try await snapshot.apply(edits)
                 self.snapshot = nil; busy = false; dismiss?()
             } catch { self.error = error.localizedDescription; busy = false }
         }
@@ -140,7 +140,7 @@ final class AppModel: ObservableObject {
             let transaction = ClipboardTransaction()
             do {
                 try await Task.sleep(for: .milliseconds(100)); try snapshot.validate()
-                guard AX.setRange(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
+                guard AX.select(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
                 try transaction.stage(replacement, attributed: attributed); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
                 FixLearning.record(edits, in: snapshot)

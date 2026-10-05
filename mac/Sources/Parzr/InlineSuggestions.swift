@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import ParzrCore
 
@@ -46,10 +47,22 @@ final class InlineSuggestions {
             guard let self else { return }
             self.model.selectedEdits.subtract(self.ignored)
         }
+        installMonitor()
+        // A global monitor made before Accessibility was granted never delivers; make a new one on grant.
+        Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
+            if granted { MainActor.assumeIsolated { self?.installMonitor() } }
+        }.store(in: &subscriptions)
+    }
+    private var subscriptions: Set<AnyCancellable> = []
+    private(set) var monitorInstalls = 0
+    func installMonitor() {
+        guard !stopped else { return }
+        if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
         scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .rightMouseDown]) { [weak self] event in
             let scrolled = event.type == .scrollWheel
             MainActor.assumeIsolated { scrolled ? self?.scrolled() : self?.closeCard() }
         }
+        monitorInstalls += 1
     }
     /// Scrolling hides marks at once and re-places them once it settles, if the text is unchanged.
     private func scrolled() {
@@ -68,7 +81,7 @@ final class InlineSuggestions {
     private var textIsCurrent: Bool {
         guard let s = shown?.snapshot, !s.app.isTerminated, s.app == NSWorkspace.shared.frontmostApplication,
               let focused = AX.focusedText(s.app), CFEqual(focused, s.element) else { return false }
-        if let full = s.fullText { return AX.string(s.element, kAXValueAttribute) == full }
+        if let full = s.fullText { return AX.text(s.element) == full }
         return AX.string(s.element, kAXSelectedTextAttribute) == s.text
     }
     private var marksAreCurrent: Bool {
@@ -102,7 +115,7 @@ final class InlineSuggestions {
     func stop() {
         stopped = true; relayout?.cancel(); dismiss()
         if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor); self.scrollMonitor = nil }
-        ignored = []; revision = nil
+        subscriptions.removeAll(); ignored = []; revision = nil
     }
     private func prepareRevision(_ snapshot: SelectionSnapshot) {
         let next = IgnoreRevision(pid: snapshot.app.processIdentifier, element: CFHash(snapshot.element), paragraph: snapshot.selection.location, textHash: snapshot.text.hashValue)

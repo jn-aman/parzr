@@ -5,8 +5,7 @@ import ParzrCore
 
 @MainActor
 enum AX {
-    private static var preparedApplications: Set<pid_t> = []
-    private static let chromium = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", "org.chromium.Chromium", "com.microsoft.teams2"]
+    static var gate = ActivationGate()
     static func get(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
@@ -31,18 +30,13 @@ enum AX {
     static func focused(_ app: NSRunningApplication) -> AXUIElement? {
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(appElement, 0.25)
-        // Electron's documented assistive-technology switch exposes nested composers.
-        // Unsupported apps simply refuse the attribute. Never change the user's drafts.
-        if !preparedApplications.contains(app.processIdentifier) {
-            if preparedApplications.count >= 128 { preparedApplications.removeAll() }
-            if AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
-                // Chrome rejects the Electron switch and exposes no focused element until AXEnhancedUserInterface is set; native apps are left alone because it can disturb window managers.
-                || (chromium.contains { app.bundleIdentifier?.hasPrefix($0) == true } && AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success) {
-                preparedApplications.insert(app.processIdentifier)
-            }
+        prepare(app)
+        if let value = get(appElement, kAXFocusedUIElementAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() {
+            let element = value as! AXUIElement
+            AXUIElementSetMessagingTimeout(element, 0.25)
+            return element
         }
-        guard let value = get(appElement, kAXFocusedUIElementAttribute), CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
-        let element = value as! AXUIElement
+        guard let element = systemFocused(for: app) else { return nil }
         AXUIElementSetMessagingTimeout(element, 0.25)
         return element
     }
@@ -53,8 +47,8 @@ enum AX {
         // Resolve only the focus ancestry, never unrelated text elsewhere in the app.
         for _ in 0..<8 {
             guard let current = cursor, !isSecure(current) else { return nil }
-            if range(current) != nil,
-               string(current, kAXValueAttribute) != nil || string(current, kAXSelectedTextAttribute) != nil { return current }
+            if selection(current) != nil,
+               text(current) != nil || string(current, kAXSelectedTextAttribute) != nil { return current }
             let role = string(current, kAXRoleAttribute) ?? ""
             if [kAXWindowRole, kAXApplicationRole, "AXWebArea"].contains(role) { break }
             guard let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
@@ -119,7 +113,7 @@ enum AX {
         var cf = CFRange(location: range.location, length: range.length)
         guard let parameter = AXValueCreate(.cfRange, &cf) else { return nil }
         var value: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(element, kAXAttributedStringForRangeParameterizedAttribute as CFString, parameter, &value) == .success else { return nil }
+        guard AXUIElementCopyParameterizedAttributeValue(element, kAXAttributedStringForRangeParameterizedAttribute as CFString, parameter, &value) == .success else { return markerAttributed(element, range) }
         return value as? NSAttributedString
     }
 }
@@ -137,15 +131,16 @@ struct SelectionSnapshot {
     /// True when the text came from Cmd+C because the editor exposes no AX text (canvas editors). Never patchable.
     let copied: Bool
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
-    var canPatch: Bool { fullText != nil && AX.settable(element, kAXSelectedTextAttribute) && AX.settable(element, kAXSelectedTextRangeAttribute) }
+    var canPatch: Bool { fullText != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element)) != nil }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
         guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
               let element = AX.focusedText(app) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element), !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
-        guard let selectedRange = AX.range(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
-        let full = AX.string(element, kAXValueAttribute)
+        if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
+        guard let selectedRange = AX.selection(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
+        let full = AX.text(element)
         var selection = selectedRange
         var text = AX.string(element, kAXSelectedTextAttribute) ?? ""
         if passive {
@@ -166,7 +161,7 @@ struct SelectionSnapshot {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, selection.length > 0 else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536, text.utf16.count == selection.length else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
-                                 bounds: AX.bounds(element, selection), richText: AX.attributed(element, selection), copied: false)
+                                 bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: AX.attributed(element, selection), copied: false)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -195,11 +190,11 @@ struct SelectionSnapshot {
         }
         guard !app.isTerminated, !IsSecureEventInputEnabled(), !AX.isSecure(element),
               let focused = AX.focusedText(app), CFEqual(focused, element),
-              let current = AX.range(element), current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
+              let current = AX.selection(element), current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }
         if let fullText {
-            guard AX.string(element, kAXValueAttribute) == fullText else { throw ParzrError.message("Your text changed. Select it again.") }
+            guard AX.text(element) == fullText else { throw ParzrError.message("Your text changed. Select it again.") }
         } else {
             guard AX.string(element, kAXSelectedTextAttribute) == text else { throw ParzrError.message("Your selection changed. Select it again.") }
         }
@@ -215,7 +210,7 @@ struct SelectionSnapshot {
     }
     func protectedRanges() -> [TextSpan] {
         guard let richText, richText.string == text else { return [] }
-        return Self.protectedSpans(in: richText)
+        return Self.protectedSpans(in: richText) + (Compat.isXcode(bundle) ? Compat.codeProtectedSpans(in: richText) : [])
     }
     /// Links and attachments, under both the AppKit keys and the "AXLink"/"AXAttachment" keys the Accessibility API uses, plus @mention runs.
     nonisolated static func protectedSpans(in text: NSAttributedString) -> [TextSpan] {
@@ -226,27 +221,29 @@ struct SelectionSnapshot {
         }
         return ranges
     }
-    func apply(_ edits: [WritingEdit]) throws {
+    func apply(_ edits: [WritingEdit]) async throws {
         try validate(); try EditPlan.validate(edits, in: text)
         // A passive caret may have moved since the snapshot; restore it from where it is now.
-        let caretStart = expectedSelection.length == 0 ? (AX.range(element)?.location ?? expectedSelection.location) : expectedSelection.location
+        let caretStart = expectedSelection.length == 0 ? (AX.selection(element)?.location ?? expectedSelection.location) : expectedSelection.location
         guard canPatch, let fullText else { throw ParzrError.message("This editor needs paste replacement. Review the formatting notice before using Paste instead.") }
         var expected = fullText
         var applied = 0
         for edit in edits.reversed() {
             // Verify between every range patch; never replace the entire document.
-            guard AX.string(element, kAXValueAttribute) == expected else {
+            guard AX.text(element) == expected else {
                 throw ParzrError.message("The editor changed during replacement. \(applied) edits applied; use the editor's Undo to revert.")
             }
             let global = NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)
-            guard AX.setRange(element, global), AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, edit.replacement as CFString) == .success else {
-                _ = AX.setRange(element, expectedSelection)
-                throw ParzrError.message("The editor refused a range edit. \(applied) edits applied; use the editor's Undo if needed.")
+            let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement)
+            do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String) }
+            catch {
+                _ = AX.select(element, expectedSelection)
+                throw ParzrError.message("\(error.localizedDescription) \(applied) edits applied; use the editor's Undo if needed.")
             }
-            let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement); expected = next as String
+            expected = next as String
             applied += 1
         }
-        guard AX.string(element, kAXValueAttribute) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        guard AX.text(element) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
         FixLearning.record(edits, in: self)
         let delta = edits.reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
         if expectedSelection.length == 0 {
@@ -258,9 +255,9 @@ struct SelectionSnapshot {
                 if relativeCaret >= edit.end_utf16 { caret += edit.replacement.utf16.count - edit.range.length }
                 else if relativeCaret > edit.start_utf16 { caret = selection.location + edit.start_utf16 + edit.replacement.utf16.count }
             }
-            _ = AX.setRange(element, NSRange(location: min(max(0, caret), expected.utf16.count), length: 0))
+            _ = AX.select(element, NSRange(location: min(max(0, caret), expected.utf16.count), length: 0))
         } else {
-            _ = AX.setRange(element, NSRange(location: selection.location, length: selection.length + delta))
+            _ = AX.select(element, NSRange(location: selection.location, length: selection.length + delta))
         }
     }
     func metadata() -> String {

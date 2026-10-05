@@ -83,7 +83,7 @@ func runGrammarTypingTest(reportDirectory: String) async throws {
         guard AX.setRange(element, NSRange(location: phrase.utf16.count, length: 0)) else { throw ParzrError.message("TextEdit refused the grammar fixture caret.") }
         let snapshot = try SelectionSnapshot.capture(passive: true)
         guard snapshot.text == phrase, let before = snapshot.richText else { throw ParzrError.message("The grammar fixture could not be captured safely.") }
-        try snapshot.apply(result.edits)
+        try await snapshot.apply(result.edits)
         guard AX.string(element, kAXValueAttribute) == expected,
               let after = AX.attributed(element, NSRange(location: 0, length: expected.utf16.count)),
               NSDictionary(dictionary: before.attributes(at: 0, effectiveRange: nil)).isEqual(to: after.attributes(at: 0, effectiveRange: nil)) else { throw ParzrError.message("Grammar patching changed text or rich-text formatting unexpectedly.") }

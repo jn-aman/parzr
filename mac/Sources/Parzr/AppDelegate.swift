@@ -136,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
         if !CommandLine.arguments.contains("--background") { showStudio() }
         // First launch (or a revoked grant): ask once per launch so Parzr is not silently idle.
+        Preferences.shared.watchTrustChanges()
         if !AXIsProcessTrusted() { Preferences.shared.promptForPermission() }
     }
     @objc private func toggleStatusPopover() {

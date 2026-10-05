@@ -29,6 +29,11 @@ final class Preferences: ObservableObject {
     @Published var contextRefinement: Bool { didSet { defaults.set(contextRefinement, forKey: "contextRefinement") } }
     @Published var showWordCount: Bool { didSet { defaults.set(showWordCount, forKey: "showWordCount") } }
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
+    /// Opt-in: VS Code and Cursor show a screen-reader notice when Parzr asks for accessibility, so they stay untouched until enabled.
+    @Published var checkVSCode: Bool { didSet { defaults.set(checkVSCode, forKey: "checkVSCode") } }
+    @Published var firefoxHintDismissed: Bool { didSet { defaults.set(firefoxHintDismissed, forKey: "firefoxHintDismissed") } }
+    /// Shown in the menu-bar popover when Firefox blocks accessibility; not persisted, so it returns next launch until dismissed.
+    @Published var firefoxHint = false
     /// Names Parzr learned (undone fixes, repeated Ignores, "This is a name"); persisted, shared with the browser host and LSP through known-words.json.
     @Published var learnedNames: [String] { didSet { defaults.set(learnedNames, forKey: "learnedNames") } }
     @Published var useContactNames: Bool { didSet { defaults.set(useContactNames, forKey: "useContactNames") } }
@@ -75,6 +80,7 @@ final class Preferences: ObservableObject {
         contextRefinement = defaults.object(forKey: "contextRefinement") as? Bool ?? true
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
+        checkVSCode = defaults.bool(forKey: "checkVSCode"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")
         learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
         useContactNames = defaults.bool(forKey: "useContactNames")
         nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.documents.rawValue
@@ -92,6 +98,12 @@ final class Preferences: ObservableObject {
     func promptForPermission() {
         permissionGranted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         watchPermission()
+    }
+    /// macOS posts this when any app's Accessibility grant changes; refreshing here makes a new grant take effect without relaunching or opening Parzr.
+    func watchTrustChanges() {
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in try? await Task.sleep(for: .milliseconds(300)); self?.refreshPermission() }
+        }
     }
     func refreshPermission() {
         permissionGranted = AXIsProcessTrusted()
@@ -113,6 +125,7 @@ final class Preferences: ObservableObject {
         do { if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }; launchError = nil; objectWillChange.send() }
         catch { launchError = "macOS could not change login settings: \(error.localizedDescription)" }
     }
+    func dismissFirefoxHint() { firefoxHint = false; firefoxHintDismissed = true }
     func enabled(for bundle: String) -> Bool { !disabledApps.contains(bundle) }
     func saveWord(_ word: String) {
         guard !word.isEmpty, word.utf8.count <= 128, dictionary.count < 1000, !dictionary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
