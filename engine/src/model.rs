@@ -923,7 +923,8 @@ fn plausible_edits(all: Vec<Edit>) -> Vec<Edit> {
         for i in 1..all.len() {
             if all[i - 1].end_utf16 == all[i].start_utf16 && keep[i - 1] != keep[i] {
                 for j in [i - 1, i] {
-                    if all[j].group_id.is_none() {
+                    // Only a real change counts: a grouped edit next to a dropped one never converges.
+                    if all[j].group_id.is_none() && keep[j] {
                         keep[j] = false;
                         changed = true;
                     }
@@ -1319,6 +1320,27 @@ mod tests {
                 ("".to_string(), ".".to_string())
             ]
         );
+    }
+    #[test]
+    fn grouped_edit_next_to_an_implausible_one_terminates() {
+        let edit =
+            |start: usize, end: usize, original: &str, replacement: &str, group: bool| Edit {
+                start_utf16: start,
+                end_utf16: end,
+                replacement: replacement.to_string(),
+                original: original.to_string(),
+                category: String::new(),
+                rule_id: String::new(),
+                explanation: String::new(),
+                confidence: 1.0,
+                group_id: group.then(|| "g".to_string()),
+            };
+        let kept = plausible_edits(vec![
+            edit(0, 3, "oin", "one", true),
+            edit(3, 4, " ", " way or the other, the thing is ", false),
+        ]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].replacement, "one");
     }
     #[test]
     fn fix_guard_filters_edits_from_the_model_diff() {
