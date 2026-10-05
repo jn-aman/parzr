@@ -1,0 +1,7 @@
+{
+  "max_damaged_all": 0.005,
+  "max_damaged_lowercase": 0.01,
+  "max_damaged_heldout": 0.03,
+  "min_control_recall": 0.94,
+  "max_errors": 0
+}

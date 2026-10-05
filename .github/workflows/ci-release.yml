@@ -38,6 +38,7 @@ jobs:
         run: |
           python3 scripts/prepare-model.py
           cargo build --release --locked --manifest-path engine/Cargo.toml
+          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
           PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
       - name: Browser and editor integration checks
         run: |
