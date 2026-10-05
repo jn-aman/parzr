@@ -442,6 +442,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     if req.protected_ranges.len() > 4096 || req.tokens.len() > 16_384 {
         return Err("Structural metadata exceeds its limit.".into());
     }
+    // One pass marks every valid UTF-16 boundary; a lookup per range end replaces a text scan.
     let mut boundary = vec![false; length + 1];
     let mut at = 0;
     for c in req.text.chars() {
@@ -536,14 +537,15 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             edits.push(e);
         }
     }
-    for compiled in rules::contextual() {
+    for (compiled, hit) in rules::contextual().iter().zip(rules::candidates(&req.text)) {
         let rule = &compiled.rule;
-        if tone_only == rule.modes.is_empty()
+        if !hit
+            || tone_only == rule.modes.is_empty()
             || (!rule.modes.is_empty() && !rule.modes.contains(&req.mode))
         {
             continue;
         }
-        for captures in compiled.regex.captures_iter(&req.text) {
+        for captures in compiled.regex().captures_iter(&req.text) {
             let Some(m) = captures.name("target").or_else(|| captures.get(0)) else {
                 continue;
             };

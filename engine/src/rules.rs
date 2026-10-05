@@ -1,9 +1,11 @@
-//! Compiled rule packs. Fixed phrases share one Aho–Corasick automaton; contextual patterns compile once.
+//! Compiled rule packs. Fixed phrases share one Aho-Corasick automaton; contextual patterns compile
+//! lazily, only once a required-literal prefilter (a second automaton) finds one of their literals.
 use crate::Mode;
 use aho_corasick::AhoCorasick;
 use regex::Regex;
 use serde::Deserialize;
 use std::sync::OnceLock;
+mod literals;
 #[derive(Debug, Deserialize)]
 pub struct Rule {
     pub id: String,
@@ -31,26 +33,81 @@ fn confidence() -> f32 {
 }
 pub struct CompiledRule {
     pub rule: Rule,
-    pub regex: Regex,
+    regex: OnceLock<Regex>,
+}
+impl CompiledRule {
+    pub fn regex(&self) -> &Regex {
+        self.regex.get_or_init(|| {
+            Regex::new(&self.rule.pattern).expect("valid embedded contextual pattern")
+        })
+    }
 }
 pub fn contextual() -> &'static [CompiledRule] {
-    static RULES: OnceLock<Vec<CompiledRule>> = OnceLock::new();
-    RULES.get_or_init(|| {
+    &pack().rules
+}
+struct Pack {
+    rules: Vec<CompiledRule>,
+    filter: AhoCorasick,
+    /// Rule index of each filter literal.
+    owner: Vec<usize>,
+    /// Rules with no safe required literal: always candidates.
+    always: Vec<usize>,
+}
+fn pack() -> &'static Pack {
+    static PACK: OnceLock<Pack> = OnceLock::new();
+    PACK.get_or_init(|| {
         let mut grammar: Vec<Rule> = serde_json::from_str(include_str!("../rules/grammar.json"))
             .expect("valid embedded rule pack");
         grammar.extend(
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/tone.json"))
                 .expect("valid embedded rule pack"),
         );
-        grammar
+        let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
+        for (i, rule) in grammar.iter().enumerate() {
+            assert!(!rule.provenance.is_empty(), "rule provenance");
+            match literals::required(&rule.pattern) {
+                Some(set) => {
+                    owner.extend(set.iter().map(|_| i));
+                    words.extend(set);
+                }
+                None => always.push(i),
+            }
+        }
+        let filter = AhoCorasick::builder()
+            .ascii_case_insensitive(true)
+            .build(&words)
+            .expect("required literals");
+        let rules = grammar
             .into_iter()
-            .map(|rule| {
-                assert!(!rule.provenance.is_empty(), "rule provenance");
-                let regex = Regex::new(&rule.pattern).expect("valid embedded contextual pattern");
-                CompiledRule { rule, regex }
+            .map(|rule| CompiledRule {
+                rule,
+                regex: OnceLock::new(),
             })
-            .collect()
+            .collect();
+        Pack {
+            rules,
+            filter,
+            owner,
+            always,
+        }
     })
+}
+/// Which contextual rules can match `text`: those whose required literal occurs in it. A rule
+/// reported false has no match, so its regex is never compiled or run.
+pub fn candidates(text: &str) -> Vec<bool> {
+    let pack = pack();
+    // Unicode case folding lets "K" and "s" match U+212A and U+017F, which the filter cannot see.
+    if text.contains(['\u{212A}', '\u{17F}']) {
+        return vec![true; pack.rules.len()];
+    }
+    let mut hit = vec![false; pack.rules.len()];
+    for &i in &pack.always {
+        hit[i] = true;
+    }
+    for m in pack.filter.find_overlapping_iter(text) {
+        hit[pack.owner[m.pattern().as_usize()]] = true;
+    }
+    hit
 }
 #[derive(Deserialize)]
 pub struct PhraseRule {
@@ -94,9 +151,13 @@ mod tests {
         assert_eq!(grammar.len() + tone.len(), contextual().len());
         for c in contextual() {
             assert!(!c.rule.provenance.is_empty());
-            assert!(c.regex.is_match(&c.rule.positive), "{} positive", c.rule.id);
             assert!(
-                !c.regex.is_match(&c.rule.negative),
+                c.regex().is_match(&c.rule.positive),
+                "{} positive",
+                c.rule.id
+            );
+            assert!(
+                !c.regex().is_match(&c.rule.negative),
                 "{} negative",
                 c.rule.id
             );
@@ -105,6 +166,58 @@ mod tests {
             assert!(!p.provenance.is_empty());
             assert!(!p.source.is_empty());
             assert_ne!(p.source, p.replacement);
+        }
+    }
+    #[test]
+    fn the_prefilter_never_hides_a_match() {
+        for (i, c) in contextual().iter().enumerate() {
+            let positive = &c.rule.positive;
+            for text in [
+                positive.clone(),
+                positive.to_uppercase(),
+                format!("Ok. {positive}"),
+            ] {
+                assert!(
+                    candidates(&text)[i] || !c.regex().is_match(&text),
+                    "{}",
+                    c.rule.id
+                );
+            }
+            assert!(candidates(positive)[i], "{} positive", c.rule.id);
+        }
+        // PARZR_PREFILTER_CORPUS: a file of texts, one JSON string or {"text": ...} per line.
+        let Ok(path) = std::env::var("PARZR_PREFILTER_CORPUS") else {
+            return;
+        };
+        let (mut texts, mut matches) = (0, 0);
+        for line in std::fs::read_to_string(path).unwrap().lines() {
+            let v: serde_json::Value = serde_json::from_str(line).unwrap();
+            let text = v.as_str().or(v["text"].as_str()).unwrap();
+            let hit = candidates(text);
+            texts += 1;
+            for (i, c) in contextual().iter().enumerate() {
+                let found = c.regex().is_match(text);
+                matches += usize::from(found);
+                assert!(!found || hit[i], "{} missed in {text:?}", c.rule.id);
+            }
+        }
+        eprintln!("prefilter checked {texts} texts, {matches} rule matches, none missed");
+    }
+    #[test]
+    fn only_k_and_s_have_non_ascii_case_variants() {
+        let all: String = (0x80..=0x10FFFF_u32).filter_map(char::from_u32).collect();
+        for c in 'a'..='z' {
+            let re = Regex::new(&format!("(?i){c}")).unwrap();
+            let odd: Vec<char> = re
+                .find_iter(&all)
+                .filter_map(|m| m.as_str().chars().next())
+                .collect();
+            let expected: &[char] = match c {
+                'k' => &['\u{212A}'],
+                's' => &['\u{17F}'],
+                _ => &[],
+            };
+            assert_eq!(odd, expected, "{c}");
         }
     }
 }
