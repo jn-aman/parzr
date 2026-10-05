@@ -504,7 +504,7 @@ function names(el) {
   new IntersectionObserver((es, o) => {
     if (!es[0].isIntersecting) return;
     fig.classList.add('in'); o.disconnect();
-    const t0 = performance.now(), step = now => { const t = clamp((now - t0) / 1600); cnt.textContent = (.08 * (1 - Math.pow(1 - t, 3))).toFixed(2); if (t < 1) requestAnimationFrame(step); };
+    const t0 = performance.now(), step = now => { const t = clamp((now - t0) / 1600); cnt.textContent = (.05 * (1 - Math.pow(1 - t, 3))).toFixed(2); if (t < 1) requestAnimationFrame(step); };
     cnt.textContent = '0.00'; requestAnimationFrame(step);
   }, { threshold: .5 }).observe(fig);
   (async () => {

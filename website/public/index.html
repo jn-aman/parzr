@@ -219,7 +219,7 @@
       <figure class="fig" id="fig">
         <p class="fig-k">Names damaged by a correction</p>
         <div class="fig-row"><span class="fig-l">Before</span><div class="bar"><i class="b13"></i></div><span class="fig-v">13%</span></div>
-        <div class="fig-row"><span class="fig-l">Now</span><div class="bar"><i class="b008"></i></div><span class="fig-v hi"><span id="fig-n" data-count="0.08">0.08</span>%</span></div>
+        <div class="fig-row"><span class="fig-l">Now</span><div class="bar"><i class="b005"></i></div><span class="fig-v hi"><span id="fig-n" data-count="0.05">0.05</span>%</span></div>
         <figcaption class="fine">Measured on Parzr’s open name benchmark; synthetic sentences. 6,426 sentences, 23 naming traditions.</figcaption>
       </figure>
     </div>
@@ -245,6 +245,25 @@
     <p class="eyebrow">What you get</p>
     <h2 id="bento-h" class="h2">Help that stays <span class="nw">out of the way.</span></h2>
     <div class="bento" id="bento">
+
+      <article class="bt bt-gec">
+        <div class="bt-vis gec-vis" aria-hidden="true">
+          <p class="gec-new">New in 0.2.0</p>
+          <ul class="tags">
+            <li class="tw"><i>The</i><small>keep</small></li>
+            <li class="tw"><i>new</i><small>keep</small></li>
+            <li class="tw"><i>features</i><small>keep</small></li>
+            <li class="tw"><i>will</i><small>keep</small></li>
+            <li class="tw"><i>be</i><small>keep</small></li>
+            <li class="tw fix"><i><s>release</s> <b>released</b></i><small>verb form</small></li>
+            <li class="tw"><i>next</i><small>keep</small></li>
+            <li class="tw"><i>week.</i><small>keep</small></li>
+          </ul>
+          <ul class="gec-stats"><li><b>about 2 ms</b> per sentence</li><li><b>about 18 MB</b> of memory</li><li><b>Neural Engine</b>, always loaded</li></ul>
+        </div>
+        <h3 class="bt-t">Smart grammar, on the Neural Engine.</h3>
+        <p class="bt-d">A small grammar model tags each word of a new sentence (keep, replace, append, verb form, plural) instead of rewriting it. It runs on your Mac in about 2 ms a sentence, and its fixes pass Parzr's own guards: names, links and code stay untouched. Example: "will be release" becomes "will be released".</p>
+      </article>
 
       <article class="bt bt-ext">
         <div class="bt-vis ext-vis" aria-hidden="true">
@@ -304,12 +323,12 @@
           <svg class="off"><use href="#i-wifi"/></svg>
         </div>
         <h3 class="bt-t">Sent from your Mac.</h3>
-        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. A 593 MB model ships inside the app and unloads after 30 idle seconds.</p>
+        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. Both models ship inside the app: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds.</p>
       </article>
 
       <article class="bt bt-src">
         <div class="bt-vis src-vis" aria-hidden="true">
-          <div class="pipe"><span>Rust engine</span><i></i><span>Swift app</span><i></i><span>Local model</span></div>
+          <div class="pipe"><span>Rust engine</span><i></i><span>Swift app</span><i></i><span>Local models</span></div>
         </div>
         <h3 class="bt-t">Open source, every line.</h3>
         <p class="bt-d">Apache-2.0. Every rule ships with a positive and a negative example, and its provenance. <a href="#open" class="inl" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Open source">Read the code</a></p>
@@ -379,7 +398,7 @@
     <div class="open-copy">
       <p class="eyebrow">Open source</p>
       <h2 id="open-h" class="h2"><span class="nw">Read every line.</span></h2>
-      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and a local model, all in one public repository. Every rule ships with a positive and a negative example, and its provenance.</p>
+      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and two local models, all in one public repository. Every rule ships with a positive and a negative example, and its provenance. The bundled GECToR weights are for non-commercial use, and Parzr is free.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/jn-aman/parzr" data-link="repo" data-rybbit-event="GitHub opened" data-rybbit-prop-placement="Open source section" rel="noopener"><svg aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
         <details class="build" id="build">
