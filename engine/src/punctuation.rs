@@ -109,7 +109,7 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
-        // "but also they killed": the adverb does not stand in for a subject.
+        // "but also have": the adverb does not stand in for a subject.
         let subject_at = if tokens
             .get(i + 1)
             .is_some_and(|t| ["also", "then"].contains(&t.normalized.as_str()))
@@ -118,7 +118,7 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         } else {
             i + 1
         };
-        if !tokens.get(subject_at).is_some_and(own_subject)
+        if tokens.get(subject_at).is_none_or(shares_subject)
             || [
                 "and", "or", "but", "yet", "nor", "not", "even", "just", "do", "does", "did",
                 "doing", "done", "if", "that", "as", "than",
@@ -158,49 +158,12 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
     }
 }
 
-/// The word can open a clause as its own subject: a pronoun, determiner, or name.
-fn own_subject(t: &Token<'_>) -> bool {
-    t.proper_name
-        || [
-            "i",
-            "we",
-            "you",
-            "he",
-            "she",
-            "it",
-            "they",
-            "there",
-            "the",
-            "a",
-            "an",
-            "this",
-            "that",
-            "these",
-            "those",
-            "my",
-            "our",
-            "your",
-            "his",
-            "her",
-            "their",
-            "its",
-            "some",
-            "many",
-            "most",
-            "all",
-            "no",
-            "every",
-            "each",
-            "everyone",
-            "everybody",
-            "nobody",
-            "someone",
-            "people",
-        ]
-        .contains(&t.normalized.as_str())
-        || t.surface.chars().next().is_some_and(char::is_uppercase)
-            && t.is_word
-            && !crate::spelling::known(&t.normalized)
+/// A verb right after "but" means the clause shares its subject with the first ("He came but
+/// left early"), so there are no two independent clauses to separate.
+fn shares_subject(t: &Token<'_>) -> bool {
+    finite(t)
+        || morphology::verb(&t.normalized).is_some_and(|v| v.base == t.normalized)
+            && crate::spelling::flags(&t.normalized) & 2 == 0
 }
 pub fn finite(t: &Token<'_>) -> bool {
     [

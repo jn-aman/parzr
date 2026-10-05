@@ -1501,6 +1501,14 @@ mod tests {
             ("Did she called him?", "Did she call him?"),
             ("Does he works here?", "Does he work here?"),
             ("My brothers is tall.", "My brothers are tall."),
+            (
+                "The fruit is cheap but the shop is far from our house.",
+                "The fruit is cheap, but the shop is far from our house.",
+            ),
+            (
+                "We should send the brief before the meeting starts Anika can finish the work today.",
+                "We should send the brief before the meeting starts. Anika can finish the work today.",
+            ),
         ] {
             assert_eq!(fix(input), expected, "{input}");
         }
