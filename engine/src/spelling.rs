@@ -1192,6 +1192,33 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
 fn addressed_by(history: &[Token<'_>], token: &Token<'_>) -> bool {
     lead(history, token, &PUNCT_BEFORE).is_some_and(|p| ADDRESSING.contains(&p.normalized.as_str()))
         || lead(history, token, &["."]).is_some_and(|p| TITLES.contains(&p.normalized.as_str()))
+        || looped_in(history)
+}
+/// Workplace phrases that bring a person into a thread: "looping in X", "loop in X", "adding X".
+fn looped_in(history: &[Token<'_>]) -> bool {
+    let words: Vec<&str> = history
+        .iter()
+        .rev()
+        .filter(|t| t.is_word)
+        .take(2)
+        .map(|t| t.normalized.as_str())
+        .collect();
+    match words.as_slice() {
+        ["in", verb, ..] => [
+            "loop", "looping", "looped", "bring", "bringing", "brought", "pull", "pulling",
+        ]
+        .contains(verb),
+        [verb, ..] => [
+            "adding",
+            "tagging",
+            "tagged",
+            "welcoming",
+            "welcome",
+            "including",
+        ]
+        .contains(verb),
+        [] => false,
+    }
 }
 /// A lowercase word that is a person's name typed without capitals: listed only as a name, or
 /// unknown and name-like in context. Callers must not respell it into a different word.
