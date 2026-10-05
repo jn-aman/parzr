@@ -29,20 +29,24 @@ unsafe extern "C" {
     fn dlopen(path: *const c_char, mode: i32) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }
+/// The runtime library and the Qwen model file next to the executable (or from the environment).
+fn locations() -> Result<(PathBuf, PathBuf), String> {
+    let executable = std::env::current_exe().map_err(|_| "Could not locate the bundled model.")?;
+    let directory = executable
+        .parent()
+        .ok_or("Could not locate the bundled model.")?;
+    let library = std::env::var_os("PARZR_MODEL_RUNTIME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| directory.join("../Frameworks/libparzr_model.dylib"));
+    let model = std::env::var_os("PARZR_MODEL_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| directory.join("../Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf"));
+    Ok((library, model))
+}
 fn runtime() -> Result<&'static Runtime, String> {
     RUNTIME
         .get_or_init(|| {
-            let executable =
-                std::env::current_exe().map_err(|_| "Could not locate the bundled model.")?;
-            let directory = executable
-                .parent()
-                .ok_or("Could not locate the bundled model.")?;
-            let library = std::env::var_os("PARZR_MODEL_RUNTIME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| directory.join("../Frameworks/libparzr_model.dylib"));
-            let model = std::env::var_os("PARZR_MODEL_PATH")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| directory.join("../Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf"));
+            let (library, model) = locations()?;
             if !model.is_file() {
                 return Err("The bundled writing model is missing. Reinstall Parzr.".into());
             }
@@ -109,6 +113,74 @@ pub fn name_log_odds(text: &str, start_utf16: usize, end_utf16: usize) -> Option
 #[cfg(not(target_os = "macos"))]
 fn load(_: &Path, _: PathBuf) -> Result<Runtime, String> {
     Err("The bundled model runtime requires macOS.".into())
+}
+type GecPrepare = unsafe extern "C" fn(*const c_char) -> i32;
+type GecForward = unsafe extern "C" fn(*const i32, i32, *mut f32, *mut f32) -> i32;
+/// The grammar model's entry points; absent in a runtime built without it (GECToR is then off).
+struct GecApi {
+    prepare: GecPrepare,
+    forward: GecForward,
+}
+static GEC: OnceLock<Option<GecApi>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+fn gec_api() -> Option<&'static GecApi> {
+    GEC.get_or_init(|| {
+        use std::os::unix::ffi::OsStrExt;
+        let (library, _) = locations().ok()?;
+        let path = CString::new(library.as_os_str().as_bytes()).ok()?;
+        // SAFETY: NUL-terminated names; the handle is kept for the process lifetime.
+        unsafe {
+            let handle = dlopen(path.as_ptr(), 2);
+            if handle.is_null() {
+                return None;
+            }
+            let prepare = dlsym(handle, c"parzr_gec_prepare".as_ptr());
+            let forward = dlsym(handle, c"parzr_gec_forward".as_ptr());
+            (!prepare.is_null() && !forward.is_null()).then(|| GecApi {
+                prepare: std::mem::transmute::<*mut c_void, GecPrepare>(prepare),
+                forward: std::mem::transmute::<*mut c_void, GecForward>(forward),
+            })
+        }
+    })
+    .as_ref()
+}
+#[cfg(not(target_os = "macos"))]
+fn gec_api() -> Option<&'static GecApi> {
+    GEC.get_or_init(|| None).as_ref()
+}
+/// Where the grammar model's files live: PARZR_GEC_DIR, else `gector` beside the Qwen model file.
+pub fn gec_dir() -> Option<PathBuf> {
+    std::env::var_os("PARZR_GEC_DIR")
+        .map(PathBuf::from)
+        .or_else(|| Some(locations().ok()?.1.parent()?.join("gector")))
+}
+/// Loads (or compiles) the resident grammar model. Idempotent; false when it is unavailable.
+pub fn gec_prepare(directory: &Path) -> bool {
+    let Some(api) = gec_api() else { return false };
+    let Ok(dir) = CString::new(directory.to_string_lossy().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: NUL-terminated directory name alive for this synchronous call.
+    unsafe { (api.prepare)(dir.as_ptr()) == 0 }
+}
+/// Label logits (count x 5001) and detection logits (count x 2) for 1 to 80 token ids.
+pub fn gec_forward(ids: &[i32]) -> Option<(Vec<f32>, Vec<f32>)> {
+    let api = gec_api()?;
+    let count = i32::try_from(ids.len())
+        .ok()
+        .filter(|n| (1..=80).contains(n))?;
+    let mut labels = vec![0f32; ids.len() * 5001];
+    let mut detect = vec![0f32; ids.len() * 2];
+    // SAFETY: the buffers hold count * 5001 and count * 2 floats, as the runtime requires.
+    let status = unsafe {
+        (api.forward)(
+            ids.as_ptr(),
+            count,
+            labels.as_mut_ptr(),
+            detect.as_mut_ptr(),
+        )
+    };
+    (status == 0).then_some((labels, detect))
 }
 pub fn cancel() {
     if let Some(Ok(r)) = RUNTIME.get() {

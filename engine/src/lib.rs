@@ -1,6 +1,10 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
 mod context;
 #[cfg(feature = "local-model")]
+mod gec;
+#[cfg(feature = "local-model")]
+mod gec_text;
+#[cfg(feature = "local-model")]
 mod model;
 mod morphology;
 mod names;
@@ -60,6 +64,10 @@ pub struct Request {
     /// Explicit passage checks request model context; passive typing stays on the fast engine.
     #[serde(default)]
     pub deep: bool,
+    /// Also run the on-device grammar model (GECToR) beside the rules in Fix mode. Without its
+    /// files or the native runtime this does nothing.
+    #[serde(default)]
+    pub gec: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -93,6 +101,7 @@ impl Default for Request {
             sentence_start: true,
             sentence_end: true,
             deep: false,
+            gec: false,
             name_index: None,
         }
     }
@@ -116,6 +125,17 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
 pub extern "C" fn parzr_cancel_rewrite() {
     #[cfg(feature = "local-model")]
     model::cancel();
+}
+
+/// Loads the on-device grammar model (and compiles it on first use) so the first check is fast.
+/// Safe to call from any thread, repeatedly. Returns 1 when the model is ready, else 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_gec_warm() -> i32 {
+    #[cfg(feature = "local-model")]
+    if catch_unwind(gec::warm).unwrap_or(false) {
+        return 1;
+    }
+    0
 }
 
 fn yes() -> bool {

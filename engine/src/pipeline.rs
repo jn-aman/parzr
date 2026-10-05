@@ -488,6 +488,17 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     if text != document.text() {
         return Err("The composed edit plan is inconsistent.".into());
     }
+    // The grammar model's corrections ride on top of the rules' plan (Fix mode only).
+    #[cfg(feature = "local-model")]
+    let (text, source_map, edits) = if req.gec && req.mode == Mode::Fix {
+        let merged = crate::gec::combine(req, &protected, edits.clone());
+        match apply_edits(&req.text, &merged) {
+            Ok((text, source_map)) => (text, source_map, merged),
+            Err(_) => (text, source_map, edits),
+        }
+    } else {
+        (text, source_map, edits)
+    };
     Ok(RewriteResult {
         version: if cfg!(feature = "local-model") {
             "parzr-0.1.0/hybrid-qwen3.5-0.8b-q5"
