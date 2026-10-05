@@ -111,18 +111,12 @@ Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and
 
 ## How it works
 
-```mermaid
-flowchart LR
-  A[Your text in any app] -->|Accessibility| B(Parzr)
-  B --> C[Rust engine<br/>rules, spelling, names]
-  C -->|as you type| D[Underlines and card]
-  B -->|Option+Space or tone| E[Local Qwen3.5-0.8B<br/>llama.cpp on Metal]
-  E --> C
-```
+<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, and gets back minimal UTF-16 edits. Only on the explicit path (Option+Space or a tone) the engine calls a native runtime that runs Qwen3.5-0.8B through llama.cpp on Metal. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Everything stays inside the Mac, with no network."></p>
 
-- **As you type:** a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). No model is loaded on this path.
-- **On demand:** explicit checks and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline), followed by another grammar pass. Guards keep the model to plausible corrections and never let it rename a name.
-- See [architecture](docs/architecture.md) and [grammar coverage](docs/grammar-coverage.md).
+- **As you type:** after a 90 ms pause (adjustable) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. No model is loaded on this path.
+- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass. Names and links are masked from the model, guards keep it to plausible corrections, and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
+- **Private by construction:** the app, engine and model runtime make no network requests while checking text.
+- See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 
 ## Measured, in the open
 
