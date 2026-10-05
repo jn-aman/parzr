@@ -932,20 +932,132 @@ fn in_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) ->
         || right.is_some_and(|w| list_member(w, false, token))
 }
 /// Common Roman Hindi words that are not English words: Hinglish is written, not misspelled.
-const HINGLISH: [&str; 93] = [
-    "aap", "aapka", "abhi", "accha", "acha", "achha", "arey", "arre", "aur", "bahut", "bata",
-    "batao", "bhai", "bhi", "bohot", "bolo", "chalo", "chinta", "dekho", "dena", "ek", "galat",
-    "gaya", "gayi", "haa", "haan", "hai", "hain", "haina", "hoon", "hua", "hue", "hui", "hum",
-    "isko", "jaldi", "ji", "kaam", "kahan", "kaisa", "kaise", "karna", "karo", "karte", "kiya",
-    "kiye", "kuch", "kya", "kyon", "kyu", "kyun", "lekin", "mat", "matlab", "mera", "mere", "meri",
-    "mujhe", "nahi", "nahin", "nai", "pata", "phir", "purana", "raha", "rahe", "rahi", "ruko",
-    "sab", "sahi", "samajh", "samjha", "suno", "tera", "teri", "tha", "theek", "thi", "thik",
-    "thoda", "thodi", "toh", "tujhe", "tumhara", "usko", "wahi", "wala", "wale", "wali", "wohi",
-    "yaar", "yahi", "zyada",
+const HINGLISH: &[&str] = &[
+    "aa", "aaj", "aana", "aao", "aap", "aapka", "abhi", "accha", "acha", "achha", "aise", "aloo",
+    "apna", "apne", "arey", "arre", "aur", "baad", "baat", "baba", "badhai", "bahot", "bahut",
+    "baje", "bas", "bata", "batao", "behen", "beta", "beti", "bhabhi", "bhai", "bhaisaab",
+    "bhaiya", "bhaiyya", "bhej", "bheje", "bhejo", "bhi", "bhool", "bilkul", "bohat", "bohot",
+    "bolo", "chaat", "chahiye", "chahta", "chahti", "chal", "chala", "chalega", "chalein", "chalo",
+    "chinta", "dekh", "dekha", "dekhna", "dekho", "dekhte", "dena", "dhyan", "didi", "diya",
+    "dost", "ek", "ekdum", "galat", "garmi", "gaya", "gayi", "ghar", "haa", "haan", "hai", "hain",
+    "haina", "hoga", "hoge", "hogi", "honge", "hoon", "hua", "hue", "hui", "hum", "humein",
+    "humne", "isko", "itna", "jaana", "jaao", "jaise", "jaldi", "jaunga", "jayega", "ji", "jo",
+    "jugaad", "ka", "kaafi", "kaam", "kab", "kahan", "kahin", "kaisa", "kaise", "kal", "kamaal",
+    "karega", "karenge", "karna", "karo", "karte", "kaun", "ke", "kha", "khana", "ki", "kitna",
+    "kitne", "kiya", "kiye", "koi", "kuch", "kya", "kyon", "kyonki", "kyu", "kyun", "kyunki",
+    "ladoo", "laga", "lagega", "lagi", "lagta", "lekin", "liya", "maine", "mat", "matlab", "maza",
+    "mein", "mera", "mere", "meri", "milte", "mujhe", "na", "nahi", "nahin", "nai", "ne", "nikal",
+    "nikalna", "paas", "paisa", "pakka", "paratha", "pata", "pe", "peene", "pehle", "phir", "pura",
+    "purana", "raha", "rahe", "rahi", "rakhna", "ruko", "sab", "sabko", "sabse", "sahi", "samajh",
+    "samjha", "samjho", "se", "shaadi", "sirf", "sunna", "suno", "tak", "tera", "teri", "tha",
+    "theek", "thi", "thik", "thoda", "thodi", "toh", "tujhe", "tumhara", "tumhe", "tumne", "unka",
+    "usko", "usne", "vasool", "wah", "wahan", "wahi", "waisa", "waise", "wala", "wale", "wali",
+    "woh", "wohi", "yaar", "yahan", "yahi", "yeh", "zyada",
+];
+/// Common Indian English vocabulary (food, kinship, culture) that no English dictionary lists: never a typo.
+const INDIAN: &[&str] = &[
+    "achar",
+    "amma",
+    "appa",
+    "ashram",
+    "aunty",
+    "babu",
+    "bazaar",
+    "bhajan",
+    "bhaji",
+    "bindi",
+    "biryani",
+    "chacha",
+    "chachi",
+    "chai",
+    "chapati",
+    "chappal",
+    "chole",
+    "chowk",
+    "chutney",
+    "crore",
+    "dabba",
+    "dadi",
+    "dal",
+    "desi",
+    "dhaba",
+    "dharma",
+    "dhoti",
+    "dosa",
+    "dupatta",
+    "ghee",
+    "gobi",
+    "gulab",
+    "guru",
+    "halwa",
+    "holi",
+    "idli",
+    "jalebi",
+    "kebab",
+    "kheer",
+    "kirtan",
+    "kulfi",
+    "kurta",
+    "lakh",
+    "lakhs",
+    "lassi",
+    "lehenga",
+    "mandir",
+    "mantra",
+    "masala",
+    "matar",
+    "mausi",
+    "mehendi",
+    "mehndi",
+    "mithai",
+    "naan",
+    "nani",
+    "paise",
+    "pakora",
+    "panchayat",
+    "pandit",
+    "paneer",
+    "papad",
+    "poha",
+    "pooja",
+    "prasad",
+    "puja",
+    "raita",
+    "rajma",
+    "rakhi",
+    "rasam",
+    "roti",
+    "sabzi",
+    "sadhu",
+    "sahib",
+    "salwar",
+    "sambar",
+    "samosa",
+    "saree",
+    "sari",
+    "swami",
+    "tabla",
+    "thali",
+    "tiffin",
+    "tikka",
+    "upma",
+    "uttapam",
+    "vada",
 ];
 /// A Hinglish word ("yaar", "karo"), never a typo or a proper noun.
 pub fn hinglish(word: &str) -> bool {
     HINGLISH.binary_search(&word).is_ok()
+}
+/// Words that must stay as typed: Roman Hindi, Indian English vocabulary, Latin and foreign
+/// phrases, "etc". A damaged spelling is never inferred from these.
+fn protected(word: &str) -> bool {
+    hinglish(word)
+        || INDIAN.binary_search(&word).is_ok()
+        || [
+            "al", "avant", "bona", "capita", "etc", "facto", "fide", "garde", "hoc", "inter",
+            "ipso", "naive", "priori", "sic", "vitro", "vivo",
+        ]
+        .contains(&word)
 }
 pub const PARTICLES: [&str; 12] = [
     "van", "von", "der", "den", "de", "zu", "bin", "ibn", "del", "della", "dos", "du",
@@ -1312,6 +1424,16 @@ fn article_split_ok(
                 || n.surface.chars().next().is_some_and(char::is_uppercase)
         })
 }
+/// Whether `word` is a regional or older spelling of `candidate` ("foetus"/"fetus", "colour"/"color").
+fn variant_spelling(word: &str, candidate: &str) -> bool {
+    // Short words ("sence") and "-ise", "-ss", "-lled" endings are ordinary typos, not variants.
+    let regional = [("oe", "e"), ("ae", "e"), ("our", "or"), ("ogue", "og")];
+    word.len() >= 6
+        && (word.starts_with("premiss")
+            || regional.iter().any(|(a, b)| {
+                word.replacen(a, b, 1) == candidate || word.replacen(b, a, 1) == candidate
+            }))
+}
 pub fn suggest(
     token: &Token<'_>,
     dialect: &str,
@@ -1425,11 +1547,60 @@ pub fn suggest(
     if lexicon().lowercase.contains(word) || names::is_shorthand(word) {
         return None;
     }
+    // "dont" is "don't", whatever else it is one letter from ("done").
+    if let Some(stem) = word.strip_suffix("nt")
+        && [
+            "do", "did", "does", "is", "was", "were", "are", "has", "have", "had", "should",
+            "would", "could", "need",
+        ]
+        .contains(&stem)
+    {
+        return Some(format!("{stem}n't"));
+    }
+    // Roman Hindi, Indian English and Latin words are never respelled; only the reviewed
+    // misspellings above and the name typos stay correctable.
+    // "thik" is also a typo of "think" unless Roman Hindi surrounds it.
+    let hindi_near = history
+        .iter()
+        .rev()
+        .take(3)
+        .chain(following_context.iter().take(3))
+        .any(|t| hinglish(&t.normalized) && t.normalized != "thik");
+    if protected(word) && (word != "thik" || hindi_near) && !names::is_name_typo(word) {
+        return None;
+    }
+    // The system spell checker also accepts "statin" and "offie", so what it accepts is respelled
+    // only to a very common word, never split.
+    let accepted = token.system_known && !names::is_name_typo(word);
+    // "waiters" is "waiter" and "laceless" is "lace" and "less": a regular form of a known word.
+    if accepted
+        && ["s", "es", "ed", "ing", "er", "ers", "ly", "less", "ness"]
+            .iter()
+            .any(|suffix| {
+                word.strip_suffix(suffix).is_some_and(|stem| {
+                    stem.len() >= 4 && (ordinary(stem) || ordinary(&format!("{stem}e")))
+                })
+            })
+    {
+        return None;
+    }
     // "jain" is only listed as "Jain": a lowercase name is never respelled into another word.
     if namey(word) && !name_only_typo(names::base(word), prev)
         || name_like(token, history, following_context)
     {
         return None;
+    }
+    // "familys" is "families" and "wifes" is "wives", not "family" and "wife".
+    let plural = word
+        .strip_suffix("ys")
+        .filter(|stem| stem.ends_with(|c| !"aeiou".contains(c)))
+        .map(|stem| format!("{stem}ies"))
+        .or_else(|| word.strip_suffix("fes").map(|stem| format!("{stem}ves")));
+    if let Some(plural) = plural
+        && !accepted
+        && lexicon().lowercase.contains(&plural)
+    {
+        return Some(plural);
     }
     let split = joined(
         word,
@@ -1440,8 +1611,9 @@ pub fn suggest(
     );
     // "aclear" beside a damaged word waits for the next pass, when "planningand" is "planning
     // and" and the split has a clear anchor.
-    let split =
-        split.filter(|(_, split)| article_split_ok(split, token, prev, history, following_context));
+    let split = split.filter(|(_, split)| {
+        !accepted && article_split_ok(split, token, prev, history, following_context)
+    });
     if word.len() < 3 {
         return None;
     }
@@ -1458,15 +1630,22 @@ pub fn suggest(
             candidates.extend(values.iter().cloned());
         }
     }
-    let dialect_flag = if dialect == "british" { 128 } else { 64 };
+    // With no dialect chosen, British and American spellings are both valid.
+    let dialect_flags = match dialect {
+        "british" => 128,
+        "american" => 64,
+        _ => 192,
+    };
     let mut candidates: Vec<String> = candidates
         .into_iter()
         // Never offer a name ("rahul" to "raul") or acronym ("neha" to "neh") for a lowercase word.
         .filter(|candidate| {
             distance_one(word, candidate)
-                && flags(candidate) & dialect_flag != 0
+                && flags(candidate) & dialect_flags != 0
                 && lexicon.lowercase.contains(candidate.as_str())
         })
+        // "foetuses" and "fetuses", "premisses" and "premises" are two valid spellings.
+        .filter(|candidate| !dialect.is_empty() || !variant_spelling(word, candidate))
         // "aman" to "man" or "aclear" to "clear" drops a word's first letter and either loses an
         // article or erases a name; neither is a correction.
         .filter(|candidate| word.strip_prefix('a') != Some(candidate))
@@ -1784,17 +1963,36 @@ pub fn suggest(
         score
     };
     candidates.sort_by(|a, b| score(b).cmp(&score(a)).then_with(|| a.cmp(b)));
-    if let Some((split_score, split)) = split.as_ref()
+    // A split of two content words ("bio diesel", "new papers") is a clear typo only when no
+    // single word is one edit away; a bound prefix is no word ("anti violence").
+    let split = split.as_ref().filter(|(_, split)| {
+        let prefix = [
+            "anti", "con", "cont", "don", "inter", "non", "out", "over", "semi", "sub", "under",
+        ];
+        !split.split(' ').next().is_some_and(|p| prefix.contains(&p))
+            && (split.split(' ').any(function) || candidates.is_empty())
+    });
+    if let Some((split_score, split)) = split
         && candidates.first().is_none_or(|c| *split_score > score(c))
     {
         return Some(split.clone());
     }
-    if candidates.len() == 1
-        || (candidates.len() > 1
-            && score(&candidates[0]) >= 40
-            && score(&candidates[0]) > score(&candidates[1]))
+    // A word one edit from a rare candidate ("chinese" and "chines") is not a typo, and one the
+    // system checker accepts is respelled only to a very common word ("statin" and "station").
+    let best = candidates
+        .first()
+        .filter(|c| frequency(c) >= if accepted { 400 } else { 250 })?;
+    // Close scores between the neighbours of a tiny word ("bos": box, bus, boy) are a guess, not a fix.
+    let margin = if accepted {
+        20
+    } else if word.len() <= 3 {
+        100
+    } else {
+        0
+    };
+    if candidates.len() == 1 || (score(best) >= 40 && score(best) > score(&candidates[1]) + margin)
     {
-        candidates.first().cloned()
+        Some(best.clone())
     } else {
         None
     }
@@ -1819,6 +2017,99 @@ mod tests {
                 && name_only_typo("ot", "")
                 && !name_only_typo("jain", "")
         );
+    }
+    /// `suggest` for `word` in `text`, as the engine calls it, with the system spell checker's verdict.
+    fn suggest_at(text: &str, word: &str, known: bool) -> Option<String> {
+        let start = text.find(word).unwrap();
+        let hint = crate::TokenHint {
+            start_utf16: start,
+            end_utf16: start + word.len(),
+            known,
+            ..Default::default()
+        };
+        let tokens = crate::tokenizer::tokenize(text, &[hint]);
+        let i = tokens.iter().position(|t| t.normalized == word).unwrap();
+        suggest(
+            &tokens[i],
+            "",
+            i.checked_sub(1).map(|j| &tokens[j]),
+            tokens.get(i + 1),
+            &tokens[..i],
+            &tokens[i + 1..],
+        )
+    }
+    #[test]
+    fn words_the_system_checker_accepts_are_not_respelled() {
+        // A closed compound the checker knows is never split.
+        let text = "The honeyeater is a small bird.";
+        assert_eq!(
+            suggest_at(text, "honeyeater", false).as_deref(),
+            Some("honey eater")
+        );
+        assert_eq!(suggest_at(text, "honeyeater", true), None);
+        // It accepts "waiters" too, a regular plural; a very common word one edit away still wins
+        // over a rare word the checker happens to accept ("statin" for "station").
+        assert_eq!(suggest_at("The waiters are kind.", "waiters", true), None);
+        assert_eq!(
+            suggest_at("Meet at the statin tomorrow.", "statin", true).as_deref(),
+            Some("station")
+        );
+        // Reviewed misspellings stay correctable whatever the checker says.
+        assert_eq!(
+            suggest_at("Please recieve it.", "recieve", true).as_deref(),
+            Some("receive")
+        );
+    }
+    #[test]
+    fn roman_hindi_indian_and_latin_words_stay() {
+        for (text, word) in [
+            ("Bhai yaar kya hai.", "yaar"),
+            ("Bhai yaar kya hai.", "hai"),
+            ("We ate paneer and dosa.", "paneer"),
+            ("My aunty came to the puja.", "puja"),
+            ("It is true a priori.", "priori"),
+            ("Pens, paper, etc. for class.", "etc"),
+        ] {
+            assert_eq!(suggest_at(text, word, false), None, "{word}");
+        }
+        assert!(HINGLISH.windows(2).all(|w| w[0] < w[1]) && INDIAN.windows(2).all(|w| w[0] < w[1]));
+    }
+    #[test]
+    fn contractions_keep_their_apostrophe() {
+        for (word, fixed) in [("dont", "don't"), ("didnt", "didn't"), ("isnt", "isn't")] {
+            let text = format!("I {word} know.");
+            assert_eq!(suggest_at(&text, word, false).as_deref(), Some(fixed));
+        }
+    }
+    #[test]
+    fn valid_variants_and_plurals() {
+        // Both spellings are valid by default; a misspelt plural gets its plural.
+        assert!(
+            variant_spelling("foetuses", "fetuses") && variant_spelling("premisses", "premises")
+        );
+        assert!(!variant_spelling("sence", "sense"));
+        assert_eq!(suggest_at("The foetuses grew.", "foetuses", false), None);
+        assert_eq!(
+            suggest_at("The familys met.", "familys", false).as_deref(),
+            Some("families")
+        );
+        assert_eq!(
+            suggest_at("Two wifes agreed.", "wifes", false).as_deref(),
+            Some("wives")
+        );
+    }
+    #[test]
+    fn one_word_beats_a_split() {
+        let text = "It was wonderfull today.";
+        assert_eq!(
+            suggest_at(text, "wonderfull", false).as_deref(),
+            Some("wonderful")
+        );
+        assert_eq!(
+            suggest_at("Read the newpapers daily.", "newpapers", false).as_deref(),
+            Some("newspapers")
+        );
+        assert_eq!(suggest_at("I donnot know.", "donnot", false), None);
     }
     #[test]
     fn dictionary_assets() {
