@@ -2,6 +2,16 @@ import Foundation
 import Darwin
 import NaturalLanguage
 
+public enum WordShape {
+    /// A lowercase letters-only token (inner apostrophes and hyphens allowed, possessive and outer quotes dropped), else nil.
+    public static func shaped(_ raw: String) -> String? {
+        var word = raw.trimmingCharacters(in: CharacterSet(charactersIn: "'\u{2019}-"))
+        for suffix in ["'s", "\u{2019}s"] where word.hasSuffix(suffix) { word.removeLast(suffix.count) }
+        guard word.count >= 2, word.utf8.count <= 128, word.contains(where: \.isLetter), word.allSatisfy({ $0.isLowercase || "'\u{2019}-".contains($0) }) else { return nil }
+        return word
+    }
+}
+
 /// The engine actor isolates Rust's per-thread state and keeps analysis off the UI actor.
 public actor WritingEngine {
     public static let shared = WritingEngine()
@@ -48,7 +58,11 @@ public actor WritingEngine {
         }
         throw ParzrError.message(Bundle.main.bundleURL.pathExtension == "app" ? "The bundled writing engine could not load. Reinstall Parzr." : "Build the local engine with cargo build --release, or set PARZR_ENGINE_PATH to its library.")
     }
-    private static func linguisticHints(for text: String) -> [TokenHint] {
+    /// Lowercase words (shaped as `WordShape.shaped`) the system spell checker accepts in `text`; set by the app, which owns the checker.
+    public typealias KnownWords = @Sendable (String) async -> Set<String>
+    private var knownWords: KnownWords?
+    public func setKnownWords(_ provider: @escaping KnownWords) { knownWords = provider }
+    static func linguisticHints(for text: String, known: Set<String> = []) -> [TokenHint] {
         // Per-call tagger; NLTagger mutable state never crosses worker boundaries.
         let tagger = NLTagger(tagSchemes: [.lexicalClass, .lemma, .nameType])
         tagger.string = text
@@ -61,7 +75,8 @@ public actor WritingEngine {
             // A lower-case typo next to a name must not become a protected last name.
             let named = (name == .personalName || name == .placeName || name == .organizationName)
                 && text[range].contains(where: \.isUppercase)
-            hints.append(TokenHint(range: NSRange(range, in: text), pos: tag?.rawValue ?? "Other", lemma: lemma, name: named))
+            let accepted = WordShape.shaped(String(text[range])).map(known.contains) ?? false
+            hints.append(TokenHint(range: NSRange(range, in: text), pos: tag?.rawValue ?? "Other", lemma: lemma, name: named, known: accepted))
             return true
         }
         return mergePossessives(hints, in: text)
@@ -81,7 +96,8 @@ public actor WritingEngine {
         try Task.checkCancellation()
         try load()
         guard request.text.utf8.count <= 65_536 else { throw ParzrError.message("Select at most 64 KB of text.") }
-        let tokens = request.tokens.isEmpty ? Self.linguisticHints(for: request.text) : request.tokens
+        var tokens = request.tokens
+        if tokens.isEmpty { tokens = Self.linguisticHints(for: request.text, known: await knownWords?(request.text) ?? []) }
         let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep)
         let input = try JSONEncoder().encode(enriched)
         guard let string = String(data: input, encoding: .utf8), let function = rewriteFunction, let cancellation else { throw ParzrError.message("The writing engine could not respond.") }

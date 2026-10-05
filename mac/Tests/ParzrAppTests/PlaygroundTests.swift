@@ -364,6 +364,12 @@ final class NameGateTests: XCTestCase {
         XCTAssertEqual(gate.names(in: "I recieve teh news"), [], "typos stay fixable")
         XCTAssertEqual(gate.names(in: "Looping in Jatin."), [], "already capitalized words are not lowercase names")
     }
+    func testAcceptedWordsAreThoseTheCheckerDoesNotFlag() {
+        var gate = gate()
+        let scan = gate.scan("ask jatin about teh plan")
+        XCTAssertEqual(scan.accepted, ["ask", "about", "plan"])
+        XCTAssertEqual(scan.names, ["jatin"])
+    }
     func testResultsAreCachedPerWord() {
         let calls = Calls(); var gate = gate(calls)
         XCTAssertEqual(gate.names(in: "ask jatin about teh plan"), ["jatin"])
@@ -375,7 +381,7 @@ final class NameGateTests: XCTestCase {
     }
     func testTokenCapAndCacheBound() {
         XCTAssertEqual(NameGate.candidates(in: "ask jatin ask jatin").count, 2)
-        let words = (0..<500).map { i in String((0..<4).map { Character(UnicodeScalar(97 + (i / Int(pow(26.0, Double($0))) % 26))!) }) }
+        let words = (0..<1500).map { i in String((0..<4).map { Character(UnicodeScalar(97 + (i / Int(pow(26.0, Double($0))) % 26))!) }) }
         XCTAssertEqual(NameGate.candidates(in: words.joined(separator: " ")).count, NameGate.maxTokens)
         var cache = LRUCache<Bool>(capacity: 16)
         for i in 0..<100 { cache.set(true, for: "k\(i)"); _ = cache.value(for: "k0") }

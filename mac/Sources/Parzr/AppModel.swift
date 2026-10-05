@@ -39,6 +39,8 @@ final class AppModel: ObservableObject {
         focusedEditID = edits[(index + direction + edits.count) % edits.count].id
     }
     func warm() {
+        // The engine tokenizes on its own; this tells it which words macOS already accepts, from the same pass the name gate uses.
+        Task { for engine in [WritingEngine.typing, WritingEngine.shared] { await engine.setKnownWords { await SystemLexicon.shared.scan($0).accepted } } }
         Task.detached(priority: .utility) { _ = await SystemLexicon.shared.names(in: "warm up the spelling server") } // the first lookup after launch can take 0.4 s
         Task { do { _ = try await WritingEngine.typing.rewrite(EngineRequest(text: "A clear message.", deep: false)); engineReady = true }
             catch { self.error = error.localizedDescription } }

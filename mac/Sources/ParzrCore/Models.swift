@@ -56,7 +56,9 @@ public struct TokenHint: Codable, Sendable {
     public let start_utf16: Int, end_utf16: Int
     public let pos: String, lemma: String
     public let name: Bool
-    public init(range: NSRange, pos: String, lemma: String, name: Bool) { start_utf16 = range.location; end_utf16 = range.location + range.length; self.pos = pos; self.lemma = lemma; self.name = name }
+    /// The system spell checker accepts the word as spelled, so the engine never respells it (older engines ignore the field).
+    public let known: Bool
+    public init(range: NSRange, pos: String, lemma: String, name: Bool, known: Bool = false) { start_utf16 = range.location; end_utf16 = range.location + range.length; self.pos = pos; self.lemma = lemma; self.name = name; self.known = known }
 }
 public struct EngineRequest: Codable, Sendable {
     public let text: String

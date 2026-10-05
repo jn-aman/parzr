@@ -15,6 +15,15 @@ final class EditPlanTests: XCTestCase {
             XCTAssertEqual(result.text, expected, source)
         }
     }
+    func testTokenHintsCarryTheSystemSpellVerdictInTheRequestJSON() throws {
+        let hints = WritingEngine.linguisticHints(for: "ask jatin about teh plan", known: ["ask", "about", "plan"])
+        XCTAssertEqual(hints.map { String("ask jatin about teh plan".utf16.dropFirst($0.start_utf16).prefix($0.end_utf16 - $0.start_utf16))! }, ["ask", "jatin", "about", "teh", "plan"])
+        XCTAssertEqual(hints.map(\.known), [true, false, true, false, true])
+        let json = try XCTUnwrap(String(data: JSONEncoder().encode(EngineRequest(text: "ask plan", tokens: Array(hints.prefix(1)))), encoding: .utf8))
+        XCTAssertTrue(json.contains("\"known\":true"), json)
+        XCTAssertEqual(WordShape.shaped("don't"), "don't")
+        XCTAssertNil(WordShape.shaped("Plan"))
+    }
     func testLinkedWordOrderEditsPreserveTheNamedRun() async throws {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
         let source = "Not only Mira did help, but she also stayed."
