@@ -27,6 +27,15 @@ matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => 
 $$('[data-link]').forEach(a => { if (LINKS[a.dataset.link]) a.href = LINKS[a.dataset.link]; });
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Analytics (Rybbit). The script can be blocked, or still loading: early events wait up to ~8s, and nothing here may throw.
+const Q = [];
+const track = (name, props) => { try { window.rybbit ? window.rybbit.event(name, props) : Q.length < 50 && Q.push([name, props]); } catch {} };
+let tries = 0;
+const flush = setInterval(() => {
+  if (window.rybbit) Q.splice(0).forEach(e => track(...e));
+  if (window.rybbit || ++tries > 20) { clearInterval(flush); Q.length = 0; }
+}, 400);
+
 /* A flag per element that says whether it is on screen, so loops can pause themselves. */
 const seen = new WeakMap();
 const sio = new IntersectionObserver(es => es.forEach(e => seen.set(e.target, e.isIntersecting)), { rootMargin: '10% 0px' });
@@ -296,7 +305,7 @@ function tryIt(el) {
     'We should utilize the new process in order to ship faster. At this point in time it is a very unique approach, due to the fact that nobody has tried it.',
     'thanks, priya. aman jain said i recieved the invoice on friday, but ananya and wei have not. Fatima wants it seperate.',
   ];
-  const ignored = new Set(); let marks = [], fixed = [], prevKeys = new Set(), active = -1, started = false, timer = 0;
+  const ignored = new Set(); let marks = [], fixed = [], prevKeys = new Set(), active = -1, started = false, timer = 0, typed = false, had = false, cleared = false;
   const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
   function render() {
     const text = ta.value; marks = analyze(text, ignored);
@@ -310,6 +319,7 @@ function tryIt(el) {
     back.innerHTML = out;
     marks.forEach(k => keys.add(k.kind + k.from + k.s)); prevKeys = keys;
     const n = marks.length;
+    if (n) had = true; else if (had && !cleared && ta.value.trim()) { cleared = true; track('Try it: all clear'); } // render only runs after a user action once the first marks are up
     status.textContent = n ? n + (n === 1 ? ' suggestion' : ' suggestions') : 'No suggestions';
     status.parentElement.classList.toggle('clear', !n);
     allBtn.disabled = nextBtn.disabled = !n;
@@ -355,16 +365,20 @@ function tryIt(el) {
   const hit = (x, y) => marks.findIndex((_, i) => spans(i).some(sp => Array.from(sp.getClientRects()).some(r => x >= r.left && x <= r.right && y >= r.top - 4 && y <= r.bottom + 4)));
   ta.addEventListener('pointermove', e => { const i = hit(e.clientX, e.clientY); ta.style.cursor = i < 0 ? '' : 'pointer'; if (!COARSE && active < 0) { $$('.im.hov', back).forEach(x => x.classList.remove('hov')); if (i >= 0) spans(i).forEach(x => x.classList.add('hov')); } });
   ta.addEventListener('pointerleave', () => { if (active < 0) $$('.im.hov', back).forEach(x => x.classList.remove('hov')); });
-  ta.addEventListener('click', e => { const i = hit(e.clientX, e.clientY); if (i >= 0) openCard(i); else closeCard(); });
-  ta.addEventListener('input', () => { closeCard(); fixed = []; fit(); clearTimeout(timer); timer = setTimeout(render, 120); });
+  ta.addEventListener('click', e => {
+    const i = hit(e.clientX, e.clientY);
+    if (i >= 0) { openCard(i); track('Try it: suggestion opened', { kind: marks[i].kind === 'b' ? 'Style' : 'Mistake', word: marks[i].from.slice(0, 40) }); } else closeCard();
+  });
+  ta.addEventListener('input', () => { if (!typed) { typed = true; track('Try it: started typing'); } closeCard(); fixed = []; fit(); clearTimeout(timer); timer = setTimeout(render, 120); });
   win.addEventListener('keydown', e => { if (e.key === 'Escape' && active >= 0) { closeCard(); ta.focus(); } });
   $('#tc-x').addEventListener('click', () => { closeCard(); ta.focus(); });
-  $('#tc-fix').addEventListener('click', e => { const [s, en] = e.currentTarget.dataset.s.split(',').map(Number); apply(marks.filter(m => m.s >= s && m.e <= en)); ta.focus({ preventScroll: true }); });
-  $('#tc-word').addEventListener('click', () => { apply([marks[active]]); ta.focus({ preventScroll: true }); });
-  $('#tc-ign').addEventListener('click', () => { const k = marks[active]; ignored.add(k.from.toLowerCase() + '|' + k.to); closeCard(); render(); ta.focus({ preventScroll: true }); });
-  allBtn.addEventListener('click', () => { apply(marks); allBtn.classList.remove('ping'); void allBtn.offsetWidth; allBtn.classList.add('ping'); });
-  nextBtn.addEventListener('click', () => openCard((active + 1) % marks.length));
+  $('#tc-fix').addEventListener('click', e => { track('Try it: sentence fixed'); const [s, en] = e.currentTarget.dataset.s.split(',').map(Number); apply(marks.filter(m => m.s >= s && m.e <= en)); ta.focus({ preventScroll: true }); });
+  $('#tc-word').addEventListener('click', () => { track('Try it: word fixed'); apply([marks[active]]); ta.focus({ preventScroll: true }); });
+  $('#tc-ign').addEventListener('click', () => { track('Try it: suggestion ignored'); const k = marks[active]; ignored.add(k.from.toLowerCase() + '|' + k.to); closeCard(); render(); ta.focus({ preventScroll: true }); });
+  allBtn.addEventListener('click', () => { track('Try it: fix all', { count: marks.length }); apply(marks); allBtn.classList.remove('ping'); void allBtn.offsetWidth; allBtn.classList.add('ping'); });
+  nextBtn.addEventListener('click', () => { track('Try it: next suggestion'); openCard((active + 1) % marks.length); });
   $$('[data-sample]', el).forEach(b => b.addEventListener('click', () => {
+    track('Try it: sample picked', { sample: b.textContent.trim() });
     $$('[data-sample]', el).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     ta.value = SAMPLES[+b.dataset.sample]; ignored.clear(); fixed = []; prevKeys = new Set(); closeCard(); render();
   }));
@@ -564,7 +578,7 @@ function bento() {
     detail.textContent = MODES[i].d;
     chips.forEach(c => { c.classList.toggle('on', +c.dataset.i === i); c.setAttribute('aria-pressed', String(+c.dataset.i === i)); });
   };
-  chips.forEach(c => c.addEventListener('click', () => { touched = true; show(+c.dataset.i); }));
+  chips.forEach(c => c.addEventListener('click', () => { touched = true; show(+c.dataset.i); track('Writing mode viewed', { mode: c.textContent.trim() }); }));
   show(1);
   if (!RM) setInterval(() => { if (!touched && awake()) show(cur % 5 + 1); }, 3800);
 }
@@ -664,7 +678,7 @@ function openSource() {
     };
     raf = requestAnimationFrame(tick);
   }
-  tabs.forEach((t, k) => t.addEventListener('click', () => type(k)));
+  tabs.forEach((t, k) => t.addEventListener('click', () => { type(k); track('Code tab picked', { tab: t.textContent.trim() }); }));
   show(0, FILES[0].text.length);
   const sr = document.createElement('pre'); sr.className = 'sr-only'; sr.textContent = FILES.map(f => f.path + '\n' + f.text).join('\n\n');
   box.append(sr); $('.code-pre', box).setAttribute('aria-hidden', 'true');
@@ -685,6 +699,7 @@ function openSource() {
     }
     label.textContent = ok ? 'Copied' : 'Press Cmd+C'; live.textContent = ok ? 'Build commands copied.' : 'Select the commands and press Command C.';
     btn.classList.toggle('ok', ok);
+    if (ok) track('Build commands copied');
     setTimeout(() => { label.textContent = 'Copy'; btn.classList.remove('ok'); }, 1800);
   });
 }
@@ -805,7 +820,8 @@ function anchors() {
     e.preventDefault();
     const go = () => t.getBoundingClientRect().top + scrollY + (t.matches('.pinned,.hero') || !id ? 1 : 0);
     scrollTo({ top: go(), behavior: RM ? 'auto' : 'smooth' });
-    if (id) history.pushState(null, '', '#' + id);
+    // the prototype method skips Rybbit's patched pushState, so an in-page jump is not counted as a new pageview
+    if (id) History.prototype.pushState.call(history, null, '', '#' + id);
     // sections that skip rendering change height while we scroll past them, so correct once we arrive
     const fix = () => { const d = go() - scrollY; if (Math.abs(d) > 3) scrollTo({ top: go(), behavior: 'auto' }); };
     if ('onscrollend' in window) addEventListener('scrollend', fix, { once: true }); else setTimeout(fix, 1200);
@@ -840,14 +856,26 @@ function wordmark() {
 /* ---------- Nav ---------- */
 function nav() {
   const t = $('.nav-toggle'), l = $('#nav-links');
-  t.addEventListener('click', () => { const o = l.classList.toggle('open'); t.setAttribute('aria-expanded', String(o)); });
+  t.addEventListener('click', () => { const o = l.classList.toggle('open'); t.setAttribute('aria-expanded', String(o)); if (o) track('Mobile menu opened'); });
   l.addEventListener('click', e => { if (e.target.closest('a')) { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); } });
   addEventListener('keydown', e => { if (e.key === 'Escape' && l.classList.contains('open')) { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); t.focus(); } });
+}
+
+/* ---------- Analytics: one "Section viewed" per section per page view ---------- */
+const SECTIONS = { top: 'Hero', try: 'Try it', how: 'How it works', names: 'Names', privacy: 'Privacy', features: 'Features', showcase: 'Showcase', works: 'Compatibility', open: 'Open source', download: 'Download', foot: 'Footer' };
+function sectionViews() {
+  // pinned scenes are several screens tall, so watch their sticky child, and count a section once half the screen is filled by it
+  const o = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting || e.intersectionRatio < .5 && e.intersectionRect.height < innerHeight * .5) return;
+    o.unobserve(e.target); track('Section viewed', { section: SECTIONS[e.target.closest('[id]').id] });
+  }), { threshold: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9, 1] });
+  Object.keys(SECTIONS).forEach(id => { const el = document.getElementById(id); if (el) o.observe($('.pin', el) || el); });
 }
 
 /* ---------- 404 ---------- */
 function notFound() {
   const el = $('.nf .fx'); if (!el) return;
+  track('Page not found', { path: location.pathname });
   fxInit(el);
   if (RM) { fxSet(el, 'right'); el.classList.add('done'); return; }
   fxSet(el, 'wrong');
@@ -868,7 +896,7 @@ function boot() {
   });
   if ($('#try')) tryIt($('#try'));
   if ($('#names')) names($('#names'));
-  if ($('#bento')) { bento(); marquees(); openSource(); }
+  if ($('#bento')) { bento(); marquees(); openSource(); sectionViews(); }
   if (!RM) irisInit();
   if (!RM) { addEventListener('scroll', schedule, { passive: true }); addEventListener('resize', () => { scenes.forEach(s => s.p = -1); schedule(); }); }
   frame();
