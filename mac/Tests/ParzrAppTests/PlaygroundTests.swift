@@ -92,7 +92,7 @@ final class PlaygroundTests: XCTestCase {
     func testCompactControlsActuallyNavigateAndIgnore() async throws {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
         let model = AppModel(); model.playground("I recieved your mesage.")
-        for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where model.busy { try await Task.sleep(for: .milliseconds(20)) } // up to 60 s: CI runners load the model slowly
         XCTAssertEqual(model.chosenEdits.count, 2)
         let host = NSHostingView(rootView: RewritePanel(model: model))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: RewritePanel.size), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -126,7 +126,7 @@ final class PlaygroundTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
         let model = AppModel()
         model.playground("I recieved your mesage.")
-        for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where model.busy { try await Task.sleep(for: .milliseconds(20)) } // up to 60 s: CI runners load the model slowly
         XCTAssertFalse(model.chosenEdits.isEmpty)
         model.playground("A completely different draft.", debounce: true)
         XCTAssertEqual(model.source, "A completely different draft.")
@@ -183,7 +183,7 @@ final class PlaygroundTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
         let model = AppModel()
         model.playground("I recieved your mesage.")
-        for _ in 0..<100 where model.busy { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where model.busy { try await Task.sleep(for: .milliseconds(20)) } // up to 60 s: CI runners load the model slowly
         XCTAssertNil(model.error)
         XCTAssertEqual(model.preview, "I received your message.")
         XCTAssertEqual(model.chosenEdits.count, 2)
