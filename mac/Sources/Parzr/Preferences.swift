@@ -1,4 +1,5 @@
 import AppKit
+import NaturalLanguage
 import SwiftUI
 import ParzrCore
 import ServiceManagement
@@ -108,4 +109,44 @@ final class Preferences: ObservableObject {
     var launchAtLoginChoice: Bool { get { launchAtLogin } set { setLogin(newValue) } }
     subscript(appEnabled bundle: String) -> Bool { get { enabled(for: bundle) } set { if newValue != enabled(for: bundle) { toggleApp(bundle) } } }
     func toggleApp(_ bundle: String) { if let i = disabledApps.firstIndex(of: bundle) { disabledApps.remove(at: i) } else { disabledApps.append(bundle) } }
+}
+
+/// Session-only names the engine must never "correct" (engine dictionary matching is ASCII case-insensitive, whole tokens, multi-word entries by phrase). Never persisted.
+enum KnownNames {
+    static let user = names(full: NSFullUserName(), short: NSUserName())
+    nonisolated static func names(full: String, short: String) -> [String] {
+        let tokens = (full + " " + short).split { !$0.isLetter }.map(String.init).filter { $0.count >= 2 }
+        let phrase = full.split { !$0.isLetter }.count > 1 ? [full.trimmingCharacters(in: .whitespacesAndNewlines)] : []
+        return merge(tokens, phrase)
+    }
+    /// Capitalized people, places and organizations already in the text (first 64 KB, at most 200), so a lowercase repeat is treated as the same name.
+    nonisolated static func documentNames(in text: String) -> [String] {
+        let tagger = NLTagger(tagSchemes: [.nameType])
+        var found: [String] = []
+        // Per sentence: one lowercase sentence start ("aman agreed") makes NLTagger tag a whole longer string as nothing.
+        for sentence in String(text.prefix(65_536)).split(whereSeparator: { ".!?\n".contains($0) }) where found.count < 400 {
+            let sentence = String(sentence)
+            tagger.string = sentence
+            tagger.enumerateTags(in: sentence.startIndex..<sentence.endIndex, unit: .word, scheme: .nameType, options: [.omitWhitespace, .omitPunctuation, .omitOther]) { tag, range in
+                guard let tag, [.personalName, .placeName, .organizationName].contains(tag) else { return true }
+                var word = String(sentence[range])
+                for suffix in ["'s", "\u{2019}s"] where word.hasSuffix(suffix) { word.removeLast(suffix.count) }
+                if word.count >= 2, word.contains(where: \.isUppercase) { found.append(word) }
+                return true
+            }
+        }
+        return Array(merge(found).prefix(200))
+    }
+    /// Order-preserving, case-insensitive dedupe within the engine limits (1000 entries, 128 bytes each); earlier lists win.
+    nonisolated static func merge(_ lists: [String]...) -> [String] {
+        var seen = Set<String>(), out: [String] = []
+        for word in lists.joined() where !word.isEmpty && word.utf8.count <= 128 && out.count < 1000 && seen.insert(word.lowercased()).inserted { out.append(word) }
+        return out
+    }
+    /// Saved dictionary, then the user's name, then names found in `text`; the scan runs off the main actor.
+    @MainActor static func dictionary(for text: String) async -> [String] {
+        let saved = Preferences.shared.dictionary
+        let document = await Task.detached(priority: .utility) { documentNames(in: text) }.value
+        return merge(saved, user, document)
+    }
 }

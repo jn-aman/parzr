@@ -208,3 +208,22 @@ final class PlaygroundTests: XCTestCase {
         }
     }
 }
+
+final class KnownNamesTests: XCTestCase {
+    func testUserNameTokensAndFullName() {
+        XCTAssertEqual(KnownNames.names(full: "Aman Jain", short: "ajain"), ["Aman", "Jain", "ajain", "Aman Jain"])
+        XCTAssertEqual(KnownNames.names(full: "Madonna", short: "m"), ["Madonna"])
+        XCTAssertEqual(KnownNames.names(full: "", short: ""), [])
+    }
+    func testMergeDedupesCaseInsensitivelyAndRespectsLimits() {
+        XCTAssertEqual(KnownNames.merge(["Zed", "parzr"], ["aman", "Parzr"], ["Aman", "", String(repeating: "a", count: 129)]), ["Zed", "parzr", "aman"])
+        XCTAssertEqual(KnownNames.merge((0..<1200).map { "w\($0)" }).count, 1000)
+    }
+    func testDocumentNamesFindCapitalizedNamesOnly() {
+        let names = KnownNames.documentNames(in: "Yesterday Aman Jain met Satya Nadella in London. aman agreed that the table was fine.")
+        XCTAssertTrue(names.contains("Aman"), "\(names)")
+        XCTAssertTrue(names.contains("London"), "\(names)")
+        XCTAssertFalse(names.contains("table"))
+        XCTAssertTrue(names.allSatisfy { $0.contains(where: \.isUppercase) })
+    }
+}

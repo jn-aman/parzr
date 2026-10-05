@@ -60,11 +60,14 @@ final class AppModel: ObservableObject {
         result = nil; selectedEdits = []; error = nil; status = nil; busy = true
         // Typing always takes the fast grammar path. Tone and passage review are explicit.
         let requestMode: RewriteMode = debounce ? .fix : mode
-        let request = EngineRequest(text: original, mode: requestMode, dictionary: Preferences.shared.dictionary,
-                                    dialect: Preferences.shared.dialect, protectedRanges: snapshot?.protectedRanges() ?? [], sentenceStart: snapshot?.startsSentence ?? true, sentenceEnd: snapshot?.endsSentence ?? true, deep: !debounce && (mode != .fix || Preferences.shared.contextRefinement))
+        let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
+        let (starts, ends, deep) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true, !debounce && (mode != .fix || Preferences.shared.contextRefinement))
         analysisTask = Task { @MainActor in
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay))) }
+                try Task.checkCancellation()
+                let request = EngineRequest(text: original, mode: requestMode, dictionary: await KnownNames.dictionary(for: fullText),
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep)
                 try Task.checkCancellation()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = try await engine.rewrite(request)

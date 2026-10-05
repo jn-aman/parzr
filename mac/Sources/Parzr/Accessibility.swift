@@ -6,6 +6,7 @@ import ParzrCore
 @MainActor
 enum AX {
     private static var preparedApplications: Set<pid_t> = []
+    private static let chromium = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", "org.chromium.Chromium", "com.microsoft.teams2"]
     static func get(_ element: AXUIElement, _ attribute: String) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
@@ -34,7 +35,9 @@ enum AX {
         // Unsupported apps simply refuse the attribute. Never change the user's drafts.
         if !preparedApplications.contains(app.processIdentifier) {
             if preparedApplications.count >= 128 { preparedApplications.removeAll() }
-            if AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success {
+            if AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue) == .success
+                // Chrome rejects the Electron switch and exposes no focused element until AXEnhancedUserInterface is set; native apps are left alone because it can disturb window managers.
+                || (chromium.contains { app.bundleIdentifier?.hasPrefix($0) == true } && AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success) {
                 preparedApplications.insert(app.processIdentifier)
             }
         }

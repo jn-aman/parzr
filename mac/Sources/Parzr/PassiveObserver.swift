@@ -93,7 +93,7 @@ final class PassiveObserver {
                 try Task.checkCancellation()
                 self?.onDismiss?()
                 let snapshot = try SelectionSnapshot.capture(passive: true)
-                let request = EngineRequest(text: snapshot.text, dictionary: Preferences.shared.dictionary,
+                let request = EngineRequest(text: snapshot.text, dictionary: await KnownNames.dictionary(for: snapshot.fullText ?? snapshot.text),
                                             dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence)
                 // Automatic checks (typing and plain selection) never load the GPU model;
                 // it runs only for explicit checks and tone changes.
