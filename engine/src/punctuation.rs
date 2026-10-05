@@ -231,9 +231,74 @@ const SUBORDINATORS: [&str; 25] = [
     "once", "until", "unless", "whenever", "where", "wherever", "whether", "which", "who", "whom",
     "whose", "what", "why", "how", "that",
 ];
-const AUXILIARIES: [&str; 18] = [
-    "am", "is", "are", "was", "were", "has", "have", "had", "can", "could", "may", "might", "must",
-    "shall", "should", "will", "would", "did",
+/// Capitalized words that open a sentence and are never names, with "I".
+const SENTENCE_OPENERS: [&str; 33] = [
+    "The",
+    "This",
+    "That",
+    "These",
+    "Those",
+    "A",
+    "An",
+    "I",
+    "We",
+    "He",
+    "She",
+    "They",
+    "It",
+    "Its",
+    "My",
+    "Our",
+    "Her",
+    "Their",
+    "Each",
+    "Why",
+    "Where",
+    "When",
+    "How",
+    "What",
+    "If",
+    "Never",
+    "Rarely",
+    "Not",
+    "Tomorrow",
+    "Yesterday",
+    "Then",
+    "Last",
+    "By",
+];
+const AUXILIARIES: &[&str] = &[
+    "am",
+    "is",
+    "are",
+    "was",
+    "were",
+    "has",
+    "have",
+    "had",
+    "can",
+    "could",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "should",
+    "will",
+    "would",
+    "did",
+    "cannot",
+    "can't",
+    "couldn't",
+    "won't",
+    "wouldn't",
+    "shouldn't",
+    "don't",
+    "doesn't",
+    "didn't",
+    "isn't",
+    "wasn't",
+    "haven't",
+    "hasn't",
 ];
 /// Beside the subordinators, first words that make a clause a modifier, not an independent one.
 const OPENERS: [&str; 26] = [
@@ -262,44 +327,7 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             || t.surface.ends_with("'s")
             || t.surface.ends_with("’s")
             || (!crate::spelling::known(&t.normalized) && tokens.get(i + 1).is_some_and(finite));
-        if !named_start
-            && ![
-                "The",
-                "This",
-                "That",
-                "These",
-                "Those",
-                "A",
-                "An",
-                "I",
-                "We",
-                "He",
-                "She",
-                "They",
-                "It",
-                "Its",
-                "My",
-                "Our",
-                "Her",
-                "Their",
-                "Each",
-                "Why",
-                "Where",
-                "When",
-                "How",
-                "What",
-                "If",
-                "Never",
-                "Rarely",
-                "Not",
-                "Tomorrow",
-                "Yesterday",
-                "Then",
-                "Last",
-                "By",
-            ]
-            .contains(&t.surface)
-        {
+        if !named_start && !SENTENCE_OPENERS.contains(&t.surface) {
             continue;
         }
         let previous = &tokens[i - 1];
@@ -401,15 +429,7 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
                 AUXILIARIES.contains(&x.normalized.as_str())
                     || ["do", "does"].contains(&x.normalized.as_str())
             });
-        // A capitalized determiner or pronoun other than "I" mid-sentence is the writer's own
-        // sentence start; only "I" and names are always capitalized.
-        let opener = [
-            "The", "This", "That", "These", "Those", "A", "An", "My", "Our", "Their", "Her", "His",
-            "Its", "We", "He", "She", "They", "It", "You",
-        ]
-        .contains(&t.surface);
         let plain_end = question
-            || opener
             || predicate_adjective
             || word.ends_with("ly")
             || [
@@ -424,32 +444,74 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .contains(&word);
         let (left, right) = if plain_end { (3, 3) } else { (6, 5) };
-        if words(&tokens[start..i]) < left
+        // A capitalized word that is never a name, mid-sentence ("The", "We", "If"), is the
+        // writer's own sentence start, so two clauses around it are enough. "I" and names are
+        // always capitalized and need the stricter evidence.
+        let capitalized_opener = t.surface != "I" && SENTENCE_OPENERS.contains(&t.surface);
+        let wh = capitalized_opener
+            && [
+                "why", "where", "when", "how", "what", "who", "whose", "which",
+            ]
+            .contains(&first);
+        // The segment since the last comma or dash is itself a clause, not a conjunct, a
+        // subordinate clause or a prepositional phrase ("and if McCarthy is condemned I").
+        let run_first = tokens[i - run.min(i)..i]
+            .first()
+            .map_or("", |x| x.normalized.as_str());
+        // A subordinate clause needs a main verb before it ("Some time before he introduced
+        // himself I'd"): the first finite word comes ahead of the first subordinator.
+        let main_verb_first = tokens[start..i]
+            .iter()
+            .position(|x| SUBORDINATORS.contains(&x.normalized.as_str()))
+            .is_none_or(|k| tokens[start..start + k].iter().any(finite));
+        // "The Wizard of Oz", "We Make Contact": a capitalized title, not a sentence start.
+        let title = ["The", "A", "An", "We"].contains(&t.surface)
+            && tokens.get(i + 1).is_some_and(|x| {
+                x.surface.starts_with(char::is_uppercase) && !SENTENCE_OPENERS.contains(&x.surface)
+            });
+        if capitalized_opener && title {
+            continue;
+        }
+        if !capitalized_opener
+            && (words(&tokens[start..i]) < left
+            || OPENERS.contains(&run_first)
+            || SUBORDINATORS.contains(&run_first)
+            || ["and", "but", "or", "so", "yet", "nor"].contains(&run_first)
+            || !main_verb_first
             || run < left
             || tokens[start..i].iter().rev().take(3).any(|x| {
-                ["and", "but", "or", "so", "yet", "nor", "then"].contains(&x.normalized.as_str())
+                ["and", "but", "or", "yet", "nor", "then"].contains(&x.normalized.as_str())
             })
             || words(&tokens[i..right_end]) < right
             || OPENERS.contains(&first)
             || !question && SUBORDINATORS.contains(&first)
+            // A subordinate clause still open at the end ("the place where Priya"), as opposed to
+            // one that already has its verb ("before the meeting starts Maya").
             || !question
                 && tokens[start..i]
                     .iter()
-                    .rev()
-                    .take(10)
-                    .any(|x| SUBORDINATORS.contains(&x.normalized.as_str()))
-            // The verb follows the subject at once ("Aman will"), or after a determiner's noun
-            // ("The guard was"). A plural noun also looks finite ("Hollywood films"), so the verb
-            // must be unambiguous.
+                    .rposition(|x| SUBORDINATORS.contains(&x.normalized.as_str()))
+                    .is_some_and(|k| {
+                        // A lowercase unknown word is a damaged verb, which closes the clause.
+                        !tokens[start + k + 1..i].iter().any(|x| {
+                            finite(x)
+                                || x.is_word
+                                    && x.surface.starts_with(char::is_lowercase)
+                                    && !crate::spelling::known(&x.normalized)
+                        })
+                    })
+            // The verb follows the subject at once ("Aman will"). A plural noun also looks finite
+            // ("Hollywood films"), so the verb must be unambiguous.
             || !tokens[i + 1..]
                 .iter()
-                .take(if opener { 3 } else { 1 })
+                .take_while(|x| x.is_word)
+                .take(if t.surface.ends_with(['s', 'S']) && t.surface.contains(['\'', '\u{2019}']) { 3 } else { 1 })
                 .any(|x| {
                     finite(x)
                         && x.surface.starts_with(char::is_lowercase)
                         && (crate::spelling::flags(&x.normalized) & 2 == 0
                             || AUXILIARIES.contains(&x.normalized.as_str()))
-                })
+                }))
         {
             continue;
         }
@@ -457,7 +519,7 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             &req.text,
             previous.end_utf16,
             previous.end_utf16,
-            if question { "?" } else { "." }.into(),
+            if question || wh { "?" } else { "." }.into(),
             "Punctuation",
             "punctuation.missing_sentence_boundary",
             "Separate these complete clauses with sentence punctuation.",
@@ -546,7 +608,21 @@ mod name_tests {
                 &["Priya"],
             ),
             // Too short on either side to be sure.
-            ("It is done Priya will send it.", &["Priya"]),
+            ("The team met Priya will send it.", &["Priya"]),
+            // A conditional or time clause before the name has no main verb of its own.
+            (
+                "I will keep your secret, and if Mara is blamed Priya will speak up for her.",
+                &["Mara", "Priya"],
+            ),
+            (
+                "Some time before the committee met Priya had finished the whole report.",
+                &["Priya"],
+            ),
+            // A capitalized title is not a sentence start.
+            (
+                "The students then watched the film The Lion King and sang along happily.",
+                &[],
+            ),
             // A question opener never gets a period.
             (
                 "Why did the committee reject the proposal so late Priya asked her colleagues quietly.",

@@ -451,7 +451,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 ]
                 .contains(&tokens[prev - 1].normalized.as_str())
                 || ["is", "are", "was", "were", "am"].contains(&w)
-                || w == v.third && (spelling::flags(w) & 2 != 0 || looks_plural(w)));
+                // "does not works" is still an auxiliary; only "do sports" has the noun at once.
+                || prev + 1 == i
+                    && w == v.third
+                    && (spelling::flags(w) & 2 != 0 || looks_plural(w)));
         if auxiliary_base
             && !name_subject
             && !nominal_what
@@ -1019,24 +1022,25 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                                 || ["about", "on", "of", "for", "in", "at", "by", "from"]
                                     .contains(&n.normalized.as_str())
                         }));
-            let narrative = tokens
-                .iter()
-                .enumerate()
-                .filter(|(_, x)| {
-                    x.paragraph == t.paragraph
-                        && x.sentence + 1 >= t.sentence
-                        && x.sentence <= t.sentence
-                })
-                .any(|(k, x)| {
-                    // "be obliged" and "has asked" are participles, not a past-tense narrative.
-                    k > 0
-                        && ![
-                            "be", "been", "being", "am", "is", "are", "has", "have", "having",
-                        ]
-                        .contains(&tokens[k - 1].normalized.as_str())
-                        && morphology::verb(&x.normalized)
-                            .is_some_and(|v| x.normalized == v.past && v.past != v.base)
-                });
+            let narrative = !clause_prefix.contains("if ")
+                && tokens
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, x)| {
+                        x.paragraph == t.paragraph
+                            && x.sentence + 1 >= t.sentence
+                            && x.sentence <= t.sentence
+                    })
+                    .any(|(k, x)| {
+                        // "be obliged" and "has asked" are participles, not a past-tense narrative.
+                        k > 0
+                            && ![
+                                "be", "been", "being", "am", "is", "are", "has", "have", "having",
+                            ]
+                            .contains(&tokens[k - 1].normalized.as_str())
+                            && morphology::verb(&x.normalized)
+                                .is_some_and(|v| x.normalized == v.past && v.past != v.base)
+                    });
             if !subjunctive && !compound && !narrative {
                 emit(
                     req,
