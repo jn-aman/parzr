@@ -1,8 +1,10 @@
 name: Verify and release Parzr
+# Full verification runs on pull requests, version tags (cut by the Release workflow) and on
+# demand. Plain pushes to main do not run it; docs and website changes never need a Mac runner.
 on:
   pull_request:
+    paths-ignore: ['website/**', 'docs/**', '**/*.md']
   push:
-    branches: [main, master]
     tags: ['v*']
   workflow_dispatch:
 permissions:
