@@ -426,6 +426,8 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         initial.mode = Mode::Fix;
     }
     let mut first = rewrite_once(&initial, false)?.edits;
+    // No edit leaves the text as it was, so the confirmation pass below would only repeat this one.
+    let unchanged = first.is_empty() && initial.mode == Mode::Fix;
     let mut protected = protected_ranges(req);
     let mut document = Document::new(&req.text);
     // Explicit checks and tone modes ask the model about words the rules would respell; the
@@ -436,7 +438,9 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     );
     judge.screen(&document, &mut first, &mut protected);
     document.apply(&first)?;
-    grammar(&mut document, req, &mut protected, &mut judge)?;
+    if !unchanged {
+        grammar(&mut document, req, &mut protected, &mut judge)?;
+    }
     #[allow(unused_mut)]
     let mut warnings = vec![];
     #[cfg(feature = "local-model")]
