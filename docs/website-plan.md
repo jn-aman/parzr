@@ -1,6 +1,6 @@
-# Parzr.app — after product acceptance
+# Parzr.app
 
-The target domain is parzr.app, managed through Cloudflare. Build and deploy the website only after the desktop product passes its release gates.
+The target domain is parzr.app, managed through Cloudflare. The site lives in [website/](../website/) and deploys to Cloudflare Workers static assets; see its README.
 
 The site should make parzr understandable in one screen: a real macOS capture showing selected text, a compact correction panel, and formatting surviving Apply. An authored interactive demo can switch among five modes using a shipped, synthetic fixture. Keep the copy grounded in measured offline behavior; label the demo and its limitations.
 
