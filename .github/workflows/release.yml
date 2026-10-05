@@ -1,0 +1,88 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to increase (ignored when an exact version is given)
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Optional exact version X.Y.Z (overrides bump)
+        type: string
+        required: false
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: parzr-release
+  cancel-in-progress: false
+jobs:
+  release:
+    # Only the default branch may cut a release.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash  # bash -eo pipefail
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Require a clean working tree
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Working tree is not clean before the version bump."
+            git status --short
+            exit 1
+          fi
+      - name: Bump version
+        # ubuntu-latest ships Python 3.12 (tomllib needs 3.11+), so no setup-python pin is needed.
+        id: bump
+        env:
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          python3 scripts/bump-version.py "${INPUT_VERSION:-$INPUT_BUMP}" | tee "$RUNNER_TEMP/bump.log"
+          echo "version=$(tail -n 1 "$RUNNER_TEMP/bump.log")" >> "$GITHUB_OUTPUT"
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
+        run: |
+          git config user.name "$ACTOR"
+          git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
+          git add engine/Cargo.toml engine/Cargo.lock resources/Info.plist extensions/browser/manifest.json extensions/vscode/package.json
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Unexpected changes outside the version files."
+            git status --short
+            exit 1
+          fi
+          git commit -m "Release v$VERSION"
+          git tag -a "v$VERSION" -m "Parzr v$VERSION"
+          git push --atomic origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}" "refs/tags/v$VERSION"
+      - name: Start the signed build
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          # Pushes made with GITHUB_TOKEN do not trigger workflows, but workflow_dispatch is allowed.
+          gh workflow run ci-release.yml --ref "v$VERSION"
+          url=""
+          for _ in $(seq 1 12); do
+            sleep 5
+            url=$(gh run list --workflow ci-release.yml --event workflow_dispatch --branch "v$VERSION" --limit 1 --json url --jq '.[0].url // empty')
+            [ -n "$url" ] && break
+          done
+          {
+            echo "## Released v$VERSION"
+            echo
+            echo "Tag: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/v$VERSION"
+            if [ -n "$url" ]; then echo "Signed build: $url"; else echo "Signed build started; find it under Actions, Verify and release Parzr."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
