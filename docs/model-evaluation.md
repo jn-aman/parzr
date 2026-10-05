@@ -1,5 +1,32 @@
 # Local writing model evaluation
 
+## Smart grammar (GECToR), 0.2.0
+
+How the typing path scores on neutral public data before and after 0.2.0. This is the "fast path" the app runs while you type: the rules, and with Smart grammar on, the rules plus GECToR (see [architecture](architecture.md#smart-grammar-gector)). It does not include Qwen, which only runs for Option+Space and the tones. The corpora are used for evaluation only and are not in this repository, because their terms do not allow redistribution (see [grammar evidence](grammar-evidence.md)).
+
+| | 0.1.x | 0.2.0, rules only | 0.2.0, Smart grammar (default) |
+| --- | --- | --- | --- |
+| BEA-2019 dev, F0.5 (precision / recall) | 0.202 (0.43 / 0.065) | 0.228 (0.63 / 0.06) | 0.529 (0.71 / 0.26) |
+| CoNLL-2014, F0.5 (precision) | 0.212 (0.48) | 0.222 (0.57) | 0.550 (0.72) |
+| JFLEG test, GLEU (F0.5) | 0.478 (0.533) | 0.479 (0.565) | 0.540 (0.690) |
+| False alarms on clean published text, per 1,000 words | 9.34 | 1.07 | 3.39 (chat 0, Hinglish 0) |
+| Names damaged: all / lowercase / held-out | 0.08% / 0.18% / 1.40% | 0.03% / 0.07% / 1.14% | 0.05% / 0.11% / 1.14% |
+| Real typos still corrected | 94.4% | 95.4% | 95.4% |
+
+What the measures mean:
+
+- **Precision** is the share of suggestions that were correct. **Recall** is the share of the real mistakes that were found.
+- **F0.5** combines them and counts precision twice as much as recall. Grammar checkers use it because an unwanted or wrong suggestion annoys a writer more than a missed one does.
+- **GLEU** (JFLEG) compares a corrected sentence with several human corrections, rewarding n-grams that appear in the references and penalising ones that were in the source and should have changed. It favours fluent rewrites; the F0.5 in brackets is the strict minimal-edit score on the same data.
+- **False alarms per 1,000 words** count suggestions on text that needed none: 1,996 sentences of published prose (Project Gutenberg, Wikipedia, chat, Indian English and Hinglish). Lower is better.
+- **Names damaged** is the share of names an edit changed beyond case, on the [name benchmark](../benchmarks/names/README.md): all 6,426 sentences, the lowercase ones, and the 104 names that are in no shipped list. **Real typos still corrected** is the share of the benchmark's misspelled controls that were fixed.
+
+How to read it. Rules were made far more precise in 0.2.0 (run-on sentences, agreement, abbreviations such as p.m. and i.e., commas, and spelling that no longer "corrects" Hinglish, Indian English vocabulary, Latin phrases, compounds, words macOS knows, in both dialects), which cut false alarms from 9.34 to 1.07 per 1,000 words and lifted precision, with recall unchanged. GECToR then more than doubles F0.5 by finding about four times as many errors, at the price of some false alarms (3.39), still about a third of 0.1.x. Recall is still modest: on BEA-2019 dev Parzr finds about one error in four. Names are slightly more exposed with Smart grammar on than with rules alone (0.05% against 0.03% of names damaged) and still below 0.1.x on every cut. The English challenge benchmarks, which are authored for the rules, stay at 100% on the rules path.
+
+The Qwen3.5-0.8B edits that Option+Space and the tones produce are not part of this table. They pass the filters in `engine/src/model.rs` (`vetted`): no straightening of quotes or dashes, no optional or date commas, no recasing in mid-sentence and no respelling one known word as another.
+
+Measurements are one run on one build. Public benchmarks measure English learner and student writing, so they say little about domain jargon or a particular writer's voice.
+
 ## Needle 3
 
 Decision: keep Needle out of the application for now. The tested base model did
@@ -10,7 +37,7 @@ model's quality.
 The [upstream project](https://github.com/cactus-compute/needle) describes a small
 model for tool calling, structured extraction, classification and embeddings.
 Its published task scores do not measure English grammar correction or passage
-rewriting. The advertised 8–29 MB sizes describe model variants; the full archive
+rewriting. The advertised 8 to 29 MB sizes describe model variants; the full archive
 downloaded for this evaluation measures **35,335,380 bytes**, including its
 container. File size is distinct from working memory.
 

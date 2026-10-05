@@ -1,12 +1,12 @@
 # English grammar evidence
 
-This catalog separates descriptions of English grammar, evaluation data, reusable resources and measured parzr behavior. External research establishes what to cover and how to test it. It does not establish parzr's accuracy. No external corpus listed here has been imported into the runtime or evaluated against parzr as part of this catalog.
+This catalog separates descriptions of English grammar, evaluation data, reusable resources and measured parzr behavior. External research establishes what to cover and how to test it. It does not establish parzr's accuracy. No external corpus listed here has been imported into the runtime. BEA-2019 dev, CoNLL-2014 and JFLEG have been used for evaluation only (the files are not in the repository); those results are in [model evaluation](model-evaluation.md). The other sources have not been evaluated against parzr as part of this catalog.
 
 ## Grammar inventories and explanations
 
 | Primary source | Evidence | Use and limits |
 |---|---|---|
-| [English Grammar Profile research](https://www.birmingham.ac.uk/documents/college-artslaw/corpus/conference-archives/2017/general/paper300.pdf) | Over 1,200 corpus-derived competency statements across A1–C2 | A broad coverage inventory. Competency statements describe language use, not executable correction rules. Consult applicable database terms before copying content. |
+| [English Grammar Profile research](https://www.birmingham.ac.uk/documents/college-artslaw/corpus/conference-archives/2017/general/paper300.pdf) | Over 1,200 corpus-derived competency statements across A1 to C2 | A broad coverage inventory. Competency statements describe language use, not executable correction rules. Consult applicable database terms before copying content. |
 | [Cambridge English Grammar Today](https://dictionary.cambridge.org/grammar/british-grammar/) | Over 500 topics, corpus-based examples, spelling, punctuation, word formation and spoken/written usage | Reference for independently authored rules and explanations. Copyrighted reference material; do not bulk copy examples or prose. |
 | [British Council advanced grammar](https://learnenglish.britishcouncil.org/free-resources/grammar/c1) | Advanced constructions including clefts, inversion and auxiliaries | Counterexamples to simplistic word-order corrections. Reference material, not a correction benchmark or an unrestricted data license. |
 | [Purdue punctuation resources](https://owl.purdue.edu/owl/general_writing/punctuation/index.html) | Clause punctuation, commas, apostrophes, quotations and hyphens | Reference for independently authored punctuation tests. The page carries an explicit copyright and redistribution notice. |
@@ -16,7 +16,7 @@ This catalog separates descriptions of English grammar, evaluation data, reusabl
 
 | Primary source | What it measures | Scale / verified terms |
 |---|---|---|
-| [CTSEG paper](https://aclanthology.org/2025.acl-long.1026/) and [official dataset](https://github.com/SDS-NLP/CTSEG) | Correction by individual grammar construction and proficiency level | 1,578 sentences covering 263 CEFR-J items, A1–B2. Research purposes only; redistribution prohibited. No corpus files in the public repo. |
+| [CTSEG paper](https://aclanthology.org/2025.acl-long.1026/) and [official dataset](https://github.com/SDS-NLP/CTSEG) | Correction by individual grammar construction and proficiency level | 1,578 sentences covering 263 CEFR-J items, A1 to B2. Research purposes only; redistribution prohibited. No corpus files in the public repo. |
 | [BLiMP](https://github.com/alexwarstadt/blimp) | Grammatical versus ungrammatical minimal pairs spanning syntax, morphology and semantics | 67 sets of 1,000 pairs, 67,000 pairs total. CC BY 4.0. Its original metric compares language-model probabilities; a rule engine needs an explicitly labeled detection/false-positive evaluation rather than claiming the original score. |
 | [BEA-2019 / W&I+LOCNESS](https://www.cl.cam.ac.uk/research/nl/bea2019st/) | Human correction of learner and native-student writing; error-type precision, recall and F0.5 | 43,169 sentences in the organizer's full dataset table. Separate train/dev/test. Organizer states non-commercial restrictions for its listed corpora. No automatic public redistribution. |
 | [CoNLL-2014](https://www.comp.nus.edu.sg/~nlp/conll14st.html) | Standard annotated correction task with an official scorer | Useful for comparable correction metrics. NUCLE access requires a signed license and request; check the test archive's own terms separately. |

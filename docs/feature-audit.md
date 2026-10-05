@@ -6,7 +6,7 @@ Parzr uses those interaction patterns as a checklist, with on-device processing 
 
 | Feature | Parzr implementation | Validation boundary |
 |---|---|---|
-| Automatic grammar, spelling and punctuation | Fast grammar engine and Apple NaturalLanguage; native range marks, browser overlays and VS Code diagnostics | Authored fixtures and adapter tests; vendor-specific coverage requires actual host tests |
+| Automatic grammar, spelling and punctuation | Fast grammar engine, Smart grammar (on-device GECToR model on the Neural Engine, Mac app only) and Apple NaturalLanguage; native range marks, browser overlays and VS Code diagnostics | Authored fixtures and adapter tests; vendor-specific coverage requires actual host tests |
 | Word-click correction card | Compact native cards with individual corrections, explanations and a corrected sentence preview | Source, focus and selection are checked again before applying |
 | Full selection / full sentence | Visible Fix all for selected passages and Fix sentence in word-click cards; internal review panel and full-passage checking | Native range edits retain formatting where the host exposes them |
 | Suggestion list | Review panel with category filters, Apply, Ignore and jumps to draft ranges | Filters affect review presentation; grammar remains enabled |

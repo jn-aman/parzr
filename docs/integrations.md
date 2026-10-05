@@ -1,6 +1,6 @@
 # Editor integrations
 
-Parzr targets writing wherever it happens: native text fields, chat composers, browser rich text, prose in code editors, and editors with an LSP client. Integrations share the local grammar engine and bundled model. A route is implemented when the adapter exists; a particular application is verified only after its text, formatting, selection and Undo pass a fixture test.
+Parzr targets writing wherever it happens: native text fields, chat composers, browser rich text, prose in code editors, and editors with an LSP client. Integrations share the local grammar engine and bundled model. Smart grammar (the on-device GECToR model) is a setting of the Mac app: the browser extension, VS Code and language-server routes run the rules engine without it. A route is implemented when the adapter exists; a particular application is verified only after its text, formatting, selection and Undo pass a fixture test.
 
 ## No extension needed
 
