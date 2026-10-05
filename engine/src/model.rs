@@ -1138,7 +1138,7 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     if o.chars().map(straight).eq(r.chars().map(straight)) {
         return None;
     }
-    let dashes = |s: &str| s.contains(['—', '–', '…']) || s.contains("...");
+    let dashes = |s: &str| s.contains(['\u{2014}', '\u{2013}', '\u{2026}']) || s.contains("...");
     if quotes(&r) < quotes(&o)
         && alnum(&o) == alnum(&r)
         && confusable(&lower(&o), &lower(&r)).is_none()
