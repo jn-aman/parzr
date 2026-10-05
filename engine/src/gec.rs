@@ -571,6 +571,43 @@ fn harmful(original: &str, replacement: &str) -> bool {
     letters(original) != letters(replacement)
         || original.split_whitespace().count() != replacement.split_whitespace().count()
 }
+const DETERMINERS: [&str; 14] = [
+    "the", "a", "an", "this", "that", "my", "your", "his", "her", "its", "our", "their", "each",
+    "every",
+];
+/// A singular noun made plural right after a determiner, or "the noun" rewritten as a bare plural:
+/// whether the writer meant one or many is not something grammar can decide.
+fn pluralizes_after_determiner(text: &str, at: usize, original: &str, replacement: &str) -> bool {
+    let (o, r) = (original.trim(), replacement.trim());
+    let plural_of = |noun: &str, plural: &str| {
+        let (n, p) = (noun.to_lowercase(), plural.to_lowercase());
+        p == format!("{n}s")
+            || p == format!("{n}es")
+            || p.strip_suffix("ies")
+                .is_some_and(|stem| n.strip_suffix('y') == Some(stem))
+    };
+    if o.contains(' ') {
+        let mut parts = o.split(' ');
+        let (first, rest) = (
+            parts.next().unwrap_or(""),
+            parts.collect::<Vec<_>>().join(" "),
+        );
+        return DETERMINERS.contains(&first.to_lowercase().as_str()) && plural_of(&rest, r);
+    }
+    let before = text[..at]
+        .split_whitespace()
+        .next_back()
+        .unwrap_or("")
+        .to_lowercase();
+    plural_of(o, r) && DETERMINERS.contains(&before.as_str())
+}
+/// "the" swapped for "a" or "an" or back: the choice of article is the writer's.
+fn swaps_article(original: &str, replacement: &str) -> bool {
+    let art = |w: &str| ["the", "a", "an"].contains(&w.to_lowercase().as_str());
+    art(original.trim())
+        && art(replacement.trim())
+        && original.trim().to_lowercase() != replacement.trim().to_lowercase()
+}
 fn words() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\w+(?:['’-]\w+)*").expect("constant regex"))
@@ -769,6 +806,12 @@ fn merge(
             continue;
         }
         let (id, category, why) = family(original, &e.replacement);
+        // The writer's choices, not errors: one or many after a determiner, and which article.
+        if pluralizes_after_determiner(text, edit.0, original, &e.replacement)
+            || swaps_article(original, &e.replacement)
+        {
+            continue;
+        }
         kept.push(Edit {
             start_utf16,
             end_utf16: start_utf16 + original.encode_utf16().count(),
@@ -1027,6 +1070,26 @@ mod tests {
         assert_eq!(
             guarded("qzxv he go home.", &[("go", "goes")], vec![], &[]),
             ["go>goes"]
+        );
+        // One or many after a determiner, and a swap of articles, are the writer's choice.
+        for (text, from, to) in [
+            ("She read the proposal today.", "proposal", "proposals"),
+            ("She read the letter today.", "the letter", "letters"),
+            ("She read the report today.", "the", "a"),
+        ] {
+            assert!(
+                guarded(text, &[(from, to)], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        assert_eq!(
+            guarded(
+                "She read two proposal today.",
+                &[("proposal", "proposals")],
+                vec![],
+                &[]
+            ),
+            ["proposal>proposals"]
         );
     }
     #[test]
