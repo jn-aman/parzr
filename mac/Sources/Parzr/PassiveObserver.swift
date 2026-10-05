@@ -9,6 +9,9 @@ final class PassiveObserver {
     private var observer: AXObserver?
     private var observed: [(AXUIElement, String)] = []
     private var work: Task<Void, Never>?
+    private var pacer = CheckPacer()
+    /// A check is waiting out its delay; false once it has started reading the editor.
+    private var pending = false
     private var activationToken: NSObjectProtocol?
     private var inputMonitor: Any?
     private var clickMonitor: Any?
@@ -28,9 +31,10 @@ final class PassiveObserver {
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
         if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
         // Some editors omit AX value notifications after paste. Native input events
-        // schedule the same bounded check; event text is never inspected or stored.
-        inputMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] _ in
-            MainActor.assumeIsolated { self?.noteKeystroke(); self?.inputChanged() }
+        // schedule the same bounded check; event text is never stored, and only used to tell whether the key ended a word.
+        inputMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            let wordEnd = CheckPacer.endsWord(event.characters)
+            MainActor.assumeIsolated { self?.noteKeystroke(); self?.keyPressed(wordEnd: wordEnd) }
         }
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { [weak self] _ in
             MainActor.assumeIsolated { self?.inputChanged() }
@@ -52,7 +56,7 @@ final class PassiveObserver {
     }
     func attach() {
         guard !stopped else { return }
-        work?.cancel(); focusRetry?.cancel(); firefoxKeystrokes = 0; onDismiss?()
+        work?.cancel(); pending = false; focusRetry?.cancel(); firefoxKeystrokes = 0; onDismiss?()
         if let observer {
             for (element, notification) in observed { AXObserverRemoveNotification(observer, element, notification as CFString) }
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
@@ -72,7 +76,7 @@ final class PassiveObserver {
                     if let app = NSWorkspace.shared.frontmostApplication { AX.prepare(app, force: true) }
                     owner.attachFocused()
                 }
-                owner.changed()
+                owner.changed(value: notification as String == kAXValueChangedNotification)
             }
         }, &created)
         guard result == .success, let created else { return }
@@ -87,6 +91,12 @@ final class PassiveObserver {
     private func inputChanged() {
         guard !stopped, let attachedPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == attachedPID else { return }
         changed()
+    }
+    /// A key went down in the attached editor. The text has not changed yet, so nothing is dismissed.
+    func keyPressed(wordEnd: Bool) {
+        guard !stopped, let attachedPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == attachedPID else { return }
+        pacer.ceiling = Preferences.shared.boundedCheckingDelay
+        schedule(pacer.key(at: ProcessInfo.processInfo.systemUptime, wordEnd: wordEnd))
     }
     private func add(_ element: AXUIElement, _ notification: String) {
         guard let observer else { return }
@@ -127,13 +137,27 @@ final class PassiveObserver {
             add(window as! AXUIElement, kAXMovedNotification); add(window as! AXUIElement, kAXResizedNotification)
         }
     }
-    private func changed() {
-        work?.cancel(); onDismiss?()
-        guard Preferences.shared.passive, !Preferences.shared.paused else { return }
+    /// An editor trigger (AX notification, click, focus). `value`: the text itself changed.
+    private func changed(value: Bool = false) {
+        pacer.ceiling = Preferences.shared.boundedCheckingDelay
+        let plan = pacer.changed(at: ProcessInfo.processInfo.systemUptime)
+        if value || plan != .keep { onDismiss?() }
+        schedule(plan)
+    }
+    private func schedule(_ plan: CheckPacer.Plan) {
+        guard Preferences.shared.passive, !Preferences.shared.paused else { work?.cancel(); pending = false; return }
+        let delay: Double
+        switch plan {
+        case .restart(let ms): delay = ms
+        // The check that is already waiting covers it; one that has started may have read a stale caret, so run again.
+        case .keep: if pending { return }; delay = pacer.quiet
+        }
+        work?.cancel(); pending = true
         work = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay)))
+                if delay > 0 { try await Task.sleep(for: .milliseconds(Int(delay.rounded()))) }
                 try Task.checkCancellation()
+                self?.pending = false
                 self?.onDismiss?()
                 let snapshot = try SelectionSnapshot.capture(passive: true)
                 FixLearning.observe(snapshot)
@@ -150,7 +174,7 @@ final class PassiveObserver {
             } catch { /* Passive failures are quiet and never log writing text. */ }
         }
     }
-    func suspend() { work?.cancel(); onDismiss?() }
+    func suspend() { work?.cancel(); pending = false; onDismiss?() }
     func stop() {
         stopped = true; suspend(); focusRetry?.cancel()
         if let observer {

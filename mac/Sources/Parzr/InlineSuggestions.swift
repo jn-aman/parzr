@@ -16,9 +16,7 @@ enum CorrectionPlacement {
 /// Transparent range marks and one compact editor-side controller. Applying never opens a studio.
 @MainActor
 final class InlineSuggestions {
-    private var marks: [String: NSPanel] = [:]
-    private var highlights: [String: NSPanel] = [:]
-    private var sentenceWashes: [NSPanel] = []
+    private let overlay = MarkOverlay()
     private var correction: FloatingPanel?
     private var scrollMonitor: Any?
     private var keyMonitor: Any?
@@ -30,11 +28,11 @@ final class InlineSuggestions {
     private(set) var overflow = 0
     private var relayout: Task<Void, Never>?
     private let maxMarks = 32
-    var hasMarks: Bool { !marks.isEmpty }
+    var hasMarks: Bool { overlay.hasMarks }
     var isPresenting: Bool { correction?.isVisible == true }
     var correctionSize: CGSize? { correction?.frame.size }
     var correctionView: NSView? { correction?.contentView }
-    func markedView(for edit: WritingEdit) -> NSView? { marks[edit.id]?.contentView }
+    func markedView(for edit: WritingEdit) -> MarkElement? { overlay.element(for: edit.id) }
     private struct IgnoreRevision: Equatable {
         let pid: pid_t
         let element: CFHashCode
@@ -52,6 +50,7 @@ final class InlineSuggestions {
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitor() } }
         }.store(in: &subscriptions)
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification).sink { [weak self] _ in MainActor.assumeIsolated { self?.dismiss() } }.store(in: &subscriptions)
     }
     private var subscriptions: Set<AnyCancellable> = []
     private(set) var monitorInstalls = 0
@@ -68,14 +67,12 @@ final class InlineSuggestions {
     private func scrolled() {
         closeCard()
         guard shown != nil else { return }
-        for mark in marks.values { mark.orderOut(nil) }
-        for highlight in highlights.values { highlight.orderOut(nil) }
-        for wash in sentenceWashes { wash.orderOut(nil) }
+        overlay.hide()
         relayout?.cancel()
         relayout = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
-            if self.textIsCurrent, let s = self.shown { self.dismiss(); self.show(snapshot: s.snapshot, result: s.result) } else { self.dismiss() }
+            if self.textIsCurrent, let s = self.shown { self.reset(); self.show(snapshot: s.snapshot, result: s.result) } else { self.dismiss() }
         }
     }
     private var textIsCurrent: Bool {
@@ -96,12 +93,11 @@ final class InlineSuggestions {
         model.clearSession()
     }
     func dismiss() {
-        for mark in marks.values { mark.orderOut(nil); mark.contentView = nil }
-        for highlight in highlights.values { highlight.orderOut(nil) }
-        for wash in sentenceWashes { wash.orderOut(nil) }
-        marks.removeAll(); highlights.removeAll(); sentenceWashes.removeAll(); closeCard()
-        shown = nil; overflow = 0; relayout?.cancel(); relayout = nil
+        overlay.clear(); reset()
+        relayout?.cancel(); relayout = nil
     }
+    /// Forgets the shown result and the card but leaves the marks on screen, so the next show can keep the unchanged ones.
+    private func reset() { closeCard(); shown = nil; overflow = 0 }
     func dismissIfStale() {
         // Marks and an open card persist across clicks and caret moves; they go only
         // when the text, focus, position or the passive/app settings no longer match.
@@ -123,15 +119,15 @@ final class InlineSuggestions {
     }
     @discardableResult
     func show(snapshot: SelectionSnapshot, result: RewriteResult) -> Bool {
-        if let current = shown, !marks.isEmpty, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
+        if let current = shown, overlay.hasMarks, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
            current.snapshot.selection == snapshot.selection, current.result.edits == result.edits, marksAreCurrent {
             shown = (snapshot, result, current.probe); return true
         }
-        dismiss(); prepareRevision(snapshot)
-        guard snapshot.app == NSWorkspace.shared.frontmostApplication, !snapshot.text.isEmpty else { return false }
+        reset(); prepareRevision(snapshot)
+        guard snapshot.app == NSWorkspace.shared.frontmostApplication, !snapshot.text.isEmpty else { overlay.clear(); return false }
         let edits = result.edits.filter { !ignored.contains($0.id) }
         shown = (snapshot, result, nil)
-        if edits.isEmpty { return true }
+        if edits.isEmpty { overlay.clear(); return true }
         overflow = max(0, edits.count - maxMarks)
         var probe: (range: NSRange, rect: CGRect)?
         let placed: [(edit: WritingEdit, global: NSRange, bounds: CGRect)] = edits.prefix(maxMarks).compactMap { edit in
@@ -141,45 +137,31 @@ final class InlineSuggestions {
                   NSScreen.screens.contains(where: { $0.visibleFrame.contains(bounds) }) else { return nil }
             return (edit, global, bounds)
         }
+        var items: [MarkItem] = []
         if Preferences.shared.highlightFill, !placed.isEmpty {
+            var washes = 0
             // Whole-sentence wash goes first so the word washes and marks stack above it.
             sentenceLoop: for range in SentencePreview.sentenceRanges(in: snapshot.text, containing: placed.map(\.edit)) {
                 for line in AX.lineRects(snapshot.element, NSRange(location: snapshot.selection.location + range.location, length: range.length)) {
                     let rect = line.insetBy(dx: -1, dy: 0)
                     guard rect.height < 70, NSScreen.screens.contains(where: { $0.visibleFrame.contains(rect) }) else { continue }
-                    if sentenceWashes.count >= 40 { break sentenceLoop }
-                    let wash = NSPanel(contentRect: rect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-                    wash.isReleasedWhenClosed = false; wash.level = .floating; wash.isOpaque = false
-                    wash.backgroundColor = .clear; wash.hasShadow = false
-                    wash.ignoresMouseEvents = true; wash.hidesOnDeactivate = false
-                    wash.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-                    let fill = NSView(); fill.wantsLayer = true
-                    fill.layer?.backgroundColor = NSColor(Color.issueInk).withAlphaComponent(0.05).cgColor; fill.layer?.cornerRadius = 3
-                    wash.contentView = fill; sentenceWashes.append(wash); wash.orderFrontRegardless()
+                    if washes >= 40 { break sentenceLoop }
+                    washes += 1; items.append(MarkItem(shape: MarkShape(kind: .wash, rect: rect)))
                 }
             }
         }
         for (edit, global, bounds) in placed {
-            let highlight = NSPanel(contentRect: bounds, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            highlight.isReleasedWhenClosed = false; highlight.level = .floating; highlight.isOpaque = false
-            highlight.backgroundColor = NSColor(Color.ink(for: edit.category)).withAlphaComponent(0.12); highlight.hasShadow = false
-            highlight.ignoresMouseEvents = true; highlight.hidesOnDeactivate = false
-            highlight.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            if Preferences.shared.highlightFill { highlights[edit.id] = highlight; highlight.orderFrontRegardless() }
-            let mark = NSPanel(contentRect: NSRect(x: bounds.minX, y: bounds.minY - 5, width: max(16, bounds.width), height: bounds.height + 5), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-            mark.isReleasedWhenClosed = false; mark.level = .floating; mark.isOpaque = false
-            mark.backgroundColor = .clear; mark.hasShadow = false; mark.hidesOnDeactivate = false
-            mark.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let button = UnderlineButton(label: "Review \(edit.category.lowercased()) correction", ink: NSColor(Color.ink(for: edit.category))) { [weak self] in
+            let style = ["Style", "Tone"].contains(edit.category)
+            if Preferences.shared.highlightFill { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: bounds, style: style), owner: edit.id)) }
+            items.append(MarkItem(shape: MarkShape(kind: .underline, rect: bounds, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
                 guard let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < 2, abs(now.minX - bounds.minX) < 2 else { self?.dismiss(); return }
                 self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
-            }
-            button.toolTip = "Parzr: \(edit.explanation)"; mark.contentView = button
-            marks[edit.id] = mark; mark.orderFrontRegardless()
+            })
             if probe == nil { probe = (global, bounds) }
         }
+        overlay.apply(items)
         shown = (snapshot, result, probe)
-        return !marks.isEmpty
+        return overlay.hasMarks
     }
     @discardableResult
     func present(snapshot: SelectionSnapshot, result: RewriteResult, focused: WritingEdit? = nil, anchor: CGRect, activate: Bool = true) -> Bool {
@@ -227,10 +209,7 @@ final class InlineSuggestions {
     private func ignore(_ edit: WritingEdit) {
         let related = EditPlan.related(to: edit, in: model.result?.edits ?? [edit])
         ignored.formUnion(related.map(\.id)); model.toggle(edit)
-        for item in related {
-            marks.removeValue(forKey: item.id)?.orderOut(nil)
-            highlights.removeValue(forKey: item.id)?.orderOut(nil)
-        }
+        overlay.remove(owners: Set(related.map(\.id)))
         if model.chosenEdits.isEmpty { closeCard() }
     }
 }
