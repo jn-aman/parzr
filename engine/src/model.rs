@@ -1518,7 +1518,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     };
     let (text, source_map) = apply_edits(&req.text, &changes)?;
     Ok(RewriteResult {
-        version: "parzr-0.1.0/qwen3.5-0.8b-q5".into(),
+        version: concat!("parzr-", env!("CARGO_PKG_VERSION"), "/qwen3.5-0.8b-q5").into(),
         text,
         edits: changes,
         source_map,

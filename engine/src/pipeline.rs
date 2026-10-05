@@ -501,9 +501,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     };
     Ok(RewriteResult {
         version: if cfg!(feature = "local-model") {
-            "parzr-0.1.0/hybrid-qwen3.5-0.8b-q5"
+            concat!(
+                "parzr-",
+                env!("CARGO_PKG_VERSION"),
+                "/hybrid-qwen3.5-0.8b-q5"
+            )
         } else {
-            "parzr-0.1.0/rules-3"
+            concat!("parzr-", env!("CARGO_PKG_VERSION"), "/rules-3")
         }
         .into(),
         text,

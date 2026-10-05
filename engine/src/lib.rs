@@ -903,7 +903,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     }
     let (text, source_map) = apply_edits(&req.text, &accepted)?;
     Ok(RewriteResult {
-        version: "parzr-0.1.0/rules-1".into(),
+        version: concat!("parzr-", env!("CARGO_PKG_VERSION"), "/rules-1").into(),
         text,
         edits: accepted,
         source_map,

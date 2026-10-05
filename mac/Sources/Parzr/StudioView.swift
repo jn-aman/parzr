@@ -230,11 +230,11 @@ struct StudioView: View {
                     divider
                     settingRow("Default mode", detail: "Start every editor selection with this mode.") { ModeChoices(mode: $preferences.defaultMode, compact: true) }
                     divider
-                    settingRow("Checking delay", detail: "Wait after typing before showing suggestions.") {
+                    settingRow("Checking delay", detail: "The longest wait while you type quickly. A pause checks sooner, and a space or punctuation checks at once.") {
                         VStack(alignment: .trailing, spacing: 4) { Slider(value: $preferences.checkingDelay, in: 40...700).frame(width: 130).accessibilityLabel("Checking delay"); Text("\(Int(preferences.boundedCheckingDelay)) ms").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.textSecondary) }
                     }
                     divider
-                    settingRow("Context refinement", detail: "Use the bundled model for full-passage grammar checks. Typing uses the lightweight engine; tone rewrites still use the model.") { toggle("Context refinement", $preferences.contextRefinement) }
+                    settingRow("Context refinement", detail: "Use the larger bundled model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
                     divider
                     settingRow("Smart grammar (on-device model)", detail: "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. Nothing leaves your Mac.") { toggle("Smart grammar", $preferences.smartGrammar) }
                 }
