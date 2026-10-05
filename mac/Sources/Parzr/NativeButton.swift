@@ -103,12 +103,12 @@ final class UnderlineButton: ActionButton {
     override func draw(_ dirtyRect: NSRect) {
         if hovering || isHighlighted {
             let word = NSRect(x: 0, y: isFlipped ? 0 : 5, width: bounds.width, height: max(0, bounds.height - 5))
-            NSColor(Color.correctionInk).withAlphaComponent(0.14).setFill()
+            NSColor(Color.correctionInk).withAlphaComponent(0.26).setFill()
             NSBezierPath(roundedRect: word, xRadius: 3, yRadius: 3).fill()
         }
         NSColor(Color.correctionInk).setStroke()
-        let path = NSBezierPath(); path.lineWidth = isHighlighted ? 2.2 : 1.7; path.lineCapStyle = .round
-        path.setLineDash([1, 3], count: 2, phase: 0)
+        let path = NSBezierPath(); path.lineWidth = isHighlighted ? 3.0 : 2.6; path.lineCapStyle = .round
+        path.setLineDash([1.5, 3.2], count: 2, phase: 0)
         let y = isFlipped ? bounds.maxY - 5 : 5
         path.move(to: NSPoint(x: 1, y: y)); path.line(to: NSPoint(x: bounds.maxX - 1, y: y)); path.stroke()
     }

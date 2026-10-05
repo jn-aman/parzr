@@ -141,7 +141,7 @@ final class InlineSuggestions {
                     wash.ignoresMouseEvents = true; wash.hidesOnDeactivate = false
                     wash.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
                     let fill = NSView(); fill.wantsLayer = true
-                    fill.layer?.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.05).cgColor; fill.layer?.cornerRadius = 3
+                    fill.layer?.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.08).cgColor; fill.layer?.cornerRadius = 3
                     wash.contentView = fill; sentenceWashes.append(wash); wash.orderFrontRegardless()
                 }
             }
@@ -149,7 +149,7 @@ final class InlineSuggestions {
         for (edit, global, bounds) in placed {
             let highlight = NSPanel(contentRect: bounds, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             highlight.isReleasedWhenClosed = false; highlight.level = .floating; highlight.isOpaque = false
-            highlight.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.08); highlight.hasShadow = false
+            highlight.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.20); highlight.hasShadow = false
             highlight.ignoresMouseEvents = true; highlight.hidesOnDeactivate = false
             highlight.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             if Preferences.shared.highlightFill { highlights[edit.id] = highlight; highlight.orderFrontRegardless() }
