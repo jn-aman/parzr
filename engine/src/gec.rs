@@ -5,7 +5,7 @@
 use crate::{
     Edit, Request, TextRange,
     gec_text::{Bpe, Tokenizer, Word},
-    model, spelling,
+    model, names, spelling,
 };
 use regex::Regex;
 use std::{
@@ -23,8 +23,13 @@ const LABELS: usize = 5001;
 /// Sentences longer than this are left to the rules; the model sees 80 subwords anyway.
 const MAX_PIECE_BYTES: usize = 4000;
 const CACHE_ENTRIES: usize = 1024;
-/// Uncached sentences the model runs per request; the rest wait for the next check (typing is incremental).
-const BUDGET: usize = 24;
+/// A sentence with this many lowercase words the rules neither know nor fix reads as code-mixed or
+/// non-English text (Hinglish, names, jargon); the model is not trusted there.
+const CODE_MIXED: usize = 2;
+/// Uncached sentences the model runs per request while typing (about 70 ms); the rest wait for the next
+/// check, and typing is incremental so only the sentence being edited is new. Explicit checks run them all.
+const TYPING_BUDGET: usize = 24;
+const EXPLICIT_BUDGET: usize = 512;
 
 type Logits = (Vec<f32>, Vec<f32>);
 pub type Forward<'a> = dyn Fn(&[i32]) -> Option<Logits> + 'a;
@@ -642,8 +647,12 @@ pub fn combine_with(
     parzr: Vec<Edit>,
 ) -> Vec<Edit> {
     let text = req.text.as_str();
-    let mut raw: Vec<(usize, Raw)> = vec![];
-    let mut budget = BUDGET;
+    let mut raw: Vec<(usize, usize, Raw)> = vec![];
+    let mut budget = if req.deep {
+        EXPLICIT_BUDGET
+    } else {
+        TYPING_BUDGET
+    };
     for (a, b) in pieces(text) {
         let piece = &text[a..b];
         if piece.len() > MAX_PIECE_BYTES {
@@ -662,11 +671,22 @@ pub fn combine_with(
                 edits
             }
         };
-        raw.extend(edits.iter().map(|e| (a, e.clone())));
+        raw.extend(edits.iter().map(|e| (a, b, e.clone())));
     }
+    merge(req, protected, parzr, raw)
+}
+/// Drops the model's corrections that the guards reject and merges the rest into the rules' edits.
+/// `raw` holds each correction with the byte range of its sentence.
+fn merge(
+    req: &Request,
+    protected: &[TextRange],
+    parzr: Vec<Edit>,
+    mut raw: Vec<(usize, usize, Raw)>,
+) -> Vec<Edit> {
     if raw.is_empty() {
         return parzr;
     }
+    let text = req.text.as_str();
     // Everything below works on the original text in bytes; the rules' and protected ranges are UTF-16.
     let mut to_byte = vec![usize::MAX; text.encode_utf16().count() + 1];
     let mut at16 = 0;
@@ -696,6 +716,8 @@ pub fn combine_with(
     );
     let mut capitalized: Vec<Span> = vec![];
     let mut unknown: Vec<Span> = vec![];
+    // Lowercase words that are also given names ("will", "mark"): written lowercase they may be names.
+    let mut nameish: Vec<Span> = vec![];
     for m in words().find_iter(text) {
         let w = m.as_str();
         let sp = (m.start(), m.end());
@@ -706,6 +728,12 @@ pub fn combine_with(
             capitalized.push(sp);
         }
         let lower = w.chars().any(char::is_lowercase) && !w.chars().any(char::is_uppercase);
+        let untouched = !rules
+            .iter()
+            .any(|r| touches(*r, &[sp]) || (r.0 < sp.1 && r.1 > sp.0));
+        if lower && untouched && names::is_bundled_name(names::base(&names::fold(w))) {
+            nameish.push(sp);
+        }
         if lower
             && !spelling::ordinary(w)
             && !spelling::ordinary(&w.replace('’', "'"))
@@ -718,17 +746,23 @@ pub fn combine_with(
     }
     let mut kept: Vec<Edit> = vec![];
     let mut last_end = 0;
-    raw.sort_by_key(|(a, e)| (a + e.start, a + e.end));
-    for (offset, e) in raw {
+    raw.sort_by_key(|(a, _, e)| (a + e.start, a + e.end));
+    for (offset, end, e) in raw {
         let edit = (offset + e.start, offset + e.end);
         let original = &text[edit.0..edit.1];
-        let guarded = rules.iter().any(|r| overlaps(text, edit, *r))
+        let strange = unknown
+            .iter()
+            .filter(|u| u.0 >= offset && u.1 <= end)
+            .count();
+        let guarded = strange >= CODE_MIXED
+            || rules.iter().any(|r| overlaps(text, edit, *r))
             || touches(edit, &shielded)
             || touches(edit, &capitalized)
             || (original != e.replacement
                 && original.to_lowercase() == e.replacement.to_lowercase()
                 && !sentence_initial(text, edit.0))
-            || (harmful(original, &e.replacement) && touches(edit, &unknown));
+            || (harmful(original, &e.replacement)
+                && (touches(edit, &unknown) || touches(edit, &nameish)));
         let start_utf16 = text[..edit.0].encode_utf16().count();
         // One edit per start: the app rejects plans where two edits begin at the same offset.
         if guarded || edit.0 < last_end || kept.iter().any(|k| k.start_utf16 == start_utf16) {
@@ -872,6 +906,129 @@ mod tests {
         assert_eq!(cut("3.5 times"), ["3.5 times"]);
         assert_eq!(cut(""), Vec::<&str>::new());
     }
+    fn guarded(
+        text: &str,
+        edits: &[(&str, &str)],
+        parzr: Vec<Edit>,
+        protected: &[TextRange],
+    ) -> Vec<String> {
+        let req = Request {
+            text: text.into(),
+            ..Request::default()
+        };
+        let raw = edits
+            .iter()
+            .map(|(from, to)| {
+                let start = text.find(from).expect("edit source is in the text");
+                (
+                    0,
+                    text.len(),
+                    Raw {
+                        start,
+                        end: start + from.len(),
+                        replacement: (*to).into(),
+                        confidence: 0.9,
+                    },
+                )
+            })
+            .collect();
+        merge(&req, protected, parzr, raw)
+            .into_iter()
+            .map(|e| format!("{}>{}", e.original, e.replacement))
+            .collect()
+    }
+    fn rule_edit(text: &str, from: &str, to: &str) -> Edit {
+        let start = text[..text.find(from).unwrap()].encode_utf16().count();
+        Edit {
+            start_utf16: start,
+            end_utf16: start + from.encode_utf16().count(),
+            replacement: to.into(),
+            original: from.into(),
+            category: "Grammar".into(),
+            rule_id: "grammar.test".into(),
+            explanation: String::new(),
+            confidence: 0.9,
+            group_id: None,
+        }
+    }
+    #[test]
+    fn corrections_survive_only_when_the_guards_allow_them() {
+        // A plain correction is kept, with UTF-16 positions after an emoji, a rule id and a category.
+        let text = "\u{1F600} She go to school.";
+        let req = Request {
+            text: text.into(),
+            ..Request::default()
+        };
+        let start = text.find("go").unwrap();
+        let raw = vec![(
+            0,
+            text.len(),
+            Raw {
+                start,
+                end: start + 2,
+                replacement: "goes".into(),
+                confidence: 0.8,
+            },
+        )];
+        let kept = merge(&req, &[], vec![], raw);
+        assert_eq!((kept[0].start_utf16, kept[0].end_utf16), (7, 9));
+        assert_eq!(
+            (
+                kept[0].rule_id.as_str(),
+                kept[0].category.as_str(),
+                kept[0].confidence
+            ),
+            ("gector.replace", "Grammar", 0.8)
+        );
+        // The rules' own edit wins; a protected range, a mid-sentence capital and a lowercase-only change do not move.
+        let text = "She go to school.";
+        assert_eq!(
+            guarded(
+                text,
+                &[("go", "goes")],
+                vec![rule_edit(text, "go", "went")],
+                &[]
+            ),
+            ["go>went"]
+        );
+        let protect = [TextRange {
+            start_utf16: 4,
+            end_utf16: 6,
+        }];
+        assert!(guarded(text, &[("go", "goes")], vec![], &protect).is_empty());
+        assert!(guarded("We met Maria today.", &[("Maria", "Marie")], vec![], &[]).is_empty());
+        assert!(
+            guarded(
+                "We went to paris today.",
+                &[("paris", "Paris")],
+                vec![],
+                &[]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            guarded("she went home.", &[("she", "She")], vec![], &[]),
+            ["she>She"]
+        );
+        // A word the rules do not know may not be rewritten, and neither may a lowercase given name.
+        assert!(guarded("She wents to qzxv now.", &[("qzxv", "quartz")], vec![], &[]).is_empty());
+        assert!(names::is_bundled_name("will"));
+        assert!(
+            guarded(
+                "We should invite will to the call.",
+                &[("will", "wills")],
+                vec![],
+                &[]
+            )
+            .is_empty()
+        );
+        // Two unknown words make the sentence code-mixed: nothing in it is touched.
+        assert!(guarded("qzxv wvut he go home.", &[("go", "goes")], vec![], &[]).is_empty());
+        assert_eq!(
+            guarded("qzxv he go home.", &[("go", "goes")], vec![], &[]),
+            ["go>goes"]
+        );
+    }
     #[test]
     fn guards_use_the_rules_names_and_case() {
         // A gap written either side of a space is one position; an insertion inside a span overlaps it.
@@ -982,12 +1139,23 @@ mod tests {
     /// equal its outputs. PARZR_GEC_COMPARE is a results directory (<dataset>.json with inputs and outputs).
     #[test]
     fn native_forward_matches_a_python_run() {
-        let (Some(dir), Some(model)) = (std::env::var_os("PARZR_GEC_COMPARE"), shared()) else { return };
-        for name in ["eng1000", "clean100", "controls", "hinglish", "jfleg", "bea"] {
-            let Ok(raw) = std::fs::read(Path::new(&dir).join(format!("{name}.json"))) else { continue };
+        let (Some(dir), Some(model)) = (std::env::var_os("PARZR_GEC_COMPARE"), shared()) else {
+            return;
+        };
+        for name in [
+            "eng1000", "clean100", "controls", "hinglish", "jfleg", "bea",
+        ] {
+            let Ok(raw) = std::fs::read(Path::new(&dir).join(format!("{name}.json"))) else {
+                continue;
+            };
             let data: serde_json::Value = serde_json::from_slice(&raw).unwrap();
             let (mut same, mut total, mut sentences, mut shown) = (0, 0, 0, 0);
-            for (input, want) in data["inputs"].as_array().unwrap().iter().zip(data["outputs"].as_array().unwrap()) {
+            for (input, want) in data["inputs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .zip(data["outputs"].as_array().unwrap())
+            {
                 let (input, want) = (input.as_str().unwrap(), want.as_str().unwrap());
                 let mut out = String::new();
                 let mut at = 0;
@@ -995,7 +1163,11 @@ mod tests {
                     out.push_str(&input[at..a]);
                     let piece = &input[a..b];
                     sentences += 1;
-                    out.push_str(&model.correct(piece, &native).map_or(piece.to_owned(), |c| c.text));
+                    out.push_str(
+                        &model
+                            .correct(piece, &native)
+                            .map_or(piece.to_owned(), |c| c.text),
+                    );
                     at = b;
                 }
                 out.push_str(&input[at..]);
@@ -1006,7 +1178,9 @@ mod tests {
                     eprintln!("[{name}] {input:?}\n  python {want:?}\n  rust   {out:?}");
                 }
             }
-            eprintln!("native vs python {name}: {same} of {total} texts identical ({sentences} sentences)");
+            eprintln!(
+                "native vs python {name}: {same} of {total} texts identical ({sentences} sentences)"
+            );
         }
     }
 }
