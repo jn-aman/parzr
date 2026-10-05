@@ -53,6 +53,8 @@ shutil.copy2(model_cache/'libparzr_model.dylib', stage/'Contents/Frameworks/libp
 model_resources = stage/'Contents/Resources/Model'; model_resources.mkdir()
 for name in [model_info['file'], 'manifest.json', 'llama-LICENSE.txt']:
     shutil.copy2(model_cache/name, model_resources/name)
+# GECToR (Core ML) beside the Qwen model: the runtime's default directory is Model/gector.
+shutil.copytree(model_cache/'gector', model_resources/'gector')
 for name, destination in [('libparzr_engine.dylib','Contents/Frameworks'),('parzr-engine','Contents/MacOS'),('parzr-native-host','Contents/MacOS'),('parzr-lsp','Contents/MacOS')]:
     files = [ROOT/'engine/target'/target/'release'/name if target else ROOT/'engine/target/release'/name for target in architectures]
     shutil.copy2(files[0],stage/destination/name)
