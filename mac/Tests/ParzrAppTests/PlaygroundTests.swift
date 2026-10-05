@@ -16,8 +16,8 @@ final class PlaygroundTests: XCTestCase {
     }
 
     func testWritingPreferencesPersistAndBoundRuntimeValues() throws {
-        let name = "app.parzr.tests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        let name = "app.parzr.tests" // reused and reset: a UUID per run left a file behind each time
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name)); defaults.removePersistentDomain(forName: name)
         defer { defaults.removePersistentDomain(forName: name) }
         let prefs = Preferences(defaults: defaults)
         XCTAssertTrue(prefs.selectedTextPopover)
@@ -233,8 +233,8 @@ final class KnownNamesTests: XCTestCase {
 @MainActor
 final class NameHandlingTests: XCTestCase {
     private func prefs() throws -> (Preferences, () -> Void) {
-        let name = "app.parzr.tests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        let name = "app.parzr.tests" // reused and reset: a UUID per run left a file behind each time
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name)); defaults.removePersistentDomain(forName: name)
         return (Preferences(defaults: defaults), { defaults.removePersistentDomain(forName: name) })
     }
     func testNamesMergeAllSourcesWithinLimits() {
@@ -257,7 +257,8 @@ final class NameHandlingTests: XCTestCase {
         prefs.noteIgnored(edit)
         XCTAssertEqual(prefs.learnedNames, ["Aman"])
         // Counts persist across launches and unrelated categories never count.
-        let other = WritingEdit(start: 0, end: 3, replacement: "the", original: "teh", category: "Grammar")
+        // Two letters: nameCandidate returns before it would ask NSSpellChecker, whose automatic language guess for a bare "teh" (also Malay for tea) differs between machines and runs.
+        let other = WritingEdit(start: 0, end: 2, replacement: "its", original: "it", category: "Grammar")
         prefs.noteIgnored(other); prefs.noteIgnored(other)
         XCTAssertEqual(prefs.learnedNames, ["Aman"])
         XCTAssertEqual(Preferences.ignoresToLearn, 2)
@@ -422,7 +423,7 @@ final class RepetitionLearningTests: XCTestCase {
         XCTAssertEqual(RepetitionLearning.fresh(["jatin"], previous: cleared.present, fullText: "jatin ok").fresh, ["jatin"], "typed again in an emptied field")
     }
     @MainActor func testPreferencesLearnsAfterSightingsAndNeverAfterApply() throws {
-        let suite = "parzr-rep-\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!; defer { defaults.removePersistentDomain(forName: suite) }
+        let suite = "app.parzr.tests.repetition"; let defaults = UserDefaults(suiteName: suite)!; defaults.removePersistentDomain(forName: suite); defer { defaults.removePersistentDomain(forName: suite) }
         let prefs = Preferences(defaults: defaults)
         prefs.noteSighting("jatin", app: "a", day: 1); prefs.noteSighting("jatin", app: "b", day: 1)
         XCTAssertTrue(prefs.learnedNames.isEmpty)
