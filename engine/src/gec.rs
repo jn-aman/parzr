@@ -31,6 +31,35 @@ const CODE_MIXED: usize = 2;
 const TYPING_BUDGET: usize = 24;
 const EXPLICIT_BUDGET: usize = 512;
 
+/// Extra holds on the model's tags, tuned on BEA dev (see the commit log); `Gates::NONE` is the reference decoder.
+#[derive(Clone, Copy)]
+pub struct Gates {
+    /// A tag needs at least this detection probability of "incorrect" at its word.
+    pub detection: f32,
+    /// A $REPLACE_ tag (one word for another) needs this probability.
+    pub replace: f32,
+    /// So does appending a comma, which published prose uses freely.
+    pub comma: f32,
+    /// A held-back tag also holds the verb-form and agreement tags this many words around it
+    /// ("Did you eat" to "Have you eaten" must not become "Did you eaten").
+    pub verb_window: usize,
+}
+impl Gates {
+    #[cfg(test)]
+    pub const NONE: Gates = Gates {
+        detection: 0.0,
+        replace: 0.0,
+        comma: 0.0,
+        verb_window: 0,
+    };
+    pub const PRODUCTION: Gates = Gates {
+        detection: 0.3,
+        replace: 0.83,
+        comma: 0.82,
+        verb_window: 2,
+    };
+}
+
 type Logits = (Vec<f32>, Vec<f32>);
 pub type Forward<'a> = dyn Fn(&[i32]) -> Option<Logits> + 'a;
 
@@ -41,6 +70,7 @@ pub struct Gec {
     keep: usize,
     start: i32,
     decode: HashMap<String, String>,
+    pub gates: Gates,
 }
 /// What the model did to one sentence: the corrected text and the weakest tag it applied.
 pub struct Corrected {
@@ -74,6 +104,7 @@ impl Gec {
             start: *added.get("$START").ok_or("no $START")?,
             labels,
             decode,
+            gates: Gates::PRODUCTION,
         })
     }
 
@@ -106,6 +137,7 @@ impl Gec {
         }
         let mut worst = 0f32;
         let mut tags = vec![];
+        let mut held: Vec<usize> = vec![];
         for &p in &firsts {
             let row = &labels[p * LABELS..(p + 1) * LABELS];
             let (mut top, mut at) = (f32::MIN, 0);
@@ -130,8 +162,34 @@ impl Gec {
                     (at, top_p)
                 };
             let (a, b) = (detect[p * 2], detect[p * 2 + 1]);
-            worst = worst.max(1.0 / (1.0 + (a - b).exp()));
+            let incorrect = 1.0 / (1.0 + (a - b).exp());
+            worst = worst.max(incorrect);
+            let label = self.labels.get(best).map_or("", String::as_str);
+            let g = self.gates;
+            if best != self.keep
+                && (incorrect < g.detection
+                    || (label.starts_with("$REPLACE_") && best_p < g.replace)
+                    || (label == "$APPEND_," && best_p < g.comma)
+                    || best_p < MIN_PROBABILITY)
+            {
+                held.push(tags.len());
+                tags.push((self.keep, 1.0));
+                continue;
+            }
             tags.push((best, best_p));
+        }
+        // Corrections lean on their neighbours: a held-back tag takes the verb-form tags near it along.
+        for h in held {
+            for i in h.saturating_sub(self.gates.verb_window)
+                ..(h + self.gates.verb_window + 1).min(tags.len())
+            {
+                let label = self.labels.get(tags[i].0).map_or("", String::as_str);
+                if label.starts_with("$TRANSFORM_VERB_")
+                    || label.starts_with("$TRANSFORM_AGREEMENT_")
+                {
+                    tags[i] = (self.keep, 1.0);
+                }
+            }
         }
         // A sentence the detector finds clean, and any tag the model is unsure of, stay as they are.
         for tag in &mut tags {
@@ -603,12 +661,55 @@ fn pluralizes_after_determiner(text: &str, at: usize, original: &str, replacemen
         );
         return DETERMINERS.contains(&first.to_lowercase().as_str()) && plural_of(&rest, r);
     }
+    // The determiner may sit a modifier or two back ("the museum event").
+    let recent = text[..at]
+        .rsplit(['.', '!', '?', ',', ';', ':', '\n'])
+        .next()
+        .unwrap_or("");
+    plural_of(o, r)
+        && recent
+            .split_whitespace()
+            .rev()
+            .take(3)
+            .any(|w| DETERMINERS.contains(&w.to_lowercase().as_str()))
+}
+/// A word rewritten as another form of itself right after a determiner or possessive ("the build"
+/// to "the building"): the writer picked the part of speech.
+fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement: &str) -> bool {
+    let (o, r) = (
+        original.trim().to_lowercase(),
+        replacement.trim().to_lowercase(),
+    );
+    if o.contains(' ') || r.contains(' ') || o == r {
+        return false;
+    }
     let before = text[..at]
         .split_whitespace()
         .next_back()
         .unwrap_or("")
         .to_lowercase();
-    plural_of(o, r) && DETERMINERS.contains(&before.as_str())
+    let stem_of = |w: &str| {
+        ["ing", "ed", "en"].iter().any(|suffix| {
+            w.strip_suffix(suffix).is_some_and(|stem| {
+                stem.len() >= 2
+                    && (o == stem
+                        || o == format!("{stem}e")
+                        || stem.strip_suffix(stem.chars().last().unwrap_or(' '))
+                            == Some(o.as_str()))
+            })
+        })
+    };
+    DETERMINERS.contains(&before.as_str()) && stem_of(&r)
+}
+/// The model glued or split words into something that is no word ("I'm living" to "Ilive"): every
+/// alphabetic word it writes must be a known word or already in the text.
+fn invents_a_word(text: &str, replacement: &str) -> bool {
+    let lower = text.to_lowercase();
+    replacement
+        .split(|c: char| !c.is_alphabetic() && c != '\'' && c != '’')
+        .filter(|w| w.chars().count() >= 2)
+        .map(|w| w.strip_suffix("'s").or(w.strip_suffix("’s")).unwrap_or(w))
+        .any(|w| !spelling::known(w) && !lower.contains(&w.to_lowercase()))
 }
 /// "the" swapped for "a" or "an" or back: the choice of article is the writer's.
 fn swaps_article(original: &str, replacement: &str) -> bool {
@@ -790,17 +891,27 @@ fn merge(
             unknown.push(sp);
         }
     }
-    let mut kept: Vec<Edit> = vec![];
-    let mut last_end = 0;
     raw.sort_by_key(|(a, _, e)| (a + e.start, a + e.end));
-    for (offset, end, e) in raw {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Verdict {
+        Keep,
+        Drop,
+    }
+    // Per edit: dropped by a guard, and whether it was dropped as "one or many" (its verb then stays too).
+    let mut verdicts: Vec<Verdict> = vec![];
+    let mut number: Vec<bool> = vec![];
+    for (offset, end, e) in &raw {
+        let (offset, end) = (*offset, *end);
         let edit = (offset + e.start, offset + e.end);
         let original = &text[edit.0..edit.1];
         let strange = unknown
             .iter()
             .filter(|u| u.0 >= offset && u.1 <= end)
             .count();
-        let guarded = strange >= CODE_MIXED
+        // The writer's choices, not errors: one or many after a determiner, which article, the part of speech.
+        let writers_choice = pluralizes_after_determiner(text, edit.0, original, &e.replacement)
+            || verb_form_after_determiner(text, edit.0, original, &e.replacement);
+        let dropped = strange >= CODE_MIXED
             || rules.iter().any(|r| overlaps(text, edit, *r))
             || touches(edit, &shielded)
             || touches(edit, &capitalized)
@@ -808,19 +919,52 @@ fn merge(
                 && original.to_lowercase() == e.replacement.to_lowercase()
                 && !sentence_initial(text, edit.0))
             || (harmful(original, &e.replacement)
-                && (touches(edit, &unknown) || touches(edit, &nameish)));
-        let start_utf16 = text[..edit.0].encode_utf16().count();
-        // One edit per start: the app rejects plans where two edits begin at the same offset.
-        if guarded || edit.0 < last_end || kept.iter().any(|k| k.start_utf16 == start_utf16) {
+                && (touches(edit, &unknown) || touches(edit, &nameish)))
+            || writers_choice
+            || swaps_article(original, &e.replacement)
+            || invents_a_word(text, &e.replacement);
+        number.push(writers_choice);
+        verdicts.push(if dropped {
+            Verdict::Drop
+        } else {
+            Verdict::Keep
+        });
+    }
+    // A noun left as it was ("the proposal") keeps its verb as it was ("is"): verb edits just after it go too.
+    const AUXILIARIES: [&str; 12] = [
+        "is", "are", "was", "were", "has", "have", "had", "does", "do", "did", "am", "been",
+    ];
+    for i in 0..raw.len() {
+        if !number[i] {
             continue;
         }
-        let (id, category, why) = family(original, &e.replacement);
-        // The writer's choices, not errors: one or many after a determiner, and which article.
-        if pluralizes_after_determiner(text, edit.0, original, &e.replacement)
-            || swaps_article(original, &e.replacement)
+        for j in 0..raw.len() {
+            let (x, y) = (&raw[i], &raw[j]);
+            let original = text[y.0 + y.2.start..y.0 + y.2.end].trim().to_lowercase();
+            if x.0 == y.0
+                && y.2.start >= x.2.end
+                && y.2.start <= x.2.end + 24
+                && (AUXILIARIES.contains(&original.as_str())
+                    || AUXILIARIES.contains(&y.2.replacement.trim().to_lowercase().as_str()))
+            {
+                verdicts[j] = Verdict::Drop;
+            }
+        }
+    }
+    let mut kept: Vec<Edit> = vec![];
+    let mut last_end = 0;
+    for ((offset, _, e), verdict) in raw.into_iter().zip(verdicts) {
+        let edit = (offset + e.start, offset + e.end);
+        let original = &text[edit.0..edit.1];
+        let start_utf16 = text[..edit.0].encode_utf16().count();
+        // One edit per start: the app rejects plans where two edits begin at the same offset.
+        if verdict == Verdict::Drop
+            || edit.0 < last_end
+            || kept.iter().any(|k| k.start_utf16 == start_utf16)
         {
             continue;
         }
+        let (id, category, why) = family(original, &e.replacement);
         kept.push(Edit {
             start_utf16,
             end_utf16: start_utf16 + original.encode_utf16().count(),
@@ -1080,6 +1224,33 @@ mod tests {
             guarded("qzxv he go home.", &[("go", "goes")], vec![], &[]),
             ["go>goes"]
         );
+        // The part of speech after a determiner, and a word the model makes up, are not corrections.
+        assert!(guarded("The build is green.", &[("build", "building")], vec![], &[]).is_empty());
+        assert!(guarded("I'm living here.", &[("I'm living", "Ilive")], vec![], &[]).is_empty());
+        assert_eq!(
+            guarded("He wants a build.", &[("wants", "want")], vec![], &[]),
+            ["wants>want"]
+        );
+        // A noun left singular keeps its singular verb: the verb edit right after it is dropped too.
+        assert!(
+            guarded(
+                "The proposal is ready.",
+                &[("proposal", "proposals"), ("is", "are")],
+                vec![],
+                &[]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            guarded(
+                "They is ready.",
+                &[("They", "He"), ("is", "are")],
+                vec![],
+                &[]
+            )
+            .len(),
+            2
+        );
         // One or many after a determiner, and a swap of articles, are the writer's choice.
         for (text, from, to) in [
             ("She read the proposal today.", "proposal", "proposals"),
@@ -1152,8 +1323,12 @@ mod tests {
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
 
+    /// The reference decoder: no extra gates, so its output can be compared with the Python pipeline.
     fn gec() -> Option<Gec> {
-        Gec::load(Path::new(&std::env::var_os("PARZR_GEC_DIR")?)).ok()
+        let dir = std::path::PathBuf::from(std::env::var_os("PARZR_GEC_DIR")?);
+        let mut model = Gec::load(&dir).ok()?;
+        model.gates = Gates::NONE;
+        model::gec_prepare(&dir).then_some(model)
     }
     /// The torch fp32 logits recorded while the Python pipeline corrected 430 sentences are fed through
     /// this decoder (BPE, tags, five rounds, detokenizing): every output must be identical.
@@ -1211,7 +1386,7 @@ mod tests {
     /// equal its outputs. PARZR_GEC_COMPARE is a results directory (<dataset>.json with inputs and outputs).
     #[test]
     fn native_forward_matches_a_python_run() {
-        let (Some(dir), Some(model)) = (std::env::var_os("PARZR_GEC_COMPARE"), shared()) else {
+        let (Some(dir), Some(model)) = (std::env::var_os("PARZR_GEC_COMPARE"), gec()) else {
             return;
         };
         for name in [
