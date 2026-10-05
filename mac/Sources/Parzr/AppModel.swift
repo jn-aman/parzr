@@ -78,6 +78,8 @@ final class AppModel: ObservableObject {
             }
         }
     }
+    /// Mode pickers bind here; a key-path binding avoids a Swift 6.3 IRGen crash in closure-built Bindings.
+    var modeChoice: RewriteMode { get { mode } set { changeMode(newValue) } }
     func changeMode(_ mode: RewriteMode) { guard self.mode != mode else { return }; self.mode = mode; analyze() }
     func toggle(_ edit: WritingEdit) {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))

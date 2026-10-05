@@ -18,10 +18,10 @@ struct StatusPopover: View {
                 HStack {
                     Label("Automatic highlights", systemImage: "textformat.abc").font(.system(size: 12, weight: .medium))
                     Spacer()
-                    Toggle("Automatic highlights", isOn: Binding(get: { preferences.passive && !preferences.paused }, set: { preferences.passive = $0; preferences.paused = false })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    Toggle("Automatic highlights", isOn: $preferences.automaticHighlights).labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
                 if let sourceApp, let id = sourceApp.bundleIdentifier {
-                    HStack { Text(sourceApp.localizedName ?? "Current app").font(.system(size: 11)).foregroundStyle(Color.textSecondary); Spacer(); Toggle("Enable in \(sourceApp.localizedName ?? "current app")", isOn: Binding(get: { preferences.enabled(for: id) }, set: { _ in preferences.toggleApp(id) })).labelsHidden().toggleStyle(.switch).controlSize(.small) }
+                    HStack { Text(sourceApp.localizedName ?? "Current app").font(.system(size: 11)).foregroundStyle(Color.textSecondary); Spacer(); Toggle("Enable in \(sourceApp.localizedName ?? "current app")", isOn: $preferences[appEnabled: id]).labelsHidden().toggleStyle(.switch).controlSize(.small) }
                 }
             }.padding(13).graphiteSurface()
             HStack {

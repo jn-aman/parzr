@@ -14,7 +14,7 @@ struct RewritePanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 if showsModes {
-                    ModeChoices(mode: Binding(get: { model.mode }, set: model.changeMode), compact: true).disabled(model.busy || model.snapshot == nil && model.selectionHint)
+                    ModeChoices(mode: $model.modeChoice, compact: true).disabled(model.busy || model.snapshot == nil && model.selectionHint)
                 } else {
                     Circle().fill(Color.correctionInk).frame(width: 6, height: 6).accessibilityHidden(true)
                     Text(headline).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.textPrimary).lineLimit(1)

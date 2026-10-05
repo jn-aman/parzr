@@ -134,7 +134,7 @@ struct StudioView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        ModeChoices(mode: Binding(get: { model.mode }, set: model.changeMode)).disabled(model.busy)
+                        ModeChoices(mode: $model.modeChoice).disabled(model.busy)
                     }
                 }.padding(.horizontal, 16).padding(.vertical, 12)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
@@ -200,7 +200,7 @@ struct StudioView: View {
             switch activeRoute {
             case .general:
                 group("EVERYDAY") {
-                    settingRow("Start with your Mac", detail: "Keep Parzr ready in the menu bar.") { Toggle("Launch at login", isOn: Binding(get: { preferences.launchAtLogin }, set: preferences.setLogin)).labelsHidden().toggleStyle(.switch) }
+                    settingRow("Start with your Mac", detail: "Keep Parzr ready in the menu bar.") { Toggle("Launch at login", isOn: $preferences.launchAtLoginChoice).labelsHidden().toggleStyle(.switch) }
                     divider
                     settingRow("Automatic suggestions", detail: "Catch grammar and spelling as you type.") { toggle("Automatic suggestions", $preferences.passive) }
                     divider
@@ -259,7 +259,7 @@ struct StudioView: View {
                 group("OPEN APPLICATIONS") {
                     ForEach(runningApps, id: \.bundleIdentifier) { app in
                         if let id = app.bundleIdentifier {
-                            settingRow(app.localizedName ?? id, detail: id) { toggle("Enable \(app.localizedName ?? id)", Binding(get: { preferences.enabled(for: id) }, set: { _ in preferences.toggleApp(id) })) }
+                            settingRow(app.localizedName ?? id, detail: id) { toggle("Enable \(app.localizedName ?? id)", $preferences[appEnabled: id]) }
                             divider
                         }
                     }

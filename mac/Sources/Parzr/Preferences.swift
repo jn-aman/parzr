@@ -98,5 +98,9 @@ final class Preferences: ObservableObject {
         guard !word.isEmpty, word.utf8.count <= 128, dictionary.count < 1000, !dictionary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
         dictionary.append(word)
     }
+    // Key-path bindings for toggles (see AppModel.modeChoice).
+    var automaticHighlights: Bool { get { passive && !paused } set { passive = newValue; paused = false } }
+    var launchAtLoginChoice: Bool { get { launchAtLogin } set { setLogin(newValue) } }
+    subscript(appEnabled bundle: String) -> Bool { get { enabled(for: bundle) } set { if newValue != enabled(for: bundle) { toggleApp(bundle) } } }
     func toggleApp(_ bundle: String) { if let i = disabledApps.firstIndex(of: bundle) { disabledApps.remove(at: i) } else { disabledApps.append(bundle) } }
 }
