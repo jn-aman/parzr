@@ -1,0 +1,11 @@
+{
+  "name": "parzr", "displayName": "Parzr", "description": "Offline writing assistance with minimal edits and deliberate tones.",
+  "version": "0.1.0", "publisher": "parzr", "license": "Apache-2.0", "engines": {"vscode": "^1.85.0"},
+  "categories": ["Linters"], "main": "./extension.cjs", "activationEvents": ["onCommand:parzr.rewrite", "onLanguage:plaintext", "onLanguage:markdown", "onLanguage:mdx", "onLanguage:git-commit"],
+  "capabilities": {"untrustedWorkspaces": {"supported": true}, "virtualWorkspaces": {"supported": false}},
+  "contributes": {
+    "commands": [{"command": "parzr.rewrite", "title": "Parzr: Improve selected text"}],
+    "keybindings": [{"command": "parzr.rewrite", "key": "alt+space", "mac": "alt+space", "when": "editorTextFocus && editorHasSelection"}],
+    "configuration": {"title": "Parzr", "properties": {"parzr.automatic": {"type":"boolean", "default":true, "description":"Underline grammar issues while typing in local prose documents."}, "parzr.enginePath": {"type":"string", "scope":"machine", "default":"/Applications/Parzr.app/Contents/MacOS/parzr-engine", "description":"Path to the local Parzr engine executable. Run locally on macOS."}}}
+  }
+}

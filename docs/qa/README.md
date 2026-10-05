@@ -1,0 +1,19 @@
+# Verification
+
+Use synthetic fixtures only. Public screenshots in screenshots/ depict the current product. Generated JSON reports, local paths, integration fixtures and packaged artifacts belong in ignored dist/qa or dist/native-qa.
+
+The Rust suites check rules, valid contexts, grammar in every mode, composed edit plans, protected spans and Unicode. Swift tests check the native bridge, attributed edits, the playground viewport, draft invalidation during debounce, and correction acceptance with native Undo. The app’s `--health-check` exercises the bundled engine without opening a window or reading editor text; it also reports whether Accessibility is granted and suggestions are paused. Node tests check editor/native-host and LSP protocols. Playwright checks Chromium DOM behavior against the compiled engine through a test messaging bridge.
+
+The explicit native command in README opens an authored RTF in TextEdit and checks real Accessibility selection, passive paragraph capture, an automatic highlight following an actual typing event, clicking the flagged word, applying through the 340 × 218 point correction surface, bold/italic retention, paragraphs and Undo. Run it only in an interactive macOS session with Accessibility enabled. It checks secure input and verifies its fixture before editing.
+
+`dist/Parzr.app/Contents/MacOS/parzr --ui-test dist/qa/ui-controls` exercises the native Sample, Apply all, Copy, Settings, Done and Clear session controls, window Undo, the menu Settings action and reopening visible, minimized and closed windows. It uses authored text and restores its fixture clipboard if the clipboard has not changed. Swift tests also exercise menu pause/highlight actions, compact navigation and Ignore, insertion anchors beside emoji, and screen-edge placement. This verifies the tested controls; host coverage still needs editor-specific evidence.
+
+See [integrations](../integrations.md) for the distinction between implemented routes and host-specific evidence, and [grammar coverage](../grammar-coverage.md) for linguistic limits. Installed extension messaging, custom editors and signed distribution need separate acceptance checks.
+
+`dist/Parzr.app/Contents/MacOS/parzr --typing-test dist/qa/typing` checks an incomplete sentence without final punctuation. It sends a real typing event to an authored TextEdit fixture, requires three automatic marks, applies one through the compact popover, checks that the typing caret is preserved and remaining marks return, and verifies native Undo. Contextual spelling tests preserve valid musical `si`, noun `bod`, proper names and personal dictionary entries.
+
+`dist/Parzr.app/Contents/MacOS/parzr --grammar-typing-test dist/qa/grammar-typing` types into two authored TextEdit fixtures: a supposed/done sentence and a paragraph with tense, agreement and negative-concord errors. It requires marks for every returned edit, clicks a real underline and correction button, checks that remaining marks return with the typing caret preserved, applies the complete plan, preserves a bold anchor and verifies real editor Undo. Reports and popup screenshots remain in ignored `dist/qa`.
+
+`--paste-test dist/qa/paste` sends an actual Cmd+V to an authored TextEdit fixture, checks the trailing-newline context, requires automatic marks and lowercase `done`, clicks the word itself, captures the themed correction card and applies both errors with Fix sentence. Native input events supplement AX value notifications; no event characters are stored.
+
+The UI check also exercises the new menu panel’s Settings, About and Open editor buttons. Run `scripts/render-model-report.py RESULTS_DIRECTORY` on a completed model benchmark to create a searchable offline report with every input, expected correction, actual correction and timing.

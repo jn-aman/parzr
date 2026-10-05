@@ -1,0 +1,32 @@
+.DS_Store
+.build/
+target/
+dist/
+node_modules/
+*.p12
+*.p8
+.env
+.env.*
+!*.example
+*.xcuserstate
+
+# Local authoring tools and private workspace state
+/.agents/
+/.codex/
+/.impeccable/
+/.vscode/
+/skills-lock.json
+__pycache__/
+*.pyc
+*.keychain-db
+*.mobileprovision
+*.provisionprofile
+*.pem
+*.key
+*.cer
+
+# Generated QA and packaged editor adapters
+test-results/
+playwright-report/
+*.vsix
+*.dmg

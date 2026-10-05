@@ -1,0 +1,24 @@
+{"task": "grammar", "id": "typos", "input": "this si too bod", "expected": "This is too bad."}
+{"task": "clean", "id": "typos-clean", "input": "This is too bad.", "expected": "This is too bad."}
+{"task": "grammar", "id": "spelling", "input": "Please chek the documnt.", "expected": "Please check the document."}
+{"task": "clean", "id": "spelling-clean", "input": "Please check the document.", "expected": "Please check the document."}
+{"task": "grammar", "id": "agreement", "input": "She go to work every day.", "expected": "She goes to work every day."}
+{"task": "clean", "id": "agreement-clean", "input": "She goes to work every day.", "expected": "She goes to work every day."}
+{"task": "grammar", "id": "past", "input": "Yesterday, I goes to the market.", "expected": "Yesterday, I went to the market."}
+{"task": "clean", "id": "past-clean", "input": "Yesterday, I went to the market.", "expected": "Yesterday, I went to the market."}
+{"task": "grammar", "id": "perfect", "input": "He has wrote the letter.", "expected": "He has written the letter."}
+{"task": "clean", "id": "perfect-clean", "input": "He has written the letter.", "expected": "He has written the letter."}
+{"task": "grammar", "id": "passive", "input": "The report is suppose to be donme.", "expected": "The report is supposed to be done."}
+{"task": "clean", "id": "passive-clean", "input": "The report is supposed to be done.", "expected": "The report is supposed to be done."}
+{"task": "grammar", "id": "modal", "input": "We should sends the report.", "expected": "We should send the report."}
+{"task": "clean", "id": "modal-clean", "input": "We should send the report.", "expected": "We should send the report."}
+{"task": "grammar", "id": "articles", "input": "I ate a apple before the meeting.", "expected": "I ate an apple before the meeting."}
+{"task": "clean", "id": "articles-clean", "input": "I ate an apple before the meeting.", "expected": "I ate an apple before the meeting."}
+{"task": "grammar", "id": "punctuation", "input": "The plan is clear We should share it.", "expected": "The plan is clear. We should share it."}
+{"task": "clean", "id": "punctuation-clean", "input": "The plan is clear. We should share it.", "expected": "The plan is clear. We should share it."}
+{"task": "grammar", "id": "question", "input": "Where did Maya went?", "expected": "Where did Maya go?"}
+{"task": "clean", "id": "question-clean", "input": "Where did Maya go?", "expected": "Where did Maya go?"}
+{"task": "style", "id": "professional", "input": "I just wanted to let you know that the meeting was kinda bad and we need to fix the plan before Friday. I am not happy with the delay.", "expected": null}
+{"task": "style", "id": "friendly", "input": "I just wanted to let you know that the meeting was kinda bad and we need to fix the plan before Friday. I am not happy with the delay.", "expected": null}
+{"task": "style", "id": "concise", "input": "I just wanted to let you know that the meeting was kinda bad and we need to fix the plan before Friday. I am not happy with the delay.", "expected": null}
+{"task": "style", "id": "direct", "input": "I just wanted to let you know that the meeting was kinda bad and we need to fix the plan before Friday. I am not happy with the delay.", "expected": null}

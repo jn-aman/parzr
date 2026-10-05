@@ -1,0 +1,1907 @@
+{
+  "description": "Authored workplace regression corpus, not a representative English-language benchmark. Literal expected outputs verify correctness; valid cases guard against false positives.",
+  "cases": [
+    {
+      "id": "error-001",
+      "input": "I has already reviewed the proposal.",
+      "expected": "I have already reviewed the proposal.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-002",
+      "input": "She have finished the report.",
+      "expected": "She has finished the report.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-003",
+      "input": "They is available tomorrow.",
+      "expected": "They are available tomorrow.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-004",
+      "input": "You am welcome to join us.",
+      "expected": "You are welcome to join us.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-005",
+      "input": "He are waiting outside.",
+      "expected": "He is waiting outside.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-006",
+      "input": "I are available this afternoon.",
+      "expected": "I am available this afternoon.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-007",
+      "input": "He don't want to change the date.",
+      "expected": "He doesn't want to change the date.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-008",
+      "input": "We doesn't need another meeting.",
+      "expected": "We don't need another meeting.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-009",
+      "input": "Each document are stored locally.",
+      "expected": "Each document is stored locally.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-010",
+      "input": "Every employee are invited.",
+      "expected": "Every employee is invited.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-011",
+      "input": "The feedback are useful.",
+      "expected": "The feedback is useful.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-012",
+      "input": "Our equipment are working.",
+      "expected": "Our equipment is working.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-013",
+      "input": "The number of users are increasing.",
+      "expected": "The number of users is increasing.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-014",
+      "input": "A number of messages is missing.",
+      "expected": "A number of messages are missing.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-015",
+      "input": "There are a request to review.",
+      "expected": "There is a request to review.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-016",
+      "input": "There is several issues to resolve.",
+      "expected": "There are several issues to resolve.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-017",
+      "input": "The informations are useful.",
+      "expected": "The information is useful.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-018",
+      "input": "Some advices would help.",
+      "expected": "Some advice would help.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-019",
+      "input": "The file are available.",
+      "expected": "The file is available.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-020",
+      "input": "Our reports is ready.",
+      "expected": "Our reports are ready.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-021",
+      "input": "I have went through every step.",
+      "expected": "I have gone through every step.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-022",
+      "input": "She has wrote the introduction.",
+      "expected": "She has written the introduction.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-023",
+      "input": "We have already began the review.",
+      "expected": "We have already begun the review.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-024",
+      "input": "They've took the earlier train.",
+      "expected": "They've taken the earlier train.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-025",
+      "input": "I have recently spoke to the manager.",
+      "expected": "I have recently spoken to the manager.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-026",
+      "input": "He has gave us permission.",
+      "expected": "He has given us permission.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-027",
+      "input": "We have chose a new date.",
+      "expected": "We have chosen a new date.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-028",
+      "input": "They have drank the water.",
+      "expected": "They have drunk the water.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-029",
+      "input": "She has drove home.",
+      "expected": "She has driven home.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-030",
+      "input": "I have saw the changes.",
+      "expected": "I have seen the changes.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-031",
+      "input": "We should sends the report.",
+      "expected": "We should send the report.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-032",
+      "input": "They will reviewed the document.",
+      "expected": "They will review the document.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-033",
+      "input": "I could went tomorrow.",
+      "expected": "I could go tomorrow.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-034",
+      "input": "She may not agrees with us.",
+      "expected": "She may not agree with us.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-035",
+      "input": "The service must works offline.",
+      "expected": "The service must work offline.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-036",
+      "input": "It might contains a typo.",
+      "expected": "It might contain a typo.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-037",
+      "input": "I didn't went to the meeting.",
+      "expected": "I didn't go to the meeting.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-038",
+      "input": "This version is faster then the previous one.",
+      "expected": "This version is faster than the previous one.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-039",
+      "input": "Rather then cancel, we can reschedule.",
+      "expected": "Rather than cancel, we can reschedule.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-040",
+      "input": "There are less errors now.",
+      "expected": "There are fewer errors now.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-041",
+      "input": "We need fewer equipment.",
+      "expected": "We need less equipment.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-042",
+      "input": "They checked each others work.",
+      "expected": "They checked each other's work.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-043",
+      "input": "What is you're email address?",
+      "expected": "What is your email address?",
+      "kind": "correction"
+    },
+    {
+      "id": "error-044",
+      "input": "Between you and I, this seems reasonable.",
+      "expected": "Between you and me, this seems reasonable.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-045",
+      "input": "I am interested on the position.",
+      "expected": "I am interested in the position.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-046",
+      "input": "The result depends of the input.",
+      "expected": "The result depends on the input.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-047",
+      "input": "We discussed about the document.",
+      "expected": "We discussed the document.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-048",
+      "input": "Despite of the delay, we finished.",
+      "expected": "Despite the delay, we finished.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-049",
+      "input": "The workflow is more faster.",
+      "expected": "The workflow is faster.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-050",
+      "input": "This is the most safest option.",
+      "expected": "This is the safest option.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-051",
+      "input": "It is a error in the report.",
+      "expected": "It is an error in the report.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-052",
+      "input": "She is an university student.",
+      "expected": "She is a university student.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-053",
+      "input": "I hope your having a good day.",
+      "expected": "I hope you're having a good day.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-054",
+      "input": "Let me know whether its ready.",
+      "expected": "Let me know whether it's ready.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-055",
+      "input": "I would of checked the report.",
+      "expected": "I would have checked the report.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-056",
+      "input": "The the document is ready.",
+      "expected": "The document is ready.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-057",
+      "input": "We need to to check the report.",
+      "expected": "We need to check the report.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-058",
+      "input": "i received your reply.",
+      "expected": "I received your reply.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-059",
+      "input": "thank you for your help.",
+      "expected": "Thank you for your help.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-060",
+      "input": "Thanks , that helps !",
+      "expected": "Thanks, that helps!",
+      "kind": "correction"
+    },
+    {
+      "id": "error-061",
+      "input": "Hello,please check this.",
+      "expected": "Hello, please check this.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-062",
+      "input": "One thing matters:correctness.",
+      "expected": "One thing matters: correctness.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-063",
+      "input": "I recieved your mesage.",
+      "expected": "I received your message.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-064",
+      "input": "Please chek teh document.",
+      "expected": "Please check the document.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-065",
+      "input": "Please bare in mind the deadline.",
+      "expected": "Please bear in mind the deadline.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-066",
+      "input": "He waited with baited breath.",
+      "expected": "He waited with bated breath.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-067",
+      "input": "It happened in one foul swoop.",
+      "expected": "It happened in one fell swoop.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-068",
+      "input": "This was trail and error.",
+      "expected": "This was trial and error.",
+      "kind": "correction"
+    },
+    {
+      "id": "error-069",
+      "input": "They explained the statute of limitations.",
+      "expected": "They explained the statute of limitations.",
+      "kind": "correction"
+    },
+    {
+      "id": "valid-001",
+      "input": "The number of reports is growing.",
+      "expected": "The number of reports is growing.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-002",
+      "input": "A number of reports are missing.",
+      "expected": "A number of reports are missing.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-003",
+      "input": "The report and its notes are ready.",
+      "expected": "The report and its notes are ready.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-004",
+      "input": "Each report and every note are ready.",
+      "expected": "Each report and every note are ready.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-005",
+      "input": "The information and examples are useful.",
+      "expected": "The information and examples are useful.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-006",
+      "input": "The letter I is capitalized.",
+      "expected": "The letter I is capitalized.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-007",
+      "input": "The word they has four letters.",
+      "expected": "The word they has four letters.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-008",
+      "input": "The letters A and I are vowels.",
+      "expected": "The letters A and I are vowels.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-009",
+      "input": "We had had enough.",
+      "expected": "We had had enough.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-010",
+      "input": "That that is, is.",
+      "expected": "That that is, is.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-011",
+      "input": "We have saw blades.",
+      "expected": "We have saw blades.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-012",
+      "input": "We will saw the wood tomorrow.",
+      "expected": "We will saw the wood tomorrow.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-013",
+      "input": "It was different then.",
+      "expected": "It was different then.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-014",
+      "input": "It was better then; now it is worse.",
+      "expected": "It was better then; now it is worse.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-015",
+      "input": "I went through the steps.",
+      "expected": "I went through the steps.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-016",
+      "input": "She wrote the introduction.",
+      "expected": "She wrote the introduction.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-017",
+      "input": "We began the review.",
+      "expected": "We began the review.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-018",
+      "input": "They took the earlier train.",
+      "expected": "They took the earlier train.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-019",
+      "input": "I spoke to the manager.",
+      "expected": "I spoke to the manager.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-020",
+      "input": "I am interested in this position.",
+      "expected": "I am interested in this position.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-021",
+      "input": "We talked about the issue.",
+      "expected": "We talked about the issue.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-022",
+      "input": "In spite of the delay, we finished.",
+      "expected": "In spite of the delay, we finished.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-023",
+      "input": "We need fewer files and less information.",
+      "expected": "We need fewer files and less information.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-024",
+      "input": "You and I agreed.",
+      "expected": "You and I agreed.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-025",
+      "input": "You're working on your files.",
+      "expected": "You're working on your files.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-026",
+      "input": "They reviewed each other's work.",
+      "expected": "They reviewed each other's work.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-027",
+      "input": "This is a user account.",
+      "expected": "This is a user account.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-028",
+      "input": "This is an hour of work.",
+      "expected": "This is an hour of work.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-029",
+      "input": "The team asked whether its working methods are effective.",
+      "expected": "The team asked whether its working methods are effective.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-030",
+      "input": "Thank you for your doing this manually.",
+      "expected": "Thank you for your doing this manually.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-031",
+      "input": "We need to utilize this in order to reduce latency.",
+      "expected": "We need to utilize this in order to reduce latency.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-032",
+      "input": "The application is more useful.",
+      "expected": "The application is more useful.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-033",
+      "input": "This is the most useful option.",
+      "expected": "This is the most useful option.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-034",
+      "input": "Say no to changing the deadline.",
+      "expected": "Say no to changing the deadline.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-035",
+      "input": "The boat went off course.",
+      "expected": "The boat went off course.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-036",
+      "input": "They will join in anyway.",
+      "expected": "They will join in anyway.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-037",
+      "input": "Somebody said no in response.",
+      "expected": "Somebody said no in response.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-038",
+      "input": "The result depends on the input.",
+      "expected": "The result depends on the input.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-039",
+      "input": "She has already written the report.",
+      "expected": "She has already written the report.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-040",
+      "input": "The implementation must work offline.",
+      "expected": "The implementation must work offline.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-041",
+      "input": "We cannot change the date: 15 October.",
+      "expected": "We cannot change the date: 15 October.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-042",
+      "input": "Visit https://example.com/teh?q=mesage.",
+      "expected": "Visit https://example.com/teh?q=mesage.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-043",
+      "input": "Run `cargo chek` to see the error.",
+      "expected": "Run `cargo chek` to see the error.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-044",
+      "input": "Contact teh@example.com for details.",
+      "expected": "Contact teh@example.com for details.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-045",
+      "input": "The file is /tmp/teh/mesage.txt.",
+      "expected": "The file is /tmp/teh/mesage.txt.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-046",
+      "input": "The total is 12.50.",
+      "expected": "The total is 12.50.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-047",
+      "input": "We discussed the issue.",
+      "expected": "We discussed the issue.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-048",
+      "input": "The reports are available here.",
+      "expected": "The reports are available here.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-049",
+      "input": "There are several reasons.",
+      "expected": "There are several reasons.",
+      "kind": "valid"
+    },
+    {
+      "id": "valid-050",
+      "input": "I am ready.",
+      "expected": "I am ready.",
+      "kind": "valid"
+    },
+    {
+      "id": "grammar.present_singular_go.error",
+      "input": "He go to school every day.",
+      "expected": "He goes to school every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_go.valid",
+      "input": "He and she go to school every day.",
+      "expected": "He and she go to school every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_go.error",
+      "input": "They goes to school every day.",
+      "expected": "They go to school every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_go.valid",
+      "input": "She goes to school every day.",
+      "expected": "She goes to school every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_go.error",
+      "input": "He does not goes to school every day.",
+      "expected": "He does not go to school every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_go.valid",
+      "input": "He does not go to school every day.",
+      "expected": "He does not go to school every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_walk.error",
+      "input": "He walk to work.",
+      "expected": "He walks to work.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_walk.valid",
+      "input": "He and she walk to work.",
+      "expected": "He and she walk to work.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_walk.error",
+      "input": "They walks to work.",
+      "expected": "They walk to work.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_walk.valid",
+      "input": "She walks to work.",
+      "expected": "She walks to work.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_walk.error",
+      "input": "He does not walks to work.",
+      "expected": "He does not walk to work.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_walk.valid",
+      "input": "He does not walk to work.",
+      "expected": "He does not walk to work.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_need.error",
+      "input": "He need more time.",
+      "expected": "He needs more time.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_need.valid",
+      "input": "He and she need more time.",
+      "expected": "He and she need more time.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_need.error",
+      "input": "They needs more time.",
+      "expected": "They need more time.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_need.valid",
+      "input": "She needs more time.",
+      "expected": "She needs more time.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_need.error",
+      "input": "He does not needs more time.",
+      "expected": "He does not need more time.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_need.valid",
+      "input": "He does not need more time.",
+      "expected": "He does not need more time.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_want.error",
+      "input": "He want a new book.",
+      "expected": "He wants a new book.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_want.valid",
+      "input": "He and she want a new book.",
+      "expected": "He and she want a new book.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_want.error",
+      "input": "They wants a new book.",
+      "expected": "They want a new book.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_want.valid",
+      "input": "She wants a new book.",
+      "expected": "She wants a new book.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_want.error",
+      "input": "He does not wants a new book.",
+      "expected": "He does not want a new book.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_want.valid",
+      "input": "He does not want a new book.",
+      "expected": "He does not want a new book.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_know.error",
+      "input": "He know the answer.",
+      "expected": "He knows the answer.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_know.valid",
+      "input": "He and she know the answer.",
+      "expected": "He and she know the answer.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_know.error",
+      "input": "They knows the answer.",
+      "expected": "They know the answer.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_know.valid",
+      "input": "She knows the answer.",
+      "expected": "She knows the answer.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_know.error",
+      "input": "He does not knows the answer.",
+      "expected": "He does not know the answer.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_know.valid",
+      "input": "He does not know the answer.",
+      "expected": "He does not know the answer.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_think.error",
+      "input": "He think about the problem.",
+      "expected": "He thinks about the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_think.valid",
+      "input": "He and she think about the problem.",
+      "expected": "He and she think about the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_think.error",
+      "input": "They thinks about the problem.",
+      "expected": "They think about the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_think.valid",
+      "input": "She thinks about the problem.",
+      "expected": "She thinks about the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_think.error",
+      "input": "He does not thinks about the problem.",
+      "expected": "He does not think about the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_think.valid",
+      "input": "He does not think about the problem.",
+      "expected": "He does not think about the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_like.error",
+      "input": "He like this idea.",
+      "expected": "He likes this idea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_like.valid",
+      "input": "He and she like this idea.",
+      "expected": "He and she like this idea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_like.error",
+      "input": "They likes this idea.",
+      "expected": "They like this idea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_like.valid",
+      "input": "She likes this idea.",
+      "expected": "She likes this idea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_like.error",
+      "input": "He does not likes this idea.",
+      "expected": "He does not like this idea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_like.valid",
+      "input": "He does not like this idea.",
+      "expected": "He does not like this idea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_love.error",
+      "input": "He love this song.",
+      "expected": "He loves this song.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_love.valid",
+      "input": "He and she love this song.",
+      "expected": "He and she love this song.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_love.error",
+      "input": "They loves this song.",
+      "expected": "They love this song.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_love.valid",
+      "input": "She loves this song.",
+      "expected": "She loves this song.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_love.error",
+      "input": "He does not loves this song.",
+      "expected": "He does not love this song.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_love.valid",
+      "input": "He does not love this song.",
+      "expected": "He does not love this song.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_work.error",
+      "input": "He work at home.",
+      "expected": "He works at home.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_work.valid",
+      "input": "He and she work at home.",
+      "expected": "He and she work at home.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_work.error",
+      "input": "They works at home.",
+      "expected": "They work at home.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_work.valid",
+      "input": "She works at home.",
+      "expected": "She works at home.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_work.error",
+      "input": "He does not works at home.",
+      "expected": "He does not work at home.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_work.valid",
+      "input": "What she does works well.",
+      "expected": "What she does works well.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_live.error",
+      "input": "He live near the park.",
+      "expected": "He lives near the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_live.valid",
+      "input": "He and she live near the park.",
+      "expected": "He and she live near the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_live.error",
+      "input": "They lives near the park.",
+      "expected": "They live near the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_live.valid",
+      "input": "She lives near the park.",
+      "expected": "She lives near the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_live.error",
+      "input": "He does not lives near the park.",
+      "expected": "He does not live near the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_live.valid",
+      "input": "He does not live near the park.",
+      "expected": "He does not live near the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_say.error",
+      "input": "He say hello.",
+      "expected": "He says hello.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_say.valid",
+      "input": "He and she say hello.",
+      "expected": "He and she say hello.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_say.error",
+      "input": "They says hello.",
+      "expected": "They say hello.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_say.valid",
+      "input": "She says hello.",
+      "expected": "She says hello.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_say.error",
+      "input": "He does not says hello.",
+      "expected": "He does not say hello.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_say.valid",
+      "input": "He does not say hello.",
+      "expected": "He does not say hello.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_make.error",
+      "input": "He make dinner.",
+      "expected": "He makes dinner.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_make.valid",
+      "input": "He and she make dinner.",
+      "expected": "He and she make dinner.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_make.error",
+      "input": "They makes dinner.",
+      "expected": "They make dinner.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_make.valid",
+      "input": "She makes dinner.",
+      "expected": "She makes dinner.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_make.error",
+      "input": "He does not makes dinner.",
+      "expected": "He does not make dinner.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_make.valid",
+      "input": "He does not make dinner.",
+      "expected": "He does not make dinner.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_take.error",
+      "input": "He take the bus.",
+      "expected": "He takes the bus.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_take.valid",
+      "input": "He and she take the bus.",
+      "expected": "He and she take the bus.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_take.error",
+      "input": "They takes the bus.",
+      "expected": "They take the bus.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_take.valid",
+      "input": "She takes the bus.",
+      "expected": "She takes the bus.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_take.error",
+      "input": "He does not takes the bus.",
+      "expected": "He does not take the bus.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_take.valid",
+      "input": "He does not take the bus.",
+      "expected": "He does not take the bus.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_see.error",
+      "input": "He see the difference.",
+      "expected": "He sees the difference.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_see.valid",
+      "input": "He and she see the difference.",
+      "expected": "He and she see the difference.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_see.error",
+      "input": "They sees the difference.",
+      "expected": "They see the difference.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_see.valid",
+      "input": "She sees the difference.",
+      "expected": "She sees the difference.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_see.error",
+      "input": "He does not sees the difference.",
+      "expected": "He does not see the difference.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_see.valid",
+      "input": "He does not see the difference.",
+      "expected": "He does not see the difference.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_look.error",
+      "input": "He look happy.",
+      "expected": "He looks happy.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_look.valid",
+      "input": "He and she look happy.",
+      "expected": "He and she look happy.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_look.error",
+      "input": "They looks happy.",
+      "expected": "They look happy.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_look.valid",
+      "input": "She looks happy.",
+      "expected": "She looks happy.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_look.error",
+      "input": "He does not looks happy.",
+      "expected": "He does not look happy.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_look.valid",
+      "input": "He does not look happy.",
+      "expected": "He does not look happy.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_feel.error",
+      "input": "He feel better.",
+      "expected": "He feels better.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_feel.valid",
+      "input": "He and she feel better.",
+      "expected": "He and she feel better.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_feel.error",
+      "input": "They feels better.",
+      "expected": "They feel better.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_feel.valid",
+      "input": "She feels better.",
+      "expected": "She feels better.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_feel.error",
+      "input": "He does not feels better.",
+      "expected": "He does not feel better.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_feel.valid",
+      "input": "He does not feel better.",
+      "expected": "He does not feel better.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_write.error",
+      "input": "He write every day.",
+      "expected": "He writes every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_write.valid",
+      "input": "He and she write every day.",
+      "expected": "He and she write every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_write.error",
+      "input": "They writes every day.",
+      "expected": "They write every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_write.valid",
+      "input": "She writes every day.",
+      "expected": "She writes every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_write.error",
+      "input": "He does not writes every day.",
+      "expected": "He does not write every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_write.valid",
+      "input": "He does not write every day.",
+      "expected": "He does not write every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_run.error",
+      "input": "He run in the park.",
+      "expected": "He runs in the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_run.valid",
+      "input": "He and she run in the park.",
+      "expected": "He and she run in the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_run.error",
+      "input": "They runs in the park.",
+      "expected": "They run in the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_run.valid",
+      "input": "She runs in the park.",
+      "expected": "She runs in the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_run.error",
+      "input": "He does not runs in the park.",
+      "expected": "He does not run in the park.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_run.valid",
+      "input": "He does not run in the park.",
+      "expected": "He does not run in the park.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_come.error",
+      "input": "He come here every day.",
+      "expected": "He comes here every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_come.valid",
+      "input": "He and she come here every day.",
+      "expected": "He and she come here every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_come.error",
+      "input": "They comes here every day.",
+      "expected": "They come here every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_come.valid",
+      "input": "She comes here every day.",
+      "expected": "She comes here every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_come.error",
+      "input": "He does not comes here every day.",
+      "expected": "He does not come here every day.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_come.valid",
+      "input": "He does not come here every day.",
+      "expected": "He does not come here every day.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_use.error",
+      "input": "He use this app.",
+      "expected": "He uses this app.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_use.valid",
+      "input": "He and she use this app.",
+      "expected": "He and she use this app.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_use.error",
+      "input": "They uses this app.",
+      "expected": "They use this app.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_use.valid",
+      "input": "She uses this app.",
+      "expected": "She uses this app.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_use.error",
+      "input": "He does not uses this app.",
+      "expected": "He does not use this app.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_use.valid",
+      "input": "He does not use this app.",
+      "expected": "He does not use this app.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_try.error",
+      "input": "He try to help.",
+      "expected": "He tries to help.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_try.valid",
+      "input": "He and she try to help.",
+      "expected": "He and she try to help.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_try.error",
+      "input": "They tries to help.",
+      "expected": "They try to help.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_try.valid",
+      "input": "She tries to help.",
+      "expected": "She tries to help.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_try.error",
+      "input": "He does not tries to help.",
+      "expected": "He does not try to help.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_try.valid",
+      "input": "He does not try to help.",
+      "expected": "He does not try to help.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_watch.error",
+      "input": "He watch the news.",
+      "expected": "He watches the news.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_watch.valid",
+      "input": "He and she watch the news.",
+      "expected": "He and she watch the news.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_watch.error",
+      "input": "They watches the news.",
+      "expected": "They watch the news.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_watch.valid",
+      "input": "She watches the news.",
+      "expected": "She watches the news.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_watch.error",
+      "input": "He does not watches the news.",
+      "expected": "He does not watch the news.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_watch.valid",
+      "input": "He does not watch the news.",
+      "expected": "He does not watch the news.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_teach.error",
+      "input": "He teach English.",
+      "expected": "He teaches English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_teach.valid",
+      "input": "He and she teach English.",
+      "expected": "He and she teach English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_teach.error",
+      "input": "They teaches English.",
+      "expected": "They teach English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_teach.valid",
+      "input": "She teaches English.",
+      "expected": "She teaches English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_teach.error",
+      "input": "He does not teaches English.",
+      "expected": "He does not teach English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_teach.valid",
+      "input": "He does not teach English.",
+      "expected": "He does not teach English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_study.error",
+      "input": "He study English.",
+      "expected": "He studies English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_study.valid",
+      "input": "He and she study English.",
+      "expected": "He and she study English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_study.error",
+      "input": "They studies English.",
+      "expected": "They study English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_study.valid",
+      "input": "She studies English.",
+      "expected": "She studies English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_study.error",
+      "input": "He does not studies English.",
+      "expected": "He does not study English.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_study.valid",
+      "input": "He does not study English.",
+      "expected": "He does not study English.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_eat.error",
+      "input": "He eat an apple.",
+      "expected": "He eats an apple.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_eat.valid",
+      "input": "He and she eat an apple.",
+      "expected": "He and she eat an apple.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_eat.error",
+      "input": "They eats an apple.",
+      "expected": "They eat an apple.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_eat.valid",
+      "input": "She eats an apple.",
+      "expected": "She eats an apple.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_eat.error",
+      "input": "He does not eats an apple.",
+      "expected": "He does not eat an apple.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_eat.valid",
+      "input": "He does not eat an apple.",
+      "expected": "He does not eat an apple.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_drink.error",
+      "input": "He drink water.",
+      "expected": "He drinks water.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_drink.valid",
+      "input": "He and she drink water.",
+      "expected": "He and she drink water.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_drink.error",
+      "input": "They drinks water.",
+      "expected": "They drink water.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_drink.valid",
+      "input": "She drinks water.",
+      "expected": "She drinks water.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_drink.error",
+      "input": "He does not drinks water.",
+      "expected": "He does not drink water.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_drink.valid",
+      "input": "He does not drink water.",
+      "expected": "He does not drink water.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_play.error",
+      "input": "He play the piano.",
+      "expected": "He plays the piano.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_play.valid",
+      "input": "He and she play the piano.",
+      "expected": "He and she play the piano.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_play.error",
+      "input": "They plays the piano.",
+      "expected": "They play the piano.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_play.valid",
+      "input": "She plays the piano.",
+      "expected": "She plays the piano.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_play.error",
+      "input": "He does not plays the piano.",
+      "expected": "He does not play the piano.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_play.valid",
+      "input": "He does not play the piano.",
+      "expected": "He does not play the piano.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_prefer.error",
+      "input": "He prefer tea.",
+      "expected": "He prefers tea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_prefer.valid",
+      "input": "He and she prefer tea.",
+      "expected": "He and she prefer tea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_prefer.error",
+      "input": "They prefers tea.",
+      "expected": "They prefer tea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_prefer.valid",
+      "input": "She prefers tea.",
+      "expected": "She prefers tea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_prefer.error",
+      "input": "He does not prefers tea.",
+      "expected": "He does not prefer tea.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_prefer.valid",
+      "input": "He does not prefer tea.",
+      "expected": "He does not prefer tea.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_believe.error",
+      "input": "He believe you.",
+      "expected": "He believes you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_believe.valid",
+      "input": "He and she believe you.",
+      "expected": "He and she believe you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_believe.error",
+      "input": "They believes you.",
+      "expected": "They believe you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_believe.valid",
+      "input": "She believes you.",
+      "expected": "She believes you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_believe.error",
+      "input": "He does not believes you.",
+      "expected": "He does not believe you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_believe.valid",
+      "input": "He does not believe you.",
+      "expected": "He does not believe you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_understand.error",
+      "input": "He understand the problem.",
+      "expected": "He understands the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_understand.valid",
+      "input": "He and she understand the problem.",
+      "expected": "He and she understand the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_understand.error",
+      "input": "They understands the problem.",
+      "expected": "They understand the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_understand.valid",
+      "input": "She understands the problem.",
+      "expected": "She understands the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_understand.error",
+      "input": "He does not understands the problem.",
+      "expected": "He does not understand the problem.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_understand.valid",
+      "input": "He does not understand the problem.",
+      "expected": "He does not understand the problem.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_remember.error",
+      "input": "He remember the date.",
+      "expected": "He remembers the date.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_remember.valid",
+      "input": "He and she remember the date.",
+      "expected": "He and she remember the date.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_remember.error",
+      "input": "They remembers the date.",
+      "expected": "They remember the date.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_remember.valid",
+      "input": "She remembers the date.",
+      "expected": "She remembers the date.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_remember.error",
+      "input": "He does not remembers the date.",
+      "expected": "He does not remember the date.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_remember.valid",
+      "input": "He does not remember the date.",
+      "expected": "He does not remember the date.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_singular_agree.error",
+      "input": "He agree with you.",
+      "expected": "He agrees with you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_singular_agree.valid",
+      "input": "He and she agree with you.",
+      "expected": "He and she agree with you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.present_plural_agree.error",
+      "input": "They agrees with you.",
+      "expected": "They agree with you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.present_plural_agree.valid",
+      "input": "She agrees with you.",
+      "expected": "She agrees with you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.negative_base_agree.error",
+      "input": "He does not agrees with you.",
+      "expected": "He does not agree with you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.negative_base_agree.valid",
+      "input": "He does not agree with you.",
+      "expected": "He does not agree with you.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.this_that_be.error",
+      "input": "This are wrong.",
+      "expected": "This is wrong.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.this_that_be.valid",
+      "input": "This and that are different.",
+      "expected": "This and that are different.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.these_those_be.error",
+      "input": "These is useful.",
+      "expected": "These are useful.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.these_those_be.valid",
+      "input": "Each of these is useful.",
+      "expected": "Each of these is useful.",
+      "kind": "preservation"
+    },
+    {
+      "id": "grammar.i_am_agree.error",
+      "input": "I am agree with you.",
+      "expected": "I agree with you.",
+      "kind": "correction"
+    },
+    {
+      "id": "grammar.i_am_agree.valid",
+      "input": "I am agreeing with you.",
+      "expected": "I am agreeing with you.",
+      "kind": "preservation"
+    }
+  ]
+}

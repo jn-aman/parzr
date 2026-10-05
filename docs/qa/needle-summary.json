@@ -1,0 +1,54 @@
+{
+  "source": {
+    "repository": "Cactus-Compute/needle3",
+    "revision": "c7c415a3d1b3d929014bc6e866d51ebb971f7089",
+    "weights_sha256": "c9d915eca282ed42d1a09b143b592adb4cc6744ffe2d294adf5cfc5548170c38",
+    "weights_bytes": 35335380,
+    "runtime_sha256": "6c3d79e04c48656b275feb9b4157b43fc20a6efbb5993d0aff9e6414eaef21be"
+  },
+  "network": "OS sandbox denied all network access during inference",
+  "telemetry": false,
+  "host": "Apple Silicon macOS",
+  "load_ms": 8.073,
+  "process_peak_rss_bytes": 134905856,
+  "tasks": {
+    "grammar": {
+      "total": 10,
+      "outputs": 5,
+      "withheld_calls": 9,
+      "exact": 0,
+      "changed": 0,
+      "median_ms": 50.436,
+      "max_ms": 110.834
+    },
+    "clean": {
+      "total": 10,
+      "outputs": 0,
+      "withheld_calls": 15,
+      "exact": 0,
+      "changed": 0,
+      "median_ms": 73.877,
+      "max_ms": 526.588
+    },
+    "ranking": {
+      "total": 10,
+      "outputs": 9,
+      "withheld_calls": 1,
+      "exact": 0,
+      "changed": 0,
+      "median_ms": 39.7,
+      "max_ms": 48.165
+    },
+    "style": {
+      "total": 4,
+      "outputs": 3,
+      "withheld_calls": 1,
+      "exact": 0,
+      "changed": 1,
+      "median_ms": 85.577,
+      "max_ms": 128.361
+    }
+  },
+  "evaluation_date": "2026-10-04",
+  "scope": "Small authored synthetic feasibility probe; not general English accuracy."
+}

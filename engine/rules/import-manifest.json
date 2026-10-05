@@ -1,0 +1,227 @@
+{
+  "upstream": "https://github.com/Automattic/harper",
+  "version": "harper-core 1.7.0",
+  "changes": "Literal subset translated to parzr phrase VM; automatic-correction allowlist; messages and corrections retained.",
+  "files": [
+    {
+      "file": "AdNauseam.weir",
+      "sha256": "ebf95185faaa06fdc3cab50a0ef6ff10065f1d862a9593de977aa33be69fdee9",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "AfterAll.weir",
+      "sha256": "433c9cb49ae4cbe30a086ca91f053240ea647dfa7da7af7513d691c3acb7dadb",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "AsFollows.weir",
+      "sha256": "75b3a3a36f4c2d31da8f0b8d137e621b73c376fe83522a1a1a0817156bec1319",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "AsLongAs.weir",
+      "sha256": "3661041c3c1c7ba93e82883ee40887bdb7e2337fa8a7f48a44daf94a1c56f81b",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BareInMind.weir",
+      "sha256": "e75a068a2f6c776937e12a174408e8b4b03632be8c347ea881273a1f5636d079",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BatedBreath.weir",
+      "sha256": "7be6293ffb2f08ce62037276325ada74781254bd142eb433b08ef3a0112a4a41",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BeckAndCall.weir",
+      "sha256": "7a92d5f300f56ad8728a03f1b935ed1707a5e7f880c052cf1e44e14772e0fbbe",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BesideThePoint.weir",
+      "sha256": "d0f7bf6c5ce66a2c7941b6b704dd15ad817a1a710c11ef325ef561cbb74af9ae",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BestRegards.weir",
+      "sha256": "ab4c43bb71a3893e1405f25c9ad00701028f74b5b01f04242c4e5a469b46858d",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "BetterOffWith.weir",
+      "sha256": "9b38a43d3f401434131a1e9001cfb1af5d91c995de1a3187cf70b285798d9fac",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "CanBeSeen.weir",
+      "sha256": "0186986fbe5fb9a119758254d497f821f6108d1cbf45d6a860d8584946b1d29e",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "EggYolk.weir",
+      "sha256": "39be3ddfbb2466ffbde1a0f9ec424892caec639efde5371cedfd0496b7e71f4b",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "EverSince.weir",
+      "sha256": "2bb4f1243fa092b199f50d165eaa892fc132e33e240c9cdc3079ac39109fae77",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "ForALongTime.weir",
+      "sha256": "c2167688ffd48660ff9f74d0d2a493116b34deb1b6f5a01612cfda80e15c0d47",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "HalfAnHour.weir",
+      "sha256": "16400230c5d3710e7550252e1c5dbd0f2dc1065f4cc8c98d855f42b67d87da7c",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "HumanBeings.weir",
+      "sha256": "da86a28e605111d3fc37339743a0b05abb9d6f92326a8df4c8626f799189bbda",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "InLieuOf.weir",
+      "sha256": "ff088486c5f503a3869acd1c24415e64411a3bcbfdcacffad25ba6810861b78d",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "InOneFellSwoop.weir",
+      "sha256": "84a8011234bd9ecc9e17f05de74ed55ccf4dd5e7fe60937d9c17d4d84318e974",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "InsteadOf.weir",
+      "sha256": "9e6187b4f55cfc8a4cdaeed69dbaa63f64ff3c403d82ea590dcca89d1236ea16",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "IsKnownFor.weir",
+      "sha256": "5ad64ec0cf73dfef588bc062bf1cab4df5c3feb8e02a3191fed901df3de66fc8",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "JawDropping.weir",
+      "sha256": "19300db11b748c8dd33119ac1d001e53e77f84798b6095adedf078c46950873b",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "KindRegards.weir",
+      "sha256": "5a875867eb26ba72485cac5f9a10b3eea897357067efcfd7b50320f476a0221d",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "ManagerialReins.weir",
+      "sha256": "ea5aa223639aa2ed118d5680d2dafdcce8aedf65a2947158a20fa76fa2cc8ccc",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "MyHouse.weir",
+      "sha256": "d8d0aefa5b857c4cbecc1bfcded2429de8ac14e1b720e662169ca9a780e70dc8",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "NeedHelp.weir",
+      "sha256": "adbedf4a5463d60e1a5e1e0d586709e1211a0ed1f2b0edfa1924ae14097c3a6e",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "OldWivesTale.weir",
+      "sha256": "182bc1f0c517aa2ff92123e1ab38c5e41f5d58cedb66c10fe2ac7f6e94ebbec5",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "OnTheSpurOfTheMoment.weir",
+      "sha256": "e5a790384fb5a94f507cd6dd3ca59559f7f6238ce8aa7b4a904c9f518309219c",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "OnTopOf.weir",
+      "sha256": "dc790aaa5951cf57d7b58aa29da37fcb641d60366fe0d3f5759a9dd17bd4c153",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "PartsOfSpeech.weir",
+      "sha256": "3e9513c2f3c397c30282df0a97f73948dd5dbf1b60adc6afc83b456a944be001",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "PerSe.weir",
+      "sha256": "e069c42eddb9ca5ac5edfb5ee84600416014a259896b9dd4528a9959ddf7a6fd",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "PointsOfView.weir",
+      "sha256": "5f53b3d10911eee2f5c4c750d6ec7ebd455e33d7f6ed6272ff72b3687b7a80c6",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "PrayingMantis.weir",
+      "sha256": "a23d41780ab67b8846759e023f3457e86073d1a957d34580316c607f2c83748e",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "RulesOfThumb.weir",
+      "sha256": "c2e6a09042abf845b5815e53a5cf22ebf9bd46ee4544d6969da8cb4b99a63a7a",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "SameAs.weir",
+      "sha256": "2dc20a7e8e74d8c55e1e51aeed976e25fe5f4dbba58f9cfecd2d5a468c3516a5",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "ScantilyClad.weir",
+      "sha256": "49230550cd14b69346f75ed49597c2d989fad0b30b495f8cdb9b447bb3602e3c",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "SomebodyElses.weir",
+      "sha256": "3b05d01d9054dff97e67551c0fdde998e5c347b92ccc755631c0006ad615bbe6",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "SpecialAttention.weir",
+      "sha256": "3aad412a573f63c7e0e81317436eb7f6e05263e263d61597d711a37557579702",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "StatuteOfLimitations.weir",
+      "sha256": "3c7276d8d4b64f74b1906ec2b6f59e9023c314a3c339f8bfdbb427f25031ad7e",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "ThanksALot.weir",
+      "sha256": "7f3b0888bf035e820193a7b841d13e147fd0b5432a3584813ca3ace8a01c2618",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "ThoughtProcess.weir",
+      "sha256": "fe1fd96a221129601d88d8c1e701e89b3f514a525626a4b22fd5deff2af8f32e",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "TrialAndError.weir",
+      "sha256": "132d4e5d44db7c7410e1b79b95d8599845ebf9d9ca76e66bf570166fe566d240",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "TurnItOff.weir",
+      "sha256": "9228c532f1e53b680dd95a440996c2ab27daa59e4d9c0d84bc9c2d06735675ec",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "WhetYourAppetite.weir",
+      "sha256": "af27e922ccfa7fe70ad6d9e8ef0b97bc233407f41ca629794e7f614e38f4b631",
+      "license": "Apache-2.0"
+    },
+    {
+      "file": "WillContain.weir",
+      "sha256": "9590bbecf9102459f16b4322037c56bad13e15d78fe4ac9e9400b5357223d66f",
+      "license": "Apache-2.0"
+    }
+  ]
+}

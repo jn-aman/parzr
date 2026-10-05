@@ -1,0 +1,21 @@
+# Parzr interface
+
+Graphite surfaces, mint acceptance actions and muted rose issue marks. Use native SF fonts, SF Symbols, the authored `ParzrMark`, and macOS controls. The display name is **Parzr**; executable names and integration identifiers remain lowercase.
+
+The editor is one writable surface. It opens empty, accepts paste and typing, and offers an optional sample. Text uses the system prose font at 18 points with 6 points of additional line spacing. The default window is 720 × 580 points and can resize down to 640 × 520. Keep the writing space dominant; settings open from the gear or Command-comma.
+
+Automatic analysis follows a short typing pause. Stale suggestions disappear as soon as the source changes. Draft issues use temporary dotted underlines and a subtle rose wash. Corrections require acceptance and use the native editor's Undo.
+
+Correction cards lead with the corrected sentence: removed words are struck through in secondary ink and replacements are mint on a mint wash, with the focused correction underlined. One primary action is always obvious and shows its key. When the sentence has more than one correction, Fix sentence is primary and Only this word is secondary; otherwise the single replacement is primary. Clicking a draft issue opens a **340 × 200 point** popover. External accessible editors use a **340 × 218 point** floating card: a fix count and correction navigation at the top (writing modes only for selected passages), the sentence in the middle, the explanation, then actions. Keep the card beside the word and within the visible screen. A sentence that contains an issue gets a very soft wash, drawn line by line, so the faulty sentence is visible at a glance; flagged words keep their stronger dotted marks. The whole flagged word is the click target; hovering it shows a pointing hand and a soft wash. Marks persist across clicks and caret moves while the text is unchanged, re-place themselves after scrolling, and a +N badge appears when a paragraph has more issues than marks. Unsupported range geometry uses a nearby review marker.
+
+Native AppKit buttons own hit testing, target/action dispatch, keyboard activation, disabled states and accessibility activation. Escape closes the card and keeps the marks; Return applies the primary action (the whole sentence when it has several corrections); Apply all uses Command-Return. Left and right arrow keys navigate corrections in the external popover. Long replacements truncate within the surface rather than stretching it; the action still applies the complete replacement.
+
+Show in Dock (General) is on by default; turning it off keeps Parzr in the menu bar only, including while its window is open. Appearance is applied app-wide through `NSApp.appearance`, so System follows macOS live. The menu bar uses a native `NSMenu`. It shows local engine status, selection checking, checked pause/automatic-highlight states, the current app's enable state, Open Parzr, Settings and Quit. Refresh state each time the menu opens. Use a template SF Symbol so macOS controls appearance in the menu bar.
+
+Opening Parzr shows its existing window and restores a minimized or closed window. Login starts in the background using `--background`. Opening inline corrections preserves the host editing context.
+
+Settings use native segmented navigation, pickers, switches and a shortcut recorder. Permission actions explain what to enable and open the relevant macOS settings. Privacy includes an explicit session-clear action. Writing is never stored as history.
+
+Route transitions use a 140 millisecond ease-out, disabled by Reduce Motion. Use native pressed and focus feedback. Avoid idle animation and decorative interior shadows; external correction windows use the macOS shadow.
+
+The palette is defined in `mac/Sources/Parzr/Design.swift`; native source is authoritative. QA captures actual native screens and tests button actions, automatic TextEdit highlights, compact correction application, formatting preservation, Undo and window restoration. Generated reports belong under ignored `dist/`.

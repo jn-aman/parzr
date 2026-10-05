@@ -1,0 +1,120 @@
+name: Verify and release Parzr
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: parzr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+        with:
+          toolchain: '1.91.0'
+          components: rustfmt, clippy
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Version and Rust checks
+        run: |
+          python3 scripts/audit-public-repo.py
+          python3 scripts/check-release-version.py
+          cargo fmt --manifest-path engine/Cargo.toml --check
+          cargo clippy --locked --manifest-path engine/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path engine/Cargo.toml
+          cargo test --locked --manifest-path engine/Cargo.toml --no-default-features
+      - name: Build engine and test native bridge
+        run: |
+          python3 scripts/prepare-model.py
+          cargo build --release --locked --manifest-path engine/Cargo.toml
+          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
+      - name: Browser and editor integration checks
+        run: |
+          npm ci
+          npx playwright install chromium
+          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:editors
+          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:browser
+      - name: Build and package local development DMG
+        run: |
+          python3 scripts/build.py
+          dist/Parzr.app/Contents/MacOS/parzr --health-check
+          python3 scripts/package.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: verification-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            dist/qa/browser-results.json
+            dist/build-report.json
+            dist/package-report.json
+            dist/Parzr-*-local.dmg
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: macos-26
+    timeout-minutes: 75
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+        with:
+          toolchain: '1.91.0'
+      - name: Validate release version
+        run: python3 scripts/check-release-version.py
+      - name: Prepare ephemeral signing keychain
+        env:
+          PARZR_CERTIFICATE_BASE64: ${{ secrets.PARZR_CERTIFICATE_BASE64 }}
+          PARZR_CERTIFICATE_PASSWORD: ${{ secrets.PARZR_CERTIFICATE_PASSWORD }}
+          PARZR_SIGNING_IDENTITY: ${{ secrets.PARZR_SIGNING_IDENTITY }}
+          PARZR_NOTARY_KEY_BASE64: ${{ secrets.PARZR_NOTARY_KEY_BASE64 }}
+          PARZR_NOTARY_KEY_ID: ${{ secrets.PARZR_NOTARY_KEY_ID }}
+          PARZR_NOTARY_ISSUER: ${{ secrets.PARZR_NOTARY_ISSUER }}
+        run: python3 scripts/ci-signing.py
+      - name: Build Apple Silicon app, sign, notarize, staple and verify
+        env:
+          PARZR_SIGNING_IDENTITY: ${{ secrets.PARZR_SIGNING_IDENTITY }}
+          PARZR_BUNDLE_ID: ${{ vars.PARZR_BUNDLE_ID || 'app.parzr.desktop' }}
+        run: |
+          python3 scripts/build.py --sign
+          dist/Parzr.app/Contents/MacOS/parzr --health-check
+          python3 scripts/package.py --release
+      - name: Checksum verified distribution
+        run: |
+          cd dist
+          shasum -a 256 Parzr-*.dmg > SHA256SUMS
+      - name: Publish immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes dist/Parzr-*.dmg dist/SHA256SUMS LICENSE THIRD_PARTY_NOTICES
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: release-audit-${{ github.sha }}
+          path: |
+            dist/build-report.json
+            dist/package-report.json
+            dist/app-notarization.json
+            dist/dmg-notarization.json
+      - name: Remove ephemeral signing credentials
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/parzr-signing.keychain-db" || true
+          rm -f "$RUNNER_TEMP/parzr-signing.p12" "$RUNNER_TEMP/parzr-notary.p8"

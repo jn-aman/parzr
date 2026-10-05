@@ -1,0 +1,11 @@
+{
+  "seed": 2610042000,
+  "corrupted_paragraphs": 2000,
+  "clean_controls": 200,
+  "base_paragraphs": 200,
+  "combinations_per_base": 10,
+  "sha256": "a9d16beb506d78667894b870d64e63c70d91e33defa68e3a9309694824c16478",
+  "clean_sha256": "f1595442f5a76ac58a078283517c4ba056f339b154710c77eaf9357affebb804",
+  "prior_corpus_sha256": "50d428206c88badbef80560b218de7a93438cc94b5e6d77ca67381b1580e481b",
+  "scope": "New topics, names, vocabulary and corruptions of the same 20 authored grammar families. Topic/lexical generalization, not new grammar structures or natural-language English accuracy."
+}

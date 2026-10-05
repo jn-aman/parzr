@@ -1,0 +1,1033 @@
+//! Inflection-aware deletion index with deterministic context ranking.
+use crate::tokenizer::Token;
+use crate::{context, morphology};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::OnceLock,
+};
+struct Lexicon {
+    words: HashMap<String, u8>,
+    lowercase: HashSet<String>,
+    deletes: HashMap<String, Vec<String>>,
+}
+fn frequency(word: &str) -> u16 {
+    static FREQUENCIES: OnceLock<HashMap<String, u16>> = OnceLock::new();
+    FREQUENCIES
+        .get_or_init(|| {
+            #[derive(serde::Deserialize)]
+            struct Prior {
+                metadata: serde_json::Value,
+                entries: Vec<(String, u16)>,
+            }
+            let prior: Prior = serde_json::from_str(include_str!("../rules/frequency.json"))
+                .expect("valid attributed frequency prior");
+            assert_eq!(prior.metadata["license"], "CC-BY-SA-4.0");
+            prior.entries.into_iter().collect()
+        })
+        .get(word)
+        .copied()
+        .unwrap_or(0)
+}
+fn lexicon() -> &'static Lexicon {
+    static LEXICON: OnceLock<Lexicon> = OnceLock::new();
+    LEXICON.get_or_init(|| {
+        let entries: Vec<(String, u8)> =
+            serde_json::from_str(include_str!("../rules/lexicon.json")).unwrap_or_default();
+        let mut words = HashMap::with_capacity(entries.len());
+        let mut lowercase = HashSet::new();
+        for (word, flags) in entries {
+            if word == word.to_lowercase() {
+                lowercase.insert(word.clone());
+            }
+            *words.entry(word.to_lowercase()).or_insert(0) |= flags;
+        }
+        let mut deletes: HashMap<String, Vec<String>> = HashMap::new();
+        // Index common words only for suggestions; all words remain valid dictionary entries.
+        for (word, flags) in &words {
+            let common_form = flags & 1 != 0
+                || frequency(word) >= 250
+                || ["s", "es", "ed", "ing"].iter().any(|suffix| {
+                    word.strip_suffix(suffix).is_some_and(|stem| {
+                        words.get(stem).is_some_and(|f| f & 1 != 0)
+                            || words.get(&format!("{stem}e")).is_some_and(|f| f & 1 != 0)
+                    })
+                });
+            if !common_form || word.len() > 24 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+                continue;
+            }
+            for deleted in deletions(word) {
+                deletes.entry(deleted).or_default().push(word.clone());
+            }
+        }
+        for values in deletes.values_mut() {
+            values.sort();
+            values.dedup();
+        }
+        Lexicon {
+            words,
+            lowercase,
+            deletes,
+        }
+    })
+}
+fn deletions(word: &str) -> HashSet<String> {
+    (0..word.len())
+        .map(|i| format!("{}{}", &word[..i], &word[i + 1..]))
+        .collect()
+}
+pub fn known(word: &str) -> bool {
+    lexicon().words.contains_key(&word.to_lowercase())
+}
+pub fn flags(word: &str) -> u8 {
+    lexicon()
+        .words
+        .get(&word.to_lowercase())
+        .copied()
+        .unwrap_or(0)
+}
+pub fn name_only(word: &str) -> bool {
+    known(word) && !lexicon().lowercase.contains(word)
+}
+pub fn possessive_boundary(token: &Token<'_>) -> Option<usize> {
+    if !token.surface.chars().next().is_some_and(char::is_uppercase) {
+        return None;
+    }
+    let apostrophe = token.surface.find(['\'', '’'])?;
+    let mark = token.surface[apostrophe..].chars().next()?;
+    let boundary = apostrophe + mark.len_utf8() + 1;
+    if !token.surface[apostrophe + mark.len_utf8()..].starts_with('s')
+        || boundary >= token.surface.len()
+    {
+        return None;
+    }
+    let tail = &token.surface[boundary..];
+    if tail.len() >= 4
+        && tail.chars().all(char::is_lowercase)
+        && flags(tail) & 2 != 0
+        && known(tail)
+    {
+        Some(token.surface[..boundary].encode_utf16().count())
+    } else {
+        None
+    }
+}
+fn distance_one(a: &str, b: &str) -> bool {
+    if !a.bytes().all(|c| c.is_ascii_alphabetic()) || !b.bytes().all(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    if a.len().abs_diff(b.len()) > 1 {
+        return false;
+    }
+    if a.len() == b.len() {
+        let differences: Vec<usize> = a
+            .iter()
+            .zip(b)
+            .enumerate()
+            .filter_map(|(i, (x, y))| (x != y).then_some(i))
+            .collect();
+        return differences.len() == 1
+            || differences.len() == 2
+                && differences[1] == differences[0] + 1
+                && a[differences[0]] == b[differences[1]]
+                && a[differences[1]] == b[differences[0]];
+    }
+    let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
+    let mut i = 0;
+    let mut j = 0;
+    let mut skipped = false;
+    while i < short.len() && j < long.len() {
+        if short[i] == long[j] {
+            i += 1;
+            j += 1;
+        } else if !skipped {
+            skipped = true;
+            j += 1;
+        } else {
+            return false;
+        }
+    }
+    true
+}
+fn transposed(a: &str, b: &str) -> bool {
+    a.len() == b.len()
+        && a.bytes().zip(b.bytes()).filter(|(a, b)| a != b).count() == 2
+        && distance_one(a, b)
+}
+fn function(word: &str) -> bool {
+    if ["be", "been", "being"].contains(&word) {
+        return true;
+    }
+    [
+        "a", "an", "the", "and", "or", "but", "so", "to", "of", "in", "on", "at", "by", "for",
+        "from", "with", "before", "after", "during", "every", "some", "any", "all", "no", "not",
+        "is", "are", "was", "were", "has", "have", "had", "will", "would", "can", "could",
+        "should", "must", "do", "does", "did", "it", "its", "we", "they", "their", "our", "her",
+        "my", "your", "you", "if", "then", "so", "anything", "this", "that", "i", "you're",
+        "we're", "they're", "it's", "don't", "doesn't", "didn't", "i'm", "me", "us", "him", "them",
+        "who", "whom", "whose", "which", "one",
+    ]
+    .contains(&word)
+}
+fn joined(
+    word: &str,
+    prev: &str,
+    following: &str,
+    new_sentence: bool,
+    following_flags: u8,
+) -> Option<(i32, String)> {
+    if !word.is_ascii() || word.len() < 4 || word.len() > 40 {
+        return None;
+    }
+    fn valid(w: &str) -> bool {
+        (w.len() >= 3 || function(w)) && (function(w) || known(w) && frequency(w) >= 250)
+    }
+    let mut splits: Vec<(i32, String)> = Vec::new();
+    for i in 1..word.len() {
+        let (a, b) = word.split_at(i);
+        if !valid(a) {
+            continue;
+        }
+        let mut tails = Vec::new();
+        if valid(b) {
+            tails.push(vec![b]);
+        }
+        if word.contains('\'') {
+            for j in 1..b.len() {
+                let (c, d) = b.split_at(j);
+                if valid(c) && valid(d) {
+                    tails.push(vec![c, d]);
+                }
+            }
+        }
+        for tail in tails {
+            let mut parts = vec![a];
+            parts.extend(tail);
+            if parts.len() == 2 && parts[1] == "one" && !function(a) && flags(a) & 8 == 0 {
+                continue;
+            }
+            if parts.iter().any(|p| p.len() < 4 && !function(p))
+                && !parts.iter().any(|p| function(p))
+                && !(flags(a) & 8 != 0 && parts[parts.len() - 1].len() >= 4)
+            {
+                continue;
+            }
+            if [
+                "in", "on", "at", "by", "for", "of", "with", "from", "before", "after", "during",
+                "a", "an", "the",
+            ]
+            .contains(&parts[parts.len() - 1])
+                && (following.is_empty()
+                    || !following.chars().all(char::is_alphabetic)
+                    || new_sentence)
+            {
+                continue;
+            }
+            if ["a", "an"].contains(&a)
+                && flags(parts[parts.len() - 1]) & 8 != 0
+                && (following_flags & 2 == 0 || function(following))
+            {
+                continue;
+            }
+            if ["a", "an", "the", "my", "your", "our", "their"].contains(&prev)
+                && function(a)
+                && !["a", "an"].contains(&a)
+            {
+                continue;
+            }
+            if ["am", "is", "are", "was", "were", "be", "been"].contains(&prev)
+                && flags(a) & 8 == 0
+                && !morphology::verb(a).is_some_and(|v| v.participle == a || v.gerund == a)
+                && !["not", "too", "very"].contains(&a)
+            {
+                continue;
+            }
+            let mut score = parts
+                .windows(2)
+                .map(|p| context::score(p[0], p[1]))
+                .sum::<i32>()
+                + context::score(prev, a)
+                + context::score(parts[parts.len() - 1], following)
+                + 30
+                - 20 * (parts.len() as i32 - 2);
+            if ["a", "an"].contains(&a) && following_flags & 2 != 0 && flags(b) & 8 != 0 {
+                score += 230;
+            }
+            if b == "so"
+                && flags(a) & 2 != 0
+                && ["a", "an", "the"].contains(&prev)
+                && (following_flags & 16 != 0 || following.ends_with("ly"))
+            {
+                score += 350;
+            }
+            if prev == "to"
+                && a == "be"
+                && morphology::verb(parts[parts.len() - 1])
+                    .is_some_and(|v| v.participle == parts[parts.len() - 1])
+            {
+                score += 80;
+            }
+            // A missing space before an article has a strong syntactic anchor:
+            // the exact base verb on its left and a noun on its right. Do not
+            // discard the article to prefer a nearby inflected spelling.
+            if parts.len() == 2
+                && ["a", "an"].contains(&parts[1])
+                && following_flags & 2 != 0
+                && morphology::verb(a).is_some_and(|v| v.base == a && morphology::predicate(a))
+            {
+                score += 320;
+            }
+            if ["i", "we", "you", "they", "he", "she"].contains(&a)
+                && ["", ",", ".", "!", "?", "yesterday", "today"].contains(&prev)
+                && parts.len() == 2
+                && morphology::verb(parts[1]).is_some_and(|v| {
+                    morphology::predicate(&v.base)
+                        && [v.base.as_str(), &v.past, &v.third].contains(&parts[1])
+                })
+            {
+                score += 180;
+            }
+            splits.push((score, parts.join(" ")));
+        }
+    }
+    splits.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    if splits.len() == 1 || splits.len() > 1 && splits[0].0 > splits[1].0 {
+        splits.first().cloned()
+    } else {
+        None
+    }
+}
+const COMMON: [&str; 15] = [
+    "is", "it", "the", "and", "to", "of", "on", "in", "as", "at", "so", "no", "for", "was", "has",
+];
+const SUBJECT_WORDS: [&str; 19] = [
+    "this",
+    "that",
+    "it",
+    "he",
+    "she",
+    "there",
+    "here",
+    "what",
+    "who",
+    "which",
+    "everything",
+    "something",
+    "nothing",
+    "anything",
+    "everyone",
+    "someone",
+    "nobody",
+    "somebody",
+    "whatever",
+];
+const DETERMINERS: [&str; 16] = [
+    "the", "a", "an", "my", "your", "his", "her", "our", "their", "this", "that", "each", "every",
+    "some", "any", "no",
+];
+const ARTICLE_LIKE: [&str; 21] = [
+    "the", "a", "an", "my", "your", "his", "her", "our", "their", "this", "that", "these", "those",
+    "its", "all", "each", "every", "some", "any", "most", "many",
+];
+const COPULAS: [&str; 15] = [
+    "is", "are", "was", "were", "am", "be", "been", "being", "it's", "that's", "he's", "she's",
+    "there's", "here's", "what's",
+];
+const ADJECTIVES: [&str; 33] = [
+    "bad",
+    "great",
+    "nice",
+    "hard",
+    "easy",
+    "big",
+    "small",
+    "late",
+    "early",
+    "long",
+    "short",
+    "hot",
+    "cold",
+    "loud",
+    "quiet",
+    "fast",
+    "slow",
+    "important",
+    "difficult",
+    "sad",
+    "happy",
+    "tired",
+    "busy",
+    "boring",
+    "expensive",
+    "cheap",
+    "annoying",
+    "terrible",
+    "awful",
+    "sorry",
+    "glad",
+    "funny",
+    "weird",
+];
+pub fn adjective(token: &Token<'_>) -> bool {
+    // Fix-time tagging of damaged text is noisy; the list backs up the OS part-of-speech hint.
+    // "do good", "do right" and "do well" are real verb phrases, so they never qualify.
+    !["good", "right", "wrong", "well", "better", "best"].contains(&token.normalized.as_str())
+        && (token.pos == "Adjective" || ADJECTIVES.contains(&token.normalized.as_str()))
+}
+/// A word that can be the subject of "is": a pronoun, name, or determiner + singular noun.
+fn singular_subject(tokens: &[Token<'_>], at: usize) -> bool {
+    let token = &tokens[at];
+    let word = token.normalized.as_str();
+    if !token.is_word || word == "i" {
+        return false;
+    }
+    if SUBJECT_WORDS.contains(&word) {
+        return true;
+    }
+    let initial = at == 0 || [".", "!", "?"].contains(&tokens[at - 1].surface);
+    if token.proper_name
+        || token.surface.chars().next().is_some_and(char::is_uppercase)
+            && (!initial || name_only(word))
+    {
+        return true;
+    }
+    let noun = flags(word) & 2 != 0 && flags(word) & 16 == 0 && !word.ends_with('s');
+    noun && (at >= 1 && DETERMINERS.contains(&tokens[at - 1].normalized.as_str())
+        || at >= 2
+            && adjective(&tokens[at - 1])
+            && DETERMINERS.contains(&tokens[at - 2].normalized.as_str()))
+}
+/// Whether `candidate` fits the slot of `tokens[index]`. Each entry is a deliberately narrow
+/// syntactic frame, so a real word (a musical "si", "On" opening a sentence) keeps its meaning.
+fn slot_fits(candidate: &str, tokens: &[Token<'_>], index: usize) -> bool {
+    let text = |i: Option<usize>| {
+        i.and_then(|i| tokens.get(i))
+            .filter(|t| t.is_word)
+            .map_or("", |t| t.normalized.as_str())
+    };
+    let (prev, next) = (text(index.checked_sub(1)), text(Some(index + 1)));
+    let ahead = text(Some(index + 2));
+    match candidate {
+        "is" => {
+            let subject = index > 0 && singular_subject(tokens, index - 1);
+            // "si note is" is a noun phrase with its own verb, not a damaged copula.
+            let phrase = ["is", "are", "was", "were"].contains(&ahead);
+            let predicate = [
+                "too", "so", "very", "really", "not", "still", "already", "quite", "pretty",
+                "always", "never", "just", "also", "ready", "going",
+            ]
+            .contains(&next)
+                && !prev.is_empty()
+                && ![
+                    "i", "you", "we", "they", "the", "a", "an", "of", "to", "in", "on", "at",
+                ]
+                .contains(&prev);
+            (subject && !phrase) || predicate
+        }
+        "it" => {
+            [
+                "is", "was", "has", "had", "will", "would", "can", "could", "should", "does",
+                "did", "seems", "looks", "might", "may", "must", "isn't", "wasn't", "doesn't",
+            ]
+            .contains(&next)
+                && !DETERMINERS.contains(&prev)
+        }
+        "in" => !prev.is_empty() && ARTICLE_LIKE.contains(&next),
+        "at" => {
+            !prev.is_empty()
+                && (ARTICLE_LIKE.contains(&next)
+                    || [
+                        "least", "once", "home", "work", "school", "night", "noon", "first", "last",
+                    ]
+                    .contains(&next))
+        }
+        "of" => {
+            [
+                "lot", "lots", "couple", "number", "kind", "type", "sort", "part", "bit", "piece",
+                "one", "all", "most", "many", "some", "out", "because", "instead", "front",
+                "middle", "end", "top", "rest", "member", "members", "version", "list", "side",
+                "group", "set",
+            ]
+            .contains(&prev)
+                && ARTICLE_LIKE.contains(&next)
+        }
+        "as" => {
+            !prev.is_empty()
+                && [
+                    "if", "soon", "well", "much", "many", "long", "far", "though", "a", "an", "the",
+                ]
+                .contains(&next)
+        }
+        "so" => {
+            [
+                "i", "we", "you", "they", "he", "she", "it", "is", "are", "was", "were", "am",
+                "be", "been", "and", "but", "not", "that", "this",
+            ]
+            .contains(&prev)
+                && (tokens.get(index + 1).is_some_and(adjective)
+                    || ["much", "many", "long", "far"].contains(&next))
+        }
+        "was" => {
+            [
+                "i", "he", "she", "it", "this", "that", "there", "who", "what",
+            ]
+            .contains(&prev)
+                && !next.is_empty()
+        }
+        "has" => {
+            ["he", "she", "it", "who", "that", "this"].contains(&prev)
+                && ([
+                    "been", "a", "an", "the", "no", "not", "never", "already", "just", "also",
+                    "always",
+                ]
+                .contains(&next)
+                    || morphology::verb(next).is_some_and(|v| v.participle == next))
+        }
+        _ => false,
+    }
+}
+/// Slot-aware corrections that need neighbouring tokens: a rare word that is one adjacent
+/// transposition (or, when unknown to the dictionary, one edit) from a top-frequency function
+/// word becomes that word where its slot fits, and "do" becomes "so" before an adjective.
+/// Returns the rule id, replacement and reason. `to`, `the`, `and`, `for`, `on`
+/// and `no` have no frame here, so they win a tie and leave the token to `suggest`.
+pub fn slot_fix(
+    tokens: &[Token<'_>],
+    index: usize,
+) -> Option<(&'static str, String, &'static str)> {
+    let token = &tokens[index];
+    let word = token.normalized.as_str();
+    if token.proper_name || token.surface != word || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+        return None;
+    }
+    if word == "do" {
+        let prev = index.checked_sub(1).map(|i| &tokens[i])?;
+        let next = tokens.get(index + 1)?;
+        let plural_noun = tokens
+            .get(index + 2)
+            .is_some_and(|t| t.is_word && flags(&t.normalized) & 16 != 0);
+        return (prev.is_word
+            && COPULAS.contains(&prev.normalized.as_str())
+            && adjective(next)
+            && !plural_noun)
+            .then(|| {
+                (
+                    "spelling.copula_do_intensifier",
+                    "so".to_string(),
+                    "Use so before this adjective; do cannot modify it.",
+                )
+            });
+    }
+    if !(2..=3).contains(&word.len()) {
+        return None;
+    }
+    let unknown = !lexicon().lowercase.contains(word);
+    let mut near: Vec<&str> = COMMON
+        .into_iter()
+        // Far more frequent: a gap of 1.5 Zipf points (about 30 times) in the frequency prior.
+        .filter(|c| frequency(c) >= frequency(word).saturating_add(150))
+        .filter(|c| transposed(word, c) || unknown && distance_one(word, c))
+        .collect();
+    // A transposition is the stronger evidence ("ot" is "to", not "at").
+    if near.iter().any(|c| transposed(word, c)) {
+        near.retain(|c| transposed(word, c));
+    }
+    let fits: Vec<&str> = near
+        .into_iter()
+        .filter(|c| slot_fits(c, tokens, index))
+        .collect();
+    match fits[..] {
+        [only] => Some((
+            "spelling.frequent_word",
+            only.to_string(),
+            "A far more common word fits here; this looks like a typo.",
+        )),
+        _ => None,
+    }
+}
+pub fn suggest(
+    token: &Token<'_>,
+    dialect: &str,
+    previous: Option<&Token<'_>>,
+    next: Option<&Token<'_>>,
+    history: &[Token<'_>],
+    following_context: &[Token<'_>],
+) -> Option<String> {
+    let word = &token.normalized;
+    if token.proper_name
+        || token.surface.chars().any(char::is_uppercase)
+        || word.len() > 24
+        || !word.bytes().all(|b| b.is_ascii_lowercase() || b == b'\'')
+    {
+        return None;
+    }
+    fn contextual_word(word: &str) -> &str {
+        if known(word) {
+            return word;
+        }
+        let nearby: Vec<_> = [
+            "the", "and", "not", "to", "my", "your", "our", "their", "his", "her", "its", "any",
+            "some", "will", "with", "before", "after",
+        ]
+        .into_iter()
+        .filter(|w| distance_one(word, w))
+        .collect();
+        if nearby.len() == 1 { nearby[0] } else { word }
+    }
+    let prev = contextual_word(previous.map(|t| t.normalized.as_str()).unwrap_or(""));
+    let following = contextual_word(
+        next.filter(|t| !t.surface.chars().next().is_some_and(char::is_uppercase))
+            .map(|t| t.normalized.as_str())
+            .unwrap_or(""),
+    );
+    let next_flags = if following.is_empty() {
+        0
+    } else if flags(following) != 0 || !following.is_ascii() {
+        flags(following)
+    } else {
+        let mut nearby = HashSet::new();
+        if let Some(values) = lexicon().deletes.get(following) {
+            nearby.extend(values.iter());
+        }
+        for deleted in deletions(following) {
+            if let Some((w, _)) = lexicon().words.get_key_value(&deleted) {
+                nearby.insert(w);
+            }
+            if let Some(values) = lexicon().deletes.get(&deleted) {
+                nearby.extend(values.iter());
+            }
+        }
+        let candidates: Vec<_> = nearby
+            .into_iter()
+            .filter(|w| distance_one(following, w))
+            .collect();
+        candidates
+            .iter()
+            .fold(0, |combined, candidate| combined | flags(candidate))
+    };
+    // Reviewed short transpositions. Preserve valid interjections and 'to and fro'.
+    let short = match word.as_str() {
+        "adn" => Some("and"),
+        "wsa" => Some("was"),
+        "hda" => Some("had"),
+        "hsa" => Some("has"),
+        "wlil" => Some("will"),
+        "wiht" => Some("with"),
+        "cna" => Some("can"),
+        "nto" => Some("not"),
+        "shold" | "sould" => Some("should"),
+        "cannt" => Some("cannot"),
+        "ot" if function(following)
+            || morphology::verb(following).is_some()
+            || [
+                "everyone",
+                "anyone",
+                "someone",
+                "nobody",
+                "everybody",
+                "somebody",
+            ]
+            .contains(&following) =>
+        {
+            Some("to")
+        }
+        "fro" if prev != "and" && !following.is_empty() && next.is_some_and(|t| t.is_word) => {
+            Some("for")
+        }
+        "ew" if (morphology::verb(following).is_some_and(|v| morphology::predicate(&v.base))
+            && [
+                "when", "while", "if", "because", "since", "that", "week", "month", "night", "day",
+                ",",
+            ]
+            .contains(&prev))
+            || (["has", "have", "had"].contains(&prev)
+                && morphology::verb(following).is_some())
+            || [
+                "will", "would", "have", "had", "can", "could", "should", "are", "were", "do",
+                "did", "look", "need",
+            ]
+            .contains(&following) =>
+        {
+            Some("we")
+        }
+        _ => None,
+    };
+    if let Some(s) = short {
+        return Some(s.into());
+    }
+    if lexicon().lowercase.contains(word) {
+        return None;
+    }
+    let split = joined(
+        word,
+        prev,
+        following,
+        next.is_some_and(|t| t.surface.chars().next().is_some_and(char::is_uppercase)),
+        next_flags,
+    );
+    if word.len() < 3 {
+        return None;
+    }
+    let lexicon = lexicon();
+    let mut candidates = HashSet::new();
+    if let Some(values) = lexicon.deletes.get(word) {
+        candidates.extend(values.iter().cloned());
+    }
+    for deleted in deletions(word) {
+        if lexicon.words.contains_key(&deleted) {
+            candidates.insert(deleted.clone());
+        }
+        if let Some(values) = lexicon.deletes.get(&deleted) {
+            candidates.extend(values.iter().cloned());
+        }
+    }
+    let dialect_flag = if dialect == "british" { 128 } else { 64 };
+    let mut candidates: Vec<String> = candidates
+        .into_iter()
+        .filter(|candidate| distance_one(word, candidate) && flags(candidate) & dialect_flag != 0)
+        .collect();
+    let score = |candidate: &str| -> i32 {
+        let mut score = i32::from(morphology::common(candidate)) * 14
+            + i32::from(frequency(candidate) / 5)
+            + i32::from(transposed(word, candidate)) * 80;
+        // Prefer a dictionary compound such as everyone over an incidental
+        // adverb + one split when both explain the same damaged token.
+        if candidate.ends_with("one")
+            && candidate.len() > word.len()
+            && split
+                .as_ref()
+                .is_some_and(|(_, value)| value.ends_with(" one"))
+        {
+            score += 250;
+        }
+        let f = flags(candidate);
+        if ["am", "is", "are", "was", "were", "be", "been"].contains(&prev) {
+            score += i32::from(f & 8 != 0) * 15;
+            score += i32::from(
+                morphology::verb(candidate)
+                    .is_some_and(|v| v.participle == candidate || v.gerund == candidate),
+            ) * 35;
+        }
+        if [
+            "can", "could", "may", "might", "should", "must", "will", "would", "did", "does",
+            "don't", "doesn't", "didn't", "to",
+        ]
+        .contains(&prev)
+        {
+            score +=
+                i32::from(morphology::verb(candidate).is_some_and(|v| v.base == candidate)) * 25;
+        }
+        if ["a", "an", "the", "my", "your", "our", "their"].contains(&prev) {
+            score += i32::from(f & 2 != 0 || f & 8 != 0) * 10;
+        }
+        if ["is", "was", "are", "were"].contains(&following) {
+            score += i32::from(f & 2 != 0) * 15;
+        }
+        score += context::score(prev, candidate) + context::score(candidate, following);
+        if known(prev) && known(following) {
+            score -= i32::from(frequency(candidate) / 20);
+        }
+        if candidate.len() > word.len() {
+            score += 35;
+        }
+        if word.len() > candidate.len() && word.get(1..) == Some(candidate) {
+            score -= 40;
+        }
+        if token.pos == "Verb" {
+            score += i32::from(
+                morphology::verb(candidate).is_some_and(|v| morphology::predicate(&v.base)),
+            ) * 35;
+            score -= i32::from(function(candidate)) * 50;
+        }
+        // Prefer grammatical word classes in clear noun and auxiliary slots.
+        let noun_slot = [
+            "a", "an", "the", "my", "your", "our", "their", "its", "some", "any", "no",
+        ]
+        .contains(&prev)
+            || ["is", "are", "was", "were"].contains(&following)
+            || previous.is_some_and(|t| flags(&t.normalized) & (2 | 8) != 0)
+                && history.iter().rev().nth(1).is_some_and(|t| {
+                    [
+                        "a", "an", "the", "teh", "any", "no", "some", "my", "your", "our", "their",
+                    ]
+                    .contains(&t.normalized.as_str())
+                });
+        let noun_slot = noun_slot
+            && !(prev == "one"
+                && history.iter().rev().take(4).any(|t| {
+                    ["seen", "heard", "watched", "see", "hear", "watch"]
+                        .contains(&t.normalized.as_str())
+                }))
+            && !(token.pos == "Verb"
+                && history.iter().rev().nth(2).is_some_and(|t| {
+                    ["before", "after", "when", "while"].contains(&t.normalized.as_str())
+                }));
+        if noun_slot {
+            let adjective_slot = next_flags & 2 != 0 || following == "one";
+            score += if f & 2 != 0 || adjective_slot && f & 8 != 0 {
+                90
+            } else {
+                -75
+            };
+        }
+        if prev == "the"
+            && history
+                .iter()
+                .rev()
+                .nth(1)
+                .is_some_and(|t| t.normalized == "of")
+            && history.iter().rev().nth(2).is_some_and(|t| {
+                ["each", "one", "either", "both", "several", "many", "some"]
+                    .contains(&t.normalized.as_str())
+            })
+            && f & 16 != 0
+        {
+            score += 160;
+        }
+        if flags(following) & 16 != 0 && ["any", "no", "some", "the", "a", "an"].contains(&prev) {
+            score += i32::from(f & 8 != 0) * 100;
+        }
+        let auxiliary_slot = history.iter().rev().take(3).any(|t| {
+            [
+                "did", "does", "can", "could", "must", "should", "will", "would",
+            ]
+            .contains(&t.normalized.as_str())
+        });
+        if auxiliary_slot && ["a", "an", "the"].contains(&following) {
+            score +=
+                i32::from(morphology::verb(candidate).is_some_and(|v| v.base == candidate)) * 45;
+            score -= i32::from(function(candidate)) * 70;
+        }
+        if following == "by"
+            && morphology::verb(candidate).is_some_and(|v| {
+                ["want", "waive", "waste", "raise", "revise", "protect"].contains(&v.base.as_str())
+            })
+            && !["was", "were", "is", "are", "be", "been"].contains(&prev)
+        {
+            score -= 310;
+        }
+        if word.chars().next() != candidate.chars().next() {
+            score -= 35;
+        }
+        // Topic and argument preferences only rank unknown-word candidates. They do
+        // not replace valid words or prescribe a reference paragraph.
+        let nearby_topic = |topics: &[&str]| {
+            history
+                .iter()
+                .rev()
+                .take(18)
+                .chain(following_context.iter().take(8))
+                .any(|t| {
+                    topics.contains(&t.normalized.as_str())
+                        || !known(&t.normalized)
+                            && topics
+                                .iter()
+                                .any(|topic| distance_one(&t.normalized, topic))
+                })
+        };
+        let topical = match candidate {
+            "stall" => nearby_topic(&["fruit", "vegetable", "market", "vendor"]),
+            "cakes" => nearby_topic(&["bakery", "baker", "pastry"]),
+            "chairs" => nearby_topic(&["furniture", "seating", "dining"]),
+            "drums" => nearby_topic(&["music", "band", "percussion"]),
+            "concert" => nearby_topic(&["charity", "music", "orchestra"]),
+            "theater" => ["opening", "stage", "performance", "audience"].contains(&following),
+            "printer" => nearby_topic(&["battery", "print", "ink", "paper", "cartridge"]),
+            "spare" => {
+                ["folders", "folder", "copies", "parts", "keys", "battery"]
+                    .iter()
+                    .any(|w| *w == following || !known(following) && distance_one(following, w))
+                    || ["foldersin", "folderin", "folderand", "foldersand"].contains(&following)
+            }
+            "delay" => following_context.iter().take(3).any(|t| {
+                ["meeting", "appointment", "departure", "event"]
+                    .iter()
+                    .any(|w| {
+                        *w == t.normalized
+                            || !known(&t.normalized) && distance_one(&t.normalized, w)
+                    })
+            }),
+            "improves" => ["weather", "health", "condition", "quality"].contains(&prev),
+            "starts" => ["meeting", "class", "event", "concert", "session", "match"]
+                .iter()
+                .any(|w| *w == prev || !known(prev) && distance_one(prev, w)),
+            "dates" => prev == "the" && nearby_topic(&["check", "schedule", "calendar", "confirm"]),
+            "bought" => {
+                nearby_topic(&["store", "shop", "market", "purchase", "bakery"])
+                    && !following_context
+                        .iter()
+                        .take(6)
+                        .any(|t| ["to", "into"].contains(&t.normalized.as_str()))
+            }
+            "brought" => following_context
+                .iter()
+                .take(6)
+                .any(|t| ["to", "into", "toward"].contains(&t.normalized.as_str())),
+            "store" => nearby_topic(&["hardware", "clothing", "grocery", "furniture", "book"]),
+            "earlier" => {
+                next.is_some_and(|t| t.surface == ",")
+                    && nearby_topic(&["had", "prepared", "finished", "arrived"])
+            }
+            "every" => {
+                ["morning", "evening", "day", "night", "week", "month"].contains(&following)
+                    || following_context
+                        .first()
+                        .is_some_and(|t| distance_one(&t.normalized, "morning"))
+            }
+            "fewer" => next_flags & 2 != 0 && following.ends_with('s'),
+            "ready" => {
+                ["is", "was", "are", "were"].contains(&prev)
+                    && (following.is_empty() || ["for", "to"].contains(&following))
+            }
+            _ => false,
+        };
+        if topical {
+            score += 230;
+        }
+        if ["revised", "revise"].contains(&candidate)
+            && !noun_slot
+            && following_context.iter().take(3).any(|t| {
+                [
+                    "brief",
+                    "record",
+                    "review",
+                    "memo",
+                    "plan",
+                    "statement",
+                    "notice",
+                    "draft",
+                    "report",
+                    "document",
+                    "letter",
+                    "summary",
+                ]
+                .contains(&t.normalized.as_str())
+            })
+        {
+            score += 190;
+        }
+        // Reviewed semantic constraints disambiguate otherwise grammatical candidates.
+        if candidate == "plants"
+            && history
+                .iter()
+                .rev()
+                .take(9)
+                .any(|t| ["garden", "nursery", "seed", "seeds"].contains(&t.normalized.as_str()))
+        {
+            score += 50;
+        }
+        if !noun_slot
+            && ["revise", "review", "edit", "write"].contains(&candidate)
+            && following_context.iter().take(3).any(|t| {
+                [
+                    "report",
+                    "proposal",
+                    "schedule",
+                    "application",
+                    "summary",
+                    "document",
+                    "draft",
+                    "letter",
+                    "manuscript",
+                ]
+                .contains(&t.normalized.as_str())
+            })
+        {
+            score += 160;
+        }
+        if candidate == "stationery"
+            && ["shop", "store", "supplies", "items", "paper", "pens"].contains(&following)
+        {
+            score += 160;
+        }
+        if candidate == "event"
+            && ["museum", "gallery", "festival", "school", "community"].contains(&prev)
+        {
+            score += 130;
+        }
+        // A superlative fits a definite determiner followed by "one".
+        if candidate.ends_with("est") && prev == "the" && following == "one" {
+            score += 80;
+        }
+        // Preserve local past narration when recovering a damaged finite verb.
+        let past_context = history.iter().rev().take(20).any(|t| {
+            ["yesterday", "had", "ago"].contains(&t.normalized.as_str())
+                || morphology::verb(&t.normalized).is_some_and(|v| {
+                    v.past == t.normalized && v.past != v.base && morphology::predicate(&v.base)
+                })
+        });
+        let preceding_finite = history
+            .iter()
+            .rev()
+            .take_while(|t| {
+                ![
+                    ".", "?", "!", ",", "before", "after", "when", "while", "that", "and", "but",
+                    "so",
+                ]
+                .contains(&contextual_word(&t.normalized))
+            })
+            .any(|t| {
+                morphology::verb(&t.normalized).is_some_and(|v| {
+                    morphology::predicate(&v.base)
+                        && (v.past == t.normalized || v.third == t.normalized)
+                        && v.base != t.normalized
+                })
+            });
+        if past_context
+            && (!noun_slot
+                || history.iter().rev().nth(2).is_some_and(|t| {
+                    ["before", "after", "when", "while"].contains(&contextual_word(&t.normalized))
+                }))
+            && !preceding_finite
+            && (token.pos == "Verb" || previous.is_some_and(|t| flags(&t.normalized) & 2 != 0))
+            && ![
+                "can", "could", "may", "might", "will", "would", "should", "must", "did", "does",
+                "to",
+            ]
+            .contains(&prev)
+            && morphology::verb(candidate).is_some_and(|v| v.past == candidate && v.past != v.base)
+        {
+            score += 180;
+        }
+        // Temporal connectors can follow a noun phrase; a finite verb cannot.
+        if ["after", "before", "during"].contains(&candidate)
+            && ["a", "an", "the"].contains(&following)
+            && (preceding_finite || previous.is_some_and(|t| flags(&t.normalized) & 2 != 0))
+        {
+            score += 180;
+        }
+        score
+    };
+    candidates.sort_by(|a, b| score(b).cmp(&score(a)).then_with(|| a.cmp(b)));
+    if let Some((split_score, split)) = split.as_ref()
+        && candidates.first().is_none_or(|c| *split_score > score(c))
+    {
+        return Some(split.clone());
+    }
+    if candidates.len() == 1
+        || (candidates.len() > 1
+            && score(&candidates[0]) >= 40
+            && score(&candidates[0]) > score(&candidates[1]))
+    {
+        candidates.first().cloned()
+    } else {
+        None
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn one_edit() {
+        assert!(distance_one("teh", "the"));
+        assert!(distance_one("mesage", "message"));
+        assert!(!distance_one("mesage", "me sage"));
+        assert!(!distance_one("a", "abc"));
+    }
+    #[test]
+    fn dictionary_assets() {
+        assert!(known("message"));
+        assert!(known("configuration"));
+    }
+}

@@ -1,0 +1,50 @@
+Vale Harper Style
+Copyright (c) 2026 Joseph Kato and contributors
+
+This product includes software and linguistic rule definitions derived from
+Harper (https://github.com/Automattic/harper), Copyright (c) Automattic, Inc.
+and contributors, licensed under the Apache License, Version 2.0.
+
+Everything derived from Harper carries a header naming it. Four kinds of
+material are derived, from three parts of Harper's source:
+
+  - Rules under generated/ compiled from Harper's `.weir` rule definitions.
+    The matched phrases, corrections, messages and descriptions in those files
+    are Harper's; the translation into Vale's rule format is this project's.
+
+  - Rules under generated/ compiled from Harper's Rust linters. The phrases
+    and messages are Harper's, read from the linter's own expression or from
+    the examples it is tested against.
+
+  - The tagger dictionary shipped with the style, expanded from Harper's
+    dictionary and affix rules by Harper's own tooling. The words, their parts
+    of speech and their inflections are Harper's.
+
+  - Rules under Harper/ written by hand from a Harper linter's source, where a
+    generator could not express what the linter does. These state the same
+    phrases, conditions and messages as the linter they were read from.
+
+Changes made to the original work:
+
+  - Rule definitions were compiled into Vale's `existence`, `substitution` and
+    `sequence` check formats.
+  - Alternations were expanded into literal phrases, since Vale matches by
+    pattern rather than by parsed expression.
+  - Part-of-speech constraints were translated from Harper's universal tags
+    into the Penn Treebank tags Vale's tagger produces, which do not divide the
+    categories the same way.
+  - Severity levels were assigned from Harper's rule kinds, which Vale requires
+    and Harper does not express.
+  - Rules Harper reports under one name but which need more than one Vale check
+    are numbered, and some of Harper's rules are not ported at all; the
+    generators name a reason for each omission.
+  - Linters Harper ships disabled, and linters whose source Harper never adds
+    to its lint group, are omitted so that the style reports what Harper
+    reports rather than what its source tree contains.
+
+The corpus the port is measured against is built from the examples in Harper's
+own tests. It is not distributed with the style.
+
+You may obtain a copy of the Apache License, Version 2.0 at
+
+    http://www.apache.org/licenses/LICENSE-2.0

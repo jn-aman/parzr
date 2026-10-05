@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Parzr \u00b7 offline writing assistant",
+  "version": "0.1.0",
+  "description": "Local inline grammar suggestions in writing fields and chat composers. Activate on the current page.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "nativeMessaging"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "minimum_chrome_version": "121",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "parzr@parzr.app",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {"required": ["websiteContent", "personalCommunications"]}
+    }
+  },
+  "action": {
+    "default_title": "Parzr \u00b7 Check writing on this page"
+  },
+  "commands": {
+    "rewrite": {
+      "description": "Improve selected text",
+      "suggested_key": {
+        "default": "Alt+Shift+P",
+        "mac": "Alt+Shift+P"
+      }
+    }
+  }
+}

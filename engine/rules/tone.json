@@ -1,0 +1,559 @@
+[
+  {
+    "id": "professional.can_request",
+    "pattern": "(?im)^(can|could) you ",
+    "replacement": "Could you ",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Use a measured request.",
+    "positive": "can you check this?",
+    "negative": "I know you can check this.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.want",
+    "pattern": "(?i)\\bwanna\\b",
+    "replacement": "want to",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Use standard wording.",
+    "positive": "I wanna help.",
+    "negative": "I want to help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.gonna",
+    "pattern": "(?i)\\bgonna\\b",
+    "replacement": "going to",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Use standard wording.",
+    "positive": "I'm gonna help.",
+    "negative": "I'm going to help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.thanks",
+    "pattern": "(?i)\\bthanks a lot\\b",
+    "replacement": "thank you",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Use a restrained expression of thanks.",
+    "positive": "Thanks a lot for this.",
+    "negative": "Thanks for this.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.asap",
+    "pattern": "(?i)\\basap\\b",
+    "replacement": "as soon as possible",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand an abbreviation.",
+    "positive": "Please reply ASAP.",
+    "negative": "Please reply tomorrow.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.im",
+    "pattern": "(?i)\\bI'm\\b",
+    "replacement": "I am",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand a contraction.",
+    "positive": "I'm ready.",
+    "negative": "I am ready.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.youre",
+    "pattern": "(?i)\\byou're\\b",
+    "replacement": "you are",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand a contraction.",
+    "positive": "You're ready.",
+    "negative": "You are ready.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.were",
+    "pattern": "(?i)\\bwe're\\b",
+    "replacement": "we are",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand a contraction.",
+    "positive": "We're ready.",
+    "negative": "We are ready.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.dont",
+    "pattern": "(?i)\\bdon't\\b",
+    "replacement": "do not",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand a contraction while keeping negation.",
+    "positive": "I don't agree.",
+    "negative": "I do not agree.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.cant",
+    "pattern": "(?i)\\bcan't\\b",
+    "replacement": "cannot",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand a contraction while keeping negation.",
+    "positive": "I can't help.",
+    "negative": "I cannot help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "friendly.request",
+    "pattern": "(?im)^(?:can|could|would) you (?:please )?",
+    "replacement": "Could you please ",
+    "modes": [
+      "friendly"
+    ],
+    "reason": "Add warmth to a request.",
+    "positive": "Can you review this?",
+    "negative": "I know you can review this.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "friendly.thanks",
+    "pattern": "(?i)\\bthank you\\b",
+    "replacement": "thanks",
+    "modes": [
+      "friendly"
+    ],
+    "reason": "Use conversational thanks.",
+    "positive": "Thank you for this.",
+    "negative": "Thanks for this.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "friendly.you_are",
+    "pattern": "(?i)\\byou are\\b",
+    "replacement": "you're",
+    "modes": [
+      "friendly"
+    ],
+    "reason": "Use a conversational contraction.",
+    "positive": "You are welcome.",
+    "negative": "Your report is ready.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "friendly.i_am",
+    "pattern": "(?i)\\bI am\\b",
+    "replacement": "I'm",
+    "modes": [
+      "friendly"
+    ],
+    "reason": "Use a conversational contraction.",
+    "positive": "I am ready.",
+    "negative": "I was ready.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.in_order",
+    "pattern": "(?i)\\bin order to\\b",
+    "replacement": "to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Remove unnecessary words.",
+    "positive": "Check in order to confirm.",
+    "negative": "Check to confirm.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.at_this_time",
+    "pattern": "(?i)\\bat this point in time\\b",
+    "replacement": "now",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter time expression.",
+    "positive": "At this point in time we agree.",
+    "negative": "We agree now.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.due_to",
+    "pattern": "(?i)\\bdue to the fact that\\b",
+    "replacement": "because",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Simplify a phrase.",
+    "positive": "We left due to the fact that it rained.",
+    "negative": "We left because it rained.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.please_note",
+    "pattern": "(?im)^please note that ",
+    "replacement": "",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Remove an introductory phrase.",
+    "positive": "Please note that the report is ready.",
+    "negative": "Please do not delete the report.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.for_purpose",
+    "pattern": "(?i)\\bfor the purpose of\\b",
+    "replacement": "for",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Simplify a phrase.",
+    "positive": "For the purpose of testing.",
+    "negative": "For testing.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "direct.request",
+    "pattern": "(?im)^(?P<target>(?:can|could|would) you (?:please )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "",
+    "modes": [
+      "direct"
+    ],
+    "reason": "Make the action explicit.",
+    "positive": "Could you check this?",
+    "negative": "Could you not send this?",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.request",
+    "pattern": "(?im)^(?P<target>(?:can|could|would) you (?:please )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "Please ",
+    "modes": [
+      "concise"
+    ],
+    "reason": "Make a concise request.",
+    "positive": "Could you check this?",
+    "negative": "Could you not send this?",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.hedged_request",
+    "pattern": "(?im)^(?P<target>I (?:just )?(?:wanted to ask|was (?:just )?wondering) (?:if|whether) you (?:could|can|would) (?:maybe )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "Could you ",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Remove the indirect request wrapper while retaining the action and timing.",
+    "positive": "I just wanted to ask if you could maybe send me the document when you get a chance.",
+    "negative": "I was wondering if you could not send the document.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "friendly.hedged_request",
+    "pattern": "(?im)^(?P<target>I (?:just )?(?:wanted to ask|was (?:just )?wondering) (?:if|whether) you (?:could|can|would) (?:maybe )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "Could you please ",
+    "modes": [
+      "friendly"
+    ],
+    "reason": "Remove the indirect request wrapper while retaining the action and timing.",
+    "positive": "I just wanted to ask if you could maybe send me the document when you get a chance.",
+    "negative": "I was wondering if you could not send the document.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.hedged_request",
+    "pattern": "(?im)^(?P<target>I (?:just )?(?:wanted to ask|was (?:just )?wondering) (?:if|whether) you (?:could|can|would) (?:maybe )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "Please ",
+    "modes": [
+      "concise"
+    ],
+    "reason": "Remove the indirect request wrapper while retaining the action and timing.",
+    "positive": "I just wanted to ask if you could maybe send me the document when you get a chance.",
+    "negative": "I was wondering if you could not send the document.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "direct.hedged_request",
+    "pattern": "(?im)^(?P<target>I (?:just )?(?:wanted to ask|was (?:just )?wondering) (?:if|whether) you (?:could|can|would) (?:maybe )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
+    "replacement": "",
+    "modes": [
+      "direct"
+    ],
+    "reason": "Remove the indirect request wrapper while retaining the action and timing.",
+    "positive": "I just wanted to ask if you could maybe send me the document when you get a chance.",
+    "negative": "I was wondering if you could not send the document.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.Ill",
+    "pattern": "(?i)\\bI'll\\b",
+    "replacement": "I will",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "I'll help.",
+    "negative": "I will help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.well",
+    "pattern": "(?i)\\bwe'll\\b",
+    "replacement": "we will",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "we'll help.",
+    "negative": "we will help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.its",
+    "pattern": "(?i)\\b(?P<target>it's) (?:ready|working|available|clear|possible|fine|good|great|raining)\\b",
+    "replacement": "it is",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "it's ready.",
+    "negative": "it is help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.isnt",
+    "pattern": "(?i)\\bisn't\\b",
+    "replacement": "is not",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "isn't help.",
+    "negative": "is not help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.doesnt",
+    "pattern": "(?i)\\bdoesn't\\b",
+    "replacement": "does not",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "doesn't help.",
+    "negative": "does not help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.wont",
+    "pattern": "(?i)\\bwon't\\b",
+    "replacement": "will not",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "won't help.",
+    "negative": "will not help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.weve",
+    "pattern": "(?i)\\bwe've\\b",
+    "replacement": "we have",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "we've help.",
+    "negative": "we have help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "professional.contraction.Ive",
+    "pattern": "(?i)\\bI've\\b",
+    "replacement": "I have",
+    "modes": [
+      "professional"
+    ],
+    "reason": "Expand the contraction without changing tense or negation.",
+    "positive": "I've help.",
+    "negative": "I have help.",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.utilize",
+    "pattern": "(?i)\\butilize\\b",
+    "replacement": "use",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "utilize",
+    "negative": "use",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.utilized",
+    "pattern": "(?i)\\butilized\\b",
+    "replacement": "used",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "utilized",
+    "negative": "used",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.prior_to",
+    "pattern": "(?i)\\bprior to\\b",
+    "replacement": "before",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "prior to",
+    "negative": "before",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.subsequent_to",
+    "pattern": "(?i)\\bsubsequent to\\b",
+    "replacement": "after",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "subsequent to",
+    "negative": "after",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.at_the_present_time",
+    "pattern": "(?i)\\bat the present time\\b",
+    "replacement": "now",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "at the present time",
+    "negative": "now",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.in_the_event_that",
+    "pattern": "(?i)\\bin the event that\\b",
+    "replacement": "if",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "in the event that",
+    "negative": "if",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.in_spite_of_the_fact_that",
+    "pattern": "(?i)\\bin spite of the fact that\\b",
+    "replacement": "although",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "in spite of the fact that",
+    "negative": "although",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.with_regard_to",
+    "pattern": "(?i)\\bwith regard to\\b",
+    "replacement": "about",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "with regard to",
+    "negative": "about",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.a_large_number_of",
+    "pattern": "(?i)\\ba large number of\\b",
+    "replacement": "many",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "a large number of",
+    "negative": "many",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.on_a_daily_basis",
+    "pattern": "(?i)\\bon a daily basis\\b",
+    "replacement": "daily",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "on a daily basis",
+    "negative": "daily",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.has_the_ability_to",
+    "pattern": "(?i)\\bhas the ability to\\b",
+    "replacement": "can",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "has the ability to",
+    "negative": "can",
+    "provenance": "parzr original rule"
+  },
+  {
+    "id": "concise.phrase.at_a_later_date",
+    "pattern": "(?i)\\bat a later date\\b",
+    "replacement": "later",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "reason": "Use a shorter equivalent expression.",
+    "positive": "at a later date",
+    "negative": "later",
+    "provenance": "parzr original rule"
+  }
+]

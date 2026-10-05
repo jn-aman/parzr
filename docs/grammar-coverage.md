@@ -1,0 +1,31 @@
+# English correctness coverage
+
+Correctness runs in every mode: grammar/spelling/punctuation → optional tone → grammar/spelling/punctuation. Each correctness phase repeats to a bounded stable result, and the final composed edit plan is checked against the actual rewritten text. Original scalar anchors preserve UTF-16 ranges across stages. Corrections remain reviewable; passive suggestions never apply automatically.
+
+Current assets: 251 contextual grammar rules, 154 phrase corrections, a local 132,786-entry lexical export, and 71,372 attributed English frequency entries adapted from wordfreq 3.1.1. Token analysis adds verb morphology, local clause constraints, pronoun/sentence capitalization, accidental function-word repetition, missing sentence boundaries and punctuation spacing. Tone rules are separate and never run in Fix. Rule counts are not accuracy scores.
+
+| Family | Implemented coverage | Remaining breadth |
+|---|---|---|
+| Spelling | Lexical validity, reviewed short typos, inflection-aware edit-distance-one candidates ranked by frequency and local context, guarded joined-word recovery, dictionary/name protection | Ambiguous candidates, wider syntactic ranking, broader dialect/proper-name handling |
+| Subject/verb agreement | Pronouns and local noun heads, each/every, selected uncountables, there is/are, number constructions, guarded coordination and who clauses | Full clause parsing, complex coordination/relative clauses, collective nouns and dialect-dependent agreement |
+| Verb forms/tense | Authored irregular paradigms and lexicon-verified regular inflections; modal/base, do questions, perfect and passive forms, gerund complements, explicit past-time anchors, fronted negative inversion | Complex auxiliary chains, passive/adjective ambiguity, discourse tense consistency and all verb patterns |
+| Articles | Reviewed consonant/vowel-sound examples, university/user/hour exceptions | Complete phonetic treatment, initialisms/acronyms, determiner/countability context |
+| Pronouns/possessives | Guarded your/you're, its/it's and there/their, selected possessives, between you and me | Broader possessive/reference errors needing syntactic context |
+| Prepositions/comparisons | Selected dependent prepositions, redundant complements, comparatives/superlatives, then/than and less/fewer guards | Phrasal verbs, idiom ambiguity, register/dialect preferences |
+| Punctuation | Missing space after comma/semicolon/colon, whitespace before punctuation, guarded missing sentence boundaries including questions | Comma structure, ambiguous clause boundaries, paired punctuation, quotations, sentence fragments and terminal punctuation |
+| Capitalization/repetition | First-person I, known sentence starts, accidental repeated function words | Titles, acronyms, headings, all contextual repetition |
+| Protection | Fenced/inline code, URLs, paths, email/mentions, numbers, quoted email, signatures, host links/attachments and named/dictionary spans | Host-specific semantic spans and opaque custom editor models |
+
+The 317-case authored workplace regression corpus includes corrections and valid contexts, plus separate Unicode, source-map, negation, entities, protected structures, composed fixes and every-mode invariants. Passing it proves those cases; it is not a representative English benchmark and does not establish general precision or recall.
+
+The [1,000-paragraph challenge](../benchmarks/README.md) includes spelling, grammar and punctuation combinations plus 100 clean controls. It is a development challenge: failures in this set informed these checker changes. Its exact-reference score must not be described as independent held-out accuracy. Fresh regression cases cover the reported failures, valid counterexamples and linked minimal edits that preserve a formatted proper name during inversion. Native TextEdit QA separately checks typing-driven marks, compact inline acceptance, formatting, caret restoration and Undo.
+
+“All English grammar” is the coverage ambition, not a verified claim. Many valid constructions are ambiguous without wider discourse. We must expand detection and explanations without guessing changes to names, facts, negation, timing or intended tone. Uncertain spelling candidates are labeled lower-confidence and remain explicit review choices.
+
+## Extending coverage
+
+Rules live in `engine/rules/grammar.json` and `phrases.json`. Every contextual rule has a stable ID, target capture, exact replacement, explanation, confidence, provenance, positive case and valid negative case. Add end-to-end corpus examples with expected output and intent checks; include counterexamples beyond the regex fixture itself. Run all grammar pipeline, Unicode, rich-text and editor tests. Do not silently drop invalid packs or regexes.
+
+Licensed adaptations retain attribution and source/version hashes. Grammar rules execute in Parzr's own VM. The independent wordfreq data asset and its credits ship inside the app and DMG; its Python exporter is a build-time tool. Broad upstream benchmark numbers are not Parzr's numbers.
+
+Next coverage milestones: independent held-out workplace/general prose corpus; grammatical dependency/phrase analysis; more contextual confusion rules; phonetic article handling; structured punctuation findings; candidate confidence calibration; safe statistical ranking, never generative replacement. Measure false positives and missed errors by family and dialect before promoting a rule to automatic high-confidence status.

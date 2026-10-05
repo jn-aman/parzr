@@ -1,0 +1,94 @@
+Parzr
+Copyright 2026 Parzr contributors. Licensed under Apache-2.0.
+
+Harper lexical data and phrase rules
+Copyright (c) Automattic, Inc. and contributors.
+https://github.com/Automattic/harper
+Apache License, Version 2.0 (resources/ThirdParty/Harper-Apache-2.0.txt).
+Modified: harper-core 1.7.0's curated dictionary exported to a JSON array of
+words and compact metadata flags, used by Parzr's own tokenizer/spelling
+index; 44 reviewed literal rule definitions translated from .weir into
+Parzr's phrase VM with an automatic-correction allowlist. Source hashes and
+version recorded in engine/rules/import-manifest.json. Harper is not a
+runtime dependency in the default build. The optional maintenance exporter
+is built with --features baseline-harper.
+
+Vale Harper rule adaptations
+Copyright (c) 2026 Joseph Kato and contributors.
+https://github.com/vale-cli/Harper
+Apache License, Version 2.0. Original attribution and changes are retained
+in resources/ThirdParty/Vale-Harper-NOTICE.txt. Parzr adapted ThenThan,
+SimplePastToPastParticiple and EachOthersPossessive concepts into Rust regex
+rules with narrower guards and original-coordinate target spans. These
+upstream definitions themselves derive from Harper. This is not the Vale
+runtime, and upstream benchmark scores do not describe Parzr.
+
+Rust dependency license copies, including transitive normal dependencies,
+are shipped under resources/ThirdParty and in the macOS app Resources.
+Compiled default graph:
+  aho-corasick 1.1.5
+  itoa 1.0.18
+  memchr 2.8.3
+  proc-macro2 1.0.107
+  quote 1.0.47
+  regex 1.13.1
+  regex-automata 0.4.18
+  regex-syntax 0.8.11
+  serde 1.0.229
+  serde_core 1.0.229
+  serde_derive 1.0.229
+  serde_json 1.0.151
+  syn 3.0.6
+  unicode-ident 1.0.26
+  zmij 1.0.23
+
+Development tools (Playwright, Swift/Rust compilers and build tooling) are
+not shipped as a product runtime.
+
+Native interface motion
+Pow 1.0.6: Copyright Emerge Tools and contributors. MIT license.
+https://github.com/EmergeTools/Pow
+Used for brief success feedback in native controls. Its resource bundle and
+full license (Resources/ThirdParty/Pow-LICENSE.txt) ship with the app.
+Parzr's icon and brand mark are original project assets.
+
+English word frequency data (wordfreq 3.1.1)
+Copyright Robyn Speer and the credited upstream source contributors.
+https://github.com/rspeer/wordfreq
+Data license: Creative Commons Attribution-ShareAlike 4.0 International.
+https://creativecommons.org/licenses/by-sa/4.0/
+The independent frequency JSON is adapted to the English ASCII entries in
+Parzr's lexical export and rounded to integer Zipf frequencies times 100.
+Attribution, license, changes and source hashes are embedded in the JSON;
+the full upstream credits and citations accompany it in
+resources/ThirdParty/EnglishFrequency-NOTICES.md. Both files ship in the
+app's Resources/ThirdParty directory. Wordfreq's Apache-2.0 Python code is
+used only by the build-time exporter and is not shipped as a runtime.
+
+Local model and runtime
+Qwen3.5-0.8B: Copyright Alibaba/Qwen contributors. Apache License 2.0.
+https://huggingface.co/Qwen/Qwen3.5-0.8B
+The app bundles a text-only Q5_K_M GGUF derived from ggml-org's pinned Q8_0
+conversion; source revisions, SHA-256 hashes and conversion are recorded
+in its Model/manifest.json. The full model license is included in
+resources/ThirdParty/Qwen3.5-LICENSE.txt.
+
+llama.cpp: Copyright Georgi Gerganov and contributors. MIT license.
+https://github.com/ggml-org/llama.cpp
+Revision dd266785c2595775001c1c714bd9d92b3ef34cde. The native runtime is
+built from source with embedded Metal for Apple Silicon arm64 only.
+The app includes the upstream license in Model/llama-LICENSE.txt.
+
+Production edit alignment uses similar 2.7.0 (Apache-2.0),
+unicode-segmentation (MIT/Apache-2.0), and bstr (MIT/Apache-2.0).
+The rule and frequency credits above cover production grammar/spelling passes
+and research source. Production combines those passes with the bundled model.
+
+English word-pair frequency data
+Wolf Garbe / SymSpell; Google Books Ngram contributors; SCOWL contributors.
+SymSpell revision c239062ae02961df18ab7da1671d01b4388204e0, MIT license.
+Underlying Google Books Ngram frequencies: CC-BY-3.0.
+Pairs are filtered to the Parzr lexicon with unchanged counts; no benchmark
+references used. Attribution, source hash, changes and license links are in
+resources/ThirdParty/EnglishBigrams-NOTICES.md and SymSpell-LICENSE.txt.
+This adapted data is embedded in the production engine and ships offline.

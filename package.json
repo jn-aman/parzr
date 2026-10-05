@@ -1,0 +1,11 @@
+{
+  "name": "parzr-verification",
+  "private": true,
+  "scripts": {
+    "test:browser": "playwright test",
+    "test:editors": "node --test tests/editor.test.cjs tests/lsp.test.cjs tests/browser-background.test.cjs tests/vscode-automatic.test.cjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0"
+  }
+}

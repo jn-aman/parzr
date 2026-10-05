@@ -1,0 +1,43 @@
+{
+  "seed": 61004,
+  "base_paragraphs": 100,
+  "combinations_per_base": 10,
+  "corrupted_paragraphs": 1000,
+  "clean_controls": 100,
+  "families": [
+    "past_narrative",
+    "subject_agreement",
+    "modal_verbs",
+    "perfect_tenses",
+    "passive_voice",
+    "articles",
+    "conditionals",
+    "comparisons",
+    "pronouns_possessives",
+    "uncountable_nouns",
+    "gerunds_infinitives",
+    "prepositions",
+    "auxiliary_do",
+    "standard_negation",
+    "relative_clauses",
+    "inversion",
+    "future_forms",
+    "tense_consistency",
+    "real_word_confusions",
+    "questions"
+  ],
+  "combinations": [
+    "grammar_only",
+    "spelling_only",
+    "punctuation_only",
+    "grammar_spelling",
+    "grammar_punctuation",
+    "spelling_punctuation",
+    "grammar_spelling_punctuation",
+    "short_word_spelling",
+    "word_boundaries",
+    "dense_combination"
+  ],
+  "sha256": "50d428206c88badbef80560b218de7a93438cc94b5e6d77ca67381b1580e481b",
+  "scope": "Authored synthetic standard-English challenge set. Exact references are not the only possible grammatical corrections; dialect/style variants require human review."
+}
