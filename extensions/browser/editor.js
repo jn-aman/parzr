@@ -27,7 +27,8 @@
     return find(e);
   }
   function selection(root) { return root.getRootNode().getSelection?.() || window.getSelection(); }
-  const protectedSelector = 'a,code,pre,[contenteditable="false"],[data-mention],[data-entity-type="mention"],img';
+  // Mention and chip markup of common web composers. Real Teams, Slack, Gmail, Outlook, Docs, Notion and LinkedIn DOM is unverified.
+  const protectedSelector = ['a','code','pre','[contenteditable="false"]','[data-mention]','[data-entity-type="mention"]','img','[itemtype*="schema.skype.com/Mention"]','[data-tid*="mention" i]','[data-stringify-type="mention"]','.c-member_slug','.c-mrkdwn__user_group','[data-hovercard-id]','[data-chip-type]','[class*="mention-token"]','.ql-mention','[data-denotation-char]'].join(',');
   const blockSelector = 'p,div,li,blockquote,h1,h2,h3,h4,h5,h6';
   function richModel(root) {
     let text = ''; const segments = [], protectedRanges = [];

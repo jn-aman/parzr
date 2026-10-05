@@ -56,6 +56,8 @@ for arch in architectures:
     out = cache/f'libparzr_model-{arch}.dylib'; outputs.append(out)
     command = ['clang++', '-std=c++17', '-O3', '-dynamiclib', '-arch', arch, '-mmacosx-version-min=13.0', remap, '-I', source/'include', '-I', source/'ggml/include', ROOT/'native/model.mm', *libraries, '-framework', 'Accelerate', '-framework', 'Foundation', '-framework', 'NaturalLanguage', '-fobjc-arc']
     command += ['-framework', 'Metal', '-framework', 'MetalKit']
+    # AppKit: NSSpellChecker tells lowercase names apart from typos (see parzr_model_token_hints).
+    command += ['-framework', 'AppKit']
     command += ['-Wl,-install_name,@rpath/libparzr_model.dylib', '-o', out]
     run(command)
 quantized = cache/MODEL_NAME

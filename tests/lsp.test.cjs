@@ -1,7 +1,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const {spawnSync}=require('node:child_process');
 const uri='file:///parzr-synthetic-fixture.md';
 function frame(message){const body=Buffer.from(JSON.stringify({jsonrpc:'2.0',...message}));return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`),body]);}
-function run(messages){const input=Buffer.concat([...messages,{id:99,method:'shutdown'},{method:'exit'}].map(frame));const p=spawnSync('engine/target/release/parzr-lsp',[],{input,timeout:180000});assert.equal(p.status,0,p.stderr?.toString());const out=[];let bytes=p.stdout;while(bytes.length){const split=bytes.indexOf('\r\n\r\n');assert.ok(split>=0);const length=Number(bytes.subarray(0,split).toString().match(/Content-Length: (\d+)/)[1]);out.push(JSON.parse(bytes.subarray(split+4,split+4+length)));bytes=bytes.subarray(split+4+length);}return out;}
+function run(messages,env){const input=Buffer.concat([...messages,{id:99,method:'shutdown'},{method:'exit'}].map(frame));const p=spawnSync('engine/target/release/parzr-lsp',[],{input,timeout:180000,env:env&&{...process.env,...env}});assert.equal(p.status,0,p.stderr?.toString());const out=[];let bytes=p.stdout;while(bytes.length){const split=bytes.indexOf('\r\n\r\n');assert.ok(split>=0);const length=Number(bytes.subarray(0,split).toString().match(/Content-Length: (\d+)/)[1]);out.push(JSON.parse(bytes.subarray(split+4,split+4+length)));bytes=bytes.subarray(split+4+length);}return out;}
 function open(text,languageId='markdown',version=7){return {method:'textDocument/didOpen',params:{textDocument:{uri,text,languageId,version}}};}
 function actions(start,end,id=2){return {id,method:'textDocument/codeAction',params:{textDocument:{uri},range:{start,end},context:{diagnostics:[]}}};}
 test('LSP initializes UTF-16/full-sync capabilities and publishes actual grammar diagnostics',()=>{const out=run([{id:1,method:'initialize',params:{}},open('😀 I recieved your mesage.')]);assert.equal(out[0].result.capabilities.positionEncoding,'utf-16');const diagnostic=out.find(m=>m.method==='textDocument/publishDiagnostics');assert.equal(diagnostic.params.version,7);assert.ok(diagnostic.params.diagnostics.some(d=>d.range.start.character===5&&d.code==='grammar.phrase.23'&&d.message==='Use the standard spelling.'));});
@@ -10,3 +10,19 @@ test('LSP selected prose cannot rewrite a surrounding fenced code block',()=>{co
 test('LSP protects unsupported code documents and rejects split-surrogate ranges',()=>{const out=run([open('teh mesage','rust'),actions({line:0,character:0},{line:0,character:10}),open('😀 teh','plaintext',8),actions({line:0,character:1},{line:0,character:6},3)]);assert.deepEqual(out.find(m=>m.id===2).result,[]);assert.deepEqual(out.find(m=>m.id===3).result,[]);});
 test('LSP oversized framing terminates without body allocation or output',()=>{const p=spawnSync('engine/target/release/parzr-lsp',[],{input:'Content-Length: 999999999\r\n\r\n',timeout:2000});assert.equal(p.status,0);assert.equal(p.stdout.length,0);});
 test('LSP one quickfix applies both linked word-order parts',()=>{const original='Not only Mira did help.';const out=run([open(original,'plaintext'),actions({line:0,character:8},{line:0,character:8})]);const list=out.find(m=>m.id===2).result;const quick=list.find(a=>a.kind==='quickfix');assert.ok(quick);const edits=quick.edit.documentChanges[0].edits;assert.equal(edits.length,2);let text=original;for(const e of [...edits].reverse()){text=text.slice(0,e.range.start.character)+e.newText+text.slice(e.range.end.character);}assert.equal(text,'Not only did Mira help.');});
+
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const starts=out=>out.find(m=>m.method==='textDocument/publishDiagnostics').params.diagnostics.map(d=>d.range.start.character);
+test('LSP initializationOptions.names protect a word the engine would otherwise respell',()=>{
+ assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')])).includes(4));
+ assert.ok(!starts(run([{id:1,method:'initialize',params:{initializationOptions:{names:['mesage']}}},open('Ask mesage about it.')])).includes(4));
+});
+test('LSP merges the app known-words.json from HOME',()=>{
+ const home=fs.mkdtempSync(path.join(os.tmpdir(),'parzr-home-'));try{
+  fs.mkdirSync(path.join(home,'Library/Application Support/Parzr'),{recursive:true});
+  fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),JSON.stringify({version:1,dictionary:[],names:['mesage']}));
+  assert.ok(!starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')],{HOME:home})).includes(4));
+  fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),'not json');
+  assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')],{HOME:home})).includes(4));
+ }finally{fs.rmSync(home,{recursive:true,force:true});}
+});

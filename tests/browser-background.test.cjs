@@ -32,3 +32,16 @@ test('untrusted callers and oversized writing metadata cannot start inference',(
  request(0,{text:'text',mode:'fix',protected_ranges:new Array(4097).fill({})},r=>result=r);
  assert.match(result.error,/metadata/);assert.equal(sent.length,0);
 });
+test('dictionary and names are forwarded unchanged and names are never capitalized unless asked',()=>{
+ const {request,sent}=background();
+ request(0,{text:'Hi aman jain.',mode:'fix',dictionary:['Parzr','Zorblax'],names:['aman jain']},()=>{});
+ assert.deepEqual([...sent[0].dictionary],['Parzr','Zorblax']);assert.deepEqual([...sent[0].names],['aman jain']);assert.equal(sent[0].capitalize_names,false);
+});
+test('missing vocabulary defaults safely and malformed vocabulary is rejected',()=>{
+ const {request,sent}=background();let result;
+ request(0,{text:'Plain.',mode:'fix'},()=>{});
+ assert.deepEqual([...sent[0].dictionary],['Parzr']);assert.deepEqual([...sent[0].names],[]);
+ request(1,{text:'Bad.',mode:'fix',names:[1]},r=>result=r);assert.match(result.error,/metadata/);
+ request(2,{text:'Big.',mode:'fix',names:new Array(2001).fill('a')},r=>result=r);assert.match(result.error,/metadata/);
+ assert.equal(sent.length,1);
+});

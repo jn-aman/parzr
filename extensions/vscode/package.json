@@ -6,6 +6,6 @@
   "contributes": {
     "commands": [{"command": "parzr.rewrite", "title": "Parzr: Improve selected text"}],
     "keybindings": [{"command": "parzr.rewrite", "key": "alt+space", "mac": "alt+space", "when": "editorTextFocus && editorHasSelection"}],
-    "configuration": {"title": "Parzr", "properties": {"parzr.automatic": {"type":"boolean", "default":true, "description":"Underline grammar issues while typing in local prose documents."}, "parzr.enginePath": {"type":"string", "scope":"machine", "default":"/Applications/Parzr.app/Contents/MacOS/parzr-engine", "description":"Path to the local Parzr engine executable. Run locally on macOS."}}}
+    "configuration": {"title": "Parzr", "properties": {"parzr.automatic": {"type":"boolean", "default":true, "description":"Underline grammar issues while typing in local prose documents."}, "parzr.dictionary": {"type":"array", "items":{"type":"string"}, "default":[], "description":"Extra words Parzr must never respell."}, "parzr.names": {"type":"array", "items":{"type":"string"}, "default":[], "description":"People, places and brands Parzr must leave alone (only capitalization may change)."}, "parzr.enginePath": {"type":"string", "scope":"machine", "default":"/Applications/Parzr.app/Contents/MacOS/parzr-engine", "description":"Path to the local Parzr engine executable. Run locally on macOS."}}}
   }
 }

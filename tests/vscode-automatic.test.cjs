@@ -40,3 +40,12 @@ test('VS Code invalidates stale inline actions before a changed draft can be edi
 test('VS Code never automatically submits source code or remote documents',async()=>{
  const h=harness('teh mesage','rust');try{await wait(250);assert.equal(h.requests.length,0);h.doc.languageId='plaintext';h.api.env.remoteName='ssh-remote';h.events.editor();await wait(250);assert.equal(h.requests.length,0);}finally{h.dispose();}
 });
+test('VS Code sends the app known-words file and settings, and never capitalizes names',async()=>{
+ const os=require('node:os'),home=fs.mkdtempSync(path.join(os.tmpdir(),'parzr-home-')),previous=process.env.HOME;
+ fs.mkdirSync(path.join(home,'Library/Application Support/Parzr'),{recursive:true});
+ fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),JSON.stringify({version:1,dictionary:['Zorblax','parzr'],names:['aman jain']}));
+ process.env.HOME=home;let h;
+ try{h=harness('Ask mesage about it.');await until(()=>h.diagnostics.has(h.doc.uri.toString()));
+  const r=h.requests[0];assert.deepEqual(r.dictionary,['Parzr','Zorblax']);assert.deepEqual(r.names,['aman jain']);assert.equal(r.capitalize_names,false);
+ }finally{process.env.HOME=previous;h?.dispose();fs.rmSync(home,{recursive:true,force:true});}
+});

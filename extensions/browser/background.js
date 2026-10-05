@@ -41,7 +41,9 @@ api.commands.onCommand.addListener(async command => { if (command === 'rewrite')
 api.runtime.onMessage.addListener((message, sender, respond) => {
   if (message?.type !== 'parzr-rewrite' || !sender.tab || sender.id !== api.runtime.id || !/^https?:\/\/|^file:\/\//.test(sender.url || '')) return;
   const incoming = message.request;
-  const request = incoming && { text: incoming.text, mode: incoming.mode, deep: incoming.deep !== false, dictionary: ['Parzr'], protected_ranges: incoming.protected_ranges || [], sentence_start: incoming.sentence_start !== false, sentence_end: incoming.sentence_end !== false };
+  const request = incoming && { text: incoming.text, mode: incoming.mode, deep: incoming.deep !== false, dictionary: incoming.dictionary ?? ['Parzr'], names: incoming.names ?? [], capitalize_names: incoming.capitalize_names === true, protected_ranges: incoming.protected_ranges || [], sentence_start: incoming.sentence_start !== false, sentence_end: incoming.sentence_end !== false };
+  const words = list => Array.isArray(list) && list.length <= 2000 && list.every(w => typeof w === 'string' && w.length <= 128);
+  if (request && !(words(request.dictionary) && words(request.names))) { respond({error: 'Invalid editor metadata.'}); return; }
   if (!Array.isArray(request?.protected_ranges) || request.protected_ranges.length > 4096) { respond({error: 'Invalid editor metadata.'}); return; }
   if (!request || typeof request.text !== 'string' || new TextEncoder().encode(request.text).length > 65536 || !['fix','professional','friendly','concise','direct'].includes(request.mode)) { respond({ error: 'Invalid writing request.' }); return; }
   // Keep one warm process for all tabs and retain only the latest queued request per tab.

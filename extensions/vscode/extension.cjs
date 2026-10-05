@@ -1,7 +1,9 @@
 'use strict';
 const vscode = require('vscode');
 const { spawn } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, statSync, readFileSync } = require('node:fs');
+const { homedir } = require('node:os');
+const { join } = require('node:path');
 const modes = ['Fix', 'Professional', 'Friendly', 'Concise', 'Direct'];
 let processHandle;
 const documents = new Map();
@@ -10,6 +12,33 @@ const { StringDecoder } = require('node:string_decoder');
 let decoder = new StringDecoder('utf8');
 let engineQueue = Promise.resolve();
 const proseLanguages = ['plaintext', 'markdown', 'mdx', 'git-commit'];
+// The macOS app's dictionary and names, re-read only when the file's mtime changes.
+let known = {stamp: 0, dictionary: [], names: []};
+function knownWords() {
+  const file = join(homedir(), 'Library', 'Application Support', 'Parzr', 'known-words.json');
+  let stamp = 0, size = 0;
+  try { const stat = statSync(file); stamp = stat.mtimeMs; size = stat.size; } catch {}
+  if (stamp !== known.stamp) {
+    known = {stamp, dictionary: [], names: []};
+    try {
+      if (stamp && size <= 1 << 20) { const data = JSON.parse(readFileSync(file, 'utf8')); known.dictionary = data.dictionary; known.names = data.names; }
+    } catch {}
+  }
+  return known;
+}
+function merge(cap, ...lists) {
+  const seen = new Set(), out = [];
+  for (const word of lists.flatMap(list => Array.isArray(list) ? list : [])) {
+    if (typeof word !== 'string' || !word.trim() || Buffer.byteLength(word) > 128 || seen.has(word.toLowerCase())) continue;
+    seen.add(word.toLowerCase()); out.push(word);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
+function vocabulary() {
+  const configuration = vscode.workspace.getConfiguration('parzr'), words = knownWords();
+  return {dictionary: merge(1000, ['Parzr'], configuration.get('dictionary', []), words.dictionary), names: merge(2000, configuration.get('names', []), words.names), capitalize_names: false};
+}
 function localDocument(doc) { return !vscode.env.remoteName && ['file', 'untitled'].includes(doc.uri.scheme); }
 function runEngine(path, request, current = () => true) {
   const task = engineQueue.then(() => {
@@ -73,7 +102,7 @@ function activate(context) {
     const current = () => generation === checkGeneration && !doc.isClosed && doc.version === version && vscode.window.activeTextEditor?.document === doc;
     checkTimer = setTimeout(async () => {
       try {
-        const result = await runEngine(configuration.get('enginePath'), {text, mode:'fix', deep:false, dictionary:['Parzr']}, current);
+        const result = await runEngine(configuration.get('enginePath'), {text, mode:'fix', deep:false, ...vocabulary()}, current);
         if (!current()) return;
         validatePlan(text, result);
         checked.set(uri, {doc, version, text, result});
@@ -146,7 +175,7 @@ function activate(context) {
     if (!mode) return;
     try {
       const path = vscode.workspace.getConfiguration('parzr').get('enginePath');
-      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Parzr · Checking locally' }, () => runEngine(path, { text, mode: mode.toLowerCase(), deep: true, dictionary: ['Parzr'], sentence_start: /^[\s]*$/.test(doc.lineAt(selection.start.line).text.slice(0, selection.start.character)) || /[.!?]\s*$/.test(doc.lineAt(selection.start.line).text.slice(0, selection.start.character)), sentence_end: doc.offsetAt(selection.end) === doc.getText().length || /[.!?\n]\s*$/.test(text) }));
+      const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Parzr · Checking locally' }, () => runEngine(path, { text, mode: mode.toLowerCase(), deep: true, ...vocabulary(), sentence_start: /^[\s]*$/.test(doc.lineAt(selection.start.line).text.slice(0, selection.start.character)) || /[.!?]\s*$/.test(doc.lineAt(selection.start.line).text.slice(0, selection.start.character)), sentence_end: doc.offsetAt(selection.end) === doc.getText().length || /[.!?\n]\s*$/.test(text) }));
       validatePlan(text, result);
       if (!result.edits.length) { vscode.window.showInformationMessage('Looks good. No changes needed.'); return; }
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;

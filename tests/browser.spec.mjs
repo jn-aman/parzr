@@ -137,3 +137,33 @@ test('clicking the actual rich-text word opens a full sentence preview and prese
  await click(page,'Apply suggestion'); await expect(page.locator('[contenteditable]')).toHaveText('This is not how it is suppose to be done.');
  await page.evaluate(()=>document.execCommand('undo')); await expect(page.locator('#word')).toHaveText('Done');
 });
+
+const chips=[
+ ['Teams itemtype','<span itemscope itemtype="http://schema.skype.com/Mention" itemid="0">mesage</span>'],
+ ['Teams data-tid','<span data-tid="mention-chip">mesage</span>'],
+ ['Slack stringify','<span data-stringify-type="mention">mesage</span>'],
+ ['Slack member slug','<span class="c-member_slug">mesage</span>'],
+ ['Slack user group','<span class="c-mrkdwn__user_group">mesage</span>'],
+ ['Gmail hovercard','<span data-hovercard-id="mira@example.com">mesage</span>'],
+ ['Outlook mention','<span data-mention="mira">mesage</span>'],
+ ['Outlook mailto','<a href="mailto:mira@example.com">mesage</a>'],
+ ['Docs smart chip','<span data-chip-type="person">mesage</span>'],
+ ['Notion mention token','<span class="notion-page-mention-token">mesage</span>'],
+ ['LinkedIn Quill mention','<span class="ql-mention">mesage</span>'],
+ ['Quill mention data','<span class="mention" data-denotation-char="@">mesage</span>'],
+];
+for(const [name,chip] of chips) test(`mention chip is protected: ${name}`,async({page})=>{
+ await setup(page,`<div id="editor" contenteditable="true">I recieved ${chip} today.</div>`);
+ await page.evaluate(()=>{const e=document.querySelector('#editor');e.focus();const r=document.createRange();r.selectNodeContents(e);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+ await open(page);await click(page,'Fix all');
+ await expect(page.locator('#editor > *')).toHaveText('mesage');expect(await page.locator('#editor').textContent()).toContain('I received');
+});
+test('an ordinary span is not protected, so the chip tests prove something',async({page})=>{
+ await setup(page,'<div id="editor" contenteditable="true">I recieved <span class="plain">mesage</span> today.</div>');
+ await page.evaluate(()=>{const e=document.querySelector('#editor');e.focus();const r=document.createRange();r.selectNodeContents(e);const s=getSelection();s.removeAllRanges();s.addRange(r);});
+ await open(page);await click(page,'Fix all');expect(await page.locator('#editor').textContent()).toMatch(/\bmessage\b/);
+});
+test('browser requests carry the dictionary, no names, and never capitalize names',async({page})=>{
+ await setup(page,'<textarea>I recieved your mesage.</textarea>');await page.locator('textarea').focus();await page.evaluate(script);await marks(page);
+ expect(await page.evaluate(()=>window.__parzrRequests.every(r=>r.capitalize_names===false&&r.names.length===0&&r.dictionary.includes('Parzr')))).toBe(true);
+});

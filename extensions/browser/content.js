@@ -41,7 +41,7 @@ footer{margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}.error{c
     place(); return {host,section,place};
   }
   async function request(snapshot,mode = 'fix',deep = false) {
-    const result = await (globalThis.browser || chrome).runtime.sendMessage({type:'parzr-rewrite',request:{text:snapshot.text,mode,deep,dictionary:['Parzr'],protected_ranges:snapshot.protectedRanges,sentence_start:snapshot.sentenceStart,sentence_end:snapshot.sentenceEnd}});
+    const result = await (globalThis.browser || chrome).runtime.sendMessage({type:'parzr-rewrite',request:{text:snapshot.text,mode,deep,dictionary:['Parzr'],names:[],capitalize_names:false,protected_ranges:snapshot.protectedRanges,sentence_start:snapshot.sentenceStart,sentence_end:snapshot.sentenceEnd}});
     if (result?.error) throw new Error(result.error);
     snapshot.validate(result); return result;
   }

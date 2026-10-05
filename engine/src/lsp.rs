@@ -5,6 +5,8 @@ use std::{
     collections::HashMap,
     io::{self, BufRead, Read, Write},
 };
+#[path = "known_words.rs"]
+mod known_words;
 const MAX_MESSAGE: usize = 524_288;
 struct Document {
     text: String,
@@ -102,17 +104,26 @@ fn editable(doc: &Document) -> bool {
         && doc.text.len() <= parzr_engine::MAX_TEXT_BYTES
 }
 fn request(text: &str, mode: Mode, options: &Value) -> Request {
-    Request {
-        text: text.into(),
-        mode,
-        dictionary: options["dictionary"]
+    let list = |key: &str| -> Vec<String> {
+        options[key]
             .as_array()
             .map(|v| {
                 v.iter()
                     .filter_map(|x| x.as_str().map(String::from))
                     .collect()
             })
-            .unwrap_or_default(),
+            .unwrap_or_default()
+    };
+    let known = known_words::current();
+    Request {
+        text: text.into(),
+        mode,
+        dictionary: known_words::merge(
+            list("dictionary"),
+            &known.dictionary,
+            known_words::MAX_DICTIONARY,
+        ),
+        names: known_words::merge(list("names"), &known.names, known_words::MAX_NAMES),
         dialect: options["dialect"].as_str().unwrap_or("").into(),
         ..Request::default()
     }
