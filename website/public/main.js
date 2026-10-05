@@ -101,36 +101,66 @@ async function fxPlay(el, o = {}) {
   if (settle) { await sleep(1000); if (live()) el.classList.remove('done'); }
 }
 
-/* ---------- Floating struck fragments (depth 5) ---------- */
+/* ---------- Floating struck fragments: quiet, in the gutters, never on text ---------- */
 const PAIRS = [['teh', 'the'], ['recieved', 'received'], ['definately', 'definitely'], ['alot', 'a lot'], ['seperate', 'separate'], ['mesage', 'message'], ['chek', 'check'], ['wich', 'which'], ['thier', 'their'], ['untill', 'until'], ['occured', 'occurred'], ['becuase', 'because'], ['freind', 'friend'], ['wierd', 'weird'], ['goverment', 'government'], ['tommorow', 'tomorrow']];
 const BITS = ['teh', 'e', 'ing', 'ed', 'th', 'ie', 'ei', 'ss', 'wich', 'tion', 'ae', 'ph', 'alot', 'nd'];
-function frags(host, count, seed, pairs, zone) {
-  const r = rng(seed), n = COARSE ? Math.ceil(count * .55) : count, out = [];
+const SMALL = () => innerWidth < 761;
+// Text is measured tightly (per line box); visual boxes are measured whole.
+const TEXT_SEL = 'h1,h2,h3,p,li,dt,dd,summary,pre,figcaption,.eyebrow,.step,.rowlab span';
+const BOX_SEL = '.btn,.chip,.mchip,.card,.win,.mstage,.tile,.code,.shot,.gdocs,.build-box,.marquee,.scroll-cue';
+function obstacles(host, pad) {
+  const scope = host.closest('.pin') || host.parentElement, H = host.getBoundingClientRect(), out = [];
+  const add = (r, p) => { if (r.width > 1 && r.height > 1) out.push({ l: r.left - H.left - p, t: r.top - H.top - p, r: r.right - H.left + p, b: r.bottom - H.top + p }); };
+  scope.querySelectorAll(TEXT_SEL).forEach(el => {
+    if (el.closest('.layer, .sr-only') || el.classList.contains('sr-only')) return;
+    const rg = document.createRange(); rg.selectNodeContents(el);
+    Array.from(rg.getClientRects()).forEach(r => add(r, pad));
+  });
+  scope.querySelectorAll(BOX_SEL).forEach(el => { if (!el.closest('.layer')) add(el.getBoundingClientRect(), pad); });
+  const av = host.dataset.avoid; // "x0,x1" in percent of host width, for scenes whose art moves while scrolling
+  if (av) { const [x0, x1] = av.split(',').map(Number); out.push({ l: H.width * x0 / 100, t: -1e4, r: H.width * x1 / 100, b: 1e5 }); }
+  return out;
+}
+function frags(host, count, seed, pairs) {
+  const r = rng(seed), small = SMALL(), n = Math.min(count, small ? 8 : 18), out = [];
+  const sec = host.closest('section'), cv = sec.style.contentVisibility;
+  sec.style.contentVisibility = 'visible'; // sections that skip rendering must be laid out to be measured
+  const W = host.clientWidth, Hh = host.clientHeight, PAD = 24, MOVE = 40; // MOVE: drift and parallax travel
+  const obs = obstacles(host, PAD + MOVE), placed = [];
+  sec.style.contentVisibility = cv;
+  const hit = (b, list) => list.some(o => b.l < o.r && b.r > o.l && b.t < o.b && b.b > o.t);
   for (let i = 0; i < n; i++) {
-    const far = r() < .38;
-    const left = r() < .5;
-    let x;
-    if (zone === 'right') x = 70 + r() * 25;
-    else if (zone === 'sides' || (!zone && !far)) x = left ? 1 + r() * 14 : 82 + r() * 14;
-    else x = 4 + r() * 88;
-    const y = zone === 'bands' ? (r() < .5 ? 4 + r() * 13 : 84 + r() * 10) : 6 + r() * 84;
-    const pair = pairs ? PAIRS[i % PAIRS.length] : null;
+    const far = r() < .4;
+    const size = far ? 14 + r() * 4 : 17 + r() * 5;
+    const pool = small ? PAIRS.filter(p => p[0].length < 6) : PAIRS, bit = BITS[Math.floor(r() * BITS.length)];
+    const pair = pairs ? pool[i % pool.length] : [bit, bit];
+    const w = Math.max(pair[0].length, pair[1].length) * size * .56 + 6, h = size * 1.3;
+    let spot = null;
+    for (let k = 0; k < 40 && !spot; k++) {
+      const side = r() < .65;
+      let x = side ? (r() < .5 ? 6 + r() * (W * .14 - w) : W * .86 + r() * (W * .14 - w - 8)) : 12 + r() * (W - w - 24);
+      const y = 84 + r() * Math.max(1, Hh - h - 100); // 84px clears the fixed nav
+      x = Math.max(6, Math.min(W - w - 6, x));
+      const b = { l: x - MOVE, t: y - MOVE, r: x + w + MOVE, b: y + h + MOVE };
+      if (!hit(b, obs) && !hit({ l: x, t: y, r: x + w, b: y + h }, placed.map(p => ({ l: p.l - 16, t: p.t - 12, r: p.r + 16, b: p.b + 12 })))) spot = { x, y, l: x, t: y, r: x + w, b: y + h };
+    }
+    if (!spot) continue;
+    placed.push(spot);
     const el = document.createElement('span');
-    el.className = 'frag' + (far ? ' blur' : '');
-    const size = far ? 15 + r() * 14 : 20 + r() * 26;
+    el.className = 'frag';
     const set = (k, v) => el.style.setProperty(k, v);
-    set('--x', x.toFixed(1) + '%'); set('--y', y.toFixed(1) + '%'); set('--s', size.toFixed(0) + 'px');
-    set('--o', (far ? .16 + r() * .12 : .34 + r() * .24).toFixed(2));
-    set('--d', ((far ? 10 : 28) * (r() < .5 ? -1 : 1) * (.6 + r() * .8)).toFixed(0));
-    set('--sy', (-(far ? 60 : 180) * (.5 + r())).toFixed(0));
-    set('--t', (7 + r() * 8).toFixed(1) + 's'); set('--dl', (-r() * 8).toFixed(1) + 's');
-    set('--dx', ((r() - .5) * 40).toFixed(0) + 'px'); set('--dy', ((r() - .5) * 60).toFixed(0) + 'px');
-    set('--r0', ((r() - .5) * 10).toFixed(1) + 'deg'); set('--r1', ((r() - .5) * 14).toFixed(1) + 'deg');
+    set('--x', (spot.x / W * 100).toFixed(2) + '%'); set('--y', (spot.y / Hh * 100).toFixed(2) + '%'); set('--s', size.toFixed(0) + 'px');
+    set('--o', (.12 + r() * .2).toFixed(2));
+    set('--d', ((far ? 6 : 12) * (r() < .5 ? -1 : 1) * (.6 + r() * .8)).toFixed(0));
+    set('--sy', (-(far ? 18 : 40) * (.5 + r() * .5)).toFixed(0));
+    set('--t', (8 + r() * 8).toFixed(1) + 's'); set('--dl', (-r() * 8).toFixed(1) + 's');
+    set('--dx', ((r() - .5) * 20).toFixed(0) + 'px'); set('--dy', ((r() - .5) * 24).toFixed(0) + 'px');
+    set('--r0', ((r() - .5) * 6).toFixed(1) + 'deg'); set('--r1', ((r() - .5) * 8).toFixed(1) + 'deg');
     const inner = document.createElement('span');
     inner.className = 'fi';
-    const a = document.createElement('span'); a.className = 'a'; a.textContent = pair ? pair[0] : BITS[Math.floor(r() * BITS.length)];
+    const a = document.createElement('span'); a.className = 'a'; a.textContent = pair[0];
     inner.append(a);
-    if (pair) { const b = document.createElement('span'); b.className = 'b'; b.textContent = pair[1]; inner.append(b); }
+    if (pairs) { const b = document.createElement('span'); b.className = 'b'; b.textContent = pair[1]; inner.append(b); }
     el.append(inner); host.append(el);
     out.push(el);
   }
@@ -180,7 +210,7 @@ function jumpTo(s, p) { // scroll so that scene s reaches progress p
 function hero(el) {
   const h1 = $('.hero-h', el), words = $$('.fx', h1), host = $('#frags', el);
   words.forEach(fxInit);
-  const fr = frags(host, 16, 7, true);
+  const fr = frags(host, 14, 7, true);
   const thr = fr.map((_, i) => .08 + i * (.4 / fr.length));
   let third = false;
   const fixThird = () => { if (third) return; third = true; fxPlay(words[2], { hold: 380 }); };
@@ -315,15 +345,23 @@ function demo(el) {
 
 /* ---------- 3. Privacy: manifesto lights up word by word ---------- */
 function privacy(el) {
-  const h = $('[data-manifesto]', el);
-  const words = h.textContent.trim().split(/\s+/);
-  h.textContent = '';
-  const spans = words.map((w, i) => {
-    const s = document.createElement('span');
-    s.className = 'mw' + (w === 'No' ? ' hl' : '');
-    s.textContent = w + (i < words.length - 1 ? ' ' : '');
-    h.append(s); return s;
+  const h = $('[data-manifesto]', el), spans = [];
+  // Split into per-word spans but keep the authored <br> and .nw phrase wrappers, so phrase pairs never split.
+  const split = (node, into) => Array.from(node.childNodes).forEach(c => {
+    if (c.nodeType === 3) {
+      c.textContent.split(/(\s+)/).forEach(t => {
+        if (!t) return;
+        if (/^\s+$/.test(t)) { into.append(t); return; }
+        const s = document.createElement('span');
+        s.className = 'mw' + (t === 'No' ? ' hl' : ''); s.textContent = t;
+        into.append(s); spans.push(s);
+      });
+    } else if (c.nodeType === 1 && c.classList.contains('nw')) {
+      const w = document.createElement('span'); w.className = 'nw'; split(c, w); into.append(w);
+    } else into.append(c.cloneNode(true));
   });
+  const tmp = document.createElement('div'); split(h, tmp);
+  h.replaceChildren(...tmp.childNodes);
   if (RM) return { update() {} };
   const n = spans.length;
   return {
@@ -552,7 +590,7 @@ function boot() {
   const mods = {
     hero, demo, privacy, modes: el => modes(el, mods._s), showcase, final,
   };
-  $$('.fg').forEach((h, i) => { if (!RM) frags(h, +h.dataset.n || 8, 100 + i * 13, false, h.dataset.zone); });
+  $$('.fg').forEach((h, i) => { if (!RM) frags(h, +h.dataset.n || 8, 100 + i * 13, false); });
   $$('[data-scene]').forEach(el => {
     const name = el.dataset.scene, holder = {};
     mods._s = holder;
