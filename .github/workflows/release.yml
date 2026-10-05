@@ -60,7 +60,8 @@ jobs:
           git config user.name "$ACTOR"
           git config user.email "${ACTOR_ID}+${ACTOR}@users.noreply.github.com"
           git add engine/Cargo.toml engine/Cargo.lock resources/Info.plist extensions/browser/manifest.json extensions/vscode/package.json
-          if [ -n "$(git status --porcelain)" ]; then
+          # Anything not staged above (modified or untracked) is unexpected.
+          if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
             echo "::error::Unexpected changes outside the version files."
             git status --short
             exit 1
