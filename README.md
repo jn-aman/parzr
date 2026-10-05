@@ -1,47 +1,150 @@
-# Parzr
+<p align="center">
+  <img src="resources/Brand/ParzrIcon.png" width="112" alt="Parzr">
+</p>
 
-**A writing assistant that lives on your Mac. Offline. Open source. Free.**
+<h1 align="center">Parzr</h1>
 
-Parzr underlines grammar, spelling and punctuation as you write, in the apps you already use. Click a flagged word to see the whole corrected sentence and fix it in one keystroke. Select a passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct. Everything runs on your Mac: no account, no cloud, no telemetry.
+<p align="center">
+  <b>Write like you meant it.</b><br>
+  Grammar, spelling and tone help in every app on your Mac.<br>
+  Offline. Open source. Free.
+</p>
 
-[**Download the public beta**](https://github.com/jn-aman/parzr/releases/latest) · [parzr.app](https://parzr.app) · Apple Silicon · macOS 13 or later
+<p align="center">
+  <a href="https://github.com/jn-aman/parzr/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://parzr.app">parzr.app</a> ·
+  <a href="https://github.com/jn-aman/parzr/issues">Report a bug</a>
+</p>
 
-![The Parzr correction card: the corrected sentence with removed words struck through and fixes in mint](docs/qa/screenshots/inline.png)
+<p align="center">
+  <a href="https://github.com/jn-aman/parzr/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/jn-aman/parzr?label=public%20beta&color=24754D"></a>
+  <img alt="macOS 13+" src="https://img.shields.io/badge/macOS-13%2B-202629">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-native-202629">
+  <img alt="Offline" src="https://img.shields.io/badge/works-offline-24754D">
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-202629"></a>
+</p>
 
-> **Public beta.** Parzr v0.1 is signed and notarized by Apple. English coverage is growing, and Parzr will not catch every error or work in every app's custom editor. Please [report what you find](https://github.com/jn-aman/parzr/issues).
+<p align="center">
+  <img src="docs/media/hero.png" width="860" alt="The parzr.app hero: the headline corrects itself while an editor keeps the name aman jain and underlines recieved and teh in red">
+</p>
+
+---
+
+Parzr underlines mistakes as you write, in the apps you already use. Click the flagged word and the card shows the **whole corrected sentence**; press Return and every error in it is fixed. Select any passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct.
+
+Everything runs on your Mac. No account, no cloud, no telemetry, no extension.
+
+> **Public beta.** Signed and notarized by Apple. English coverage is growing and Parzr will not catch every error. Please [tell us what you find](https://github.com/jn-aman/parzr/issues).
+
+## Highlights
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**One keystroke fixes the sentence**<br>
+The card leads with the corrected sentence: removed words struck through, fixes in mint. Return applies all of them.
+
+</td>
+<td width="50%" valign="top">
+
+**Red for mistakes, blue for style**<br>
+Solid, thick underlines you cannot miss, like the tools you know. Hover to highlight, click the word to fix it.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Built to respect names**<br>
+"aman jain", "thanks, priya": never "corrected", even in lowercase. Parzr learns names from your undo, your Ignore, the macOS dictionary and (opt-in) Contacts.
+
+</td>
+<td valign="top">
+
+**No extension, anywhere**<br>
+Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, Mail, Word and native apps. Option+Space covers the rest, even Google Docs.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**Five writing modes**<br>
+Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
+
+</td>
+<td valign="top">
+
+**Private by construction**<br>
+Writing stays in memory on your Mac. The model ships inside the app; nothing downloads at runtime and nothing is logged.
+
+</td>
+</tr>
+</table>
+
+<p align="center">
+  <img src="docs/media/see-it-work.png" width="600" alt="Parzr's onboarding: a live field with red underlines under recieved, mesage and chek, and the Option+Space shortcut">
+  &nbsp;
+  <img src="docs/media/card.png" width="340" alt="The correction card: 4 fixes in this sentence, the corrected sentence with struck-through typos and mint fixes, and Fix sentence">
+</p>
 
 ## Install
 
-1. Download `Parzr-x.y.z.dmg` from the [latest release](https://github.com/jn-aman/parzr/releases/latest) and check it against `SHA256SUMS` if you like.
-2. Open the DMG and drag **Parzr** to **Applications**, then open it from there.
-3. Allow **Accessibility** when asked (System Settings, Privacy & Security, Accessibility). Parzr needs it to read and correct text in other apps; it cannot grant this to itself.
+1. Download **Parzr-x.y.z.dmg** from the [latest release](https://github.com/jn-aman/parzr/releases/latest) (checksums in `SHA256SUMS`).
+2. Drag **Parzr** to **Applications** and open it.
+3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
 
-Then just write. Underlines appear when you pause. Click the word itself to open its fix; **Return** applies the whole sentence. Select text and press **Option+Space** for a full passage check or a tone rewrite. Change the shortcut, pause Parzr, or turn it off per app in Settings. Turn off **Show in Dock** to keep Parzr in the menu bar only.
+Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, or hide it from the Dock in Settings.
 
-## What it does
+## Works where you write
 
-- **Fixes the whole sentence at once.** The card leads with the corrected sentence, removed words struck through and fixes in mint, so one keystroke repairs every error in it.
-- **Five writing modes.** Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
-- **Works where you write, with no extension.** Parzr uses macOS Accessibility, so Safari, Chrome, Brave, Edge, Arc and Firefox, TextEdit, Mail and Word work natively; the browser extension, VS Code extension and language server are optional extras for developers. Verified by probes: TextEdit, Safari, Chrome, Brave and Firefox with default settings; Word and Mail reads. Slack, Teams and Notion are untested. VS Code and Cursor prose files are an opt-in setting. In canvas editors such as Google Docs, Option+Space copies your selection, checks it and pastes the fix. See [integrations](docs/integrations.md) for exactly what is verified.
-- **Private by construction.** Writing stays in memory on your Mac. No account, telemetry, writing logs or HTTP server. The model ships inside the app; nothing downloads at runtime.
+| Where | How | Status |
+| --- | --- | --- |
+| Safari, Chrome, Brave, Edge, Arc, Firefox | macOS Accessibility, no extension | Verified (Safari, Chrome, Brave, Firefox) |
+| TextEdit, Mail, Word, Xcode comments | macOS Accessibility | TextEdit verified end to end; Mail and Word reads verified |
+| Slack, Teams, Notion, Discord (Electron) | macOS Accessibility | Supported, not yet tested here |
+| VS Code, Cursor (Markdown and text) | Opt-in setting | Unit-tested |
+| Google Docs and other canvas editors | Option+Space copies, checks and pastes the fix | Supported |
+
+Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and language-server adapters remain in the repo as optional extras for developers.
 
 ## How it works
 
-Parzr has its own Rust writing engine: tokenization, protected spans (links, code, names, numbers), phrase and context rules, verb morphology, frequency-ranked spelling, and minimal UTF-16 edit planning that preserves your formatting and Undo. Apple NaturalLanguage contributes word hints.
+```mermaid
+flowchart LR
+  A[Your text in any app] -->|Accessibility| B(Parzr)
+  B --> C[Rust engine<br/>rules, spelling, names]
+  C -->|as you type| D[Underlines and card]
+  B -->|Option+Space or tone| E[Local Qwen3.5-0.8B<br/>llama.cpp on Metal]
+  E --> C
+```
 
-Automatic checks use only this fast engine. Explicit passage checks and tone rewrites add the bundled **Qwen3.5-0.8B** model (Q5_K_M, 593 MB) through llama.cpp on Metal, followed by another grammar pass, and a guard keeps the model to plausible corrections. See [architecture](docs/architecture.md) and [grammar coverage](docs/grammar-coverage.md).
+- **As you type:** a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). No model is loaded on this path.
+- **On demand:** explicit checks and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline), followed by another grammar pass. Guards keep the model to plausible corrections and never let it rename a name.
+- See [architecture](docs/architecture.md) and [grammar coverage](docs/grammar-coverage.md).
 
-## Build from source
+## Measured, in the open
 
-Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+, and Node 22 for the integration tests. Dependencies download at build time; writing analysis always runs offline.
+| Benchmark | Result |
+| --- | --- |
+| [Names](benchmarks/names/README.md): 6,426 sentences, 23 naming traditions | 0.08% of names damaged (13% before), 1.4% on held-out names; checked on every release |
+| [English challenge](benchmarks/README.md): 3,000 authored paragraphs plus clean controls | Exact corrections on all, no clean text changed |
+
+The English challenge was authored for Parzr's rules, so it shows regressions rather than general accuracy; results on public benchmarks are in progress.
+
+<details>
+<summary><b>Build from source</b></summary>
+
+Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+ and Node 22 for the integration tests. Dependencies download at build time; writing analysis always runs offline.
 
 ```sh
-python3 scripts/build.py         # builds dist/Parzr.app (ad-hoc signed)
+python3 scripts/build.py         # dist/Parzr.app (ad-hoc signed)
 open dist/Parzr.app
 python3 scripts/package.py       # optional: a local DMG
 ```
 
-Run the checks CI runs:
+Run what CI runs:
 
 ```sh
 python3 scripts/audit-public-repo.py
@@ -53,17 +156,25 @@ python3 scripts/prepare-model.py
 cargo build --release --locked --manifest-path engine/Cargo.toml
 export PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf"
 export PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib"
+python3 scripts/run-name-benchmark.py
 PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
 npm ci && npx playwright install chromium
 npm run test:editors && npm run test:browser
 ```
 
-Interactive native QA opens only authored fixtures and needs a desktop session with Accessibility; see [QA evidence](docs/qa/README.md). The [1,000-paragraph English challenge](benchmarks/README.md) measures corrections against authored references with clean controls.
+Interactive native QA opens only authored fixtures and needs a desktop session with Accessibility; see [QA evidence](docs/qa/README.md).
 
-## Releases
+</details>
 
-Releases are built, signed, notarized and published by CI. See [releases](docs/releases.md).
+<details>
+<summary><b>Releases</b></summary>
+
+One click: **Actions → Release → Run workflow** (or `gh workflow run release.yml -f bump=patch`). CI bumps every version file, tags, builds, signs, notarizes, staples and publishes the DMG with checksums. See [releases](docs/releases.md).
+
+</details>
 
 ## Contributing
 
-Apache-2.0; see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). New rules should come with error and valid-context fixtures, provenance, intent preservation and editor safety checks. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome. New rules should come with error and valid-context fixtures, provenance, intent preservation and editor safety checks; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+Licensed under [Apache-2.0](LICENSE). Third-party components: [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
