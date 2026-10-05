@@ -150,8 +150,8 @@ function schedule() { if (!ticking) { ticking = true; requestAnimationFrame(fram
 
 /* ---------- 1. Hero: the headline corrects itself; a glass editor behind it catches mistakes live ---------- */
 const HERO_LINES = [
-  [{ t: 'Thanks, ' }, { n: 'aman jain' }, { t: '. I ' }, { w: ['recieved', 'received'] }, { t: ' ' }, { w: ['teh', 'the'] }, { t: ' report.' }],
-  [{ w: ['Your', "You're"] }, { t: ' doing ' }, { w: ['alot', 'a lot'] }, { t: ' better, ' }, { n: 'priya' }, { t: '.' }],
+  [{ t: 'Thanks, ' }, { w: ['aman jain', 'Aman Jain'], b: 1 }, { t: '. I ' }, { w: ['recieved', 'received'] }, { t: ' ' }, { w: ['teh', 'the'] }, { t: ' report.' }],
+  [{ w: ['Your', "You're"] }, { t: ' doing ' }, { w: ['alot', 'a lot'] }, { t: ' better, ' }, { w: ['priya', 'Priya'], b: 1 }, { t: '.' }],
   [{ t: 'We should ' }, { w: ['utilize', 'use'], b: 1 }, { t: ' it ' }, { w: ['in order to', 'to'], b: 1 }, { t: ' ship.' }],
 ];
 function buildLine(host, spec, diffHost) {
@@ -159,7 +159,6 @@ function buildLine(host, spec, diffHost) {
   const words = [];
   spec.forEach(p => {
     if (p.t) { host.append(p.t); diffHost && diffHost.append(p.t); }
-    else if (p.n) { const s = document.createElement('span'); s.className = 'nm'; s.textContent = p.n; host.append(s); diffHost && diffHost.append(p.n); }
     else {
       const s = document.createElement('span'); s.className = 'fx w' + (p.b ? ' blue' : ''); s.dataset.wrong = p.w[0]; s.textContent = p.w[1];
       host.append(s); fxInit(s); fxSet(s, 'wrong'); words.push(s);
@@ -237,7 +236,8 @@ function hero(el) {
 
 /* ---------- 2. Try it: a small client-side checker with the app's colours ---------- */
 // ponytail: a dozen hand-written rules, no network. The app's engine does far more; this only shows the feel.
-const NAMES = new Set('aman jain priya ananya wei mohammed muhammad fatima olu chidi yuki aiko sofia nguyen dmitri ivan anna jose maria ahmed aisha raj kenji hana kwame amara sven liam noah mei li chen kim park'.split(' '));
+// Names are proper nouns: a lowercase one gets a blue capitalisation suggestion, and is never respelled.
+const NAMES = new Set('aman jain priya ananya wei mohammed muhammad fatima olu chidi yuki aiko sofia nguyen dmitri ivan anna jose maria ahmed aisha raj kenji hana kwame amara sven liam noah mei li chen kim'.split(' '));
 const RULES = [
   [/\bteh\b/gi, 'the', 'r', 'Common misspelling of "the".'],
   [/\brecieve(d|s|r)?\b/gi, 'receive$1', 'r', 'i before e, except after c.'],
@@ -256,32 +256,37 @@ const RULES = [
   [/\bits(?= (?:a|the|going|been|not|so|very|time|too|alot|better|worse|good|great|ready)\b)/gi, "it's", 'r', "Use it's (it is) here."],
   [/\b(could|should|would) of\b/gi, '$1 have', 'r', 'Use "have", not "of".'],
   [/\bi\b(?!')/g, 'I', 'r', 'Capitalize the first-person pronoun.'],
+  [/\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|april|june|july|september|october|november|december)\b/g, w => cap(w), 'r', 'Capitalize days and months.'],
   [/\bin order to\b/gi, 'to', 'b', 'Wordy. "to" says the same, shorter.'],
   [/\bvery unique\b/gi, 'unique', 'b', '"Unique" is already absolute.'],
   [/\butilize\b/gi, 'use', 'b', 'A plainer word.'],
   [/\bat this point in time\b/gi, 'now', 'b', 'Wordy. "now" says the same.'],
   [/\bdue to the fact that\b/gi, 'because', 'b', 'Wordy. "because" says the same.'],
 ];
+const cap = s => s.replace(/(^| )\p{L}/gu, c => c.toUpperCase());
 const caseLike = (from, to) => /^[A-Z]/.test(from) && /^[a-z]/.test(to) && from !== 'I' ? to[0].toUpperCase() + to.slice(1) : to;
 function analyze(text, ignored) {
-  const names = [], wre = /[\p{L}'’]+/gu; let m, prev = null;
+  const names = [], marks = [], wre = /[\p{L}'’]+/gu; let m, prev = null;
   while ((m = wre.exec(text))) {
     if (!NAMES.has(m[0].toLowerCase())) { prev = null; continue; }
     if (prev && /^ +$/.test(text.slice(prev.e, m.index))) prev.e = m.index + m[0].length; else { prev = { s: m.index, e: m.index + m[0].length }; names.push(prev); }
   }
-  const marks = [];
+  for (const n of names) {
+    const from = text.slice(n.s, n.e), to = cap(from);
+    if (/(?:^| )\p{Ll}/u.test(from) && !ignored.has(from.toLowerCase() + '|' + to)) marks.push({ s: n.s, e: n.e, from, to, kind: 'b', why: `Capitalize the name "${to}".` });
+  }
   for (const [re, to, kind, why] of RULES) {
     re.lastIndex = 0;
     while ((m = re.exec(text))) {
       const s = m.index, e = s + m[0].length;
       if (names.some(n => s < n.e && e > n.s)) continue;
-      const rep = caseLike(m[0], to.replace(/\$(\d)/g, (_, k) => m[k] || ''));
+      const rep = typeof to === 'function' ? to(m[0]) : caseLike(m[0], to.replace(/\$(\d)/g, (_, k) => m[k] || ''));
       if (ignored.has(m[0].toLowerCase() + '|' + rep)) continue;
       if (marks.some(k => s < k.e && e > k.s)) continue;
       marks.push({ s, e, from: m[0], to: rep, kind, why });
     }
   }
-  return { marks: marks.sort((a, b) => a.s - b.s), names };
+  return marks.sort((a, b) => a.s - b.s);
 }
 function tryIt(el) {
   const ta = $('#try-ta'), back = $('#try-back'), body = $('#try-body'), card = $('#tcard'), win = $('#try-win');
@@ -289,15 +294,14 @@ function tryIt(el) {
   const SAMPLES = [
     'I recieved teh mesage and its alot better than last time. Your doing great, and I will definately reply tommorow.',
     'We should utilize the new process in order to ship faster. At this point in time it is a very unique approach, due to the fact that nobody has tried it.',
-    'thanks, priya. aman jain said i recieved the invoice, but ananya and wei have not. Fatima wants it seperate.',
+    'thanks, priya. aman jain said i recieved the invoice on friday, but ananya and wei have not. Fatima wants it seperate.',
   ];
-  const ignored = new Set(); let marks = [], names = [], fixed = [], prevKeys = new Set(), active = -1, started = false, timer = 0;
+  const ignored = new Set(); let marks = [], fixed = [], prevKeys = new Set(), active = -1, started = false, timer = 0;
   const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
   function render() {
-    const text = ta.value; ({ marks, names } = analyze(text, ignored));
+    const text = ta.value; marks = analyze(text, ignored);
     const keys = new Set(), pieces = [];
     marks.forEach((k, i) => pieces.push({ s: k.s, e: k.e, html: `<span class="im${k.kind === 'b' ? ' blue' : ''}${prevKeys.has(k.kind + k.from + k.s) ? '' : ' new'}" data-i="${i}">${esc(k.from)}</span>` }));
-    names.forEach(n => pieces.push({ s: n.s, e: n.e, html: `<span class="nm">${esc(text.slice(n.s, n.e))}</span>` }));
     fixed.forEach(f => pieces.push({ s: f[0], e: f[1], html: `<span class="im ok">${esc(text.slice(f[0], f[1]))}</span>` }));
     pieces.sort((a, b) => a.s - b.s);
     let out = '', at = 0;
@@ -305,8 +309,8 @@ function tryIt(el) {
     out += esc(text.slice(at)); if (text.endsWith('\n') || !text) out += ' ';
     back.innerHTML = out;
     marks.forEach(k => keys.add(k.kind + k.from + k.s)); prevKeys = keys;
-    const n = marks.length, nn = names.length;
-    status.textContent = (n ? n + (n === 1 ? ' suggestion' : ' suggestions') : 'No suggestions') + (nn ? ` · ${nn} ${nn === 1 ? 'name' : 'names'} kept as typed` : '');
+    const n = marks.length;
+    status.textContent = n ? n + (n === 1 ? ' suggestion' : ' suggestions') : 'No suggestions';
     status.parentElement.classList.toggle('clear', !n);
     allBtn.disabled = nextBtn.disabled = !n;
     fit();
@@ -469,12 +473,12 @@ function demo(el) {
   };
 }
 
-/* ---------- 4. Names: a lowercase name stays intact while a real typo is fixed ---------- */
+/* ---------- 4. Names: a lowercase name gains its capital (blue) while a real typo is fixed (red) ---------- */
 function names(el) {
   const fxw = $('#nfx'), nm = $('#nm1'), st = $('#n-status'), fig = $('#fig'), cnt = $('#fig-n'), awake = watch($('#nwin'));
-  fxInit(fxw);
-  if (RM) { fxSet(fxw, 'wrong', true); nm.classList.add('named'); fig.classList.add('in'); return; }
-  fxSet(fxw, 'wrong');
+  fxInit(fxw); fxInit(nm);
+  if (RM) { fxSet(fxw, 'wrong', true); fxSet(nm, 'wrong', true); fig.classList.add('in'); return; }
+  fxSet(fxw, 'wrong'); fxSet(nm, 'wrong');
   new IntersectionObserver((es, o) => {
     if (!es[0].isIntersecting) return;
     fig.classList.add('in'); o.disconnect();
@@ -484,10 +488,10 @@ function names(el) {
   (async () => {
     for (;;) {
       await until(awake);
-      fxSet(fxw, 'wrong'); nm.classList.remove('named'); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
-      await sleep(900); nm.classList.add('named'); await sleep(1100);
-      st.textContent = '1 suggestion'; st.parentElement.classList.remove('clear'); fxw.classList.add('u'); await sleep(1300);
-      fxPlay(fxw, { hold: 300 }); await sleep(1500); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
+      fxSet(fxw, 'wrong'); fxSet(nm, 'wrong'); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
+      await sleep(1400);
+      st.textContent = '2 suggestions'; st.parentElement.classList.remove('clear'); nm.classList.add('u'); await sleep(300); fxw.classList.add('u'); await sleep(1300);
+      fxPlay(nm, { hold: 300 }); fxPlay(fxw, { hold: 300 }); await sleep(1500); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
       await sleep(3600);
     }
   })();

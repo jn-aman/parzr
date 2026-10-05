@@ -80,7 +80,7 @@
         <div class="hw-win glass">
           <div class="win-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
           <div class="hw-body"><p class="hw-line" id="hw-line"></p></div>
-          <div class="win-foot"><span class="status"><i class="dot"></i><span id="hw-status">3 suggestions</span></span><span>Names kept as typed</span></div>
+          <div class="win-foot"><span class="status"><i class="dot"></i><span id="hw-status">3 suggestions</span></span><span>Names capitalized, never respelled</span></div>
         </div>
         <div class="card hw-card" id="hw-card">
           <div class="card-h"><span class="card-dot"></span><b id="hw-count">2 fixes in this sentence</b></div>
@@ -162,11 +162,11 @@
         </ol>
       </div>
       <figure class="demo-stage" id="stage">
-        <figcaption class="sr-only">Illustration: in a text editor, the sentence "i hope your doing well. can you chek this once, priya?" gets four red underlines. The name priya is left alone. Clicking "your" opens a correction card showing all four fixes. Fix sentence applies them.</figcaption>
+        <figcaption class="sr-only">Illustration: in a text editor, the sentence "i hope your doing well. can you chek this once, Priya?" gets four red underlines. The correctly capitalized name Priya is left alone. Clicking "your" opens a correction card showing all four fixes. Fix sentence applies them.</figcaption>
         <div class="win glass" id="win" aria-hidden="true">
           <div class="win-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
           <div class="win-body" id="ed">
-            <p class="ed-text"><span class="sent" id="sent"><span class="fx w" data-wrong="i">I</span> hope <span class="fx w" data-wrong="your">you're</span> doing well. <span class="fx w" data-wrong="can">Can</span> you <span class="fx w" data-wrong="chek">check</span> this once, <span class="nm">priya</span>?</span></p>
+            <p class="ed-text"><span class="sent" id="sent"><span class="fx w" data-wrong="i">I</span> hope <span class="fx w" data-wrong="your">you're</span> doing well. <span class="fx w" data-wrong="can">Can</span> you <span class="fx w" data-wrong="chek">check</span> this once, <span class="nm">Priya</span>?</span></p>
             <div class="card" id="card">
               <div class="card-h"><span class="card-dot"></span><b>4 fixes in this sentence</b><span class="card-nav"><i>‹</i><em>2/4</em><i>›</i><i class="x">×</i></span></div>
               <div class="card-box">
@@ -191,7 +191,7 @@
     <div class="names-copy">
       <p class="eyebrow">Names</p>
       <h2 id="names-h" class="h2">Built to <span class="nw">respect names.</span></h2>
-      <p class="sect-lede">Parzr never “corrects” a name, even one typed in lowercase, like aman jain or thanks, priya. Real typos still get fixed. And it learns the names that matter to you.</p>
+      <p class="sect-lede">Names are proper nouns. Type aman jain or thanks, priya in lowercase and Parzr suggests the capital, Aman Jain and Priya, but never respells the name. Real typos still get fixed. And it learns the names that matter to you.</p>
       <ul class="learn">
         <li><svg aria-hidden="true"><use href="#i-undo"/></svg><div><b>From your Undo</b><span>Undo a change to a name and Parzr remembers.</span></div></li>
         <li><svg aria-hidden="true"><use href="#i-ban"/></svg><div><b>From Ignore</b><span>Ignore a mark once and it stays ignored.</span></div></li>
@@ -201,10 +201,10 @@
     </div>
     <div class="names-vis">
       <figure class="nwin glass" id="nwin">
-        <figcaption class="sr-only">Illustration: in the sentence "Thanks, aman jain, for the invoice. I recieved it today." the lowercase name aman jain is left untouched while the typo recieved is corrected to received.</figcaption>
+        <figcaption class="sr-only">Illustration: in the sentence "Thanks, aman jain, for the invoice. I recieved it today." the lowercase name aman jain gets a blue suggestion to capitalize it as Aman Jain, and the typo recieved gets a red correction to received. The name is never respelled.</figcaption>
         <div class="win-bar" aria-hidden="true"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
-        <p class="nline" aria-hidden="true">Thanks, <span class="nm" id="nm1">aman jain<span class="nm-tag">name</span></span>, for the invoice. I <span class="fx w" id="nfx" data-wrong="recieved">received</span> it today.</p>
-        <div class="win-foot" aria-hidden="true"><span class="status"><i class="dot"></i><span id="n-status">1 suggestion</span></span><span>1 name kept as typed</span></div>
+        <p class="nline" aria-hidden="true">Thanks, <span class="fx w blue" id="nm1" data-wrong="aman jain">Aman Jain</span>, for the invoice. I <span class="fx w" id="nfx" data-wrong="recieved">received</span> it today.</p>
+        <div class="win-foot" aria-hidden="true"><span class="status"><i class="dot"></i><span id="n-status">2 suggestions</span></span><span>Names capitalized, never respelled</span></div>
       </figure>
       <figure class="fig" id="fig">
         <p class="fig-k">Names damaged by a correction</p>

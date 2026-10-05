@@ -57,7 +57,7 @@ Solid, thick underlines you cannot miss, like the tools you know. Hover to highl
 <td valign="top">
 
 **Built to respect names**<br>
-"aman jain", "thanks, priya": never "corrected", even in lowercase. Parzr learns names from your undo, your Ignore, the macOS dictionary and (opt-in) Contacts.
+Parzr never respells a name, it gives it its capital: "aman jain" becomes "Aman Jain", "thanks, priya" becomes "thanks, Priya". Parzr learns names from your undo, your Ignore, the macOS dictionary and (opt-in) Contacts.
 
 </td>
 <td valign="top">
