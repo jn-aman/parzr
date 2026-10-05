@@ -4,6 +4,56 @@ use crate::{
     tokenizer::{self, Token},
 };
 
+/// Words after which a clause (and so a subject) can begin.
+const CLAUSE_OPENERS: [&str; 41] = [
+    "and",
+    "but",
+    "so",
+    "that",
+    "because",
+    "if",
+    "when",
+    "while",
+    "then",
+    "or",
+    "although",
+    "since",
+    "though",
+    "whether",
+    "unless",
+    "until",
+    "after",
+    "before",
+    "once",
+    "yesterday",
+    "today",
+    "tomorrow",
+    "now",
+    "finally",
+    "also",
+    "however",
+    "usually",
+    "often",
+    "sometimes",
+    "always",
+    "never",
+    "still",
+    "even",
+    "first",
+    "here",
+    "again",
+    "soon",
+    "think",
+    "say",
+    "know",
+    "believe",
+];
+/// Sentence openers that front a place or time phrase and so invert the clause.
+const FRONTED: [&str; 24] = [
+    "round", "inside", "outside", "in", "on", "at", "under", "over", "behind", "beside", "near",
+    "among", "between", "across", "around", "along", "above", "below", "beyond", "within",
+    "through", "toward", "towards", "from",
+];
 fn emit(
     req: &Request,
     t: &Token<'_>,
@@ -53,26 +103,136 @@ fn plural(subject: &Token<'_>) -> Option<bool> {
     {
         return Some(false);
     }
+    // Relative and expletive words take their number from elsewhere; these nouns do not mark it.
+    if [
+        "who",
+        "which",
+        "whom",
+        "whose",
+        "there",
+        "here",
+        "fish",
+        "sheep",
+        "deer",
+        "aircraft",
+        "personnel",
+        "staff",
+    ]
+    .contains(&word)
+    {
+        return None;
+    }
+    if [
+        "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+        "dozen", "hundred", "thousand", "million", "both", "several", "many", "few",
+    ]
+    .contains(&word)
+    {
+        return Some(true);
+    }
     if subject.proper_name
         || subject.pos == "Noun" && spelling::known(word)
         || spelling::flags(word) & 2 != 0
     {
         return Some(
-            spelling::flags(word) & 16 != 0
+            (spelling::flags(word) & 16 != 0
+                || !subject.proper_name && !spelling::name_only(word) && looks_plural(word))
                 && !["news", "series", "species", "means"].contains(&word),
         );
     }
-    // A capitalized unknown name can be a simple subject; edits target its verb.
+    // A capitalized unknown name can be a simple subject; edits target its verb. One ending in
+    // "s" may be a plural the dictionary lacks, so its number is unknown.
     if subject
         .surface
         .chars()
         .next()
         .is_some_and(char::is_uppercase)
         && !spelling::known(word)
+        && !word.ends_with('s')
     {
         return Some(false);
     }
     None
+}
+/// A subject that can sit between an inverted auxiliary and its verb ("did she called"): a
+/// pronoun or a name, never a common word that might itself be the verb ("play games").
+fn inverted_subject(t: &Token<'_>) -> bool {
+    t.proper_name
+        || [
+            "i", "you", "he", "she", "it", "we", "they", "someone", "anyone", "everyone", "nobody",
+            "somebody", "people",
+        ]
+        .contains(&t.normalized.as_str())
+        || t.surface.chars().next().is_some_and(char::is_uppercase)
+            && t.is_word
+            && !spelling::known(&t.normalized)
+}
+/// Conjunctions, adverbs and place words that never head a subject phrase.
+fn function_word(w: &str) -> bool {
+    [
+        "and",
+        "or",
+        "but",
+        "so",
+        "yet",
+        "because",
+        "if",
+        "when",
+        "while",
+        "although",
+        "though",
+        "since",
+        "then",
+        "also",
+        "even",
+        "still",
+        "now",
+        "just",
+        "only",
+        "again",
+        "too",
+        "very",
+        "really",
+        "always",
+        "often",
+        "usually",
+        "sometimes",
+        "here",
+        "there",
+        "everywhere",
+        "nowhere",
+        "somewhere",
+        "anywhere",
+        "where",
+        "how",
+        "why",
+        "what",
+        "than",
+        "as",
+    ]
+    .contains(&w)
+}
+/// A regular plural of a known noun that the dictionary does not flag as plural ("teenagers",
+/// "photographs", "lives").
+fn looks_plural(word: &str) -> bool {
+    if word.len() < 5
+        || !word.ends_with('s')
+        || word.ends_with("ss")
+        || word.ends_with("us")
+        || word.ends_with("is")
+    {
+        return false;
+    }
+    let noun = |stem: &str| spelling::flags(stem) & 2 != 0;
+    let stem = &word[..word.len() - 1];
+    noun(stem)
+        || word.strip_suffix("es").is_some_and(noun)
+        || word
+            .strip_suffix("ies")
+            .is_some_and(|s| noun(&format!("{s}y")))
+        || word
+            .strip_suffix("ves")
+            .is_some_and(|s| noun(&format!("{s}fe")) || noun(&format!("{s}f")))
 }
 pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
@@ -121,8 +281,17 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             edits.extend(pair);
         }
     }
+    // Hinglish verbs ("Thoda wait karo") are not English agreement errors.
+    let hinglish: Vec<usize> = tokens
+        .iter()
+        .filter(|t| t.is_word && spelling::hinglish(&t.normalized))
+        .map(|t| t.sentence)
+        .collect();
     for (i, t) in tokens.iter().enumerate().filter(|(_, t)| t.is_word) {
         let w = t.normalized.as_str();
+        if hinglish.contains(&t.sentence) {
+            continue;
+        }
         if [
             "and", "or", "but", "may", "might", "must", "can", "could", "will", "would", "should",
             "shall", "not", "never", "if", "then", "of", "in", "on", "at", "by", "for", "from",
@@ -256,6 +425,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             "mustn't",
         ]
         .contains(&previous);
+        // "why couldn't boys read": after a question word the auxiliary is inverted, so a noun
+        // after it is the subject, not a verb.
+        let wh_inversion = prev > 0
+            && ["why", "how", "what", "where", "when", "who"]
+                .contains(&tokens[prev - 1].normalized.as_str());
         let nominal_what = tokens
             .iter()
             .take(i)
@@ -267,9 +441,22 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let name_subject = auxiliary_base
             && (tokens[prev].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
+        // "do sports", "need to do is", "can do lots of": do is the main verb with an object or a
+        // complement, so what follows is not a verb to de-inflect.
+        let main_do = ["do", "does", "did"].contains(&previous)
+            && (prev > 0
+                && [
+                    "to", "can", "could", "may", "might", "must", "shall", "should", "will",
+                    "would",
+                ]
+                .contains(&tokens[prev - 1].normalized.as_str())
+                || ["is", "are", "was", "were", "am"].contains(&w)
+                || w == v.third && (spelling::flags(w) & 2 != 0 || looks_plural(w)));
         if auxiliary_base
             && !name_subject
             && !nominal_what
+            && !wh_inversion
+            && !main_do
             && w != "saw"
             && w != v.base
             && [v.third.as_str(), &v.past, &v.participle].contains(&w)
@@ -367,7 +554,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         }
         // Inversion: 'did she called' / 'does Maya works'.
         if prev > 0
-            && plural(&tokens[prev]).is_some()
+            && inverted_subject(&tokens[prev])
             && [
                 "did", "does", "do", "can", "could", "will", "would", "should", "must",
             ]
@@ -469,12 +656,18 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // A determiner and noun open a subject only where a clause can start; after a verb or a
+        // preposition they are an object or an adjunct ("as a kitchen help").
         let determiner_subject = i >= 2
             && [
                 "the", "a", "an", "this", "that", "these", "those", "my", "your", "our", "their",
                 "his", "her", "its", "every", "each", "some", "many", "several",
             ]
-            .contains(&tokens[i - 2].normalized.as_str());
+            .contains(&tokens[i - 2].normalized.as_str())
+            && (i == 2
+                || tokens[i - 3].sentence != t.sentence
+                || !tokens[i - 3].is_word
+                || CLAUSE_OPENERS.contains(&tokens[i - 3].normalized.as_str()));
         let subject_start = i == 1
             || tokens[i - 2].sentence != t.sentence
             || [
@@ -507,6 +700,20 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     "pronoun", "pronouns",
                 ]
                 .contains(&x.normalized.as_str())
+            })
+        {
+            continue;
+        }
+        // "I think that provide the seat": here "that" is the complementizer, not a subject.
+        if p.normalized == "that"
+            && i >= 2
+            && tokens[i - 2].is_word
+            && morphology::verb(&tokens[i - 2].normalized).is_some_and(|v| {
+                [
+                    "think", "say", "know", "believe", "hope", "feel", "suggest", "mean", "show",
+                    "find", "claim", "argue", "agree", "ensure", "realize", "see", "hear",
+                ]
+                .contains(&v.base.as_str())
             })
         {
             continue;
@@ -548,9 +755,31 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // A possessive or contraction ("Let's see", "my morning's work") and a conjunction or
+        // adverb are no subject.
+        if p.normalized.ends_with("'s") || function_word(&p.normalized) {
+            continue;
+        }
+        // A fronted place phrase inverts the clause ("Round this corner were three doors"): the
+        // verb agrees with a noun phrase that comes after it.
+        if let Some(first) = tokens.iter().find(|x| x.sentence == t.sentence)
+            && FRONTED.contains(&first.normalized.as_str())
+            && tokens[..i]
+                .iter()
+                .filter(|x| x.sentence == t.sentence)
+                .all(|x| x.surface != ",")
+        {
+            continue;
+        }
+        // "actions that day were": the plural before "that" is the head of the subject.
+        if i >= 3 && tokens[i - 2].normalized == "that" && plural(&tokens[i - 3]) == Some(true) {
+            continue;
+        }
         let Some(mut is_plural) = plural(p) else {
             continue;
         };
+        // "A and B are": a conjoined subject at the start of its clause. Another verb or a pronoun
+        // before the "and" means it joins clauses ("I sing a song and the world is perfect").
         if let Some(and) = tokens[..i - 1]
             .iter()
             .rposition(|x| x.sentence == t.sentence && x.normalized == "and")
@@ -558,12 +787,21 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && and > 0
             && tokens[and + 1..i - 1].iter().all(|x| x.is_word)
             && plural(&tokens[and - 1]).is_some()
-            && !tokens[..and]
+            && !tokens[..and - 1]
                 .iter()
-                .filter(|x| x.sentence == t.sentence)
+                .rev()
+                .take_while(|x| {
+                    x.sentence == t.sentence
+                        && ![",", ";", ":", "that", "because", "if", "but"]
+                            .contains(&x.normalized.as_str())
+                })
                 .any(|x| {
-                    morphology::verb(&x.normalized)
-                        .is_some_and(|v| x.normalized == v.past || x.normalized == v.third)
+                    morphology::verb(&x.normalized).is_some()
+                        || [
+                            "i", "you", "he", "she", "it", "we", "they", "is", "are", "was",
+                            "were", "has", "have", "had",
+                        ]
+                        .contains(&x.normalized.as_str())
                 })
         {
             is_plural = true;
@@ -613,9 +851,22 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             })
             .take(7)
             .collect();
+        // A preposition before the noun means p may only end a modifier of the real head ("the
+        // roads near the station get", "the platform off the coast were"); a gerund or a
+        // perception or causative verb means p is an object or part of a gerund subject ("reading
+        // these chapters is", "saw him walk", "makes Martha attend").
         if previous_clause.iter().any(|x| {
-            ["to", "of", "about", "from", "with", "between", "whether"]
-                .contains(&x.normalized.as_str())
+            [
+                "to", "of", "about", "from", "with", "between", "whether", "in", "on", "at", "by",
+                "for", "near", "off", "among", "around", "behind", "beside", "under", "over",
+                "inside", "outside", "across", "through", "during", "within", "toward", "towards",
+                "into", "onto", "upon", "along", "against", "above", "below", "beyond", "without",
+                "except", "like", "than", "such", "after", "before", "see", "sees", "saw", "watch",
+                "watched", "hear", "heard", "make", "makes", "made", "let", "lets", "help",
+                "helps", "helped", "feel", "felt", "notice", "noticed", "have", "had",
+            ]
+            .contains(&x.normalized.as_str())
+                || morphology::verb(&x.normalized).is_some_and(|v| x.normalized == v.gerund)
         }) {
             continue;
         }
@@ -671,13 +922,26 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && !["every ", "usually", "always", "tomorrow", "next "]
                 .iter()
                 .any(|marker| clause_prefix.contains(marker) || sentence_tail.contains(marker));
-        let past = anchored_past
-            || clause_prefix.contains("yesterday")
-            || clause_prefix.contains("last week")
-            || clause_prefix.contains("last month")
-            || clause_prefix.contains("last night")
-            || (clause_prefix.trim_start().starts_with("then ")
-                && prefix.to_lowercase().contains("yesterday"));
+        // The time word governs its own clause: not one before a semicolon, and not a clause
+        // already written in the present ("... yesterday ...; it is only now that it has been").
+        let frame = clause_prefix.rsplit([';', ':']).next().unwrap_or("");
+        let markers = ["yesterday", "last week", "last month", "last night"];
+        let present_frame = markers
+            .iter()
+            .filter_map(|m| frame.rfind(m).map(|at| at + m.len()))
+            .max()
+            .is_some_and(|end| {
+                [
+                    " is ", " are ", " am ", " has ", " have ", " does ", " do ", " now ",
+                ]
+                .iter()
+                .any(|m| frame[end..].contains(m))
+            });
+        let past = !present_frame
+            && (anchored_past
+                || markers.iter().any(|m| frame.contains(m))
+                || (clause_prefix.trim_start().starts_with("then ")
+                    && prefix.to_lowercase().contains("yesterday")));
         if past && v.base != "be" && (w == v.base || w == v.third) && v.past != w {
             emit(
                 req,
@@ -690,16 +954,26 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             continue;
         }
         if v.base == "be" {
+            // A name can be a collective ("Wigan were paired") or a multi-word name whose head
+            // the tagger missed; "were" can be subjunctive after a conditional or wish frame.
+            let named = p.normalized != "i"
+                && (p.proper_name
+                    || p.surface.chars().next().is_some_and(char::is_uppercase)
+                        && (spelling::name_only(&p.normalized)
+                            || !spelling::known(&p.normalized)
+                            || !crate::starts_sentence(&req.text, p.start_byte, req)));
+            let subjunctive = [
+                "if ", "though", "wish", "suppose", "unless", "lest", "whether", "as it ", "till ",
+                "until ", "were it", "even so",
+            ]
+            .iter()
+            .any(|m| clause_prefix.contains(m));
             let replacement = match (w, is_plural, p.normalized.as_str()) {
+                _ if named => None,
                 ("are", _, "i") => Some("am"),
                 ("was", true, "i") => None,
                 ("was", true, _) => Some("were"),
-                ("were", false, _)
-                    if !clause_prefix.contains("if ")
-                        && !prefix.to_lowercase().contains("wish ") =>
-                {
-                    Some("was")
-                }
+                ("were", false, _) if !subjunctive => Some("was"),
                 ("is", true, "i") => Some("am"),
                 ("is", true, _) => Some("are"),
                 ("are", false, _) => Some("is"),
@@ -734,7 +1008,36 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 || prefix.to_lowercase().contains("recommend that")
                 || prefix.to_lowercase().contains("insist that")
                 || prefix.to_lowercase().contains("demand that");
-            if !subjunctive {
+            // A noun-capable verb after a noun is usually a compound ("kitchen help", "NASA study
+            // shows"), "like" and "save" are prepositions after one, and a narrative in the past
+            // that drops "-ed" ("Tom open the door") is not missing an "-s".
+            let compound = !pronoun_subject
+                && (!p.proper_name && ["like", "save", "except"].contains(&w)
+                    || spelling::flags(w) & 2 != 0
+                        && tokens.get(i + 1).is_some_and(|n| {
+                            crate::punctuation::finite(n)
+                                || ["about", "on", "of", "for", "in", "at", "by", "from"]
+                                    .contains(&n.normalized.as_str())
+                        }));
+            let narrative = tokens
+                .iter()
+                .enumerate()
+                .filter(|(_, x)| {
+                    x.paragraph == t.paragraph
+                        && x.sentence + 1 >= t.sentence
+                        && x.sentence <= t.sentence
+                })
+                .any(|(k, x)| {
+                    // "be obliged" and "has asked" are participles, not a past-tense narrative.
+                    k > 0
+                        && ![
+                            "be", "been", "being", "am", "is", "are", "has", "have", "having",
+                        ]
+                        .contains(&tokens[k - 1].normalized.as_str())
+                        && morphology::verb(&x.normalized)
+                            .is_some_and(|v| x.normalized == v.past && v.past != v.base)
+                });
+            if !subjunctive && !compound && !narrative {
                 emit(
                     req,
                     t,
