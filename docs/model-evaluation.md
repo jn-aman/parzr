@@ -1,10 +1,10 @@
 # Local writing model evaluation
 
-## Smart grammar (GECToR), 0.2.0
+## Smart grammar (GECToR), 0.2
 
-How the typing path scores on neutral public data before and after 0.2.0. This is the "fast path" the app runs while you type: the rules, and with Smart grammar on, the rules plus GECToR (see [architecture](architecture.md#smart-grammar-gector)). It does not include Qwen, which only runs for Option+Space and the tones. The corpora are used for evaluation only and are not in this repository, because their terms do not allow redistribution (see [grammar evidence](grammar-evidence.md)).
+How the typing path scores on neutral public data before and after 0.2. This is the "fast path" the app runs while you type: the rules, and with Smart grammar on, the rules plus GECToR (see [architecture](architecture.md#smart-grammar-gector)). It does not include Qwen, which only runs for Option+Space and the tones. The corpora are used for evaluation only and are not in this repository, because their terms do not allow redistribution (see [grammar evidence](grammar-evidence.md)).
 
-| | 0.1.x | 0.2.0, rules only | 0.2.0, Smart grammar (default) |
+| | 0.1.x | 0.2, rules only | 0.2, Smart grammar (default) |
 | --- | --- | --- | --- |
 | BEA-2019 dev, F0.5 (precision / recall) | 0.202 (0.43 / 0.065) | 0.228 (0.63 / 0.06) | 0.529 (0.71 / 0.26) |
 | CoNLL-2014, F0.5 (precision) | 0.212 (0.48) | 0.222 (0.57) | 0.550 (0.72) |
@@ -21,7 +21,7 @@ What the measures mean:
 - **False alarms per 1,000 words** count suggestions on text that needed none: 1,996 sentences of published prose (Project Gutenberg, Wikipedia, chat, Indian English and Hinglish). Lower is better.
 - **Names damaged** is the share of names an edit changed beyond case, on the [name benchmark](../benchmarks/names/README.md): all 6,426 sentences, the lowercase ones, and the 104 names that are in no shipped list. **Real typos still corrected** is the share of the benchmark's misspelled controls that were fixed.
 
-How to read it. Rules were made far more precise in 0.2.0 (run-on sentences, agreement, abbreviations such as p.m. and i.e., commas, and spelling that no longer "corrects" Hinglish, Indian English vocabulary, Latin phrases, compounds, words macOS knows, in both dialects), which cut false alarms from 9.34 to 1.07 per 1,000 words and lifted precision, with recall unchanged. GECToR then more than doubles F0.5 by finding about four times as many errors, at the price of some false alarms (3.39), still about a third of 0.1.x. Recall is still modest: on BEA-2019 dev Parzr finds about one error in four. Names are slightly more exposed with Smart grammar on than with rules alone (0.05% against 0.03% of names damaged) and still below 0.1.x on every cut. The English challenge benchmarks, which are authored for the rules, stay at 100% on the rules path.
+How to read it. Rules were made far more precise in 0.2 (run-on sentences, agreement, abbreviations such as p.m. and i.e., commas, and spelling that no longer "corrects" Hinglish, Indian English vocabulary, Latin phrases, compounds, words macOS knows, in both dialects), which cut false alarms from 9.34 to 1.07 per 1,000 words and lifted precision, with recall unchanged. GECToR then more than doubles F0.5 by finding about four times as many errors, at the price of some false alarms (3.39), still about a third of 0.1.x. Recall is still modest: on BEA-2019 dev Parzr finds about one error in four. Names are slightly more exposed with Smart grammar on than with rules alone (0.05% against 0.03% of names damaged) and still below 0.1.x on every cut. The English challenge benchmarks, which are authored for the rules, stay at 100% on the rules path.
 
 The Qwen3.5-0.8B edits that Option+Space and the tones produce are not part of this table. They pass the filters in `engine/src/model.rs` (`vetted`): no straightening of quotes or dashes, no optional or date commas, no recasing in mid-sentence and no respelling one known word as another.
 

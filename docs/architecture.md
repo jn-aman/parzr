@@ -54,7 +54,7 @@ Option+Space, or choosing Professional, Friendly, Concise or Direct, runs Qwen. 
 
 ## Smart grammar (GECToR)
 
-Rules are precise but narrow. Since 0.2.0 a small grammar model covers some of what they cannot: the wrong preposition, a verb form that needs its neighbour ("will be release"), a missing "to". It is **GECToR** (Grammarly's "Tag, Not Rewrite", Omelianchuk et al., BEA 2020), a RoBERTa-base encoder with two linear heads, using the checkpoint `gotutiyan/gector-roberta-base-5k` converted to Core ML. It is on by default (**Smart grammar (on-device model)** in Settings, Writing) and runs only in Fix mode.
+Rules are precise but narrow. Since 0.2 a small grammar model covers some of what they cannot: the wrong preposition, a verb form that needs its neighbour ("will be release"), a missing "to". It is **GECToR** (Grammarly's "Tag, Not Rewrite", Omelianchuk et al., BEA 2020), a RoBERTa-base encoder with two linear heads, using the checkpoint `gotutiyan/gector-roberta-base-5k` converted to Core ML. It is on by default (**Smart grammar (on-device model)** in Settings, Writing) and runs only in Fix mode.
 
 **What it does.** Instead of writing a new sentence, it labels each word with one of 5,001 edit tags: keep, delete, replace with a word, append a word, change the verb form, make it plural or singular, change case, merge or split. Parzr applies the tags, repeats up to five rounds, and diffs the result against your sentence to get small edits. Because the output is a tag per word, the edits are minimal and never reorder or paraphrase. Their `rule_id` is `gector.append`, `gector.replace`, `gector.agreement` and so on, so they show up in the same card as rule edits.
 

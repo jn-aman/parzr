@@ -71,7 +71,7 @@ Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, 
 <td valign="top">
 
 **Smart grammar on the Neural Engine**<br>
-New in 0.2.0. A small grammar model (GECToR) runs on your Mac's Neural Engine in about 2 ms per sentence and catches what rules cannot, like "will be release" (released) or "since three years" (for). Its fixes pass the same guards as everything else: names, links and code are left alone.
+New in 0.2. A small grammar model (GECToR) runs on your Mac's Neural Engine in about 2 ms per sentence and catches what rules cannot, like "will be release" (released) or "since three years" (for). Its fixes pass the same guards as everything else: names, links and code are left alone.
 
 </td>
 <td valign="top">
@@ -137,9 +137,9 @@ Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and
 
 ## Measured, in the open
 
-Typing checks on public English benchmarks, with 0.1.x for comparison. "Rules only" is 0.2.0 with Smart grammar turned off; the last column is the default.
+Typing checks on public English benchmarks, with 0.1.x for comparison. "Rules only" is 0.2 with Smart grammar turned off; the last column is the default.
 
-| | 0.1.x | 0.2.0, rules only | 0.2.0, Smart grammar (default) |
+| | 0.1.x | 0.2, rules only | 0.2, Smart grammar (default) |
 | --- | --- | --- | --- |
 | BEA-2019 dev, F0.5 (precision / recall) | 0.202 (0.43 / 0.065) | 0.228 (0.63 / 0.06) | **0.529** (0.71 / 0.26) |
 | CoNLL-2014, F0.5 (precision) | 0.212 (0.48) | 0.222 (0.57) | **0.550** (0.72) |

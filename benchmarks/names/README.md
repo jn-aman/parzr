@@ -13,6 +13,6 @@ cargo build --release --locked --manifest-path engine/Cargo.toml
 python3 scripts/run-name-benchmark.py
 ```
 
-CI runs the rules alone. Add `--gec` to include Smart grammar (the on-device GECToR model, which needs the bundled runtime and `dist/model/gector`); the 0.2.0 results are 0.03% of names damaged with the rules alone and 0.05% with Smart grammar, 1.14% on the held-out names in both cases.
+CI runs the rules alone. Add `--gec` to include Smart grammar (the on-device GECToR model, which needs the bundled runtime and `dist/model/gector`); the 0.2 results are 0.03% of names damaged with the rules alone and 0.05% with Smart grammar, 1.14% on the held-out names in both cases.
 
 The run fails when it exceeds `thresholds.json`, and writes a breakdown by case, context and culture with the damaged examples to `dist/qa/names/report.json`. CI runs it on every push.
