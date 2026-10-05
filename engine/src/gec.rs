@@ -712,6 +712,12 @@ fn invents_a_word(text: &str, replacement: &str) -> bool {
         .any(|w| !spelling::known(w) && !lower.contains(&w.to_lowercase()))
 }
 /// "the" swapped for "a" or "an" or back: the choice of article is the writer's.
+/// "thanks for the fix" is gratitude, "thanks to the fix" a cause: after thanks the "for" is the writer's.
+fn thanks_for(text: &str, start: usize, original: &str) -> bool {
+    let before = text[..start].trim_end().to_lowercase();
+    original.trim().eq_ignore_ascii_case("for")
+        && (before.ends_with("thanks") || before.ends_with("thank you"))
+}
 fn swaps_article(original: &str, replacement: &str) -> bool {
     let art = |w: &str| ["the", "a", "an"].contains(&w.to_lowercase().as_str());
     art(original.trim())
@@ -922,6 +928,7 @@ fn merge(
                 && (touches(edit, &unknown) || touches(edit, &nameish)))
             || writers_choice
             || swaps_article(original, &e.replacement)
+            || thanks_for(text, edit.0, original)
             || invents_a_word(text, &e.replacement);
         number.push(writers_choice);
         verdicts.push(if dropped {
@@ -992,6 +999,14 @@ fn merge(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn thanks_keeps_its_for() {
+        let text = "The build is green now, thanks for the fix. Thank you for coming.";
+        let at = |w: &str, from: usize| from + text[from..].find(w).unwrap();
+        assert!(thanks_for(text, at("for", 0), "for"));
+        assert!(thanks_for(text, at("for", 40), "for "));
+        assert!(!thanks_for("I waited for you.", 9, "for"));
+    }
     fn tok(s: &str) -> Vec<String> {
         Tokenizer::new()
             .words(s)
