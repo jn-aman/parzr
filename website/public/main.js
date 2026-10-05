@@ -15,10 +15,13 @@ const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); };
 const lerp = (a, b, t) => a + (b - a) * t;
+// Phone toolbars show and hide as you scroll and fire resize with a slightly different height. Only react to a real size change.
+const onResize = fn => { let w = innerWidth, h = innerHeight; addEventListener('resize', () => { if (innerWidth === w && Math.abs(innerHeight - h) < 150) return; w = innerWidth; h = innerHeight; fn(); }); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const root = document.documentElement;
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const COARSE = matchMedia('(pointer: coarse)').matches;
+const NARROW = matchMedia('(max-width: 760px), (max-height: 540px)'); // the Try it card sits in the flow here (see styles.css)
 root.classList.add('js');
 if (RM) root.classList.add('rm');
 if (COARSE) root.classList.add('coarse');
@@ -127,13 +130,16 @@ const io = new IntersectionObserver(entries => {
     if (e.isIntersecting) schedule();
   });
 }, { rootMargin: '15% 0px' });
+// A scene scrubs while pinned. On short screens the CSS lets it flow instead, so ask the browser whether the pin is really sticky.
+const stuck = s => !!s.pin && getComputedStyle(s.pin).position === 'sticky';
 function register(el, mod) {
-  const s = { el, mod, vis: false, p: -1, pinned: el.classList.contains('pinned') };
+  const s = { el, mod, vis: false, p: -1, pin: $('.pin', el), pinned: false };
+  s.pinned = el.classList.contains('pinned') && stuck(s);
   scenes.push(s); io.observe(el); return s;
 }
 function measure(s) {
   const r = s.el.getBoundingClientRect(), vh = innerHeight;
-  const span = r.height - vh;
+  const span = r.height - (s.pin ? s.pin.offsetHeight : vh); // the pin is 100svh, innerHeight changes with the browser toolbar
   return s.pinned && span > 0 ? clamp(-r.top / span) : clamp((vh - r.top) / (vh + r.height));
 }
 function frame() {
@@ -333,6 +339,7 @@ function tryIt(el) {
     if (e < t.length && /[.!?]/.test(t[e])) e++;
     return { s, e };
   }
+  const refocus = () => { if (!COARSE) ta.focus({ preventScroll: true }); };
   function closeCard() { card.classList.remove('on'); active = -1; $$('.im.hov', back).forEach(x => x.classList.remove('hov')); }
   function openCard(i, focus) {
     const k = marks[i]; if (!k) return;
@@ -354,6 +361,7 @@ function tryIt(el) {
     card.style.setProperty('--ox', clamp(r.left - b.left + r.width / 2 - parseFloat(card.style.left), 0, cw) + 'px');
     card.classList.add('on');
     if (focus) $('#tc-fix').focus({ preventScroll: true });
+    if (NARROW.matches) requestAnimationFrame(() => card.scrollIntoView({ block: innerHeight < 540 ? 'start' : 'nearest', behavior: RM ? 'auto' : 'smooth' }));
   }
   function apply(list) { // replace from the end so offsets stay valid, then flash the fixes mint
     if (!list.length) return;
@@ -367,14 +375,14 @@ function tryIt(el) {
   ta.addEventListener('pointerleave', () => { if (active < 0) $$('.im.hov', back).forEach(x => x.classList.remove('hov')); });
   ta.addEventListener('click', e => {
     const i = hit(e.clientX, e.clientY);
-    if (i >= 0) { openCard(i); track('Try it: suggestion opened', { kind: marks[i].kind === 'b' ? 'Style' : 'Mistake', word: marks[i].from.slice(0, 40) }); } else closeCard();
+    if (i >= 0) { if (COARSE) ta.blur(); openCard(i); track('Try it: suggestion opened', { kind: marks[i].kind === 'b' ? 'Style' : 'Mistake', word: marks[i].from.slice(0, 40) }); } else closeCard();
   });
   ta.addEventListener('input', () => { if (!typed) { typed = true; track('Try it: started typing'); } closeCard(); fixed = []; fit(); clearTimeout(timer); timer = setTimeout(render, 120); });
   win.addEventListener('keydown', e => { if (e.key === 'Escape' && active >= 0) { closeCard(); ta.focus(); } });
-  $('#tc-x').addEventListener('click', () => { closeCard(); ta.focus(); });
-  $('#tc-fix').addEventListener('click', e => { track('Try it: sentence fixed'); const [s, en] = e.currentTarget.dataset.s.split(',').map(Number); apply(marks.filter(m => m.s >= s && m.e <= en)); ta.focus({ preventScroll: true }); });
-  $('#tc-word').addEventListener('click', () => { track('Try it: word fixed'); apply([marks[active]]); ta.focus({ preventScroll: true }); });
-  $('#tc-ign').addEventListener('click', () => { track('Try it: suggestion ignored'); const k = marks[active]; ignored.add(k.from.toLowerCase() + '|' + k.to); closeCard(); render(); ta.focus({ preventScroll: true }); });
+  $('#tc-x').addEventListener('click', () => { closeCard(); COARSE ? ta.blur() : ta.focus(); });
+  $('#tc-fix').addEventListener('click', e => { track('Try it: sentence fixed'); const [s, en] = e.currentTarget.dataset.s.split(',').map(Number); apply(marks.filter(m => m.s >= s && m.e <= en)); refocus(); });
+  $('#tc-word').addEventListener('click', () => { track('Try it: word fixed'); apply([marks[active]]); refocus(); });
+  $('#tc-ign').addEventListener('click', () => { track('Try it: suggestion ignored'); const k = marks[active]; ignored.add(k.from.toLowerCase() + '|' + k.to); closeCard(); render(); refocus(); });
   allBtn.addEventListener('click', () => { track('Try it: fix all', { count: marks.length }); apply(marks); allBtn.classList.remove('ping'); void allBtn.offsetWidth; allBtn.classList.add('ping'); });
   nextBtn.addEventListener('click', () => { track('Try it: next suggestion'); openCard((active + 1) % marks.length); });
   $$('[data-sample]', el).forEach(b => b.addEventListener('click', () => {
@@ -382,7 +390,7 @@ function tryIt(el) {
     $$('[data-sample]', el).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     ta.value = SAMPLES[+b.dataset.sample]; ignored.clear(); fixed = []; prevKeys = new Set(); closeCard(); render();
   }));
-  addEventListener('resize', () => { fit(); if (active >= 0) closeCard(); });
+  onResize(() => { fit(); if (active >= 0) closeCard(); });
   ta.value = SAMPLES[0]; fit();
   const start = () => { if (started) return; started = true; render(); };
   if (RM) start(); else new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { start(); o.disconnect(); } }, { threshold: .3 }).observe(win);
@@ -465,7 +473,7 @@ function demo(el) {
     const step = p < .3 ? 0 : p < .54 ? 1 : p < .77 ? 2 : 3;
     if (step !== state.step) { state.step = step; steps.forEach((s, i) => s.classList.toggle('on', i === step)); }
   }
-  addEventListener('resize', () => { g = null; if (state.laid) render(el._p ?? 0); });
+  onResize(() => { g = null; if (state.laid) render(el._p ?? 0); });
   if (RM) {
     steps.forEach(s => s.classList.add('on'));
     words.forEach(w => { fxSet(w, 'wrong', true); w.style.setProperty('--u', 1); });
@@ -596,7 +604,7 @@ function marquees() {
     return { m, t, dir: +m.dataset.dir || 1, secs: m.hasAttribute('data-slow') ? 64 : 46, x: 0, half: 1, vis: false, hold: false };
   });
   const measure = () => rows.forEach(r => { r.half = r.t.scrollWidth / 2 || 1; if (r.dir < 0 && !r.x) r.x = -r.half; });
-  measure(); addEventListener('resize', measure); addEventListener('load', measure);
+  measure(); onResize(measure); addEventListener('load', measure);
   const io = new IntersectionObserver(es => es.forEach(e => { const r = rows.find(r => r.m === e.target); r.vis = e.isIntersecting; go(); }), { rootMargin: '10% 0px' });
   rows.forEach(r => {
     io.observe(r.m);
@@ -835,12 +843,12 @@ function wordmark() {
     m.style.setProperty('--mk-fs', '100px');
     const w = inn.offsetWidth; if (w) m.style.setProperty('--mk-fs', (100 * (m.clientWidth - 2 * Math.max(8, innerWidth * .012)) / w).toFixed(2) + 'px');
   };
-  fit(); addEventListener('resize', fit);
+  fit(); onResize(fit);
   if (RM) return;
   const L = $$('.mk-l', inn), order = [0, 2, 1, 3, 4]; // typing order of P r a z r
   L.forEach((l, i) => l.style.setProperty('--ti', order.indexOf(i)));
   const swap = () => { m.style.setProperty('--sa', L[2].offsetWidth + 'px'); m.style.setProperty('--sr', -L[1].offsetWidth + 'px'); };
-  swap(); addEventListener('resize', swap);
+  swap(); onResize(swap);
   m.classList.add('pre', 'typo');
   new IntersectionObserver(async (es, o) => {
     if (!es[0].isIntersecting) return;
@@ -858,7 +866,12 @@ function nav() {
   const t = $('.nav-toggle'), l = $('#nav-links');
   t.addEventListener('click', () => { const o = l.classList.toggle('open'); t.setAttribute('aria-expanded', String(o)); if (o) track('Mobile menu opened'); });
   l.addEventListener('click', e => { if (e.target.closest('a')) { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); } });
-  addEventListener('keydown', e => { if (e.key === 'Escape' && l.classList.contains('open')) { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); t.focus(); } });
+  const shut = () => { l.classList.remove('open'); t.setAttribute('aria-expanded', 'false'); };
+  addEventListener('keydown', e => { if (e.key === 'Escape' && l.classList.contains('open')) { shut(); t.focus(); } });
+  addEventListener('pointerdown', e => { if (l.classList.contains('open') && !e.target.closest('.nav-in')) shut(); });
+  let y0 = 0;
+  t.addEventListener('click', () => { y0 = scrollY; });
+  addEventListener('scroll', () => { if (l.classList.contains('open') && Math.abs(scrollY - y0) > 40) shut(); }, { passive: true });
 }
 
 /* ---------- Analytics: one "Section viewed" per section per page view ---------- */
@@ -898,7 +911,7 @@ function boot() {
   if ($('#names')) names($('#names'));
   if ($('#bento')) { bento(); marquees(); openSource(); sectionViews(); }
   if (!RM) irisInit();
-  if (!RM) { addEventListener('scroll', schedule, { passive: true }); addEventListener('resize', () => { scenes.forEach(s => s.p = -1); schedule(); }); }
+  if (!RM) { addEventListener('scroll', schedule, { passive: true }); onResize(() => { scenes.forEach(s => { s.pinned = s.el.classList.contains('pinned') && stuck(s); s.p = -1; }); schedule(); }); }
   frame();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
