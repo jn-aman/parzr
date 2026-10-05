@@ -271,9 +271,9 @@ final class NameHandlingTests: XCTestCase {
     }
     func testCapitalizeNamesMappingByBundle() throws {
         let (prefs, cleanup) = try prefs(); defer { cleanup() }
-        XCTAssertEqual(prefs.nameCapitalization, "documents")
+        XCTAssertEqual(prefs.nameCapitalization, "everywhere")
         XCTAssertTrue(prefs.capitalizeNames(for: nil)); XCTAssertTrue(prefs.capitalizeNames(for: "com.apple.mail"))
-        XCTAssertFalse(prefs.capitalizeNames(for: "com.tinyspeck.slackmacgap"))
+        XCTAssertTrue(prefs.capitalizeNames(for: "com.tinyspeck.slackmacgap"))
         prefs.nameCapitalization = "never"; XCTAssertFalse(prefs.capitalizeNames(for: "com.apple.mail")); XCTAssertFalse(prefs.capitalizeNames(for: nil))
         prefs.nameCapitalization = "everywhere"; XCTAssertTrue(prefs.capitalizeNames(for: "com.tinyspeck.slackmacgap"))
     }

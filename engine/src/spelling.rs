@@ -906,7 +906,23 @@ fn in_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) ->
     left.is_some_and(|(w, opens)| list_member(w, opens, token))
         || right.is_some_and(|w| list_member(w, false, token))
 }
-const PARTICLES: [&str; 12] = [
+/// Common Roman Hindi words that are not English words: Hinglish is written, not misspelled.
+const HINGLISH: [&str; 93] = [
+    "aap", "aapka", "abhi", "accha", "acha", "achha", "arey", "arre", "aur", "bahut", "bata",
+    "batao", "bhai", "bhi", "bohot", "bolo", "chalo", "chinta", "dekho", "dena", "ek", "galat",
+    "gaya", "gayi", "haa", "haan", "hai", "hain", "haina", "hoon", "hua", "hue", "hui", "hum",
+    "isko", "jaldi", "ji", "kaam", "kahan", "kaisa", "kaise", "karna", "karo", "karte", "kiya",
+    "kiye", "kuch", "kya", "kyon", "kyu", "kyun", "lekin", "mat", "matlab", "mera", "mere", "meri",
+    "mujhe", "nahi", "nahin", "nai", "pata", "phir", "purana", "raha", "rahe", "rahi", "ruko",
+    "sab", "sahi", "samajh", "samjha", "suno", "tera", "teri", "tha", "theek", "thi", "thik",
+    "thoda", "thodi", "toh", "tujhe", "tumhara", "usko", "wahi", "wala", "wale", "wali", "wohi",
+    "yaar", "yahi", "zyada",
+];
+/// A Hinglish word ("yaar", "karo"), never a typo or a proper noun.
+pub fn hinglish(word: &str) -> bool {
+    HINGLISH.binary_search(&word).is_ok()
+}
+pub const PARTICLES: [&str; 12] = [
     "van", "von", "der", "den", "de", "zu", "bin", "ibn", "del", "della", "dos", "du",
 ];
 /// A name part beside a surname particle with another unknown word on its far side.

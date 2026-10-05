@@ -85,7 +85,7 @@ final class Preferences: ObservableObject {
         checkVSCode = defaults.bool(forKey: "checkVSCode"); onboardingCompleted = defaults.bool(forKey: "onboardingCompleted"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")
         learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
         useContactNames = defaults.bool(forKey: "useContactNames")
-        nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.documents.rawValue
+        nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.everywhere.rawValue
         ignoreCounts = defaults.dictionary(forKey: "ignoreCounts") as? [String: Int] ?? [:]
         ledger = defaults.data(forKey: "repetitionLedger").flatMap { try? JSONDecoder().decode(RepetitionLedger.self, from: $0) } ?? RepetitionLedger()
     }
@@ -152,7 +152,7 @@ final class Preferences: ObservableObject {
     func noteApplied(_ word: String) { ledger.applied(word, day: Int(Date().timeIntervalSince1970 / 86_400)) }
     var capitalizeNamesChoice: String { get { nameCapitalization } set { nameCapitalization = newValue } }
     /// Maps the picker to the engine's `capitalize_names` for the app being written in (nil: the playground).
-    func capitalizeNames(for bundle: String?) -> Bool { (NameCapitalization(rawValue: nameCapitalization) ?? .documents).enabled(bundle: bundle) }
+    func capitalizeNames(for bundle: String?) -> Bool { (NameCapitalization(rawValue: nameCapitalization) ?? .everywhere).enabled(bundle: bundle) }
     // Key-path bindings for toggles (see AppModel.modeChoice).
     var automaticHighlights: Bool { get { passive && !paused } set { passive = newValue; paused = false } }
     var launchAtLoginChoice: Bool { get { launchAtLogin } set { setLogin(newValue) } }

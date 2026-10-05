@@ -282,7 +282,16 @@ impl NameIndex {
             // word there that closes its phrase ("bye, hope.").
             let addressed_capital = !sentence_start(i)
                 && (capitalized(t) && spelling::addressed(tokens, i)
-                    || spelling::greeted(tokens, i) && spelling::closes_name(tokens, i));
+                    || spelling::greeted(tokens, i)
+                        && spelling::closes_name(tokens, i)
+                        // "thanks for", "thank you", "best quality", "dear me": an ordinary word is
+                        // a name only behind a comma ("bye, hope.") or a salutation ("hey hope!").
+                        && (!spelling::ordinary(b)
+                            || i > 0 && tokens[i - 1].surface == ","
+                            || i > 0
+                                && ["hi", "hello", "hey", "hiya", "dear"]
+                                    .contains(&tokens[i - 1].normalized.as_str())
+                                && !["me", "you", "us", "all"].contains(&b)));
             level[i] = if hits[i]
                 || t.proper_name
                 || addressed_capital
@@ -371,7 +380,7 @@ pub(crate) fn title_case(token: &Token<'_>) -> String {
         });
     cased + suffix
 }
-/// Lowercase strong or medium names, merged into runs ("aman jain", "jean-luc").
+/// Lowercase names (strong, medium, or weak but dictionary proper nouns), merged into runs ("aman jain", "jean-luc").
 pub fn capitalizations(
     text: &str,
     tokens: &[Token<'_>],
@@ -379,12 +388,25 @@ pub fn capitalizations(
     cover: &[bool],
     utf16_at: impl Fn(usize) -> usize,
 ) -> Vec<Capitalization> {
+    // Sentences with Hinglish in them: Roman Hindi is full of words the dictionary knows only
+    // capitalized ("karo", "dena"), so only stronger evidence capitalizes there.
+    let hinglish: HashSet<(usize, usize)> = tokens
+        .iter()
+        .filter(|t| t.is_word && spelling::hinglish(base(&t.normalized)))
+        .map(|t| (t.paragraph, t.sentence))
+        .collect();
     // A strong name that is also an ordinary word ("hope", "rose") needs an addressing context.
     let eligible = |i: usize| {
         let t = &tokens[i];
         let b = base(&t.normalized);
+        // A context guess counts when the dictionary only knows the word with a capital ("mumbai").
         t.is_word
-            && level[i] >= MEDIUM
+            && (level[i] >= MEDIUM
+                || level[i] == WEAK
+                    && spelling::name_only(b)
+                    && !hinglish.contains(&(t.paragraph, t.sentence)))
+            && !spelling::PARTICLES.contains(&b)
+            && !spelling::hinglish(b)
             && t.surface.chars().next().is_some_and(char::is_lowercase)
             && t.surface
                 .chars()

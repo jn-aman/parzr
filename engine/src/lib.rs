@@ -356,6 +356,25 @@ fn make_edit(
         group_id: None,
     })
 }
+/// Days and months that are never ordinary words ("may", "march" and "august" are).
+const CALENDAR_PROPER: [&str; 16] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "january",
+    "february",
+    "april",
+    "june",
+    "july",
+    "september",
+    "october",
+    "november",
+    "december",
+];
 fn upper_first(s: &str) -> String {
     let mut chars = s.chars();
     match chars.next() {
@@ -439,6 +458,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     let index = req.names_index();
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
     let protected = protected_ranges_for(req, &tokens, &index);
+    // A tagger name is protected from respelling, not from its capital ("rahul" to "Rahul"); the
+    // case-only name guard below still blocks every other edit on it.
+    let tagged = |r: &TextRange| {
+        tokens
+            .iter()
+            .any(|t| t.proper_name && t.start_utf16 == r.start_utf16)
+    };
     // A name candidate may receive only case changes: its level decides which passes skip it.
     let level = index.mark(&req.text, &tokens);
     // Neighbouring name tokens ("Aman Jain", "Jean-Luc") form one span, so nothing can be
@@ -609,7 +635,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
         if protected
             .iter()
-            .any(|r| overlaps(token.start_utf16, token.end_utf16, r))
+            .any(|r| overlaps(token.start_utf16, token.end_utf16, r) && !tagged(r))
         {
             continue;
         }
@@ -660,6 +686,19 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             ) {
                 edits.push(e);
             }
+        } else if CALENDAR_PROPER.contains(&token.surface)
+            && let Some(e) = make_edit(
+                &req.text,
+                token.start_utf16,
+                token.end_utf16,
+                upper_first(token.surface),
+                "Capitalization",
+                "grammar.calendar_capitalization",
+                "Days and months take a capital letter.",
+                0.95,
+            )
+        {
+            edits.push(e);
         }
         if index > 0 {
             let previous = &tokens[index - 1];
@@ -755,10 +794,18 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     }
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
+    // Only lowercase letters turned capital, nothing else changed.
+    let raises_case = |e: &Edit| {
+        e.original.chars().count() == e.replacement.chars().count()
+            && e.original
+                .chars()
+                .zip(e.replacement.chars())
+                .all(|(a, b)| a == b || a.is_lowercase() && b.to_lowercase().eq([a]))
+    };
     let blocked = |e: &Edit| {
         protected
             .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !(raises_case(e) && tagged(r)))
             || !case_only(e)
                 && if e.start_utf16 != e.end_utf16 {
                     guard
@@ -1143,6 +1190,67 @@ mod tests {
             ..Request::default()
         };
         assert_eq!(fix_request(req.clone()), req.text);
+    }
+    #[test]
+    fn tagged_and_dictionary_proper_nouns_get_capitals() {
+        let named = |text: &str, words: &[&str]| -> Request {
+            let tokens = words
+                .iter()
+                .map(|w| {
+                    let start = text.find(w).unwrap();
+                    TokenHint {
+                        start_utf16: start,
+                        end_utf16: start + w.len(),
+                        pos: "Noun".into(),
+                        lemma: String::new(),
+                        name: true,
+                    }
+                })
+                .collect();
+            Request {
+                text: text.into(),
+                tokens,
+                capitalize_names: true,
+                ..Request::default()
+            }
+        };
+        assert_eq!(
+            fix_request(named(
+                "I met rahul and sneha at the office.",
+                &["rahul", "sneha"]
+            )),
+            "I met Rahul and Sneha at the office."
+        );
+        assert_eq!(
+            fix_request(named("Send it to sarah by friday.", &["sarah"])),
+            "Send it to Sarah by Friday."
+        );
+        assert_eq!(
+            fix_request(named("We flew to mumbai in june.", &[])),
+            "We flew to Mumbai in June."
+        );
+        // Ordinary words stay lowercase without a cue, and a tagged name is still never respelled.
+        assert_eq!(
+            fix_request(named("I may march in august.", &[])),
+            "I may march in august."
+        );
+        assert_eq!(
+            fix_request(named("Ask rakesh about it.", &["rakesh"])),
+            "Ask Rakesh about it."
+        );
+        // Greetings make a name only of an unusual word or one behind a comma; particles and
+        // Hinglish stay lowercase.
+        for text in [
+            "Thanks for the fix.",
+            "You're a lifesaver, thank you.",
+            "It is the very best quality.",
+            "A painting by Rogier van der Weyden.",
+            "Chinta mat karo, I'll handle it.",
+            "Thanks yaar, see you in mumbai.",
+        ] {
+            assert_eq!(fix_request(named(text, &[])), text);
+        }
+        assert_eq!(fix_request(named("Thanks, rose.", &[])), "Thanks, Rose.");
     }
     #[test]
     fn shorthand_days_and_months_are_not_names() {
