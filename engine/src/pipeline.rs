@@ -231,6 +231,7 @@ impl Document {
                 pos: crate::AUTO_CAPITAL_HINT.into(),
                 lemma: String::new(),
                 name: false,
+                ..Default::default()
             }));
         req
     }

@@ -509,6 +509,7 @@ mod name_tests {
                     pos: "Noun".into(),
                     lemma: String::new(),
                     name: true,
+                    ..Default::default()
                 });
             }
         }

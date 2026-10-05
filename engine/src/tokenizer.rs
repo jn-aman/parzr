@@ -11,6 +11,9 @@ pub struct TokenHint {
     pub lemma: String,
     #[serde(default)]
     pub name: bool,
+    /// The system spell checker accepts the word as spelled (older adapters omit it: false).
+    #[serde(default)]
+    pub known: bool,
 }
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "local-model", allow(dead_code))] // Research checker metadata; production only uses protection coordinates.
@@ -27,6 +30,7 @@ pub struct Token<'a> {
     pub pos: String,
     pub lemma: String,
     pub proper_name: bool,
+    pub system_known: bool,
 }
 /// A period that closes an abbreviation ("p.m.", "U.S.", "Mr.", "etc.") rather than a sentence.
 /// It ends a sentence only before a capitalized word, and never after a title.
@@ -104,6 +108,8 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
             pos: hint.map(|h| h.pos.clone()).unwrap_or_default(),
             lemma: hint.map(|h| h.lemma.clone()).unwrap_or_default(),
             proper_name: hint.is_some_and(|h| h.name) && !crate::names::never_a_name(m.as_str()),
+            // A possessive token ("aman's") inherits its base hint, which says nothing about it.
+            system_known: hint.is_some_and(|h| h.known) && indexed.contains_key(&(offset, end)),
         });
         if [".", "!", "?"].contains(&m.as_str())
             && !(m.as_str() == "." && abbreviation_continues(text, m.start()))

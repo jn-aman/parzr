@@ -1220,6 +1220,7 @@ mod tests {
                         pos: "Noun".into(),
                         lemma: String::new(),
                         name: true,
+                        ..TokenHint::default()
                     }
                 })
                 .collect();
@@ -1279,6 +1280,7 @@ mod tests {
                 pos: "Noun".into(),
                 lemma: String::new(),
                 name: true,
+                ..TokenHint::default()
             }
         };
         let text = "hey Aman can u send the file on friday";

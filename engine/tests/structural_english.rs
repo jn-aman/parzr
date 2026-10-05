@@ -268,6 +268,7 @@ fn possessive_dictionary_tokens_remain_fully_protected() {
             pos: "Noun".into(),
             lemma: "Mira'sreport".into(),
             name: true,
+            ..Default::default()
         }],
         ..Request::default()
     })

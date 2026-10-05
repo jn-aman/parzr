@@ -129,14 +129,16 @@ static NSString *parzrCapitalized(NSString *word) {
     for (NSString *part in [word componentsSeparatedByString:@"-"]) [parts addObject:part.length ? [[[part substringToIndex:1] uppercaseString] stringByAppendingString:[part substringFromIndex:1]] : part];
     return [parts componentsJoinedByString:@"-"];
 }
-// Lowercase words of `text` (at most 200 distinct) that the system lexicon treats as names.
-static NSSet<NSString *> *parzrLexiconNames(NSString *text) {
+// Per lowercase word of `text` (at most 1000 distinct): bit 1 the system lexicon treats it as a name, bit 2 the system spell checker rejects it.
+// A word without bit 2 is accepted as spelled, so the engine never respells it.
+static NSDictionary<NSString *, NSNumber *> *parzrLexiconInfo(NSString *text) {
     static std::mutex lock;
     static NSCache<NSString *, NSNumber *> *cache = [] { auto *c = [NSCache new]; c.countLimit = 2000; return c; }();
     NSMutableArray<NSString *> *tokens = [NSMutableArray array], *fresh = [NSMutableArray array];
-    NSMutableSet<NSString *> *seen = [NSMutableSet set], *names = [NSMutableSet set];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    NSMutableDictionary<NSString *, NSNumber *> *info = [NSMutableDictionary dictionary];
     NSUInteger at = 0, n = text.length;
-    while (at < n && tokens.count < 200) {
+    while (at < n && tokens.count < 1000) {
         if (!parzrWordChar([text characterAtIndex:at])) { at++; continue; }
         NSRange run = parzrWordRun(text, NSMakeRange(at, 1));
         at = NSMaxRange(run);
@@ -149,7 +151,8 @@ static NSSet<NSString *> *parzrLexiconNames(NSString *text) {
         static NSInteger tag = [NSSpellChecker uniqueSpellDocumentTag];
         NSSpellChecker *checker = NSSpellChecker.sharedSpellChecker;
         NSMutableSet<NSString *> *flagged = [NSMutableSet set];
-        for (NSUInteger from = 0, found = 0; from < n && found < 2000; found++) {
+        NSUInteger found = 0;
+        for (NSUInteger from = 0; from < n && found < 2000; found++) {
             NSRange r = [checker checkSpellingOfString:text startingAt:from language:@"en" wrap:NO inSpellDocumentWithTag:tag wordCount:nil];
             if (r.location == NSNotFound || r.length == 0) break;
             NSString *word = parzrShaped([text substringWithRange:r]);
@@ -157,12 +160,13 @@ static NSSet<NSString *> *parzrLexiconNames(NSString *text) {
             from = NSMaxRange(r);
         }
         for (NSString *word in fresh) {
-            BOOL name = [flagged containsObject:word] && [checker checkSpellingOfString:parzrCapitalized(word) startingAt:0 language:@"en" wrap:NO inSpellDocumentWithTag:tag wordCount:nil].location == NSNotFound;
-            [cache setObject:@(name) forKey:word];
+            BOOL flaggedWord = [flagged containsObject:word], rejected = flaggedWord || found >= 2000; // past the scan cap nothing is known
+            BOOL name = flaggedWord && [checker checkSpellingOfString:parzrCapitalized(word) startingAt:0 language:@"en" wrap:NO inSpellDocumentWithTag:tag wordCount:nil].location == NSNotFound;
+            [cache setObject:@((name ? 1 : 0) | (rejected ? 2 : 0)) forKey:word];
         }
     }
-    for (NSString *word in tokens) if ([[cache objectForKey:word] boolValue]) [names addObject:word];
-    return names;
+    for (NSString *word in tokens) info[word] = [cache objectForKey:word];
+    return info;
 }
 // The same OS language hints for the app, browser host and LSP. This does not load weights.
 extern "C" char *parzr_model_token_hints(const char *input) {
@@ -175,7 +179,7 @@ extern "C" char *parzr_model_token_hints(const char *input) {
         // Without an explicit language, short texts get no tags ("I met Aman Jain." yields no name).
         [tagger setLanguage:NLLanguageEnglish range:NSMakeRange(0, text.length)];
         NSMutableArray *hints = [NSMutableArray array];
-        NSSet<NSString *> *lexiconNames = parzrLexiconNames(text);
+        NSDictionary<NSString *, NSNumber *> *lexicon = parzrLexiconInfo(text);
         __block NSUInteger consumed = 0;
         [tagger enumerateTagsInRange:NSMakeRange(0, text.length) unit:NLTokenUnitWord scheme:NLTagSchemeLexicalClass options:NLTaggerOmitWhitespace | NLTaggerOmitPunctuation usingBlock:^(NLTag tag, NSRange range, BOOL *) {
             if (range.location < consumed) return;
@@ -185,15 +189,19 @@ extern "C" char *parzr_model_token_hints(const char *input) {
             BOOL named = ([name isEqualToString:NLTagPersonalName] || [name isEqualToString:NLTagPlaceName] || [name isEqualToString:NLTagOrganizationName]) && [word rangeOfCharacterFromSet:NSCharacterSet.uppercaseLetterCharacterSet].location != NSNotFound;
             NSUInteger end = NSMaxRange(range);
             // A lowercase word the system lexicon knows only Capitalized is a name; the hint covers the whole run ("jean-luc", "jatin's").
-            if (!named && lexiconNames.count) {
+            if (!named && lexicon.count) {
                 NSRange run = parzrWordRun(text, range);
                 NSString *shaped = parzrShaped([text substringWithRange:run]);
-                if (shaped && [lexiconNames containsObject:shaped]) { named = YES; end = NSMaxRange(run); range = NSMakeRange(run.location, run.length); }
+                if (shaped && ([lexicon[shaped] intValue] & 1)) { named = YES; end = NSMaxRange(run); range = NSMakeRange(run.location, run.length); }
             }
+            // The system spell checker accepts this word as spelled (absent from the table: unknown, so not known).
+            NSString *plain = parzrShaped(word);
+            NSNumber *mask = plain ? lexicon[plain] : nil;
+            BOOL known = mask != nil && !([mask intValue] & 2);
             // The engine tokenizes "Aman's" as one word, so the name hint must cover the possessive too.
             if (named && end + 2 <= text.length && ([text characterAtIndex:end] == '\'' || [text characterAtIndex:end] == 0x2019) && [text characterAtIndex:end + 1] == 's' && (end + 2 == text.length || ![NSCharacterSet.letterCharacterSet characterIsMember:[text characterAtIndex:end + 2]])) end += 2;
             consumed = end;
-            [hints addObject:@{@"start_utf16":@(range.location), @"end_utf16":@(end), @"pos":tag ?: @"Other", @"lemma":lemma, @"name":@(named)}];
+            [hints addObject:@{@"start_utf16":@(range.location), @"end_utf16":@(end), @"pos":tag ?: @"Other", @"lemma":lemma, @"name":@(named), @"known":@(known)}];
         }];
         NSData *data = [NSJSONSerialization dataWithJSONObject:hints options:0 error:nil];
         if (!data) return nullptr;
