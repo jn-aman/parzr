@@ -9,6 +9,7 @@ struct StatusPopover: View {
     var editor: () -> Void
     var settings: () -> Void
     var about: () -> Void
+    var welcome: () -> Void = {}
     var quit: () -> Void
     static let firefoxHint = "Firefox is blocking accessibility. In Firefox, open Settings, Privacy & Security, Permissions, turn off \"Prevent accessibility services from accessing your browser\", then restart Firefox."
     var body: some View {
@@ -42,6 +43,7 @@ struct StatusPopover: View {
             Rectangle().fill(Color.hairline).frame(height: 0.5)
             HStack { NativeButton(title: "Open editor", symbol: "square.and.pencil", label: "Open Parzr", action: editor); Spacer(); NativeButton(title: "Settings", symbol: "slider.horizontal.3", action: settings) }
             HStack { NativeButton(title: "About Parzr", kind: .utility, action: about); Spacer(); NativeButton(title: "Quit", kind: .utility, label: "Quit Parzr", action: quit) }
+            NativeButton(title: "Welcome and permissions…", kind: .utility, label: "Welcome and permissions", action: welcome).fixedSize()
         }.padding(18).frame(width: 318).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }
 }

@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     @Published var selectionHint = false
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
+    var showOnboarding: (() -> Void)?
     var didAnalyze: (() -> Void)?
     var clearDraftUndo: (() -> Void)?
     private var analysisTask: Task<Void, Never>?

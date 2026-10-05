@@ -211,6 +211,9 @@ struct StudioView: View {
                     divider
                     settingRow("Show in Dock", detail: "Turn off to keep Parzr in the menu bar only.") { toggle("Show in Dock", $preferences.showInDock) }
                 }
+                group("SETUP") {
+                    settingRow("Welcome and permissions", detail: preferences.permissionGranted ? "Accessibility is on. Review Contacts, login and the shortcut, or try Parzr again." : "Accessibility is off. Parzr cannot check other apps until you allow it.") { NativeButton(title: "Open", action: { model.showOnboarding?() }).fixedSize() }
+                }
                 group("YOUR SHORTCUT") {
                     settingRow("Check selected text", detail: "Click to record. Use ⌘, ⌥, or ⌃. Escape cancels.") {
                         VStack(alignment: .trailing, spacing: 6) {

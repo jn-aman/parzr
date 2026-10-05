@@ -9,7 +9,7 @@ final class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     private let panelModel = AppModel()
     private let studioModel = AppModel()
     private var statusItem: NSStatusItem?
@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var panel: FloatingPanel?
     private var marker: NSPanel?
     private var studio: NSWindow?
+    private var onboarding: NSWindow?
+    private var onboardingModel: OnboardingModel?
     private var hotkey: GlobalHotkey?
     private var passive: PassiveObserver?
     private let inline = InlineSuggestions()
@@ -84,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
         panelModel.warm(); studioModel.warm()
+        studioModel.showOnboarding = { [weak self] in self?.showOnboarding() }
         Preferences.shared.syncContacts()
         // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
         let prefs = Preferences.shared
@@ -103,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.store(in: &subscriptions)
         Preferences.shared.$appearance.removeDuplicates().sink { [weak self] value in
             let appearance = value == "system" ? nil : NSAppearance(named: value == "paper" ? .aqua : .darkAqua)
-            NSApp.appearance = appearance; self?.studio?.appearance = appearance
+            NSApp.appearance = appearance; self?.studio?.appearance = appearance; self?.onboarding?.appearance = appearance
         }.store(in: &subscriptions)
         Preferences.shared.$showInDock.dropFirst().removeDuplicates().sink { [weak self] show in
             // Changing policy can deactivate the app; keep an open Parzr window in front.
@@ -134,10 +137,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
-        if !CommandLine.arguments.contains("--background") { showStudio() }
-        // First launch (or a revoked grant): ask once per launch so Parzr is not silently idle.
+        // A grant made in System Settings flips permissionGranted (watcher or trust notification); the monitors and observers re-attach from that, so no restart. Bring the welcome window back to show the check.
+        Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
+            guard granted, let self, self.onboarding?.isVisible == true, self.onboardingModel?.step == .accessibility else { return }
+            NSApp.activate(ignoringOtherApps: true); self.onboarding?.makeKeyAndOrderFront(nil)
+        }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
-        if !AXIsProcessTrusted() { Preferences.shared.promptForPermission() }
+        Preferences.shared.refreshPermission()
+        // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
+        if OnboardingFlow.shouldShow(completed: Preferences.shared.onboardingCompleted, granted: Preferences.shared.permissionGranted) { showOnboarding() }
+        else if !CommandLine.arguments.contains("--background") { showStudio() }
     }
     @objc private func toggleStatusPopover() {
         guard let button = statusItem?.button else { return }
@@ -155,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }, editor: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .playground) },
             settings: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .general) },
             about: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .about) },
+            welcome: { [weak self] in self?.statusPopover?.close(); self?.showOnboarding() },
             quit: { NSApp.terminate(nil) }))
         statusPopover = popover
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -165,6 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = app.addItem(withTitle: "About Parzr", action: #selector(openAbout), keyEquivalent: ""); about.target = self
         app.addItem(.separator())
         let settings = app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ","); settings.target = self
+        let welcome = app.addItem(withTitle: "Welcome and permissions…", action: #selector(openWelcome), keyEquivalent: ""); welcome.target = self
         app.addItem(.separator())
         app.addItem(withTitle: "Hide Parzr", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: "Quit Parzr", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -201,6 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         add("Open Parzr", action: #selector(openEditor)).image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)
         add("Settings…", action: #selector(openSettings), key: ",").image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        add("Welcome and permissions…", action: #selector(openWelcome)).image = NSImage(systemSymbolName: "hand.raised", accessibilityDescription: nil)
         menu.addItem(.separator())
         let quit = add("Quit Parzr", action: #selector(NSApplication.terminate(_:)), key: "q"); quit.target = NSApp
     }
@@ -212,6 +224,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openEditor() { showStudio(route: .playground) }
     @objc private func openAbout() { showStudio(route: .about) }
     @objc private func openSettings() { showStudio(route: .general) }
+    @objc private func openWelcome() { showOnboarding() }
+    /// The guided setup. Opens at the Accessibility step when that is still missing for a returning user; closing it by any route marks it completed.
+    func showOnboarding(step: OnboardingStep? = nil) {
+        closePanel()
+        if let window = onboarding, window.isVisible { if let step { onboardingModel?.step = step }; NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); return }
+        Preferences.shared.refreshPermission()
+        let model = OnboardingModel(step: step); onboardingModel = model
+        let view = OnboardingView(model: model, settings: { [weak self] in self?.showStudio(route: .general) },
+                                  finish: { [weak self] in self?.onboarding?.close(); self?.showStudio(route: .playground) })
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: OnboardingView.size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.appearance = Preferences.shared.appearance == "system" ? nil : NSAppearance(named: Preferences.shared.appearance == "paper" ? .aqua : .darkAqua)
+        window.title = "Welcome to Parzr"; window.titlebarAppearsTransparent = true; window.isReleasedWhenClosed = false; window.delegate = self
+        window.contentView = NSHostingView(rootView: view); window.collectionBehavior = [.moveToActiveSpace]
+        window.center(); onboarding = window
+        if Preferences.shared.showInDock { NSApp.setActivationPolicy(.regular) }
+        NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); window.orderFrontRegardless()
+    }
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === onboarding else { return }
+        onboardingModel?.complete(); onboarding = nil; onboardingModel = nil
+    }
     func showStudio(route: StudioRoute? = nil) {
         studioModel.clearDraftUndo = { [weak self] in self?.studio?.undoManager?.removeAllActions() }
         if let route { studioModel.studioRoute = route }
@@ -334,8 +367,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
-                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 330), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
+                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, welcome: {}, quit: {}), size: NSSize(width: 318, height: 334), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
                 try render(StudioView(model: studioModel, route: .about, renderingSnapshot: true), size: NSSize(width: 760, height: 540), to: URL(fileURLWithPath: directory).appendingPathComponent("about-small.png"))
+                // Onboarding: one PNG per step; the Accessibility step in both states. Previews never touch macOS permissions.
+                let welcome = OnboardingModel(step: .welcome)
+                welcome.editor.playground(welcome.draft, debounce: true)
+                for _ in 0..<300 where welcome.editor.busy || welcome.editor.result == nil { try await Task.sleep(for: .milliseconds(50)) }
+                guard welcome.editor.chosenEdits.count >= 3 else { throw ParzrError.message("The onboarding sample did not produce its suggestions.") }
+                for step in OnboardingStep.allCases {
+                    welcome.step = step; welcome.previewGranted = step == .done
+                    try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-\(step.rawValue + 1).png"))
+                }
+                welcome.step = .accessibility; welcome.previewGranted = true
+                try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-2-granted.png"))
+                welcome.step = .done; welcome.previewGranted = false
+                try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-6-skipped.png"))
                 print("Saved native UI snapshots to \(directory)"); NSApp.terminate(nil)
             } catch { fputs("Native snapshots failed: \(error.localizedDescription)\n", stderr); exit(1) }
         }

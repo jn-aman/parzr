@@ -31,6 +31,8 @@ final class Preferences: ObservableObject {
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
     /// Opt-in: VS Code and Cursor show a screen-reader notice when Parzr asks for accessibility, so they stay untouched until enabled.
     @Published var checkVSCode: Bool { didSet { defaults.set(checkVSCode, forKey: "checkVSCode") } }
+    /// Set when the welcome window closes. A missing Accessibility grant still reopens it at that step on every launch.
+    @Published var onboardingCompleted: Bool { didSet { defaults.set(onboardingCompleted, forKey: "onboardingCompleted") } }
     @Published var firefoxHintDismissed: Bool { didSet { defaults.set(firefoxHintDismissed, forKey: "firefoxHintDismissed") } }
     /// Shown in the menu-bar popover when Firefox blocks accessibility; not persisted, so it returns next launch until dismissed.
     @Published var firefoxHint = false
@@ -80,7 +82,7 @@ final class Preferences: ObservableObject {
         contextRefinement = defaults.object(forKey: "contextRefinement") as? Bool ?? true
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
-        checkVSCode = defaults.bool(forKey: "checkVSCode"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")
+        checkVSCode = defaults.bool(forKey: "checkVSCode"); onboardingCompleted = defaults.bool(forKey: "onboardingCompleted"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")
         learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
         useContactNames = defaults.bool(forKey: "useContactNames")
         nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.documents.rawValue
@@ -92,11 +94,6 @@ final class Preferences: ObservableObject {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         permissionGranted = AXIsProcessTrustedWithOptions(options)
         if !permissionGranted, let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
-        watchPermission()
-    }
-    /// Launch-time ask: macOS shows its own dialog (with Open System Settings); we do not open Settings ourselves.
-    func promptForPermission() {
-        permissionGranted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         watchPermission()
     }
     /// macOS posts this when any app's Accessibility grant changes; refreshing here makes a new grant take effect without relaunching or opening Parzr.
