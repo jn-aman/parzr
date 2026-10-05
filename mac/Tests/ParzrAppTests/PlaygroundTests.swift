@@ -381,7 +381,13 @@ final class NameGateTests: XCTestCase {
     }
     func testTokenCapAndCacheBound() {
         XCTAssertEqual(NameGate.candidates(in: "ask jatin ask jatin").count, 2)
-        let words = (0..<1500).map { i in String((0..<4).map { Character(UnicodeScalar(97 + (i / Int(pow(26.0, Double($0))) % 26))!) }) }
+        // 1500 distinct four-letter words: the base-26 digits of each index (kept simple for the type checker).
+        let letters = Array("abcdefghijklmnopqrstuvwxyz")
+        let words: [String] = (0..<1500).map { (i: Int) -> String in
+            var n = i, word = ""
+            for _ in 0..<4 { word.append(letters[n % 26]); n /= 26 }
+            return word
+        }
         XCTAssertEqual(NameGate.candidates(in: words.joined(separator: " ")).count, NameGate.maxTokens)
         var cache = LRUCache<Bool>(capacity: 16)
         for i in 0..<100 { cache.set(true, for: "k\(i)"); _ = cache.value(for: "k0") }
