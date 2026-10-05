@@ -1,6 +1,6 @@
 //! Inflection-aware deletion index with deterministic context ranking.
 use crate::tokenizer::Token;
-use crate::{context, morphology};
+use crate::{context, morphology, names};
 use std::{
     collections::{HashMap, HashSet},
     sync::OnceLock,
@@ -8,6 +8,8 @@ use std::{
 struct Lexicon {
     words: HashMap<String, u8>,
     lowercase: HashSet<String>,
+    /// Original casing of entries that are neither plain capitalized nor acronyms ("McDonald", "iPhone").
+    canonical: HashMap<String, String>,
     deletes: HashMap<String, Vec<String>>,
 }
 fn frequency(word: &str) -> u16 {
@@ -35,11 +37,25 @@ fn lexicon() -> &'static Lexicon {
             serde_json::from_str(include_str!("../rules/lexicon.json")).unwrap_or_default();
         let mut words = HashMap::with_capacity(entries.len());
         let mut lowercase = HashSet::new();
+        let mut canonical: HashMap<String, String> = HashMap::new();
         for (word, flags) in entries {
-            if word == word.to_lowercase() {
+            let lower = word.to_lowercase();
+            if word == lower {
                 lowercase.insert(word.clone());
+            } else if word.chars().skip(1).any(char::is_uppercase)
+                && word.chars().any(char::is_lowercase)
+            {
+                // Mixed case beyond a first capital ("McDonald", "iPhone"), not "Rahul" or "NASA".
+                // The spelling with the most capitals wins ("McDonald" over "Mcdonald").
+                let capitals = |w: &str| w.chars().filter(|c| c.is_uppercase()).count();
+                let better = canonical
+                    .get(&lower)
+                    .is_none_or(|old| capitals(&word) > capitals(old));
+                if better {
+                    canonical.insert(lower.clone(), word.clone());
+                }
             }
-            *words.entry(word.to_lowercase()).or_insert(0) |= flags;
+            *words.entry(lower).or_insert(0) |= flags;
         }
         let mut deletes: HashMap<String, Vec<String>> = HashMap::new();
         // Index common words only for suggestions; all words remain valid dictionary entries.
@@ -63,9 +79,11 @@ fn lexicon() -> &'static Lexicon {
             values.sort();
             values.dedup();
         }
+        canonical.retain(|lower, _| !lowercase.contains(lower));
         Lexicon {
             words,
             lowercase,
+            canonical,
             deletes,
         }
     })
@@ -87,6 +105,20 @@ pub fn flags(word: &str) -> u8 {
 }
 pub fn name_only(word: &str) -> bool {
     known(word) && !lexicon().lowercase.contains(word)
+}
+/// An ordinary lowercase dictionary word ("hope", "rose"), as opposed to a name or acronym.
+pub fn ordinary(word: &str) -> bool {
+    lexicon().lowercase.contains(word)
+}
+/// "mcdonald" -> "McDonald", "iphone" -> "iPhone": the dictionary spelling of a word that is not
+/// an ordinary lowercase word.
+pub fn canonical_case(lower: &str) -> Option<&'static str> {
+    lexicon().canonical.get(lower).map(String::as_str)
+}
+/// A name from the lexicon or the bundled list, whether or not the user capitalized it.
+fn namey(word: &str) -> bool {
+    let word = names::base(word);
+    name_only(word) && !names::is_name_typo(word) || names::name_word(word)
 }
 pub fn possessive_boundary(token: &Token<'_>) -> Option<usize> {
     if !token.surface.chars().next().is_some_and(char::is_uppercase) {
@@ -538,6 +570,8 @@ pub fn slot_fix(
         .filter(|c| slot_fits(c, tokens, index))
         .collect();
     match fits[..] {
+        // A name one letter away from a function word ("ta" is a typo, "tia" may be a person).
+        [only] if !transposed(word, only) && lowercase_name(tokens, index) => None,
         [only] => Some((
             "spelling.frequent_word",
             only.to_string(),
@@ -548,9 +582,111 @@ pub fn slot_fix(
 }
 /// Words after which a lowercase unknown word is a person being greeted, thanked or addressed
 /// ("hi aman", "ask aman about it"), not a typo.
-const ADDRESSING: [&str; 23] = [
-    "hi", "hello", "hey", "dear", "thanks", "thank", "regards", "cheers", "bye", "ask", "asked",
-    "tell", "told", "ping", "pinged", "cc", "ccd", "see", "saw", "meet", "met", "call", "called",
+const ADDRESSING: [&str; 36] = [
+    "hi",
+    "hello",
+    "hey",
+    "hiya",
+    "dear",
+    "thanks",
+    "thank",
+    "regards",
+    "cheers",
+    "bye",
+    "ask",
+    "asked",
+    "tell",
+    "told",
+    "ping",
+    "pinged",
+    "cc",
+    "ccd",
+    "see",
+    "saw",
+    "meet",
+    "met",
+    "call",
+    "called",
+    "best",
+    "sincerely",
+    "yours",
+    "love",
+    "greetings",
+    "invite",
+    "invited",
+    "inviting",
+    "email",
+    "emailed",
+    "bcc",
+    "thx",
+];
+/// Greetings and closings only (no verbs): a word after these that ends its phrase is a person.
+const GREETINGS: [&str; 14] = [
+    "hi",
+    "hello",
+    "hey",
+    "hiya",
+    "dear",
+    "thanks",
+    "thank",
+    "regards",
+    "cheers",
+    "bye",
+    "best",
+    "sincerely",
+    "yours",
+    "love",
+];
+/// Closing words: a name on the next line is the signature ("Regards,\naman").
+const SIGNOFF: [&str; 13] = [
+    "regards",
+    "thanks",
+    "cheers",
+    "best",
+    "sincerely",
+    "thank",
+    "you",
+    "yours",
+    "love",
+    "bye",
+    "wishes",
+    "faithfully",
+    "again",
+];
+/// Words that introduce a person; they weigh less than ADDRESSING because they also precede
+/// ordinary words, so they need a word of 4+ letters that is not typo-shaped.
+const LEADS: [&str; 7] = [
+    "with", "from", "message", "messaged", "texted", "join", "tag",
+];
+const TITLES: [&str; 14] = [
+    "mr",
+    "mrs",
+    "ms",
+    "mx",
+    "dr",
+    "prof",
+    "professor",
+    "shri",
+    "sri",
+    "shree",
+    "smt",
+    "kumari",
+    "sardar",
+    "janab",
+];
+const HONORIFICS: [&str; 14] = [
+    "ji", "sir", "madam", "maam", "bhai", "bhaiya", "didi", "da", "dada", "anna", "akka", "sahab",
+    "saheb", "garu",
+];
+/// Words that open a clause, so an unknown word after them followed by a verb is its subject.
+const CLAUSE_LEADS: [&str; 26] = [
+    "that", "and", "but", "so", "because", "if", "when", "while", "then", "think", "thought",
+    "guess", "hope", "know", "knew", "said", "says", "heard", "whether", "though", "since",
+    "until", "maybe", "perhaps", "also", "actually",
+];
+const FINITE: [&str; 13] = [
+    "is", "was", "has", "had", "will", "would", "can", "could", "should", "does", "did", "are",
+    "were",
 ];
 /// Words that can precede an article + noun phrase, so a missing space in "aclear statement" or
 /// "is aman" can be read as "a clear statement" or "is a man". Perception, address and
@@ -568,14 +704,32 @@ fn line_start(tokens_before: &[Token<'_>], token: &Token<'_>) -> bool {
         .last()
         .is_none_or(|p| p.paragraph != token.paragraph || [".", "!", "?"].contains(&p.surface))
 }
+/// Capital letters the engine itself added when it opened a sentence say nothing about how the
+/// text was typed; the pipeline marks them so every pass reads the same evidence.
+const AUTO_CAPITAL: &str = "AutoCapital";
+pub const AUTO_CAPITAL_HINT: &str = AUTO_CAPITAL;
+fn typed_capital(t: &Token<'_>) -> bool {
+    t.surface.chars().next().is_some_and(char::is_uppercase) && t.pos != AUTO_CAPITAL
+}
 fn unknown_alphabetic(token: &Token<'_>) -> bool {
-    token.is_word && token.surface.chars().all(char::is_alphabetic) && !known(&token.normalized)
+    let word = names::base(&token.normalized);
+    token.is_word && word.chars().all(|c| c.is_alphabetic() || c == '\'') && !known(word)
 }
 /// Strong typo evidence for an unknown word: it is one adjacent swap, one extra letter or one
 /// missing letter away from a frequent word, or it is two frequent words run together. A name
 /// like "aman" has none of these (the one-letter edits it has, "a man" or "amen", are exactly
 /// the false positives), so typo-shaped words keep their corrections even beside names.
-fn typo_shaped(word: &str) -> bool {
+fn swaps_to_common(word: &str) -> bool {
+    let bytes = word.as_bytes();
+    word.is_ascii()
+        && (0..bytes.len().saturating_sub(1)).any(|i| {
+            let mut swapped = bytes.to_vec();
+            swapped.swap(i, i + 1);
+            let swapped = String::from_utf8_lossy(&swapped).into_owned();
+            swapped != word && ordinary(&swapped) && frequency(&swapped) >= 600
+        })
+}
+pub(crate) fn typo_shaped(word: &str) -> bool {
     // Frequency prior 400 is Zipf 4.0, about the 6,000 most frequent words.
     let frequent = |w: &str| known(w) && frequency(w) >= 400;
     if !word.is_ascii() || word.len() < 4 {
@@ -609,6 +763,18 @@ fn typo_shaped(word: &str) -> bool {
             }
         }
     }
+    // One wrong letter in a long word ("experiance"); long names are rarely one letter from a word.
+    if word.len() >= 7 {
+        for i in 0..bytes.len() {
+            for letter in b'a'..=b'z' {
+                let mut other = bytes.to_vec();
+                other[i] = letter;
+                if other != bytes && frequent(&text(&other)) {
+                    return true;
+                }
+            }
+        }
+    }
     (2..word.len() - 1).any(|i| {
         let (a, b) = word.split_at(i);
         let glue = |w: &str| {
@@ -634,18 +800,13 @@ fn name_neighbor(
     casual: bool,
 ) -> bool {
     // A capitalized word that opens a sentence is no evidence: "Clara atean apple".
-    let counts =
-        !line_start(before_neighbor, neighbor) || neighbor.surface.chars().all(char::is_lowercase);
+    let counts = !line_start(before_neighbor, neighbor) || !typed_capital(neighbor);
     neighbor.is_word
         && neighbor.paragraph == token.paragraph
         && counts
-        && (name_only(&neighbor.normalized) && !name_only_typo(&neighbor.normalized, "")
+        && (namey(&neighbor.normalized) && !name_only_typo(&neighbor.normalized, "")
             || casual && unknown_alphabetic(neighbor) && !typo_shaped(&neighbor.normalized)
-            || neighbor
-                .surface
-                .chars()
-                .next()
-                .is_some_and(char::is_uppercase)
+            || typed_capital(neighbor)
                 && neighbor.normalized != "i"
                 && !neighbor.normalized.starts_with("i'"))
 }
@@ -654,6 +815,24 @@ const DETERMINERS_AND_ARTICLES: [&str; 14] = [
     "the", "a", "an", "my", "your", "his", "her", "our", "their", "its", "this", "that", "these",
     "those",
 ];
+/// Whether a lowercase word that the system lexicon accepts only as a name ("tran", "neds",
+/// "appel") is really a typo here: a determiner precedes it, one swap gives a frequent word, or
+/// one missing letter gives a very frequent word (tran/train, neds/needs).
+pub fn hinted_name_is_typo(word: &str, prev: &str) -> bool {
+    if names::is_name_typo(word) || name_only_typo(word, prev) || typo_shaped(word) {
+        return true;
+    }
+    // Frequency 600 is Zipf 6.0-equivalent in this table: only very common words qualify.
+    word.is_ascii()
+        && (0..=word.len()).any(|i| {
+            (b'a'..=b'z').any(|letter| {
+                let mut longer = word.as_bytes().to_vec();
+                longer.insert(i, letter);
+                let longer = String::from_utf8_lossy(&longer).into_owned();
+                ordinary(&longer) && frequency(&longer) >= 600
+            })
+        })
+}
 /// Whether a lexicon entry listed only as a name ("Tran", "OT", "Peron") is really a damaged
 /// common word here: a determiner precedes it, or it is one swap from a top-1000 word ("ot").
 fn name_only_typo(word: &str, prev: &str) -> bool {
@@ -668,13 +847,149 @@ fn name_only_typo(word: &str, prev: &str) -> bool {
                     && frequency(&swapped) >= 500
             })
 }
+/// The word before `token`, read through the given punctuation. A word on an earlier line only
+/// counts when it closes a letter ("Regards,\naman").
+fn lead<'a>(history: &'a [Token<'a>], token: &Token<'_>, skip: &[&str]) -> Option<&'a Token<'a>> {
+    let p = history
+        .iter()
+        .rev()
+        .take(3)
+        .find(|t| !skip.contains(&t.surface))?;
+    (p.is_word && (p.paragraph == token.paragraph || SIGNOFF.contains(&p.normalized.as_str())))
+        .then_some(p)
+}
+const PUNCT_BEFORE: [&str; 4] = [",", ":", "-", "!"];
+/// Whether the word after `tokens[index]` ends the name: nothing, punctuation, or a preposition
+/// or conjunction ("thanks, will for the help"), not a pronoun that starts a new clause.
+pub fn closes_name(tokens: &[Token<'_>], index: usize) -> bool {
+    tokens.get(index + 1).is_none_or(|n| {
+        !n.is_word
+            || n.paragraph != tokens[index].paragraph
+            || function(&n.normalized)
+                && !["i", "you", "we", "they", "he", "she", "it", "there"]
+                    .contains(&n.normalized.as_str())
+    })
+}
+/// A greeting, title or sign-off just before `tokens[index]` ("Hi, hope!", "Dr. mark").
+pub fn greeted(tokens: &[Token<'_>], index: usize) -> bool {
+    let (history, token) = (&tokens[..index], &tokens[index]);
+    lead(history, token, &PUNCT_BEFORE).is_some_and(|p| GREETINGS.contains(&p.normalized.as_str()))
+        || lead(history, token, &["."]).is_some_and(|p| TITLES.contains(&p.normalized.as_str()))
+}
+/// A greeting, address, title or sign-off just before `tokens[index]`.
+pub fn addressed(tokens: &[Token<'_>], index: usize) -> bool {
+    addressed_by(&tokens[..index], &tokens[index])
+}
+/// Another word of a name list ("aditya, prajakta and ketaki") one connector away.
+fn list_member(neighbor: &Token<'_>, opens_line: bool, token: &Token<'_>) -> bool {
+    neighbor.is_word
+        && neighbor.paragraph == token.paragraph
+        && (namey(&neighbor.normalized)
+            // Two damaged-looking words side by side are two typos, not two names.
+            || unknown_alphabetic(neighbor)
+                && !(typo_shaped(&neighbor.normalized) && typo_shaped(&token.normalized))
+            || typed_capital(neighbor) && !opens_line)
+}
+const CONNECTORS: [&str; 4] = [",", "and", "&", "or"];
+fn in_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) -> bool {
+    let connector = |t: &Token<'_>| CONNECTORS.contains(&t.normalized.as_str());
+    let left = match history {
+        [rest @ .., w, c] if connector(c) => Some((w, line_start(rest, w))),
+        [rest @ .., w, c, and] if connector(c) && connector(and) => Some((w, line_start(rest, w))),
+        _ => None,
+    };
+    let right = match following {
+        [c, w, ..] if connector(c) => Some(w),
+        [c, and, w, ..] if connector(c) && connector(and) => Some(w),
+        _ => None,
+    };
+    left.is_some_and(|(w, opens)| list_member(w, opens, token))
+        || right.is_some_and(|w| list_member(w, false, token))
+}
+const PARTICLES: [&str; 12] = [
+    "van", "von", "der", "den", "de", "zu", "bin", "ibn", "del", "della", "dos", "du",
+];
+/// A name part beside a surname particle with another unknown word on its far side.
+fn particle_joined(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) -> bool {
+    let part = |t: &Token<'_>| {
+        t.is_word
+            && t.paragraph == token.paragraph
+            && (unknown_alphabetic(t) || namey(&t.normalized) || typed_capital(t))
+    };
+    let particle = |t: &Token<'_>| {
+        t.paragraph == token.paragraph && PARTICLES.contains(&t.normalized.as_str())
+    };
+    let after = match following {
+        [p, w, ..] if particle(p) && part(w) => true,
+        [p, p2, w, ..] if particle(p) && particle(p2) && part(w) => true,
+        _ => false,
+    };
+    let before = match history {
+        [.., w, p] if particle(p) && part(w) => true,
+        [.., w, p2, p] if particle(p) && particle(p2) && part(w) => true,
+        _ => false,
+    };
+    // The token may itself be the second particle ("van der berg").
+    let inner = particle(token)
+        && history.last().is_some_and(particle)
+        && following.first().is_some_and(part);
+    after || before || inner
+}
+/// A word that is not everyday vocabulary: unknown, a name, capitalized, or rare.
+fn uncommon(t: &Token<'_>) -> bool {
+    t.is_word
+        && (unknown_alphabetic(t)
+            || namey(&t.normalized)
+            || typed_capital(t)
+            || frequency(&t.normalized) < 400)
+}
+/// "anke, dirk and wim": a list of three or more single words whose other items are all
+/// uncommon words is a list of people.
+fn name_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) -> bool {
+    let connector = |t: &Token<'_>| CONNECTORS.contains(&t.normalized.as_str());
+    let same = |t: &Token<'_>| t.paragraph == token.paragraph;
+    let mut items = vec![];
+    let mut i = history.len();
+    loop {
+        let mut j = i;
+        while j > 0 && i - j < 2 && connector(&history[j - 1]) && same(&history[j - 1]) {
+            j -= 1;
+        }
+        if j == i || j == 0 || !history[j - 1].is_word || !same(&history[j - 1]) {
+            break;
+        }
+        items.push(&history[j - 1]);
+        i = j - 1;
+    }
+    let mut k = 0;
+    loop {
+        let mut j = k;
+        while j < following.len() && j - k < 2 && connector(&following[j]) && same(&following[j]) {
+            j += 1;
+        }
+        if j == k || j >= following.len() || !following[j].is_word || !same(&following[j]) {
+            break;
+        }
+        items.push(&following[j]);
+        k = j + 1;
+    }
+    let shaped = typo_shaped(&token.normalized);
+    items.len() >= 2
+        && items
+            .into_iter()
+            .all(|t| uncommon(t) && !(shaped && typo_shaped(&t.normalized)))
+}
 /// Whether a lowercase unknown word is most likely a person's name typed without capitals.
 /// Turning a name into unrelated common words is worse than leaving a typo alone, so every
 /// respelling and word split is skipped for these.
 fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) -> bool {
-    if typo_shaped(&token.normalized) {
+    let word = names::base(&token.normalized);
+    if names::is_name_typo(word) {
         return false;
     }
+    // A word that looks like a typo ("farhad" is "far had") is still a name where the context
+    // names a person: only the weaker signals below give way to its shape.
+    let shaped = typo_shaped(word);
     let previous = history.last();
     let next = following.first();
     let before_previous = &history[..history.len().saturating_sub(1)];
@@ -689,47 +1004,210 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
         )
         .filter(|t| t.is_word)
         .collect();
-    let casual = !line.iter().any(|t| {
-        t.surface.chars().next().is_some_and(char::is_uppercase)
-            && t.normalized != "i"
-            && !t.normalized.starts_with("i'")
+    let casual = !line
+        .iter()
+        .any(|t| typed_capital(t) && t.normalized != "i" && !t.normalized.starts_with("i'"));
+    let next_word = next.filter(|n| n.is_word && n.paragraph == token.paragraph);
+    let next_is = |list: &[&str]| next_word.is_some_and(|n| list.contains(&n.normalized.as_str()));
+    // "thanks aman", "Mr aman", "aman ji", "alice, aman and ravi". After a comma the next word must
+    // not be another content word: "hi, plase call me" is a typo, "hi, aman how are you" a name.
+    let punctuated = previous.is_some_and(|p| !p.is_word);
+    let closes_phrase = next_word.is_none_or(|n| {
+        function(&n.normalized)
+            || FINITE.contains(&n.normalized.as_str())
+            || [
+                "how", "what", "when", "where", "why", "hope", "please", "thanks",
+            ]
+            .contains(&n.normalized.as_str())
     });
-    if (previous.is_some_and(|p| name_neighbor(p, before_previous, token, casual))
-        || next.is_some_and(|n| name_neighbor(n, history, token, casual)))
+    if addressed_by(history, token)
+        && (!punctuated || closes_phrase)
+        && (!shaped || !punctuated || next_word.is_none())
+        || next_is(&HONORIFICS)
+    {
+        return true;
+    }
+    // A vocative: "wim, could you...", "...before lunch, sai?".
+    let comma_before = previous.is_some_and(|p| p.surface == ",");
+    let ends_clause =
+        next.is_none_or(|n| n.paragraph != token.paragraph || ["?", "!", "."].contains(&n.surface));
+    if comma_before && ends_clause
+        || next.is_some_and(|n| n.surface == ",")
+            && previous.is_none_or(|p| !p.is_word || p.paragraph != token.paragraph)
+    {
+        return true;
+    }
+    // A signature: one to three words on the line after "Regards,".
+    let signed = line.len() <= 3
+        && line
+            .iter()
+            .all(|t| unknown_alphabetic(t) || namey(&t.normalized))
+        && history
+            .iter()
+            .rev()
+            .find(|t| t.paragraph != token.paragraph)
+            .is_some_and(|t| SIGNOFF.contains(&t.normalized.as_str()));
+    if signed {
+        return true;
+    }
+    if in_list(history, token, following) || name_list(history, token, following) {
+        return true;
+    }
+    if !shaped
+        && (previous.is_some_and(|p| name_neighbor(p, before_previous, token, casual))
+            || next.is_some_and(|n| name_neighbor(n, history, token, casual)))
         && !next.is_some_and(|n| DETERMINERS_AND_ARTICLES.contains(&n.normalized.as_str()))
     {
         return true;
     }
-    if previous.is_some_and(|p| ADDRESSING.contains(&p.normalized.as_str())) {
+    // "jean-luc", "jae-won": an unknown word hyphenated to another word is a name part.
+    let before_dash = !shaped
+        && previous.zip(before_previous.last()).is_some_and(|(d, o)| {
+            d.surface == "-"
+                && o.is_word
+                && o.end_byte == d.start_byte
+                && d.end_byte == token.start_byte
+        });
+    let after_dash = !shaped
+        && next.zip(following.get(1)).is_some_and(|(d, o)| {
+            d.surface == "-"
+                && o.is_word
+                && token.end_byte == d.start_byte
+                && d.end_byte == o.start_byte
+        });
+    if before_dash || after_dash {
         return true;
     }
-    // "anoop said hi": an unknown word that opens a clause and takes a finite verb is a subject.
-    if line_start(history, token)
-        && next.is_some_and(|n| {
-            [
-                "is", "was", "has", "had", "will", "would", "can", "could", "should", "does",
-                "did", "are", "were",
+    // A lone word on the last line of a message is its signature ("Thanks for the update.\npieter").
+    if line.is_empty()
+        && following.iter().all(|t| t.paragraph == token.paragraph)
+        && history.iter().any(|t| t.paragraph != token.paragraph)
+        && previous.is_none_or(|p| p.paragraph != token.paragraph)
+    {
+        return true;
+    }
+    // "joost van dijk", "pieter von trapp": a surname particle joins two name parts.
+    if particle_joined(history, token, following) {
+        return true;
+    }
+    // "taht" is "that": one swap of a top-frequency word is a typo, whatever follows it.
+    if shaped && swaps_to_common(word) {
+        return false;
+    }
+    let after_determiner = previous.is_some_and(|p| {
+        DETERMINERS_AND_ARTICLES.contains(&p.normalized.as_str())
+            || [
+                "very", "so", "too", "more", "most", "less", "quite", "really",
             ]
-            .contains(&n.normalized.as_str())
-                || morphology::verb(&n.normalized)
-                    .is_some_and(|v| v.past == n.normalized || v.third == n.normalized)
+            .contains(&p.normalized.as_str())
+    });
+    let clause_lead = previous.is_none_or(|p| {
+        !p.is_word
+            || p.paragraph != token.paragraph
+            || CLAUSE_LEADS.contains(&p.normalized.as_str())
+            || ADDRESSING.contains(&p.normalized.as_str())
+    }) && !after_determiner;
+    let boundary = previous.is_none_or(|p| !p.is_word || p.paragraph != token.paragraph);
+    // "anoop said hi", "I think anoop said": an unknown word that opens a clause and takes a
+    // finite verb is a subject.
+    // A damaged word ("someonehad") after a conjunction ("if someonehad called") is no subject.
+    let shaped_ok = !shaped
+        || boundary
+        || previous.is_some_and(|p| {
+            [
+                "think", "thought", "guess", "hope", "know", "knew", "said", "says", "heard",
+                "maybe", "perhaps", "also", "actually",
+            ]
+            .contains(&p.normalized.as_str())
+        });
+    if clause_lead
+        && shaped_ok
+        && next_word.is_some_and(|n| {
+            // A damaged subject ("if soeone had called") also precedes an auxiliary, so an
+            // auxiliary only counts when the word opens its line or sentence.
+            !shaped && boundary && FINITE.contains(&n.normalized.as_str())
+                || !FINITE.contains(&n.normalized.as_str())
+                    && morphology::verb(&n.normalized).is_some_and(|v| {
+                        v.past == n.normalized || !shaped && v.third == n.normalized
+                    })
         })
     {
         return true;
     }
-    // A signature or greeting target: a whole line of at most three unknown or name-only words.
-    line.len() < 3
+    // "aman from design", "aman about the launch"; "to/at/for" only when the word opens its clause.
+    if !after_determiner && next_is(&["from", "about"]) || boundary && next_is(&["to", "at", "for"])
+    {
+        return true;
+    }
+    // "lunch with farhad yesterday": a damaged-looking word between "with" and a time or place.
+    if shaped
+        && previous.is_some_and(|p| ["with", "from"].contains(&p.normalized.as_str()))
+        && next_is(&[
+            "yesterday",
+            "today",
+            "tomorrow",
+            "tonight",
+            "later",
+            "at",
+            "on",
+            "in",
+            "and",
+            "last",
+            "this",
+            "next",
+            "before",
+            "after",
+            "about",
+            "earlier",
+        ])
+    {
+        return true;
+    }
+    // Below here only a word that is not typo-shaped is a name on weaker evidence.
+    if shaped {
+        return false;
+    }
+    // "with aman", "invite aman": a person is the object of a preposition or a verb of contact.
+    if word.chars().count() >= 4
+        && previous.is_some_and(|p| LEADS.contains(&p.normalized.as_str()))
+        && next_word.is_none_or(|n| !DETERMINERS_AND_ARTICLES.contains(&n.normalized.as_str()))
+    {
+        return true;
+    }
+    // The last line of the text: one to three words.
+    let last_line = line.len() <= 3
         && line
             .iter()
-            .all(|t| unknown_alphabetic(t) || name_only(&t.normalized))
+            .all(|t| unknown_alphabetic(t) && !typo_shaped(&t.normalized) || namey(&t.normalized))
+        && following.iter().all(|t| t.paragraph == token.paragraph)
+        && history.iter().any(|t| t.paragraph != token.paragraph);
+    // A greeting target: a whole line of at most two unknown or name-only words.
+    last_line
+        || line.len() < 3
+            && line
+                .iter()
+                .all(|t| unknown_alphabetic(t) || namey(&t.normalized))
+}
+/// The greeting, address, title or honorific context before a name ("thanks, aman", "Dr. aman").
+fn addressed_by(history: &[Token<'_>], token: &Token<'_>) -> bool {
+    lead(history, token, &PUNCT_BEFORE).is_some_and(|p| ADDRESSING.contains(&p.normalized.as_str()))
+        || lead(history, token, &["."]).is_some_and(|p| TITLES.contains(&p.normalized.as_str()))
 }
 /// A lowercase word that is a person's name typed without capitals: listed only as a name, or
 /// unknown and name-like in context. Callers must not respell it into a different word.
 pub fn lowercase_name(tokens: &[Token<'_>], index: usize) -> bool {
     let token = &tokens[index];
+    let word = names::base(&token.normalized);
     token.is_word
-        && token.surface.chars().all(char::is_lowercase)
-        && (name_only(&token.normalized)
+        && token
+            .surface
+            .chars()
+            .all(|c| c.is_lowercase() || c == '\'' || c == '’')
+        && !names::is_name_typo(word)
+        && !names::never_a_name(token.surface)
+        // "the tran" and "ot" are damaged common words, whatever the lexicon lists them as.
+        && (namey(word)
+            && !name_only_typo(word, index.checked_sub(1).map_or("", |i| &tokens[i].normalized))
             || unknown_alphabetic(token)
                 && name_like(token, &tokens[..index], &tokens[index + 1..]))
 }
@@ -876,11 +1354,11 @@ pub fn suggest(
     if let Some(s) = short {
         return Some(s.into());
     }
-    if lexicon().lowercase.contains(word) {
+    if lexicon().lowercase.contains(word) || names::is_shorthand(word) {
         return None;
     }
     // "jain" is only listed as "Jain": a lowercase name is never respelled into another word.
-    if name_only(word) && !name_only_typo(word, prev)
+    if namey(word) && !name_only_typo(names::base(word), prev)
         || name_like(token, history, following_context)
     {
         return None;
@@ -915,7 +1393,12 @@ pub fn suggest(
     let dialect_flag = if dialect == "british" { 128 } else { 64 };
     let mut candidates: Vec<String> = candidates
         .into_iter()
-        .filter(|candidate| distance_one(word, candidate) && flags(candidate) & dialect_flag != 0)
+        // Never offer a name ("rahul" to "raul") or acronym ("neha" to "neh") for a lowercase word.
+        .filter(|candidate| {
+            distance_one(word, candidate)
+                && flags(candidate) & dialect_flag != 0
+                && lexicon.lowercase.contains(candidate.as_str())
+        })
         // "aman" to "man" or "aclear" to "clear" drops a word's first letter and either loses an
         // article or erases a name; neither is a correction.
         .filter(|candidate| word.strip_prefix('a') != Some(candidate))
@@ -1273,5 +1756,17 @@ mod tests {
     fn dictionary_assets() {
         assert!(known("message"));
         assert!(known("configuration"));
+    }
+    #[test]
+    fn system_lexicon_names_yield_only_to_clear_typos() {
+        // Typos that are also surnames (Tran, Appel) or one letter from a very common word.
+        assert!(hinted_name_is_typo("tran", "the"));
+        assert!(hinted_name_is_typo("neds", "she"));
+        assert!(hinted_name_is_typo("appel", "an"));
+        assert!(hinted_name_is_typo("aquire", "to"));
+        // Real names keep their protection.
+        for name in ["rakesh", "aman", "minji", "hao", "priya", "jatin"] {
+            assert!(!hinted_name_is_typo(name, "with"), "{name}");
+        }
     }
 }

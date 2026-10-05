@@ -3,19 +3,22 @@ mod context;
 #[cfg(feature = "local-model")]
 mod model;
 mod morphology;
+mod names;
 mod pipeline;
 mod punctuation;
 mod rules;
 mod spelling;
 mod structure;
 mod tokenizer;
+pub use names::NameIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+pub(crate) use spelling::AUTO_CAPITAL_HINT;
 use std::time::Instant;
 use std::{
     ffi::{CStr, CString, c_char},
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::OnceLock,
+    sync::{Arc, OnceLock},
 };
 pub use tokenizer::TokenHint;
 pub const MAX_TEXT_BYTES: usize = 65_536;
@@ -37,6 +40,13 @@ pub struct Request {
     pub mode: Mode,
     #[serde(default)]
     pub dictionary: Vec<String>,
+    /// Names the user or app knows (own name, contacts, document names). A name may only receive
+    /// case changes. At most 2000 entries of 128 bytes each; a request over either limit is rejected.
+    #[serde(default)]
+    pub names: Vec<String>,
+    /// Also suggest capitalizing a known name typed in lowercase ("aman jain" to "Aman Jain").
+    #[serde(default)]
+    pub capitalize_names: bool,
     #[serde(default)]
     pub dialect: String,
     #[serde(default)]
@@ -50,6 +60,24 @@ pub struct Request {
     /// Explicit passage checks request model context; passive typing stays on the fast engine.
     #[serde(default)]
     pub deep: bool,
+    /// Names and dictionary folded once per request and shared by every pass.
+    #[serde(skip)]
+    #[doc(hidden)]
+    pub name_index: Option<Arc<NameIndex>>,
+}
+impl Request {
+    fn names_index(&self) -> Arc<names::NameIndex> {
+        self.name_index
+            .clone()
+            .unwrap_or_else(|| Arc::new(names::NameIndex::new(self)))
+    }
+    /// A copy that carries its name index, so passes over rewritten text never rebuild it.
+    fn indexed(&self) -> Request {
+        Request {
+            name_index: Some(self.names_index()),
+            ..self.clone()
+        }
+    }
 }
 impl Default for Request {
     fn default() -> Self {
@@ -57,12 +85,15 @@ impl Default for Request {
             text: String::new(),
             mode: Mode::Fix,
             dictionary: vec![],
+            names: vec![],
+            capitalize_names: false,
             dialect: String::new(),
             protected_ranges: vec![],
             tokens: vec![],
             sentence_start: true,
             sentence_end: true,
             deep: false,
+            name_index: None,
         }
     }
 }
@@ -207,9 +238,17 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|(?:^|\s)[@#][\w-]+|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
 }
 fn protected_ranges(req: &Request) -> Vec<TextRange> {
+    let tokens = tokenizer::tokenize(&req.text, &req.tokens);
+    protected_ranges_for(req, &tokens, &req.names_index())
+}
+fn protected_ranges_for(
+    req: &Request,
+    tokens: &[tokenizer::Token<'_>],
+    index: &names::NameIndex,
+) -> Vec<TextRange> {
     let mut spans = req.protected_ranges.clone();
     for m in protection_regex().find_iter(&req.text) {
         spans.push(TextRange {
@@ -217,53 +256,55 @@ fn protected_ranges(req: &Request) -> Vec<TextRange> {
             end_utf16: utf16_at(&req.text, m.end()),
         });
     }
-    let tokens = tokenizer::tokenize(&req.text, &req.tokens);
-    for token in tokens {
-        if token.proper_name
-            || req
-                .dictionary
-                .iter()
-                .any(|w| w.eq_ignore_ascii_case(token.surface))
-        {
+    // Dictionary words (also multi-word and hyphenated entries) stay exactly as typed; other names
+    // the tagger found are protected up to their possessive boundary.
+    let dictionary = index.dictionary_hits(tokens);
+    for (i, token) in tokens.iter().enumerate() {
+        if dictionary[i] {
+            match spans.last_mut() {
+                Some(last)
+                    if i > 0 && dictionary[i - 1] && last.end_utf16 == tokens[i - 1].end_utf16 =>
+                {
+                    last.end_utf16 = token.end_utf16
+                }
+                _ => spans.push(TextRange {
+                    start_utf16: token.start_utf16,
+                    end_utf16: token.end_utf16,
+                }),
+            }
+        } else if token.proper_name {
             spans.push(TextRange {
                 start_utf16: token.start_utf16,
-                end_utf16: if token.proper_name
-                    && !req
-                        .dictionary
-                        .iter()
-                        .any(|w| w.eq_ignore_ascii_case(token.surface))
-                {
-                    possessive_boundary(&token)
-                        .map(|n| token.start_utf16 + n)
-                        .unwrap_or(token.end_utf16)
-                } else {
-                    token.end_utf16
-                },
+                end_utf16: possessive_boundary(token)
+                    .map(|n| token.start_utf16 + n)
+                    .unwrap_or(token.end_utf16),
             });
         }
     }
-    // Multi-word dictionary names are also protected, with lexical boundary checks.
-    for word in req
-        .dictionary
-        .iter()
-        .filter(|w| w.chars().any(char::is_whitespace))
-    {
-        if let Ok(re) = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(word))) {
-            for m in re.find_iter(&req.text) {
-                spans.push(TextRange {
-                    start_utf16: utf16_at(&req.text, m.start()),
-                    end_utf16: utf16_at(&req.text, m.end()),
-                });
-            }
-        }
-    }
     spans
+}
+/// Original-coordinate spans of every name candidate (even a guess from context), for passes that
+/// cannot be told to leave a name alone, such as the local model.
+#[cfg(feature = "local-model")]
+fn name_guard_ranges(req: &Request) -> Vec<TextRange> {
+    let tokens = tokenizer::tokenize(&req.text, &req.tokens);
+    let level = req.names_index().mark(&req.text, &tokens);
+    tokens
+        .iter()
+        .zip(level)
+        .filter(|(_, l)| *l >= names::WEAK)
+        .map(|(t, _)| TextRange {
+            start_utf16: t.start_utf16,
+            end_utf16: t.end_utf16,
+        })
+        .collect()
 }
 fn possessive_boundary(token: &tokenizer::Token<'_>) -> Option<usize> {
     spelling::possessive_boundary(token)
 }
 /// Original-coordinate structural spans for adapters analyzing a document selection.
 pub fn protected_spans(req: &Request) -> Vec<TextRange> {
+    #[allow(unused_mut)]
     let mut spans = protected_ranges(req);
     #[cfg(feature = "local-model")]
     {
@@ -358,6 +399,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     if req.dictionary.len() > 1000 || req.dictionary.iter().any(|x| x.len() > 128) {
         return Err("Dictionary exceeds its size limit.".into());
     }
+    if req.names.len() > names::MAX_NAMES
+        || req.names.iter().any(|x| x.len() > names::MAX_NAME_BYTES)
+    {
+        return Err("Names exceed their size limit.".into());
+    }
     if !["", "american", "british"].contains(&req.dialect.as_str()) {
         return Err("Unsupported English variant.".into());
     }
@@ -378,8 +424,38 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     }) {
         return Err("Invalid structural range.".into());
     }
-    let protected = protected_ranges(req);
+    let index = req.names_index();
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
+    let protected = protected_ranges_for(req, &tokens, &index);
+    // A name candidate may receive only case changes: its level decides which passes skip it.
+    let level = index.mark(&req.text, &tokens);
+    // Neighbouring name tokens ("Aman Jain", "Jean-Luc") form one span, so nothing can be
+    // inserted between a given and a family name.
+    let name_ranges = |at_least: u8| -> Vec<TextRange> {
+        let mut out: Vec<TextRange> = vec![];
+        let mut last = None;
+        for (i, t) in tokens
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| level[*i] >= at_least)
+        {
+            let joined = last == i.checked_sub(1)
+                && last.is_some()
+                && req.text[tokens[i - 1].end_byte..t.start_byte]
+                    .chars()
+                    .all(|c| c == ' ' || c == '\t');
+            match out.last_mut() {
+                Some(r) if joined => r.end_utf16 = t.end_utf16,
+                _ => out.push(TextRange {
+                    start_utf16: t.start_utf16,
+                    end_utf16: t.end_utf16,
+                }),
+            }
+            last = Some(i);
+        }
+        out
+    };
+    let guard = name_ranges(names::MEDIUM);
     let mut edits = Vec::new();
     let phrases = rules::phrases();
     for m in phrases
@@ -532,18 +608,31 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             }
         } else if starts_sentence(&req.text, token.start_byte, req)
             && token.surface.chars().next().is_some_and(char::is_lowercase)
-            && spelling::known(&token.normalized)
+            && (spelling::known(&token.normalized)
+                || req.capitalize_names && level[index] >= names::MEDIUM)
             && (req.text[token.start_byte..]
                 .trim_end()
                 .ends_with(['.', '!', '?'])
                 || has_clause_start(&req.text[token.start_byte..]))
         {
             let first = token.surface.chars().next().unwrap_or(' ');
+            // "mcdonald" is "McDonald", "iphone" is "iPhone"; other words only need their first letter.
+            let (end, replacement) =
+                if let Some(canonical) = spelling::canonical_case(&token.normalized) {
+                    (token.end_utf16, canonical.to_string())
+                } else if level[index] >= names::MEDIUM {
+                    (token.end_utf16, names::title_case(token))
+                } else {
+                    (
+                        token.start_utf16 + first.len_utf16(),
+                        first.to_uppercase().to_string(),
+                    )
+                };
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
-                token.start_utf16 + first.len_utf16(),
-                first.to_uppercase().to_string(),
+                end,
+                replacement,
                 "Capitalization",
                 "grammar.sentence_capitalization",
                 "Start the sentence with a capital letter.",
@@ -587,6 +676,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 && e.end_utf16 > context_start
         });
         if !pending_grammar_context
+            && level[index] < names::MEDIUM
             && !edits
                 .iter()
                 .any(|e| e.start_utf16 <= token.start_utf16 && e.end_utf16 >= token.end_utf16)
@@ -621,22 +711,57 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             edits.push(e);
         }
     }
+    if req.capitalize_names && !tone_only {
+        for c in names::capitalizations(
+            &req.text,
+            &tokens,
+            &level,
+            &index.phrase_cover(&tokens),
+            |b| utf16_at(&req.text, b),
+        ) {
+            if let Some(e) = make_edit(
+                &req.text,
+                c.start_utf16,
+                c.end_utf16,
+                c.replacement.clone(),
+                "Style",
+                "names.capitalize",
+                &format!("Capitalize the name “{}”.", c.replacement),
+                0.90,
+            ) {
+                edits.push(e);
+            }
+        }
+    }
+    // Names take case changes only: any other edit touching one is dropped.
+    let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
+    let blocked = |e: &Edit| {
+        protected
+            .iter()
+            .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+            || !case_only(e)
+                && if e.start_utf16 != e.end_utf16 {
+                    guard
+                        .iter()
+                        .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+                } else {
+                    // An insertion may not split a name ("Aman. Jain"); a possessive space may.
+                    e.rule_id != "spelling.possessive_boundary"
+                        && guard
+                            .iter()
+                            .any(|r| e.start_utf16 > r.start_utf16 && e.start_utf16 < r.end_utf16)
+                }
+    };
     let blocked_groups: std::collections::HashSet<_> = edits
         .iter()
-        .filter(|e| {
-            protected
-                .iter()
-                .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
-        })
+        .filter(|e| blocked(e))
         .filter_map(|e| e.group_id.clone())
         .collect();
     edits.retain(|e| {
         !e.group_id
             .as_ref()
             .is_some_and(|g| blocked_groups.contains(g))
-            && !protected
-                .iter()
-                .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+            && !blocked(e)
     });
     // Objective fixes beat style; tone request wrappers own capitalization of their prefix.
     edits.sort_by(|a, b| {
@@ -840,6 +965,243 @@ mod tests {
             assert_eq!(fix(input), expected, "{input}");
             assert_eq!(fix(expected), expected, "idempotent: {expected}");
         }
+    }
+    fn fix_request(req: Request) -> String {
+        let mut req = req;
+        for _ in 0..6 {
+            let pass = rewrite_once(&req, false).unwrap();
+            if pass.edits.is_empty() {
+                break;
+            }
+            req.text = pass.text;
+        }
+        req.text
+    }
+    fn with_names(text: &str, names: &[&str], capitalize: bool) -> Request {
+        Request {
+            text: text.into(),
+            names: names.iter().map(|s| s.to_string()).collect(),
+            capitalize_names: capitalize,
+            ..Request::default()
+        }
+    }
+    /// The pipeline's passes, which keep the evidence of the first pass for the later ones.
+    fn pipe(text: &str) -> String {
+        pipeline::rewrite(&Request {
+            text: text.into(),
+            ..Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn names_are_unchanged_by_context_alone_without_any_list() {
+        for input in [
+            "it is sneha verma here, just checking in.",
+            "I met jonas zu hohenlohe at the conference yesterday.",
+            "Could you review this before lunch, sai?",
+            "wim, could you review this before lunch?",
+            "Hey meiling! Long time no see.",
+            "I think harsha said the meeting moved to Friday.",
+            "The new team includes anke, dirk and wim.",
+            "Thanks for the update.\npieter",
+            "Mr aman will come.",
+            "Please ask rahul bhai about it.",
+            "That works for me.\nthanks, jean-luc",
+            "I borrowed deepak's laptop for the demo.",
+        ] {
+            // Only case may change (a sentence capital); no letter of a name does.
+            assert_eq!(pipe(input).to_lowercase(), input.to_lowercase(), "{input}");
+        }
+    }
+    #[test]
+    fn request_names_only_take_case_changes() {
+        // The request names are never respelled, split or punctuated, even next to each other.
+        let text = "I met Aman Jain, and Aman's friend said aman jain was kind.";
+        let got = fix_request(with_names(text, &["Aman", "Jain"], true));
+        assert_eq!(
+            got,
+            "I met Aman Jain, and Aman's friend said Aman Jain was kind."
+        );
+        assert_eq!(
+            fix_request(with_names("we met zoë and ZOË", &["Zoë"], true)),
+            "we met Zoë and ZOË"
+        );
+        assert_eq!(
+            fix_request(with_names("send it to jean-luc today", &["Jean-Luc"], true)),
+            "send it to Jean-Luc today"
+        );
+        assert_eq!(
+            fix_request(with_names("ask o'neil about it", &["O'Neil"], true)),
+            "ask O'Neil about it"
+        );
+        // Off by default: case is left alone mid-sentence.
+        let text = "ask aman jain about it";
+        assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
+    }
+    #[test]
+    fn capitalize_names_adds_one_case_only_edit() {
+        let req = with_names(
+            "Hello from priya sharma and aman.",
+            &["Priya Sharma", "Aman"],
+            true,
+        );
+        let pass = rewrite_once(&req, false).unwrap();
+        let ids: Vec<_> = pass
+            .edits
+            .iter()
+            .map(|e| (e.rule_id.as_str(), e.replacement.as_str()))
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("names.capitalize", "Priya Sharma"),
+                ("names.capitalize", "Aman")
+            ]
+        );
+        assert!(pass.edits.iter().all(|e| e.category == "Style"));
+        assert_eq!(
+            pass.edits[0].explanation,
+            "Capitalize the name “Priya Sharma”."
+        );
+    }
+    #[test]
+    fn names_that_are_ordinary_words_need_a_capital_or_a_cue() {
+        let names = ["Will", "Mark", "Grace", "May", "Hope"];
+        for text in [
+            "I will go and mark the page.",
+            "We may leave with grace and hope.",
+            "I hope you will say hi, may we?",
+        ] {
+            let got = fix_request(with_names(text, &names, true));
+            assert_eq!(got, text, "{text}");
+        }
+        assert_eq!(
+            fix_request(with_names("thanks, will", &names, true)),
+            "thanks, Will"
+        );
+        assert_eq!(
+            fix_request(with_names("Hey Hope! how are you", &names, true)),
+            "Hey Hope! how are you"
+        );
+        assert_eq!(
+            fix_request(Request {
+                text: "We should invite Rose to the call.".into(),
+                ..Request::default()
+            }),
+            "We should invite Rose to the call."
+        );
+    }
+    #[test]
+    fn dictionary_matches_unicode_possessive_hyphen_and_phrases() {
+        for (text, dictionary) in [
+            ("ask ZOË now", "zoë"),
+            ("ask Zoë’s team", "Zoë"),
+            ("we met jean-luc today", "Jean-Luc"),
+            ("visit new yrk today", "new yrk"),
+            ("see aman's mesage", "mesage"),
+        ] {
+            let req = Request {
+                text: text.into(),
+                dictionary: vec![dictionary.into()],
+                ..Request::default()
+            };
+            assert_eq!(fix_request(req), text, "{text}");
+        }
+        let req = Request {
+            text: "we met jean-luc and new yrk".into(),
+            dictionary: vec!["Jean-Luc".into(), "new yrk".into()],
+            ..Request::default()
+        };
+        assert_eq!(fix_request(req.clone()), req.text);
+    }
+    #[test]
+    fn shorthand_days_and_months_are_not_names() {
+        // A tagger hint on "u" must not protect it; pls is never respelled either.
+        let hint = |text: &str, word: &str| {
+            let start = text.find(word).unwrap();
+            TokenHint {
+                start_utf16: start,
+                end_utf16: start + word.len(),
+                pos: "Noun".into(),
+                lemma: String::new(),
+                name: true,
+            }
+        };
+        let text = "hey Aman can u send the file on friday";
+        let tokens = tokenizer::tokenize(text, &[hint(text, "u"), hint(text, "friday")]);
+        assert!(tokens.iter().all(|t| !t.proper_name));
+        assert_eq!(fix("ok pls send it thx"), "ok pls send it thx");
+        assert!(
+            names::never_a_name("june")
+                && names::never_a_name("Friday")
+                && names::never_a_name("u")
+        );
+        assert!(!names::never_a_name("Li") && !names::never_a_name("aman"));
+    }
+    #[test]
+    fn surname_particles_join_name_parts() {
+        for input in [
+            "it is joost van dijk here, just checking in.",
+            "I met pieter von trapp at the conference yesterday.",
+            "I had lunch with farhad yesterday.",
+        ] {
+            assert_eq!(pipe(input).to_lowercase(), input.to_lowercase(), "{input}");
+        }
+    }
+    #[test]
+    fn mentions_and_handles_stay_exact() {
+        for input in [
+            "ping (@aman) about it",
+            "cc @aman.jain and @a_b-c please",
+            "Thanks @aman.",
+            "see #teh and (#mesage) now",
+        ] {
+            assert_eq!(fix(input), input, "{input}");
+        }
+    }
+    #[test]
+    fn canonical_case_opens_sentences() {
+        for (input, expected) in [
+            ("mcdonald said hi.", "McDonald said hi."),
+            ("o'neil said hi.", "O'Neil said hi."),
+            ("iphone is great.", "iPhone is great."),
+            ("iPhone is great.", "iPhone is great."),
+            ("hello there.", "Hello there."),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_name_is_never_offered_as_a_spelling_candidate() {
+        // "rahul" and "neha" sit one edit from "raul" and "neh"; lowercase words never become names.
+        for input in ["we talked to rahull today", "the nehaa file is here"] {
+            let out = fix(input);
+            assert!(
+                !out.contains("raul") && !out.contains("Neh "),
+                "{input}: {out}"
+            );
+        }
+    }
+    #[test]
+    fn name_limit_is_enforced() {
+        let req = Request {
+            text: "hi".into(),
+            names: vec!["a".into(); names::MAX_NAMES + 1],
+            ..Request::default()
+        };
+        assert!(rewrite_once(&req, false).is_err());
+        let req = Request {
+            text: "hi".into(),
+            names: vec!["a".repeat(129)],
+            ..Request::default()
+        };
+        assert!(rewrite_once(&req, false).is_err());
+        let ok: Request =
+            serde_json::from_str(r#"{"text":"hi","names":["Aman"],"capitalize_names":true}"#)
+                .unwrap();
+        assert!(ok.capitalize_names && ok.names == ["Aman"]);
+        assert!(serde_json::from_str::<Request>(r#"{"text":"hi","name_index":1}"#).is_err());
     }
     #[test]
     fn lowercase_names_are_never_respelled() {

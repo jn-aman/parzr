@@ -52,7 +52,12 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
             sentence += 1;
         }
         let end = offset + m.as_str().encode_utf16().count();
-        let hint = indexed.get(&(offset, end)).copied();
+        // "Aman's" is one token here but two for the tagger: the possessive inherits the base hint.
+        let hint = indexed.get(&(offset, end)).copied().or_else(|| {
+            let base = m.as_str().find(['\'', '’'])?;
+            let base_end = offset + m.as_str()[..base].encode_utf16().count();
+            indexed.get(&(offset, base_end)).copied()
+        });
         tokens.push(Token {
             surface: m.as_str(),
             normalized: m.as_str().to_lowercase().replace('’', "'"),
@@ -65,13 +70,28 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
             is_word: m.as_str().chars().next().is_some_and(char::is_alphabetic),
             pos: hint.map(|h| h.pos.clone()).unwrap_or_default(),
             lemma: hint.map(|h| h.lemma.clone()).unwrap_or_default(),
-            proper_name: hint.is_some_and(|h| h.name),
+            proper_name: hint.is_some_and(|h| h.name) && !crate::names::never_a_name(m.as_str()),
         });
         if [".", "!", "?"].contains(&m.as_str()) {
             sentence += 1;
         }
         offset = end;
         previous_byte = m.end();
+    }
+    // A lowercase name hint comes only from the system-lexicon gate ("rakesh" fails, "Rakesh"
+    // passes). Surnames such as Tran and Appel also pass, so clear typo evidence wins.
+    for i in 0..tokens.len() {
+        let t = &tokens[i];
+        if t.proper_name && t.surface.chars().all(|c| !c.is_uppercase()) {
+            let prev = tokens[..i]
+                .iter()
+                .rev()
+                .find(|p| p.is_word)
+                .map_or("", |p| p.normalized.as_str());
+            if crate::spelling::hinted_name_is_typo(&t.normalized, prev) {
+                tokens[i].proper_name = false;
+            }
+        }
     }
     tokens
 }

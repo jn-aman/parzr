@@ -1,4 +1,6 @@
 //! Grammar → tone → grammar, retaining original scalar anchors for minimal UTF-16 edits.
+#[cfg(feature = "local-model")]
+use crate::name_guard_ranges;
 use crate::{
     Edit, MAX_TEXT_BYTES, Mode, Request, RewriteResult, TextRange, apply_edits, byte_at,
     protected_ranges, rewrite_once,
@@ -78,6 +80,33 @@ impl Document {
                 })
             })
             .collect();
+        // Sentence capitals this engine added are not evidence about how the text was typed.
+        let mut offset = 0;
+        let mut auto = vec![];
+        for (i, c) in self.cells.iter().enumerate() {
+            if let Some(k) = c.cause
+                && self.causes[k].rule_id == "grammar.sentence_capitalization"
+                && c.origin.is_none()
+                && i.checked_sub(1)
+                    .is_none_or(|p| self.cells[p].cause != c.cause)
+            {
+                let rest: usize = self.cells[i..]
+                    .iter()
+                    .take_while(|x| x.ch.is_alphabetic() || x.ch == '\'' || x.ch == '’')
+                    .map(|x| x.ch.len_utf16())
+                    .sum();
+                auto.push((offset, offset + rest));
+            }
+            offset += c.ch.len_utf16();
+        }
+        req.tokens
+            .extend(auto.into_iter().map(|(a, b)| crate::TokenHint {
+                start_utf16: a,
+                end_utf16: b,
+                pos: crate::AUTO_CAPITAL_HINT.into(),
+                lemma: String::new(),
+                name: false,
+            }));
         req
     }
     fn apply(&mut self, edits: &[Edit]) -> Result<(), String> {
@@ -188,13 +217,33 @@ impl Document {
             *cursor = end;
             Ok(())
         };
+        let mut prev_cause: Option<usize> = None;
         for c in &self.cells {
             if let Some((a, b)) = c.origin {
+                prev_cause = None;
                 if cursor != a || !replacement.is_empty() {
                     flush(&mut cursor, a, &mut replacement, &mut causes)?;
                 }
                 cursor = b;
             } else {
+                // A name capitalization stays its own edit, never merged with a neighbour.
+                if let Some(i) = c.cause
+                    && let Some(p) = prev_cause
+                    && p != i
+                    && !replacement.is_empty()
+                    && (self.causes[p].rule_id == "names.capitalize"
+                        || self.causes[i].rule_id == "names.capitalize")
+                {
+                    flush(
+                        &mut cursor,
+                        self.causes[p].end_utf16,
+                        &mut replacement,
+                        &mut causes,
+                    )?;
+                }
+                if c.cause.is_some() {
+                    prev_cause = c.cause;
+                }
                 if replacement.is_empty()
                     && let Some(i) = c.cause
                     && self.causes[i].start_utf16 > cursor
@@ -243,7 +292,10 @@ fn grammar(document: &mut Document, req: &Request, protected: &[TextRange]) -> R
 }
 pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     let start = Instant::now();
+    // Fold names and dictionary once; every pass below shares the index.
+    let req = &req.indexed();
     // Validate the original request before computing or remapping any structural ranges.
+    #[allow(unused_mut)]
     let mut initial = req.clone();
     #[cfg(feature = "local-model")]
     {
@@ -258,7 +310,10 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     let mut warnings = vec![];
     #[cfg(feature = "local-model")]
     if req.mode != Mode::Fix || req.deep {
-        match crate::model::rewrite(&document.request(req, &protected, req.mode)) {
+        // The model gets no instructions about names, so every name candidate is masked.
+        let mut masked = protected.clone();
+        masked.extend(name_guard_ranges(req));
+        match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
             Ok(contextual) => {
                 document.apply(&contextual.edits)?;
                 grammar(&mut document, req, &protected)?;
