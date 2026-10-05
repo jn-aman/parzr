@@ -941,6 +941,286 @@ fn plausible_edits(all: Vec<Edit>) -> Vec<Edit> {
         .collect()
 }
 
+const QUOTES: [char; 6] = ['\'', '"', '‘', '’', '“', '”'];
+const MONTHS: [&str; 23] = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+];
+/// Words that open a clause: ", and it" joins two independent clauses, ", and bikes" extends a list.
+const SUBJECTS: [&str; 33] = [
+    "i",
+    "we",
+    "you",
+    "he",
+    "she",
+    "it",
+    "they",
+    "there",
+    "this",
+    "that",
+    "these",
+    "those",
+    "the",
+    "a",
+    "an",
+    "my",
+    "our",
+    "his",
+    "her",
+    "their",
+    "its",
+    "some",
+    "many",
+    "all",
+    "most",
+    "no",
+    "one",
+    "people",
+    "everyone",
+    "nobody",
+    "everybody",
+    "here",
+    "who",
+];
+/// Openers whose comma is customary ("However," "For example,"): kept even though short.
+const OPENERS: [&str; 52] = [
+    "however",
+    "therefore",
+    "moreover",
+    "furthermore",
+    "nevertheless",
+    "nonetheless",
+    "firstly",
+    "secondly",
+    "thirdly",
+    "finally",
+    "thus",
+    "hence",
+    "consequently",
+    "additionally",
+    "instead",
+    "meanwhile",
+    "otherwise",
+    "besides",
+    "indeed",
+    "similarly",
+    "accordingly",
+    "also",
+    "first",
+    "second",
+    "third",
+    "next",
+    "lastly",
+    "overall",
+    "again",
+    "still",
+    "yes",
+    "no",
+    "well",
+    "oh",
+    "sure",
+    "now",
+    "for example",
+    "for instance",
+    "in addition",
+    "in conclusion",
+    "on the other hand",
+    "in fact",
+    "of course",
+    "as a result",
+    "in short",
+    "in summary",
+    "to sum up",
+    "in other words",
+    "on the one hand",
+    "at last",
+    "above all",
+    "first of all",
+];
+const PREPOSITIONS: [&str; 13] = [
+    "in", "on", "at", "by", "for", "from", "during", "with", "of", "to", "as", "under", "over",
+];
+
+/// Whether a comma inserted between `pre` and `post` is one the rules call optional or wrong:
+/// inside a date, before "too" or a restrictive "that", after a short prepositional opener, or
+/// ahead of a conjunction that joins no two clauses (the last comma of a list).
+fn optional_comma(pre: &str, post: &str) -> bool {
+    let bare = |w: &str| {
+        w.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    let (prev, next) = (
+        pre.split_whitespace()
+            .next_back()
+            .map(bare)
+            .unwrap_or_default(),
+        post.split_whitespace().next().map(bare).unwrap_or_default(),
+    );
+    let digit = |w: &str| !w.is_empty() && w.chars().next().is_some_and(|c| c.is_ascii_digit());
+    let day = ["st", "nd", "rd", "th"]
+        .iter()
+        .find_map(|suffix| prev.strip_suffix(suffix))
+        .unwrap_or(&prev);
+    if (MONTHS.contains(&prev.as_str()) && digit(&next))
+        || (!day.is_empty()
+            && day.len() <= 2
+            && day.bytes().all(|b| b.is_ascii_digit())
+            && MONTHS.contains(&next.as_str()))
+        || ["too", "that"].contains(&next.as_str())
+    {
+        return true;
+    }
+    let sentence = pre
+        .rsplit(['.', '!', '?', '\n'])
+        .next()
+        .unwrap_or_default()
+        .trim_start();
+    if ["and", "but", "or", "so", "yet", "nor"].contains(&next.as_str()) {
+        let after = post.split_whitespace().nth(1).map(bare).unwrap_or_default();
+        return !(SUBJECTS.contains(&after.as_str())
+            && !sentence.contains(',')
+            && sentence.split_whitespace().count() >= 3);
+    }
+    let opener = sentence.to_lowercase();
+    let opener = opener.trim_end();
+    !opener.is_empty()
+        && !opener.contains(|c: char| ",;:\"“‘()".contains(c))
+        && opener.split_whitespace().count() <= 3
+        && !OPENERS.contains(&opener)
+        && opener
+            .split_whitespace()
+            .next()
+            .is_some_and(|w| PREPOSITIONS.contains(&w))
+}
+
+/// Edits the model gets wrong on correct text: it straightens curly quotes, drops quote marks and
+/// possessive apostrophes, adds date commas and optional commas, recases words the rules own and
+/// respells words the dictionary knows. Returns the edit, with the author's quote style restored
+/// inside it, or None when it should go.
+fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
+    let (o, r) = (e.original.clone(), e.replacement.clone());
+    let straight = |c: char| match c {
+        '‘' | '’' => '\'',
+        '“' | '”' => '"',
+        c => c,
+    };
+    let quotes = |s: &str| s.chars().filter(|c| QUOTES.contains(c)).count();
+    let alnum = |s: &str| {
+        s.chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+            .to_lowercase()
+    };
+    let lower = |s: &str| s.to_lowercase().replace('’', "'");
+    let at = byte_at(source, e.start_utf16)?;
+    let (before, after) = (&source[..at], &source[byte_at(source, e.end_utf16)?..]);
+    if o.chars().map(straight).eq(r.chars().map(straight)) {
+        return None;
+    }
+    let dashes = |s: &str| s.contains(['—', '–', '…']) || s.contains("...");
+    if quotes(&r) < quotes(&o)
+        && alnum(&o) == alnum(&r)
+        && confusable(&lower(&o), &lower(&r)).is_none()
+        || o.is_empty() && !r.is_empty() && r.chars().all(|c| QUOTES.contains(&c))
+        || dashes(&o) && !dashes(&r)
+    {
+        return None;
+    }
+    if quotes(&r) == quotes(&o) {
+        let mut theirs = o.chars().filter(|c| QUOTES.contains(c));
+        e.replacement = r
+            .chars()
+            .map(
+                |c| match QUOTES.contains(&c).then(|| theirs.next()).flatten() {
+                    Some(k) if straight(k) == c => k,
+                    _ => c,
+                },
+            )
+            .collect();
+    }
+    if o.is_empty() && r == "," && optional_comma(before, after) {
+        return None;
+    }
+    if o != r && o.to_lowercase() == r.to_lowercase() {
+        let lead = before.trim_end_matches(|c: char| " \"“‘'(".contains(c));
+        let starts = (lead.is_empty() || lead.ends_with(['.', '!', '?', '\n']))
+            && r.chars().next().is_some_and(char::is_uppercase);
+        let shouting = o.chars().count() > 1 && o.chars().all(|c| !c.is_lowercase());
+        let pronoun = o == "i" || o.starts_with("i'") || o.starts_with("i’");
+        return (starts || shouting || pronoun).then_some(e);
+    }
+    let word = |s: &str| !s.is_empty() && s.chars().all(char::is_alphabetic);
+    let (lo, lr) = (o.to_lowercase(), r.to_lowercase());
+    if word(&o) && word(&r) && crate::spelling::known(&o) && crate::spelling::known(&r) {
+        let sorted = |s: &str| {
+            let mut c: Vec<char> = s.chars().collect();
+            c.sort_unstable();
+            c
+        };
+        let grows = |a: &str, b: &str| {
+            ["s", "es", "ed", "d", "ing", "ly"]
+                .iter()
+                .any(|suffix| b == format!("{a}{suffix}"))
+                || a.strip_suffix('y')
+                    .is_some_and(|stem| b == format!("{stem}ies") || b == format!("{stem}ied"))
+        };
+        let swap = distance(&lo, &lr) == 1 && sorted(&lo) == sorted(&lr);
+        let same_verb = matches!(
+            (crate::morphology::verb(&lo), crate::morphology::verb(&lr)),
+            (Some(a), Some(b)) if a.base == b.base
+        );
+        if lo.chars().count().min(lr.chars().count()) >= 4
+            && distance(&lo, &lr) <= 2
+            && (lo.starts_with(&lr) || lr.starts_with(&lo))
+            && confusable(&lo, &lr).is_none()
+            && !(swap || same_verb || grows(&lo, &lr) || grows(&lr, &lo))
+        {
+            return None;
+        }
+    }
+    Some(e)
+}
+
+/// Fix mode keeps only plausible corrections, minus the ones the model gets wrong on correct text.
+fn guard(source: &str, all: Vec<Edit>) -> Vec<Edit> {
+    // A rejected edit takes the other half of its move with it.
+    let vetted: Vec<_> = plausible_edits(all)
+        .into_iter()
+        .map(|e| (e.group_id.clone(), vetted(source, e)))
+        .collect();
+    let gone: Vec<_> = vetted
+        .iter()
+        .filter(|(_, e)| e.is_none())
+        .filter_map(|(g, _)| g.clone())
+        .collect();
+    vetted
+        .into_iter()
+        .filter(|(g, _)| !g.as_ref().is_some_and(|g| gone.contains(g)))
+        .filter_map(|(_, e)| e)
+        .collect()
+}
+
 /// Letters, digits and inner apostrophes belong to a word; widening never crosses protected text.
 fn widen_to_words(
     source: &str,
@@ -1157,7 +1437,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     }
     let all = keep_names(req, all);
     let changes = if req.mode == Mode::Fix {
-        plausible_edits(all)
+        guard(&req.text, all)
     } else {
         all
     };
@@ -1365,6 +1645,149 @@ mod tests {
                 ("".to_string(), ".".to_string())
             ]
         );
+    }
+    /// The text the Fix-mode guard lets through for a model rewrite of `source`.
+    fn guarded(source: &str, target: &str) -> String {
+        let kept = guard(source, edits(source, target, Mode::Fix, &[]));
+        apply_edits(source, &kept).unwrap().0
+    }
+    #[test]
+    fn curly_quotes_stay_curly() {
+        let s = "“Stay here,” said the pilot’s sister.";
+        assert_eq!(guarded(s, "\"Stay here,\" said the pilot's sister."), s);
+        // Inside a real correction the author's apostrophe survives.
+        assert_eq!(
+            guarded(
+                "The farmer’s dog barkd all night.",
+                "The farmer's dog barked all night."
+            ),
+            "The farmer’s dog barked all night."
+        );
+    }
+    #[test]
+    fn quote_marks_and_possessive_apostrophes_are_never_deleted() {
+        let s = "Even 'virtual reality' needs good lighting.";
+        assert_eq!(guarded(s, "Even virtual reality needs good lighting."), s);
+        let s = "Ramirez' neighbours moved out last spring.";
+        assert_eq!(guarded(s, "Ramirez neighbours moved out last spring."), s);
+        // A confusable that happens to lose its apostrophe is still a fix.
+        assert_eq!(
+            guarded("The dog wagged it's tail.", "The dog wagged its tail."),
+            "The dog wagged its tail."
+        );
+    }
+    #[test]
+    fn a_quote_mark_moved_elsewhere_stays_put() {
+        let s = "He called it \"a fine job\", and left early.";
+        assert_eq!(guarded(s, "He called it a fine job, and \"left early."), s);
+    }
+    #[test]
+    fn dashes_and_ellipses_are_not_rewritten() {
+        let s = "The tide came in\u{2014}slowly, then all at once.";
+        assert_eq!(guarded(s, "The tide came in, slowly, then all at once."), s);
+    }
+    #[test]
+    fn date_commas_are_never_added() {
+        let s = "The bridge opened on 9 June 1932 after years of work.";
+        assert_eq!(
+            guarded(s, "The bridge opened on 9 June, 1932 after years of work."),
+            s
+        );
+        let s = "She was born in October 1871 in a small village.";
+        assert_eq!(
+            guarded(s, "She was born in October, 1871 in a small village."),
+            s
+        );
+        let s = "The vote was held on 3rd March and nobody objected.";
+        assert_eq!(
+            guarded(s, "The vote was held on 3rd, March and nobody objected."),
+            s
+        );
+    }
+    #[test]
+    fn a_word_is_not_respelled_into_another_known_word() {
+        let s = "The rustling of leaves carried across the field.";
+        assert_eq!(
+            guarded(s, "The rustling of leaves carried across the fields."),
+            "The rustling of leaves carried across the fields."
+        );
+        let s = "The comic timing of the actor was perfect.";
+        assert_eq!(
+            guarded(s, "The comical timing of the actor was perfect."),
+            s
+        );
+        let s = "Their economic plan failed within a year.";
+        assert_eq!(guarded(s, "Their economical plan failed within a year."), s);
+        // A different word of the same length is more likely a typo fix than a rewrite.
+        assert_eq!(
+            guarded("The cheep seats sold fast.", "The cheap seats sold fast."),
+            "The cheap seats sold fast."
+        );
+        // Agreement and confusables are corrections, not respellings.
+        assert_eq!(
+            guarded("The nurses was tired.", "The nurses were tired."),
+            "The nurses were tired."
+        );
+        assert_eq!(
+            guarded("We left there coats behind.", "We left their coats behind."),
+            "We left their coats behind."
+        );
+    }
+    #[test]
+    fn case_changes_are_left_to_the_rules_outside_sentence_starts() {
+        let s = "We ordered a speed post parcel for Tuesday.";
+        assert_eq!(guarded(s, "We ordered a Speed Post parcel for Tuesday."), s);
+        let s = "The Garden was quiet at dawn.";
+        assert_eq!(guarded(s, "The garden was quiet at dawn."), s);
+        // A sentence start, a lone i and shouted words are still fixed.
+        assert_eq!(
+            guarded(
+                "It rained. the road flooded.",
+                "It rained. The road flooded."
+            ),
+            "It rained. The road flooded."
+        );
+        assert_eq!(guarded("Then i left.", "Then I left."), "Then I left.");
+        assert_eq!(
+            guarded("PLEASE CLOSE the door.", "Please close the door."),
+            "Please close the door."
+        );
+    }
+    #[test]
+    fn optional_commas_are_dropped_and_needed_ones_kept() {
+        // A short prepositional opener, "too", a restrictive "that" and a serial comma are optional.
+        for (s, t) in [
+            (
+                "In the evening we walked home.",
+                "In the evening, we walked home.",
+            ),
+            ("My brother came too.", "My brother came, too."),
+            (
+                "The book that I borrowed was dull.",
+                "The book, that I borrowed was dull.",
+            ),
+            (
+                "We packed tents, ropes and boots.",
+                "We packed tents, ropes, and boots.",
+            ),
+        ] {
+            assert_eq!(guarded(s, t), s);
+        }
+        // An independent clause after a coordinating conjunction, a conjunctive adverb and a
+        // comma that ends a subordinate clause stay.
+        for (s, t) in [
+            (
+                "The storm grew worse and we turned back.",
+                "The storm grew worse, and we turned back.",
+            ),
+            ("However we agreed to wait.", "However, we agreed to wait."),
+            (
+                "When the bell rang we all stood up.",
+                "When the bell rang, we all stood up.",
+            ),
+        ] {
+            assert_eq!(guarded(s, t), t);
+        }
     }
     #[test]
     fn fix_edits_carry_specific_explanations() {
