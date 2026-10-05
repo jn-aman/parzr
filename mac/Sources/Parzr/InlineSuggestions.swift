@@ -141,7 +141,7 @@ final class InlineSuggestions {
                     wash.ignoresMouseEvents = true; wash.hidesOnDeactivate = false
                     wash.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
                     let fill = NSView(); fill.wantsLayer = true
-                    fill.layer?.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.08).cgColor; fill.layer?.cornerRadius = 3
+                    fill.layer?.backgroundColor = NSColor(Color.issueInk).withAlphaComponent(0.05).cgColor; fill.layer?.cornerRadius = 3
                     wash.contentView = fill; sentenceWashes.append(wash); wash.orderFrontRegardless()
                 }
             }
@@ -149,7 +149,7 @@ final class InlineSuggestions {
         for (edit, global, bounds) in placed {
             let highlight = NSPanel(contentRect: bounds, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             highlight.isReleasedWhenClosed = false; highlight.level = .floating; highlight.isOpaque = false
-            highlight.backgroundColor = NSColor(Color.correctionInk).withAlphaComponent(0.20); highlight.hasShadow = false
+            highlight.backgroundColor = NSColor(Color.ink(for: edit.category)).withAlphaComponent(0.12); highlight.hasShadow = false
             highlight.ignoresMouseEvents = true; highlight.hidesOnDeactivate = false
             highlight.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             if Preferences.shared.highlightFill { highlights[edit.id] = highlight; highlight.orderFrontRegardless() }
@@ -157,7 +157,7 @@ final class InlineSuggestions {
             mark.isReleasedWhenClosed = false; mark.level = .floating; mark.isOpaque = false
             mark.backgroundColor = .clear; mark.hasShadow = false; mark.hidesOnDeactivate = false
             mark.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            let button = UnderlineButton(label: "Review \(edit.category.lowercased()) correction") { [weak self] in
+            let button = UnderlineButton(label: "Review \(edit.category.lowercased()) correction", ink: NSColor(Color.ink(for: edit.category))) { [weak self] in
                 guard let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < 2, abs(now.minX - bounds.minX) < 2 else { self?.dismiss(); return }
                 self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
             }

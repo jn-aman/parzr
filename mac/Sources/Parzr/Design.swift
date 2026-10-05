@@ -20,6 +20,10 @@ extension Color {
     static let hairline = adaptive(0x394144, 0xDDE2DC)
     static let errorInk = adaptive(0xE6C28B, 0x876321)
     static let correctionInk = adaptive(0xA8ECC4, 0x24754D)
+    /// Issue underlines, Grammarly-style: red for correctness, blue for style and tone.
+    static let issueInk = adaptive(0xFF6B70, 0xD7263D)
+    static let styleInk = adaptive(0x7AB8FF, 0x2563EB)
+    static func ink(for category: String) -> Color { ["Style", "Tone"].contains(category) ? styleInk : issueInk }
 }
 struct GraphiteSurface: ViewModifier {
     var radius: CGFloat = 12

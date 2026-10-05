@@ -73,7 +73,7 @@ struct DraftEditor: NSViewRepresentable {
         layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
         for edit in edits {
             guard let range = editor.displayRange(for: edit) else { continue }
-            layout.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.thick.rawValue | NSUnderlineStyle.patternDot.rawValue, .underlineColor: NSColor(Color.correctionInk), .backgroundColor: NSColor(Color.correctionInk).withAlphaComponent(highlightFill ? 0.18 : 0)], forCharacterRange: range)
+            layout.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.thick.rawValue, .underlineColor: NSColor(Color.ink(for: edit.category)), .backgroundColor: NSColor(Color.ink(for: edit.category)).withAlphaComponent(highlightFill ? 0.12 : 0)], forCharacterRange: range)
         }
     }
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {

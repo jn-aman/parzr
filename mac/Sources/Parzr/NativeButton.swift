@@ -84,7 +84,9 @@ final class UnderlineButton: ActionButton {
     var onPress: (() -> Void)?
     private var hovering = false
     private var wordArea: NSTrackingArea?
-    init(label: String, action: @escaping () -> Void) {
+    private let ink: NSColor
+    init(label: String, ink: NSColor = NSColor(Color.issueInk), action: @escaping () -> Void) {
+        self.ink = ink
         super.init(frame: .zero)
         title = ""; isBordered = false; setButtonType(.momentaryPushIn)
         setAccessibilityLabel(label); target = self; self.action = #selector(pressUnderline)
@@ -103,13 +105,13 @@ final class UnderlineButton: ActionButton {
     override func draw(_ dirtyRect: NSRect) {
         if hovering || isHighlighted {
             let word = NSRect(x: 0, y: isFlipped ? 0 : 5, width: bounds.width, height: max(0, bounds.height - 5))
-            NSColor(Color.correctionInk).withAlphaComponent(0.26).setFill()
+            ink.withAlphaComponent(0.22).setFill()
             NSBezierPath(roundedRect: word, xRadius: 3, yRadius: 3).fill()
         }
-        NSColor(Color.correctionInk).setStroke()
-        let path = NSBezierPath(); path.lineWidth = isHighlighted ? 3.0 : 2.6; path.lineCapStyle = .round
-        path.setLineDash([1.5, 3.2], count: 2, phase: 0)
-        let y = isFlipped ? bounds.maxY - 5 : 5
+        // A solid, rounded 3pt underline, like Grammarly: unmistakable at a glance.
+        ink.setStroke()
+        let path = NSBezierPath(); path.lineWidth = hovering || isHighlighted ? 3.4 : 3.0; path.lineCapStyle = .round
+        let y = isFlipped ? bounds.maxY - 4 : 4
         path.move(to: NSPoint(x: 1, y: y)); path.line(to: NSPoint(x: bounds.maxX - 1, y: y)); path.stroke()
     }
     @objc private func pressUnderline() { onPress?() }
