@@ -50,7 +50,7 @@ Option+Space, or choosing Professional, Friendly, Concise or Direct, runs the mo
 6. **Grammar passes again, then one edit list.** The judge screens the model's edits, they are applied, the rule passes run again, and `plan()` rebuilds minimal UTF-16 edits against your original. The rebuilt text must equal the composed text or the request fails.
 7. **The card.** It shows the whole corrected passage with changed words in mint. Command+Return (Fix all) applies every chosen edit through Accessibility, as when typing; a copied selection is pasted back instead.
 
-**Model lifecycle.** The weights are memory-mapped and loaded on the first call that needs them. One call runs at a time, cancelling the request aborts it, and a timer thread releases the context and model 30 seconds after the last call. On a 70-character message a warm call took 0.2 to 0.6 s, and the first call, which loads the weights, took 0.9 to 15 s depending on the disk cache.
+**Model lifecycle.** The weights are memory-mapped and loaded on the first call that needs them. One call runs at a time, cancelling the request aborts it, and a timer thread releases the context and model 30 seconds after the last call. On a 70-character message a warm call took 0.2 to 0.6 s on a busy machine; the first call also pays for loading the weights.
 
 ## Guarantees and limits
 
