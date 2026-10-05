@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Parzr: an offline writing assistant for Mac</title>
-<meta name="description" content="Parzr is a free, open-source writing assistant that lives on your Mac. Grammar, spelling and tone run locally with a bundled model. No account, no cloud, no telemetry.">
+<meta name="description" content="Parzr is a free, open-source writing assistant that lives on your Mac. Grammar, spelling and tone run locally with a bundled model. Works in your browser and Mac apps with no extension. No account, no cloud, no telemetry.">
 <link rel="canonical" href="https://parzr.app/">
 <meta name="theme-color" content="#202629">
 <meta name="color-scheme" content="dark">
@@ -38,6 +38,13 @@
   <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10.5 3.9V3.6C10.5 2.7 9.8 2 8.9 2H4.1C3.2 2 2.5 2.7 2.5 3.6v5.3c0 .9.7 1.6 1.6 1.6h.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
   <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 13V3M3.8 7.2L8 3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 .5a7.5 7.5 0 0 0-2.4 14.6c.4.1.5-.2.5-.4v-1.4c-2.1.5-2.5-.9-2.5-.9-.3-.9-.8-1.1-.8-1.1-.7-.5.1-.5.1-.5.8.1 1.200.8 1.200.8.7 1.200 1.800.9 2.200.7.1-.5.3-.9.5-1.100-1.700-.2-3.400-.8-3.400-3.700 0-.8.3-1.500.8-2-.1-.2-.4-1 .1-2 0 0 .6-.2 2 .8a6.800 6.800 0 0 1 3.600 0c1.400-1 2-.8 2-.8.4 1 .2 1.800.1 2 .5.5.8 1.200.8 2 0 2.900-1.700 3.500-3.400 3.700.3.2.5.7.5 1.400v2.100c0 .2.1.5.5.4A7.500 7.500 0 0 0 8 .5z"/></symbol>
+
+  <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.5 3.5L2.8 6.2l2.7 2.7M3 6.2h6.2a3.8 3.8 0 0 1 0 7.6H6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 12L12 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-book" viewBox="0 0 16 16"><path d="M3 3.2c0-.7.5-1.2 1.200-1.200H13v10.500H4.200c-.7 0-1.200.5-1.200 1.200zM3 13.700c0 .7.5 1.200 1.200 1.200H13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 5.500h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-person" viewBox="0 0 16 16"><circle cx="8" cy="5.600" r="2.600" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2.800 14c.4-2.700 2.500-4.200 5.200-4.200s4.800 1.500 5.200 4.200" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M2.500 9.200a14 14 0 0 1 19 0M5.500 12.700a9.500 9.500 0 0 1 13 0M8.600 16.100a5 5 0 0 1 6.800 0" fill="none" stroke="currentColor" stroke-width="1.700" stroke-linecap="round"/><circle cx="12" cy="19.300" r="1.300" fill="currentColor"/></symbol>
 </svg>
 
 <a class="skip" href="#main">Skip to content</a>
@@ -47,7 +54,9 @@
   <nav class="nav-in" aria-label="Primary">
     <a class="brand" href="#top" aria-label="Parzr, back to top"><svg class="brand-mark" aria-hidden="true"><use href="#pmark"/></svg><span>Parzr</span></a>
     <ul class="nav-links" id="nav-links">
+      <li><a href="#try">Try it</a></li>
       <li><a href="#how">How it works</a></li>
+      <li><a href="#names">Names</a></li>
       <li><a href="#privacy">Privacy</a></li>
       <li><a href="#open">Open source</a></li>
       <li><a href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">GitHub</a></li>
@@ -62,55 +71,106 @@
 <!-- 1. HERO -->
 <section class="scene pinned hero" id="top" data-scene="hero" aria-labelledby="hero-h">
   <div class="pin">
-    <div class="layer d0 glow g1" aria-hidden="true"></div>
-    <div class="layer d0 glow g2" aria-hidden="true"></div>
+    <div class="layer d0 aurora" aria-hidden="true"><i class="ab a1"></i><i class="ab a2"></i><i class="ab a3"></i><i class="ab a4"></i><i class="sweep"></i></div>
     <div class="layer d1 grid" aria-hidden="true"></div>
     <div class="layer d1 grain" aria-hidden="true"></div>
     <div class="layer d2 spot" id="spot" aria-hidden="true"></div>
-    <div class="layer d5 frags" id="frags" aria-hidden="true"></div>
+    <div class="hw-stage" aria-hidden="true">
+      <div class="hw" id="hw">
+        <div class="hw-win glass">
+          <div class="win-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
+          <div class="hw-body"><p class="hw-line" id="hw-line"></p></div>
+          <div class="win-foot"><span class="status"><i class="dot"></i><span id="hw-status">3 suggestions</span></span><span>Names kept as typed</span></div>
+        </div>
+        <div class="card hw-card" id="hw-card">
+          <div class="card-h"><span class="card-dot"></span><b id="hw-count">2 fixes in this sentence</b></div>
+          <div class="card-box"><p class="diff" id="hw-diff"></p></div>
+          <div class="card-f"><span class="cbtn primary" id="hw-fix">Fix sentence <kbd>⏎</kbd></span><span class="cbtn strong">Ignore</span></div>
+        </div>
+      </div>
+    </div>
     <div class="hero-c">
-      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Public beta<span class="sep" aria-hidden="true">·</span>Open source</p>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Public beta<span class="sep" aria-hidden="true">·</span><span class="e2">Open source<span class="sep" aria-hidden="true">·</span></span>Signed and notarized</p>
       <h1 id="hero-h" class="display hero-h" aria-label="Write like you meant it.">
         <span aria-hidden="true"><span class="fx" data-fixed data-wrong="Writ">Write</span> like <span class="fx" data-fixed data-wrong="yuo">you</span><br class="lg"> <span class="nw"><span class="fx" data-fixed data-wrong="ment">meant</span> it.</span></span>
       </h1>
       <p class="lede">A writing assistant that lives on your Mac.<br class="lg"> Offline. Open source. Free.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
+        <a class="btn btn-primary btn-glow" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
         <a class="btn btn-ghost" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">View source</a>
       </div>
-      <p class="micro">Free · Apple Silicon · macOS 13 or later</p>
+      <p class="micro">Free · Apple Silicon · macOS 13 or later · No extension needed</p>
     </div>
     <div class="scroll-cue" aria-hidden="true"><span></span></div>
   </div>
 </section>
 
-<!-- 2. DEMO -->
+<!-- 2. TRY IT -->
+<section class="try" id="try" aria-labelledby="try-h">
+  <div class="layer d0 glow g3" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="try-head">
+      <p class="eyebrow">Try it</p>
+      <h2 id="try-h" class="h2"><span class="nw">Type something wrong.</span><br class="lg"> <span class="nw">Watch it get caught.</span></h2>
+    </div>
+    <div class="try-pick" role="group" aria-label="Start from a sample">
+      <span class="try-pick-l">Start from</span>
+      <button type="button" class="mchip on" data-sample="0" aria-pressed="true">Typos</button>
+      <button type="button" class="mchip" data-sample="1" aria-pressed="false">Style</button>
+      <button type="button" class="mchip" data-sample="2" aria-pressed="false">Names</button>
+    </div>
+    <div class="try-win glass" id="try-win">
+      <div class="win-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
+      <div class="try-body" id="try-body">
+        <div class="try-back" id="try-back" aria-hidden="true"></div>
+        <label class="sr-only" for="try-ta">Type or paste a sentence to check</label>
+        <textarea id="try-ta" class="try-ta" rows="4" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="Type a sentence with a typo in it."></textarea>
+        <div class="card tcard" id="tcard" role="group" aria-label="Correction card">
+          <div class="card-h"><span class="card-dot" id="tc-dot"></span><b id="tc-title">1 fix in this sentence</b><span class="card-nav"><button type="button" class="tc-x" id="tc-x" aria-label="Close card">×</button></span></div>
+          <div class="card-box"><p class="diff" id="tc-diff"></p><p class="why" id="tc-why"></p></div>
+          <div class="card-f"><button type="button" class="cbtn primary" id="tc-fix">Fix sentence <kbd>⏎</kbd></button><button type="button" class="cbtn" id="tc-word">This word</button><button type="button" class="cbtn strong" id="tc-ign">Ignore</button></div>
+        </div>
+      </div>
+      <div class="win-foot try-foot">
+        <span class="status"><i class="dot"></i><span id="try-status" role="status" aria-live="polite">Checking</span></span>
+        <span class="try-actions"><button type="button" class="cbtn" id="try-next">Next suggestion</button><button type="button" class="cbtn primary" id="try-all">Apply all</button></span>
+      </div>
+    </div>
+    <ul class="legend" aria-label="Underline colours">
+      <li><i class="sw red" aria-hidden="true"></i>Spelling, grammar, punctuation</li>
+      <li><i class="sw blue" aria-hidden="true"></i>Style and tone</li>
+      <li><i class="sw mint" aria-hidden="true"></i>The fix</li>
+    </ul>
+    <p class="fine try-note">Demo: a tiny in-page sample, the app does far more, offline. Nothing you type here leaves this page.</p>
+  </div>
+</section>
+
+<!-- 3. HOW IT WORKS -->
 <section class="scene pinned demo" id="how" data-scene="demo" aria-labelledby="demo-h">
-  <div class="pin">
-    <div class="layer d0 glow g3" aria-hidden="true"></div>
+  <div class="pin iris">
+    <div class="layer d0 aurora soft" aria-hidden="true"><i class="ab a2"></i><i class="ab a3"></i></div>
     <div class="layer d1 grid" aria-hidden="true"></div>
-    <div class="layer d5 fg" data-n="9" aria-hidden="true"></div>
     <div class="demo-in">
       <div class="demo-copy">
         <p class="eyebrow">How it works</p>
         <h2 id="demo-h" class="h2">Click the word.<br class="lg"> Fix the sentence.</h2>
         <ol class="steps" id="steps">
-          <li class="step"><span class="step-n" aria-hidden="true">01</span><div><b>Underlines appear as you pause.</b><span>Parzr checks the paragraph you are in once you stop typing.</span></div></li>
+          <li class="step"><span class="step-n" aria-hidden="true">01</span><div><b>Underlines appear as you pause.</b><span>Red for spelling, grammar and punctuation. Blue for style and tone.</span></div></li>
           <li class="step"><span class="step-n" aria-hidden="true">02</span><div><b>Click the word itself.</b><span>The whole word is the click target.</span></div></li>
           <li class="step"><span class="step-n" aria-hidden="true">03</span><div><b>See the whole fix at once.</b><span>Nothing changes until you accept it.</span></div></li>
           <li class="step"><span class="step-n" aria-hidden="true">04</span><div><b>One keystroke. Done.</b><span>Corrections apply as small edits, and Undo still works.</span></div></li>
         </ol>
       </div>
       <figure class="demo-stage" id="stage">
-        <figcaption class="sr-only">Illustration: in a text editor, the sentence "i hope your doing well. can you chek this once?" gets four dotted underlines. Clicking "your" opens a correction card showing all four fixes. Fix sentence applies them.</figcaption>
-        <div class="win" id="win" aria-hidden="true">
+        <figcaption class="sr-only">Illustration: in a text editor, the sentence "i hope your doing well. can you chek this once, priya?" gets four red underlines. The name priya is left alone. Clicking "your" opens a correction card showing all four fixes. Fix sentence applies them.</figcaption>
+        <div class="win glass" id="win" aria-hidden="true">
           <div class="win-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
           <div class="win-body" id="ed">
-            <p class="ed-text"><span class="sent" id="sent"><span class="fx w" data-wrong="i">I</span> hope <span class="fx w" data-wrong="your">you're</span> doing well. <span class="fx w" data-wrong="can">Can</span> you <span class="fx w" data-wrong="chek">check</span> this once?</span></p>
+            <p class="ed-text"><span class="sent" id="sent"><span class="fx w" data-wrong="i">I</span> hope <span class="fx w" data-wrong="your">you're</span> doing well. <span class="fx w" data-wrong="can">Can</span> you <span class="fx w" data-wrong="chek">check</span> this once, <span class="nm">priya</span>?</span></p>
             <div class="card" id="card">
               <div class="card-h"><span class="card-dot"></span><b>4 fixes in this sentence</b><span class="card-nav"><i>‹</i><em>2/4</em><i>›</i><i class="x">×</i></span></div>
               <div class="card-box">
-                <p class="diff"><del>i</del> <ins>I</ins> hope <del>your</del> <ins class="focus">you're</ins> doing well. <del>can</del> <ins>Can</ins> you <del>chek</del> <ins>check</ins> this once?</p>
+                <p class="diff"><del>i</del> <ins>I</ins> hope <del>your</del> <ins class="focus">you're</ins> doing well. <del>can</del> <ins>Can</ins> you <del>chek</del> <ins>check</ins> this once, priya?</p>
                 <p class="why"><b>your → you're</b><span>Use you're (you are) before this predicate.</span></p>
               </div>
               <div class="card-f"><span class="cbtn primary" id="fixbtn">Fix sentence <kbd>⏎</kbd></span><span class="cbtn">This word</span><span class="cbtn strong">Ignore</span></div>
@@ -124,12 +184,43 @@
   </div>
 </section>
 
-<!-- 3. PRIVACY -->
+<!-- 4. NAMES -->
+<section class="names" id="names" aria-labelledby="names-h">
+  <div class="layer d0 glow g5" aria-hidden="true"></div>
+  <div class="wrap names-grid">
+    <div class="names-copy">
+      <p class="eyebrow">Names</p>
+      <h2 id="names-h" class="h2">Built to <span class="nw">respect names.</span></h2>
+      <p class="sect-lede">Parzr never “corrects” a name, even one typed in lowercase, like aman jain or thanks, priya. Real typos still get fixed. And it learns the names that matter to you.</p>
+      <ul class="learn">
+        <li><svg aria-hidden="true"><use href="#i-undo"/></svg><div><b>From your Undo</b><span>Undo a change to a name and Parzr remembers.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-ban"/></svg><div><b>From Ignore</b><span>Ignore a mark once and it stays ignored.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-book"/></svg><div><b>From macOS</b><span>It reads the system dictionary and, only if you opt in, your Contacts.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-person"/></svg><div><b>This is a name</b><span>One button on the card teaches it directly.</span></div></li>
+      </ul>
+    </div>
+    <div class="names-vis">
+      <figure class="nwin glass" id="nwin">
+        <figcaption class="sr-only">Illustration: in the sentence "Thanks, aman jain, for the invoice. I recieved it today." the lowercase name aman jain is left untouched while the typo recieved is corrected to received.</figcaption>
+        <div class="win-bar" aria-hidden="true"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><span class="win-title">Untitled</span></div>
+        <p class="nline" aria-hidden="true">Thanks, <span class="nm" id="nm1">aman jain<span class="nm-tag">name</span></span>, for the invoice. I <span class="fx w" id="nfx" data-wrong="recieved">received</span> it today.</p>
+        <div class="win-foot" aria-hidden="true"><span class="status"><i class="dot"></i><span id="n-status">1 suggestion</span></span><span>1 name kept as typed</span></div>
+      </figure>
+      <figure class="fig" id="fig">
+        <p class="fig-k">Names damaged by a correction</p>
+        <div class="fig-row"><span class="fig-l">Before</span><div class="bar"><i class="b13"></i></div><span class="fig-v">13%</span></div>
+        <div class="fig-row"><span class="fig-l">Now</span><div class="bar"><i class="b008"></i></div><span class="fig-v hi"><span id="fig-n" data-count="0.08">0.08</span>%</span></div>
+        <figcaption class="fine">Measured on Parzr’s open name benchmark; synthetic sentences. 6,426 sentences, 23 naming traditions.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- 5. PRIVACY -->
 <section class="scene pinned privacy" id="privacy" data-scene="privacy" aria-labelledby="priv-h">
   <div class="pin iris">
     <div class="layer d0 rings" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div class="layer d1 glow g4" aria-hidden="true"></div>
-    <div class="layer d5 fg" data-n="8" aria-hidden="true"></div>
     <div class="priv-in">
       <p class="eyebrow">Privacy</p>
       <h2 id="priv-h" class="manifesto" data-manifesto>Your words never leave this Mac.<br class="lg"> <span class="nw">No account.</span> <span class="nw">No cloud.</span><br class="lg"> <span class="nw">No telemetry.</span> <span class="nw">No HTTP server.</span></h2>
@@ -137,111 +228,120 @@
   </div>
 </section>
 
-<section class="stats" aria-label="Privacy facts">
+<!-- 6. BENTO -->
+<section class="bento-sec" id="features" aria-labelledby="bento-h">
+  <div class="layer d0 glow g7" aria-hidden="true"></div>
   <div class="wrap">
-    <ul class="tiles">
-      <li class="tile">
-        <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">bytes</span></p>
-        <h3 class="tile-t">sent from your Mac</h3>
-        <p class="tile-d">No account, no telemetry, no HTTP service and no writing logs. Text stays in memory on this Mac.</p>
-      </li>
-      <li class="tile">
-        <p class="stat"><span class="num" data-count="593">593</span><span class="unit">MB</span></p>
-        <h3 class="tile-t">model on device</h3>
-        <p class="tile-d">Qwen3.5-0.8B Q5_K_M runs through llama.cpp on Metal, ships inside the app, and unloads after 30 idle seconds.</p>
-      </li>
-      <li class="tile">
-        <p class="stat"><span class="num" data-count="100">100</span><span class="unit pct">%</span></p>
-        <h3 class="tile-t">offline after install</h3>
-        <p class="tile-d">A Rust engine does the grammar work, and the model ships inside the app. Nothing downloads while you write.</p>
-      </li>
-    </ul>
-  </div>
-</section>
+    <p class="eyebrow">What you get</p>
+    <h2 id="bento-h" class="h2">Help that stays <span class="nw">out of the way.</span></h2>
+    <div class="bento" id="bento">
 
-<!-- 4. MODES -->
-<section class="scene pinned modes" id="modes" data-scene="modes" aria-labelledby="modes-h">
-  <div class="pin iris">
-    <div class="layer d0 glow g5" aria-hidden="true"></div>
-    <div class="layer d1 grid" aria-hidden="true"></div>
-    <div class="layer d5 fg" data-n="9" aria-hidden="true"></div>
-    <div class="modes-in">
-      <p class="eyebrow">Writing modes</p>
-      <h2 id="modes-h" class="h2">One sentence.<br class="lg"> Five ways to say it.</h2>
-      <div class="chips" id="mchips" role="group" aria-label="Writing modes">
-        <button type="button" class="mchip" data-i="1"><svg aria-hidden="true"><use href="#i-fix"/></svg>Fix</button>
-        <button type="button" class="mchip" data-i="2"><svg aria-hidden="true"><use href="#i-pro"/></svg>Professional</button>
-        <button type="button" class="mchip" data-i="3"><svg aria-hidden="true"><use href="#i-fri"/></svg>Friendly</button>
-        <button type="button" class="mchip" data-i="4"><svg aria-hidden="true"><use href="#i-con"/></svg>Concise</button>
-        <button type="button" class="mchip" data-i="5"><svg aria-hidden="true"><use href="#i-dir"/></svg>Direct</button>
-      </div>
-      <div class="mstage" id="mstage" data-s="3" aria-hidden="true">
-        <div class="mstage-top"><span id="mlabel">Original</span><span class="tag">Illustrative example</span></div>
-        <p class="mtext" id="mtext"></p>
-      </div>
-      <p class="mdetail" id="mdetail" aria-hidden="true">Grammar, spelling and punctuation run in every mode.</p>
-      <dl class="mlist" id="mlist">
-        <div><dt>Original</dt><dd>hi john, i was wondering if maybe you could possibly send me that report whenever you get a chance, thanks alot</dd></div>
-        <div><dt>Fix <small>Small fixes. Same voice.</small></dt><dd>Hi John, I was wondering if maybe you could possibly send me that report whenever you get a chance. Thanks a lot.</dd></div>
-        <div><dt>Professional <small>Clear, composed, considered.</small></dt><dd>Hello John, could you please send me that report at your earliest convenience? Thank you.</dd></div>
-        <div><dt>Friendly <small>A little warmer. Still you.</small></dt><dd>Hi John! Could you send me that report when you get a chance? Thanks so much!</dd></div>
-        <div><dt>Concise <small>Fewer words. Full meaning.</small></dt><dd>Hi John, could you send me that report when you can? Thanks.</dd></div>
-        <div><dt>Direct <small>Get straight to the point.</small></dt><dd>John, please send me that report. Thanks.</dd></div>
-      </dl>
-      <p class="fine">Illustrative example, written by hand to show how modes differ. Real output depends on your text.</p>
+      <article class="bt bt-ext">
+        <div class="bt-vis ext-vis" aria-hidden="true">
+          <div class="ext-core"><svg><use href="#pmark"/></svg><i></i><i></i></div>
+          <ul class="apps"><li>Safari</li><li>Chrome</li><li>Brave</li><li>Edge</li><li>Arc</li><li>Firefox</li><li>Mac apps</li><li>Electron apps</li></ul>
+        </div>
+        <h3 class="bt-t">No extension needed.</h3>
+        <p class="bt-d">Parzr reads your text through macOS Accessibility, so it works in Safari, Chrome, Brave, Edge, Arc and Firefox, in native Mac apps and in Electron apps. Nothing to install in your browser.</p>
+      </article>
+
+      <article class="bt bt-col">
+        <div class="bt-vis col-vis" aria-hidden="true">
+          <p class="col-line">I <span class="im">recieved</span> it.</p>
+          <p class="col-line">We should <span class="im blue">utilize</span> it.</p>
+          <p class="col-line">Fixed: <span class="im ok">received</span></p>
+        </div>
+        <h3 class="bt-t">Red for mistakes. Blue for style.</h3>
+        <p class="bt-d">Solid, thick underlines with a soft tint on the word, deeper when you hover. Mint is only for the fix.</p>
+      </article>
+
+      <article class="bt bt-opt">
+        <div class="bt-vis opt-vis" aria-hidden="true">
+          <div class="keys"><kbd>⌥ <small>option</small></kbd><b>+</b><kbd>space</kbd></div>
+          <p class="opt-line"><span class="opt-a">teh</span><span class="opt-b">the</span></p>
+        </div>
+        <h3 class="bt-t">Option+Space, anywhere.</h3>
+        <p class="bt-d">Select text in any app, even Google Docs, and press Option+Space. Parzr checks the selection and pastes the fix.</p>
+      </article>
+
+      <article class="bt bt-modes">
+        <div class="bt-vis modes-vis">
+          <div class="chips" id="mchips" role="group" aria-label="Writing modes">
+            <button type="button" class="mchip on" data-i="1" aria-pressed="true"><svg aria-hidden="true"><use href="#i-fix"/></svg>Fix</button>
+            <button type="button" class="mchip" data-i="2" aria-pressed="false"><svg aria-hidden="true"><use href="#i-pro"/></svg>Professional</button>
+            <button type="button" class="mchip" data-i="3" aria-pressed="false"><svg aria-hidden="true"><use href="#i-fri"/></svg>Friendly</button>
+            <button type="button" class="mchip" data-i="4" aria-pressed="false"><svg aria-hidden="true"><use href="#i-con"/></svg>Concise</button>
+            <button type="button" class="mchip" data-i="5" aria-pressed="false"><svg aria-hidden="true"><use href="#i-dir"/></svg>Direct</button>
+          </div>
+          <div class="mbox"><p class="mtext" id="mtext" aria-hidden="true">Hi John, I was wondering if maybe you could possibly send me that report whenever you get a chance. Thanks a lot.</p><span class="tag">Illustrative example</span></div>
+          <p class="mdetail" id="mdetail" aria-hidden="true">Small fixes. Same voice.</p>
+          <dl class="sr-only">
+            <div><dt>Original</dt><dd>hi john, i was wondering if maybe you could possibly send me that report whenever you get a chance, thanks alot</dd></div>
+            <div><dt>Fix</dt><dd>Hi John, I was wondering if maybe you could possibly send me that report whenever you get a chance. Thanks a lot.</dd></div>
+            <div><dt>Professional</dt><dd>Hello John, could you please send me that report at your earliest convenience? Thank you.</dd></div>
+            <div><dt>Friendly</dt><dd>Hi John! Could you send me that report when you get a chance? Thanks so much!</dd></div>
+            <div><dt>Concise</dt><dd>Hi John, could you send me that report when you can? Thanks.</dd></div>
+            <div><dt>Direct</dt><dd>John, please send me that report. Thanks.</dd></div>
+          </dl>
+        </div>
+        <h3 class="bt-t">One sentence. Five ways to say it.</h3>
+        <p class="bt-d">Grammar, spelling and punctuation run in every mode. Illustrative example, written by hand to show how modes differ.</p>
+      </article>
+
+      <article class="bt bt-priv">
+        <div class="bt-vis priv-vis" aria-hidden="true">
+          <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">bytes</span></p>
+          <svg class="off"><use href="#i-wifi"/></svg>
+        </div>
+        <h3 class="bt-t">Sent from your Mac.</h3>
+        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. A 593 MB model ships inside the app and unloads after 30 idle seconds.</p>
+      </article>
+
+      <article class="bt bt-src">
+        <div class="bt-vis src-vis" aria-hidden="true">
+          <div class="pipe"><span>Rust engine</span><i></i><span>Swift app</span><i></i><span>Local model</span></div>
+        </div>
+        <h3 class="bt-t">Open source, every line.</h3>
+        <p class="bt-d">Apache-2.0. Every rule ships with a positive and a negative example, and its provenance. <a href="#open" class="inl">Read the code</a></p>
+      </article>
+
     </div>
   </div>
 </section>
 
-<!-- 5. SHOWCASE -->
-<section class="scene pinned showcase" id="showcase" data-scene="showcase" aria-labelledby="show-h">
-  <div class="pin">
-    <div class="layer d0 glow g6" aria-hidden="true"></div>
-    <div class="layer d1 grain" aria-hidden="true"></div>
-    <div class="layer d5 fg" data-n="7" data-avoid="9,91" aria-hidden="true"></div>
-    <div class="show-head">
+<!-- 7. REAL APP -->
+<section class="real scene" id="showcase" data-scene="real" aria-labelledby="real-h">
+  <div class="wrap">
+    <div class="real-head">
       <p class="eyebrow">The real app</p>
-      <h2 id="show-h" class="h2">No mockups.<br class="lg"> These are renders from the app.</h2>
+      <h2 id="real-h" class="h2">No mockups. Straight <span class="nw">from the app.</span></h2>
       <p class="show-cap">Graphite theme shown. Paper and System follow your Mac.</p>
     </div>
     <div class="deck" id="deck">
       <figure class="shot s-writing"><img src="/assets/writing.webp" width="1400" height="1035" loading="lazy" decoding="async" alt="The Parzr Writing settings screen: English variant, default mode, checking delay, context refinement and a personal dictionary."></figure>
-      <figure class="shot s-play"><img src="/assets/playground.webp" width="1400" height="1035" loading="lazy" decoding="async" alt="The Parzr writing space with the sentence 'I recieved your mesage.' underlined, mode tabs for Fix, Professional, Friendly, Concise and Direct, and an Apply all button."></figure>
       <figure class="shot s-rewrite"><img src="/assets/rewrite.webp" width="680" height="436" loading="lazy" decoding="async" alt="The selected-passage correction card with mode icons, the corrected sentence and Fix sentence, This word and Ignore actions."></figure>
-      <figure class="shot s-inline"><img src="/assets/inline.webp" width="680" height="400" loading="lazy" decoding="async" alt="The correction card from the writing space: 2 fixes in this sentence, recieved and mesage struck through with received and message in mint, and an active Fix sentence button."></figure>
+      <figure class="shot s-inline"><img src="/assets/inline.webp" width="680" height="400" loading="lazy" decoding="async" alt="The correction card: 2 fixes in this sentence, recieved and mesage struck through with received and message in mint, and an active Fix sentence button."></figure>
     </div>
   </div>
 </section>
 
-<!-- 6. WORKS WHERE YOU WRITE -->
+<!-- 8. WORKS WHERE YOU WRITE -->
 <section class="works" id="works" aria-labelledby="works-h">
-  <div class="layer d0 glow g7" aria-hidden="true"></div>
-  <div class="layer d5 fg" data-n="6" aria-hidden="true"></div>
+  <div class="layer d0 glow g8" aria-hidden="true"></div>
   <div class="wrap">
     <p class="eyebrow">Compatibility</p>
     <h2 id="works-h" class="h2">Works where <span class="nw">you write.</span></h2>
-    <p class="sect-lede">Parzr is honest about what has been tested. A route exists when its adapter ships. An app counts as verified only after its text, selection, formatting and Undo pass a fixture test.</p>
+    <p class="sect-lede">No extension required. Parzr is honest about what has been tested: TextEdit has passed capture, selection, formatting and Undo end to end. Other apps use the same Accessibility route and have not all been tested.</p>
   </div>
 
-  <div class="rowlab wrap"><span>Verified and included</span></div>
-  <div class="marquee" data-dir="1"><ul class="track" aria-label="Verified and included editors">
-    <li class="chip is-verified"><svg aria-hidden="true"><use href="#i-check"/></svg>TextEdit<small>native Accessibility, tested end to end</small></li>
-    <li class="chip is-inc">Chrome<small>extension</small></li>
-    <li class="chip is-inc">Edge<small>extension</small></li>
-    <li class="chip is-inc">Brave<small>extension</small></li>
-    <li class="chip is-inc">Chromium<small>extension</small></li>
-    <li class="chip is-inc">Firefox<small>extension</small></li>
-    <li class="chip is-inc">VS Code<small>extension</small></li>
-    <li class="chip is-inc">Any editor with an LSP client<small>bundled language server</small></li>
+  <div class="rowlab wrap"><span>Browsers, through macOS Accessibility</span></div>
+  <div class="marquee" data-dir="1"><ul class="track" aria-label="Browsers">
+    <li class="chip is-inc">Safari</li><li class="chip is-inc">Chrome</li><li class="chip is-inc">Brave</li><li class="chip is-inc">Edge</li><li class="chip is-inc">Arc</li><li class="chip is-inc">Firefox</li>
   </ul></div>
 
-  <div class="rowlab wrap"><span>Language server, set up per editor</span></div>
-  <div class="marquee" data-dir="-1"><ul class="track" aria-label="Editors reachable through the language server">
-    <li class="chip is-inc">Neovim</li><li class="chip is-inc">Emacs</li><li class="chip is-inc">Zed</li><li class="chip is-inc">Helix</li><li class="chip is-inc">Sublime</li><li class="chip is-inc">VS Code forks such as Cursor<small>where their APIs permit</small></li>
-  </ul></div>
-
-  <div class="rowlab wrap"><span>Accessibility route, not all tested</span></div>
-  <div class="marquee" data-dir="1" data-slow><ul class="track" aria-label="Apps that use the Accessibility route and have not all been tested">
+  <div class="rowlab wrap"><span>Mac apps and Electron apps</span></div>
+  <div class="marquee" data-dir="-1"><ul class="track" aria-label="Mac and Electron apps">
+    <li class="chip is-verified"><svg aria-hidden="true"><use href="#i-check"/></svg>TextEdit<small>tested end to end</small></li>
     <li class="chip is-muted">Mail</li><li class="chip is-muted">Notes</li><li class="chip is-muted">Slack</li><li class="chip is-muted">Teams</li><li class="chip is-muted">Discord</li><li class="chip is-muted">WhatsApp</li><li class="chip is-muted">Telegram</li>
   </ul></div>
 
@@ -250,24 +350,26 @@
       <h3>Google Docs</h3>
       <p>Google Docs draws text on a canvas, so macOS Accessibility sees no document text there. <b>Option+Space copies your selection, checks it, and pastes the fix.</b> Automatic underlines are not available in canvas editors.</p>
     </div>
-    <p class="fine">Safari uses the native accessibility route; there is no Safari extension. Browser extensions are activated per page. <a href="https://github.com/jn-aman/parzr/blob/main/docs/integrations.md" data-link="docs" rel="noopener">Read the full evidence table</a>.</p>
+    <div class="extras">
+      <p class="extras-h">Optional extras for developers</p>
+      <ul class="extras-l">
+        <li><b>Browser extension</b><span>Chrome, Edge, Brave, Chromium and Firefox. Activated per page, for DOM-level editing.</span></li>
+        <li><b>VS Code extension</b><span>Prose in plaintext, Markdown and commit messages, plus forks where their APIs permit.</span></li>
+        <li><b>Language server</b><span>Neovim, Emacs, Zed, Helix and Sublime, set up per editor.</span></li>
+      </ul>
+    </div>
+    <p class="fine">Safari uses the native accessibility route; there is no Safari extension. <a href="https://github.com/jn-aman/parzr/blob/main/docs/integrations.md" data-link="docs" rel="noopener">Read the full evidence table</a>.</p>
   </div>
 </section>
 
-<!-- 7. OPEN SOURCE -->
+<!-- 9. OPEN SOURCE -->
 <section class="open" id="open" aria-labelledby="open-h">
   <div class="layer d0 glow g8" aria-hidden="true"></div>
-  <div class="layer d5 fg" data-n="6" aria-hidden="true"></div>
   <div class="wrap open-grid">
     <div class="open-copy">
       <p class="eyebrow">Open source</p>
       <h2 id="open-h" class="h2"><span class="nw">Read every line.</span></h2>
       <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and a local model, all in one public repository. Every rule ships with a positive and a negative example, and its provenance.</p>
-      <ul class="parts">
-        <li><b>Rust grammar engine</b><span>Tokenizer, phrase and context rules, spelling, edit planning.</span></li>
-        <li><b>Swift app</b><span>SwiftUI and AppKit shell with native menus and cards.</span></li>
-        <li><b>Local model</b><span>Qwen3.5-0.8B Q5_K_M through llama.cpp and Metal.</span></li>
-      </ul>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener"><svg aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
         <details class="build" id="build">
@@ -283,7 +385,7 @@ python3 scripts/package.py</code></pre>
       </div>
       <p class="sr-only" id="copy-live" role="status" aria-live="polite"></p>
     </div>
-    <div class="code" id="code">
+    <div class="code glass" id="code">
       <div class="code-bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
         <div class="tabs" role="tablist" aria-label="Source excerpts">
           <button type="button" role="tab" aria-selected="true" data-f="0">grammar.json</button>
@@ -306,19 +408,18 @@ python3 scripts/package.py</code></pre>
   </div>
 </section>
 
-<!-- 8. FINAL CTA -->
+<!-- 10. FINAL CTA -->
 <section class="scene pinned final" id="download" data-scene="final" aria-labelledby="final-h">
   <div class="pin">
-    <div class="layer d0 glow g1" aria-hidden="true"></div>
+    <div class="layer d0 aurora" aria-hidden="true"><i class="ab a1"></i><i class="ab a2"></i><i class="ab a3"></i><i class="sweep"></i></div>
     <div class="layer d1 grid" aria-hidden="true"></div>
-    <div class="layer d5 fg" data-n="10" aria-hidden="true"></div>
     <div class="final-c">
       <h2 id="final-h" class="display final-h" aria-label="Stop second-guessing."><span aria-hidden="true">Stop <span class="nw"><span class="fx" data-wrong="second-gessing">second-guessing</span>.</span></span></h2>
       <div class="cta-row">
-        <a class="btn btn-primary btn-lg" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
+        <a class="btn btn-primary btn-lg btn-glow" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">View source</a>
       </div>
-      <p class="micro">Free · Apple Silicon · macOS 13 or later</p>
+      <p class="micro">Free · Apple Silicon · macOS 13 or later · Signed and notarized</p>
       <p class="fine center">Public beta. English coverage is growing, and Parzr will not catch every error.</p>
     </div>
   </div>
@@ -331,15 +432,15 @@ python3 scripts/package.py</code></pre>
     <div class="foot-brand">
       <a class="brand" href="#top" aria-label="Parzr, back to top"><svg class="brand-mark" aria-hidden="true"><use href="#pmark"/></svg><span>Parzr</span></a>
       <p class="foot-promise">Your words never leave this Mac.</p>
-      <p class="status-pill"><i class="live" aria-hidden="true"></i>v0.1 public beta</p>
+      <p class="status-pill"><i class="live" aria-hidden="true"></i>Public beta</p>
     </div>
     <nav class="foot-col" aria-labelledby="fp-h">
       <p class="foot-h" id="fp-h">Product</p>
       <ul>
         <li><a class="fl" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download</a></li>
-        <li><a class="fl" href="#how">How it works</a></li>
+        <li><a class="fl" href="#try">Try it</a></li>
+        <li><a class="fl" href="#names">Names</a></li>
         <li><a class="fl" href="#privacy">Privacy</a></li>
-        <li><a class="fl" href="#modes">Writing modes</a></li>
       </ul>
     </nav>
     <nav class="foot-col" aria-labelledby="fo-h">

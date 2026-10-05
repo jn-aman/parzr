@@ -25,10 +25,13 @@ if (COARSE) root.classList.add('coarse');
 matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', () => location.reload());
 
 $$('[data-link]').forEach(a => { if (LINKS[a.dataset.link]) a.href = LINKS[a.dataset.link]; });
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function rng(seed) { // mulberry32, so the fragment layout is identical on every load
-  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-}
+/* A flag per element that says whether it is on screen, so loops can pause themselves. */
+const seen = new WeakMap();
+const sio = new IntersectionObserver(es => es.forEach(e => seen.set(e.target, e.isIntersecting)), { rootMargin: '10% 0px' });
+const watch = el => { sio.observe(el); return () => !!seen.get(el) && !document.hidden; };
+async function until(fn) { while (!fn()) await sleep(250); }
 
 /* ---------- Kinetic correction: underline, strike, scramble, mint wash, settle ---------- */
 const UP = 'ABCDEFGHJKLMNPQRSTUVWXYZ', LOW = 'abcdefghjkmnpqrstuvwxyz';
@@ -101,73 +104,9 @@ async function fxPlay(el, o = {}) {
   if (settle) { await sleep(1000); if (live()) el.classList.remove('done'); }
 }
 
-/* ---------- Floating struck fragments: quiet, in the gutters, never on text ---------- */
-const PAIRS = [['teh', 'the'], ['recieved', 'received'], ['definately', 'definitely'], ['alot', 'a lot'], ['seperate', 'separate'], ['mesage', 'message'], ['chek', 'check'], ['wich', 'which'], ['thier', 'their'], ['untill', 'until'], ['occured', 'occurred'], ['becuase', 'because'], ['freind', 'friend'], ['wierd', 'weird'], ['goverment', 'government'], ['tommorow', 'tomorrow']];
-const BITS = ['teh', 'e', 'ing', 'ed', 'th', 'ie', 'ei', 'ss', 'wich', 'tion', 'ae', 'ph', 'alot', 'nd'];
-const SMALL = () => innerWidth < 761;
-// Text is measured tightly (per line box); visual boxes are measured whole.
-const TEXT_SEL = 'h1,h2,h3,p,li,dt,dd,summary,pre,figcaption,.eyebrow,.step,.rowlab span';
-const BOX_SEL = '.btn,.chip,.mchip,.card,.win,.mstage,.tile,.code,.shot,.gdocs,.build-box,.marquee,.scroll-cue';
-function obstacles(host, pad) {
-  const scope = host.closest('.pin') || host.parentElement, H = host.getBoundingClientRect(), out = [];
-  const add = (r, p) => { if (r.width > 1 && r.height > 1) out.push({ l: r.left - H.left - p, t: r.top - H.top - p, r: r.right - H.left + p, b: r.bottom - H.top + p }); };
-  scope.querySelectorAll(TEXT_SEL).forEach(el => {
-    if (el.closest('.layer, .sr-only') || el.classList.contains('sr-only')) return;
-    const rg = document.createRange(); rg.selectNodeContents(el);
-    Array.from(rg.getClientRects()).forEach(r => add(r, pad));
-  });
-  scope.querySelectorAll(BOX_SEL).forEach(el => { if (!el.closest('.layer')) add(el.getBoundingClientRect(), pad); });
-  const av = host.dataset.avoid; // "x0,x1" in percent of host width, for scenes whose art moves while scrolling
-  if (av) { const [x0, x1] = av.split(',').map(Number); out.push({ l: H.width * x0 / 100, t: -1e4, r: H.width * x1 / 100, b: 1e5 }); }
-  return out;
-}
-function frags(host, count, seed, pairs) {
-  const r = rng(seed), small = SMALL(), n = Math.min(count, small ? 8 : 18), out = [];
-  const sec = host.closest('section'), cv = sec.style.contentVisibility;
-  sec.style.contentVisibility = 'visible'; // sections that skip rendering must be laid out to be measured
-  const W = host.clientWidth, Hh = host.clientHeight, PAD = 24, MOVE = 40; // MOVE: drift and parallax travel
-  const obs = obstacles(host, PAD + MOVE), placed = [];
-  sec.style.contentVisibility = cv;
-  const hit = (b, list) => list.some(o => b.l < o.r && b.r > o.l && b.t < o.b && b.b > o.t);
-  for (let i = 0; i < n; i++) {
-    const far = r() < .4;
-    const size = far ? 14 + r() * 4 : 17 + r() * 5;
-    const pool = small ? PAIRS.filter(p => p[0].length < 6) : PAIRS, bit = BITS[Math.floor(r() * BITS.length)];
-    const pair = pairs ? pool[i % pool.length] : [bit, bit];
-    const w = Math.max(pair[0].length, pair[1].length) * size * .56 + 6, h = size * 1.3;
-    let spot = null;
-    for (let k = 0; k < 40 && !spot; k++) {
-      const side = r() < .65;
-      let x = side ? (r() < .5 ? 6 + r() * (W * .14 - w) : W * .86 + r() * (W * .14 - w - 8)) : 12 + r() * (W - w - 24);
-      const y = 84 + r() * Math.max(1, Hh - h - 100); // 84px clears the fixed nav
-      x = Math.max(6, Math.min(W - w - 6, x));
-      const b = { l: x - MOVE, t: y - MOVE, r: x + w + MOVE, b: y + h + MOVE };
-      if (!hit(b, obs) && !hit({ l: x, t: y, r: x + w, b: y + h }, placed.map(p => ({ l: p.l - 16, t: p.t - 12, r: p.r + 16, b: p.b + 12 })))) spot = { x, y, l: x, t: y, r: x + w, b: y + h };
-    }
-    if (!spot) continue;
-    placed.push(spot);
-    const el = document.createElement('span');
-    el.className = 'frag';
-    const set = (k, v) => el.style.setProperty(k, v);
-    set('--x', (spot.x / W * 100).toFixed(2) + '%'); set('--y', (spot.y / Hh * 100).toFixed(2) + '%'); set('--s', size.toFixed(0) + 'px');
-    set('--o', (.12 + r() * .2).toFixed(2));
-    set('--d', ((far ? 6 : 12) * (r() < .5 ? -1 : 1) * (.6 + r() * .8)).toFixed(0));
-    set('--sy', (-(far ? 18 : 40) * (.5 + r() * .5)).toFixed(0));
-    set('--t', (8 + r() * 8).toFixed(1) + 's'); set('--dl', (-r() * 8).toFixed(1) + 's');
-    set('--dx', ((r() - .5) * 20).toFixed(0) + 'px'); set('--dy', ((r() - .5) * 24).toFixed(0) + 'px');
-    set('--r0', ((r() - .5) * 6).toFixed(1) + 'deg'); set('--r1', ((r() - .5) * 8).toFixed(1) + 'deg');
-    const inner = document.createElement('span');
-    inner.className = 'fi';
-    const a = document.createElement('span'); a.className = 'a'; a.textContent = pair[0];
-    inner.append(a);
-    if (pairs) { const b = document.createElement('span'); b.className = 'b'; b.textContent = pair[1]; inner.append(b); }
-    el.append(inner); host.append(el);
-    out.push(el);
-  }
-  return out;
-}
 
-/* ---------- Scene engine: scroll progress as --p, only for scenes in view ---------- */
+/* ---------- Scene engine: scroll progress as --p, eased, only for scenes in view ---------- */
+// The page itself scrolls natively. Only the progress value that drives transforms is smoothed (a lerp), so motion feels weighty.
 const scenes = [];
 let ticking = false;
 const io = new IntersectionObserver(entries => {
@@ -191,41 +130,85 @@ function measure(s) {
 function frame() {
   ticking = false;
   scrollFx();
+  let moving = false;
   for (const s of scenes) {
     if (!s.vis && s.p >= 0) continue;
-    const p = measure(s);
-    if (Math.abs(p - s.p) < .0004) continue;
-    s.p = p;
-    s.el.style.setProperty('--p', p.toFixed(4));
-    s.mod.update && s.mod.update(p);
+    const t = measure(s);
+    const p = s.p < 0 ? t : lerp(s.p, t, .2);
+    const done = Math.abs(t - p) < .0007;
+    if (!done) moving = true;
+    const next = done ? t : p;
+    if (s.mod.scroll) s.mod.scroll();
+    if (Math.abs(next - s.p) < .0003 && s.p >= 0) continue;
+    s.p = next;
+    s.el.style.setProperty('--p', next.toFixed(4));
+    s.mod.update && s.mod.update(next);
   }
+  if (moving) schedule();
 }
 function schedule() { if (!ticking) { ticking = true; requestAnimationFrame(frame); } }
 
-function jumpTo(s, p) { // scroll so that scene s reaches progress p
-  const r = s.el.getBoundingClientRect();
-  scrollTo({ top: scrollY + r.top + p * (r.height - innerHeight), behavior: RM ? 'auto' : 'smooth' });
+/* ---------- 1. Hero: the headline corrects itself; a glass editor behind it catches mistakes live ---------- */
+const HERO_LINES = [
+  [{ t: 'Thanks, ' }, { n: 'aman jain' }, { t: '. I ' }, { w: ['recieved', 'received'] }, { t: ' ' }, { w: ['teh', 'the'] }, { t: ' report.' }],
+  [{ w: ['Your', "You're"] }, { t: ' doing ' }, { w: ['alot', 'a lot'] }, { t: ' better, ' }, { n: 'priya' }, { t: '.' }],
+  [{ t: 'We should ' }, { w: ['utilize', 'use'], b: 1 }, { t: ' it ' }, { w: ['in order to', 'to'], b: 1 }, { t: ' ship.' }],
+];
+function buildLine(host, spec, diffHost) {
+  host.textContent = ''; if (diffHost) diffHost.textContent = '';
+  const words = [];
+  spec.forEach(p => {
+    if (p.t) { host.append(p.t); diffHost && diffHost.append(p.t); }
+    else if (p.n) { const s = document.createElement('span'); s.className = 'nm'; s.textContent = p.n; host.append(s); diffHost && diffHost.append(p.n); }
+    else {
+      const s = document.createElement('span'); s.className = 'fx w' + (p.b ? ' blue' : ''); s.dataset.wrong = p.w[0]; s.textContent = p.w[1];
+      host.append(s); fxInit(s); fxSet(s, 'wrong'); words.push(s);
+      if (diffHost) { const d = document.createElement('del'), n = document.createElement('ins'); d.textContent = p.w[0]; n.textContent = p.w[1]; diffHost.append(d, ' ', n); }
+    }
+  });
+  return words;
 }
-
-/* ---------- 1. Hero ---------- */
 function hero(el) {
-  const h1 = $('.hero-h', el), words = $$('.fx', h1), host = $('#frags', el);
-  words.forEach(fxInit);
-  const fr = frags(host, 14, 7, true);
-  const thr = fr.map((_, i) => .08 + i * (.4 / fr.length));
-  let third = false;
-  const fixThird = () => { if (third) return; third = true; fxPlay(words[2], { hold: 380 }); };
+  const h1 = $('.hero-h', el), hw = $$('.fx', h1), host = $('#hw-line'), diff = $('#hw-diff'), card = $('#hw-card');
+  const status = $('#hw-status'), count = $('#hw-count'), fixbtn = $('#hw-fix'), dot = status.previousElementSibling;
+  hw.forEach(fxInit);
+  const awake = watch(el);
+  const setCount = n => { count.textContent = n + (n === 1 ? ' fix in this sentence' : ' fixes in this sentence'); };
   if (RM) {
-    words.forEach(w => { fxSet(w, 'right'); w.classList.add('done'); }); h1.classList.add('ready');
-    fr.forEach(f => f.classList.add('fixed'));
+    hw.forEach(w => { fxSet(w, 'right'); w.classList.add('done'); }); h1.classList.add('ready');
+    const words = buildLine(host, HERO_LINES[0], diff);
+    words.forEach(w => fxSet(w, 'wrong', true)); setCount(words.length); card.classList.add('on'); status.textContent = words.length + ' suggestions';
     return { update() {} };
   }
-  words.forEach(w => fxSet(w, 'wrong'));
+  let third = false;
+  const fixThird = () => { if (third) return; third = true; fxPlay(hw[2], { hold: 380 }); };
+  hw.forEach(w => fxSet(w, 'wrong'));
   h1.classList.add('ready');
-  words.forEach((w, i) => setTimeout(() => w.classList.add('u'), 250 + i * 160));
-  setTimeout(() => fxPlay(words[0], { hold: 250 }), 1100);
-  setTimeout(() => fxPlay(words[1], { hold: 250 }), 1700);
+  hw.forEach((w, i) => setTimeout(() => w.classList.add('u'), 250 + i * 160));
+  setTimeout(() => fxPlay(hw[0], { hold: 250 }), 1100);
+  setTimeout(() => fxPlay(hw[1], { hold: 250 }), 1700);
   setTimeout(fixThird, 6500);
+  // the live editor loop: type, underline, show the card, press Fix sentence, resolve
+  (async () => {
+    await sleep(900);
+    for (let i = 0; ; i = (i + 1) % HERO_LINES.length) {
+      await until(awake);
+      const words = buildLine(host, HERO_LINES[i], diff), n = words.length, chars = host.textContent.length;
+      host.classList.remove('out', 'typing'); void host.offsetWidth;
+      host.style.setProperty('--tn', chars); host.style.setProperty('--ty', (chars * 38) + 'ms');
+      host.classList.add('typing'); status.textContent = '0 suggestions'; dot.parentElement.classList.add('clear');
+      await sleep(chars * 38 + 250);
+      dot.parentElement.classList.remove('clear'); status.textContent = n + ' suggestions'; setCount(n);
+      for (const w of words) { w.classList.add('u'); await sleep(260); }
+      await sleep(700); card.classList.add('on'); await sleep(2000);
+      fixbtn.classList.remove('press'); void fixbtn.offsetWidth; fixbtn.classList.add('press'); await sleep(260);
+      card.classList.remove('on');
+      words.forEach((w, k) => setTimeout(() => fxPlay(w, { strike: true, hold: 120, dur: 420 }), k * 300));
+      await sleep(words.length * 300 + 1100);
+      status.textContent = '0 suggestions'; dot.parentElement.classList.add('clear');
+      await sleep(2300); host.classList.add('out'); await sleep(600);
+    }
+  })();
   if (!COARSE) { // pointer parallax, cursor spotlight and headline tilt, all eased, only while the hero is on screen
     const spot = $('#spot', el);
     let tx = 0, ty = 0, cx = 0, cy = 0, px = innerWidth / 2, py = innerHeight * .4, sx = px, sy = py, run = false;
@@ -242,18 +225,153 @@ function hero(el) {
       spot.classList.add('on');
       if (!run) { run = true; requestAnimationFrame(loop); }
     }, { passive: true });
-    document.documentElement.addEventListener('mouseleave', () => { spot.classList.remove('on'); tx = ty = 0; if (!run) { run = true; requestAnimationFrame(loop); } });
+    root.addEventListener('mouseleave', () => { spot.classList.remove('on'); tx = ty = 0; if (!run) { run = true; requestAnimationFrame(loop); } });
   }
   return {
     update(p) {
       if (p > .1) fixThird();
-      el.style.setProperty('--exit', smooth(.58, .97, p).toFixed(3));
-      fr.forEach((f, i) => f.classList.toggle('fixed', p > thr[i]));
+      el.style.setProperty('--exit', smooth(.1, .46, p).toFixed(3));
     }
   };
 }
 
-/* ---------- 2. Demo: scroll-scrubbed product demo ---------- */
+/* ---------- 2. Try it: a small client-side checker with the app's colours ---------- */
+// ponytail: a dozen hand-written rules, no network. The app's engine does far more; this only shows the feel.
+const NAMES = new Set('aman jain priya ananya wei mohammed muhammad fatima olu chidi yuki aiko sofia nguyen dmitri ivan anna jose maria ahmed aisha raj kenji hana kwame amara sven liam noah mei li chen kim park'.split(' '));
+const RULES = [
+  [/\bteh\b/gi, 'the', 'r', 'Common misspelling of "the".'],
+  [/\brecieve(d|s|r)?\b/gi, 'receive$1', 'r', 'i before e, except after c.'],
+  [/\bdefinately\b/gi, 'definitely', 'r', 'Use the standard spelling.'],
+  [/\bseperate(d|ly)?\b/gi, 'separate$1', 'r', 'Use the standard spelling.'],
+  [/\balot\b/gi, 'a lot', 'r', 'Two words: a lot.'],
+  [/\bwich\b/gi, 'which', 'r', 'Use the standard spelling.'],
+  [/\bmesage(s)?\b/gi, 'message$1', 'r', 'Use the standard spelling.'],
+  [/\buntill\b/gi, 'until', 'r', 'Use the standard spelling.'],
+  [/\boccured\b/gi, 'occurred', 'r', 'Double the r in occurred.'],
+  [/\bbecuase\b/gi, 'because', 'r', 'Use the standard spelling.'],
+  [/\bthier\b/gi, 'their', 'r', 'Use the standard spelling.'],
+  [/\btommorow\b/gi, 'tomorrow', 'r', 'Use the standard spelling.'],
+  [/\bfreind(s)?\b/gi, 'friend$1', 'r', 'i before e, except after c.'],
+  [/\byour(?= (?:doing|going|being|welcome|not|right|wrong|a)\b)/gi, "you're", 'r', "Use you're (you are) before this predicate."],
+  [/\bits(?= (?:a|the|going|been|not|so|very|time|too|alot|better|worse|good|great|ready)\b)/gi, "it's", 'r', "Use it's (it is) here."],
+  [/\b(could|should|would) of\b/gi, '$1 have', 'r', 'Use "have", not "of".'],
+  [/\bi\b(?!')/g, 'I', 'r', 'Capitalize the first-person pronoun.'],
+  [/\bin order to\b/gi, 'to', 'b', 'Wordy. "to" says the same, shorter.'],
+  [/\bvery unique\b/gi, 'unique', 'b', '"Unique" is already absolute.'],
+  [/\butilize\b/gi, 'use', 'b', 'A plainer word.'],
+  [/\bat this point in time\b/gi, 'now', 'b', 'Wordy. "now" says the same.'],
+  [/\bdue to the fact that\b/gi, 'because', 'b', 'Wordy. "because" says the same.'],
+];
+const caseLike = (from, to) => /^[A-Z]/.test(from) && /^[a-z]/.test(to) && from !== 'I' ? to[0].toUpperCase() + to.slice(1) : to;
+function analyze(text, ignored) {
+  const names = [], wre = /[\p{L}'’]+/gu; let m, prev = null;
+  while ((m = wre.exec(text))) {
+    if (!NAMES.has(m[0].toLowerCase())) { prev = null; continue; }
+    if (prev && /^ +$/.test(text.slice(prev.e, m.index))) prev.e = m.index + m[0].length; else { prev = { s: m.index, e: m.index + m[0].length }; names.push(prev); }
+  }
+  const marks = [];
+  for (const [re, to, kind, why] of RULES) {
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      const s = m.index, e = s + m[0].length;
+      if (names.some(n => s < n.e && e > n.s)) continue;
+      const rep = caseLike(m[0], to.replace(/\$(\d)/g, (_, k) => m[k] || ''));
+      if (ignored.has(m[0].toLowerCase() + '|' + rep)) continue;
+      if (marks.some(k => s < k.e && e > k.s)) continue;
+      marks.push({ s, e, from: m[0], to: rep, kind, why });
+    }
+  }
+  return { marks: marks.sort((a, b) => a.s - b.s), names };
+}
+function tryIt(el) {
+  const ta = $('#try-ta'), back = $('#try-back'), body = $('#try-body'), card = $('#tcard'), win = $('#try-win');
+  const status = $('#try-status'), allBtn = $('#try-all'), nextBtn = $('#try-next');
+  const SAMPLES = [
+    'I recieved teh mesage and its alot better than last time. Your doing great, and I will definately reply tommorow.',
+    'We should utilize the new process in order to ship faster. At this point in time it is a very unique approach, due to the fact that nobody has tried it.',
+    'thanks, priya. aman jain said i recieved the invoice, but ananya and wei have not. Fatima wants it seperate.',
+  ];
+  const ignored = new Set(); let marks = [], names = [], fixed = [], prevKeys = new Set(), active = -1, started = false, timer = 0;
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+  function render() {
+    const text = ta.value; ({ marks, names } = analyze(text, ignored));
+    const keys = new Set(), pieces = [];
+    marks.forEach((k, i) => pieces.push({ s: k.s, e: k.e, html: `<span class="im${k.kind === 'b' ? ' blue' : ''}${prevKeys.has(k.kind + k.from + k.s) ? '' : ' new'}" data-i="${i}">${esc(k.from)}</span>` }));
+    names.forEach(n => pieces.push({ s: n.s, e: n.e, html: `<span class="nm">${esc(text.slice(n.s, n.e))}</span>` }));
+    fixed.forEach(f => pieces.push({ s: f[0], e: f[1], html: `<span class="im ok">${esc(text.slice(f[0], f[1]))}</span>` }));
+    pieces.sort((a, b) => a.s - b.s);
+    let out = '', at = 0;
+    pieces.forEach(p => { if (p.s < at) return; out += esc(text.slice(at, p.s)) + p.html; at = p.e; });
+    out += esc(text.slice(at)); if (text.endsWith('\n') || !text) out += ' ';
+    back.innerHTML = out;
+    marks.forEach(k => keys.add(k.kind + k.from + k.s)); prevKeys = keys;
+    const n = marks.length, nn = names.length;
+    status.textContent = (n ? n + (n === 1 ? ' suggestion' : ' suggestions') : 'No suggestions') + (nn ? ` · ${nn} ${nn === 1 ? 'name' : 'names'} kept as typed` : '');
+    status.parentElement.classList.toggle('clear', !n);
+    allBtn.disabled = nextBtn.disabled = !n;
+    fit();
+  }
+  const spans = i => $$(`.im[data-i="${i}"]`, back);
+  function sentenceOf(k) {
+    const t = ta.value; let s = k.s, e = k.e;
+    while (s > 0 && !/[.!?\n]/.test(t[s - 1])) s--;
+    while (e < t.length && !/[.!?\n]/.test(t[e])) e++;
+    if (e < t.length && /[.!?]/.test(t[e])) e++;
+    return { s, e };
+  }
+  function closeCard() { card.classList.remove('on'); active = -1; $$('.im.hov', back).forEach(x => x.classList.remove('hov')); }
+  function openCard(i, focus) {
+    const k = marks[i]; if (!k) return;
+    active = i;
+    const sen = sentenceOf(k), inSen = marks.filter(m => m.s >= sen.s && m.e <= sen.e);
+    const t = ta.value; let html = '', at = sen.s;
+    inSen.forEach(m => { html += esc(t.slice(at, m.s)) + `<del>${esc(m.from)}</del> <ins${m === k ? ' class="focus"' : ''}>${esc(m.to)}</ins>`; at = m.e; });
+    html += esc(t.slice(at, sen.e));
+    $('#tc-diff').innerHTML = html.trim();
+    $('#tc-why').innerHTML = `<b>${esc(k.from)} → ${esc(k.to)}</b><span>${esc(k.why)}</span>`;
+    $('#tc-title').textContent = k.kind === 'b' && inSen.length === 1 ? 'Style suggestion' : inSen.length + (inSen.length === 1 ? ' fix in this sentence' : ' fixes in this sentence');
+    card.classList.toggle('blue', k.kind === 'b');
+    $('#tc-fix').dataset.s = sen.s + ',' + sen.e;
+    $$('.im.hov', back).forEach(x => x.classList.remove('hov')); spans(i).forEach(x => x.classList.add('hov'));
+    const b = body.getBoundingClientRect(), r = (spans(i)[0] || back).getBoundingClientRect();
+    const cw = card.offsetWidth;
+    card.style.left = clamp(r.left - b.left - 26, 8, Math.max(8, b.width - cw - 8)) + 'px';
+    card.style.top = (r.bottom - b.top + 12) + 'px';
+    card.style.setProperty('--ox', clamp(r.left - b.left + r.width / 2 - parseFloat(card.style.left), 0, cw) + 'px');
+    card.classList.add('on');
+    if (focus) $('#tc-fix').focus({ preventScroll: true });
+  }
+  function apply(list) { // replace from the end so offsets stay valid, then flash the fixes mint
+    if (!list.length) return;
+    let t = ta.value; const out = [];
+    [...list].sort((a, b) => b.s - a.s).forEach(k => { t = t.slice(0, k.s) + k.to + t.slice(k.e); });
+    let d = 0; [...list].sort((a, b) => a.s - b.s).forEach(k => { out.push([k.s + d, k.s + d + k.to.length]); d += k.to.length - (k.e - k.s); });
+    ta.value = t; closeCard(); fixed = out; render(); setTimeout(() => { fixed = []; }, 2200);
+  }
+  const hit = (x, y) => marks.findIndex((_, i) => spans(i).some(sp => Array.from(sp.getClientRects()).some(r => x >= r.left && x <= r.right && y >= r.top - 4 && y <= r.bottom + 4)));
+  ta.addEventListener('pointermove', e => { const i = hit(e.clientX, e.clientY); ta.style.cursor = i < 0 ? '' : 'pointer'; if (!COARSE && active < 0) { $$('.im.hov', back).forEach(x => x.classList.remove('hov')); if (i >= 0) spans(i).forEach(x => x.classList.add('hov')); } });
+  ta.addEventListener('pointerleave', () => { if (active < 0) $$('.im.hov', back).forEach(x => x.classList.remove('hov')); });
+  ta.addEventListener('click', e => { const i = hit(e.clientX, e.clientY); if (i >= 0) openCard(i); else closeCard(); });
+  ta.addEventListener('input', () => { closeCard(); fixed = []; fit(); clearTimeout(timer); timer = setTimeout(render, 120); });
+  win.addEventListener('keydown', e => { if (e.key === 'Escape' && active >= 0) { closeCard(); ta.focus(); } });
+  $('#tc-x').addEventListener('click', () => { closeCard(); ta.focus(); });
+  $('#tc-fix').addEventListener('click', e => { const [s, en] = e.currentTarget.dataset.s.split(',').map(Number); apply(marks.filter(m => m.s >= s && m.e <= en)); ta.focus({ preventScroll: true }); });
+  $('#tc-word').addEventListener('click', () => { apply([marks[active]]); ta.focus({ preventScroll: true }); });
+  $('#tc-ign').addEventListener('click', () => { const k = marks[active]; ignored.add(k.from.toLowerCase() + '|' + k.to); closeCard(); render(); ta.focus({ preventScroll: true }); });
+  allBtn.addEventListener('click', () => { apply(marks); allBtn.classList.remove('ping'); void allBtn.offsetWidth; allBtn.classList.add('ping'); });
+  nextBtn.addEventListener('click', () => openCard((active + 1) % marks.length));
+  $$('[data-sample]', el).forEach(b => b.addEventListener('click', () => {
+    $$('[data-sample]', el).forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    ta.value = SAMPLES[+b.dataset.sample]; ignored.clear(); fixed = []; prevKeys = new Set(); closeCard(); render();
+  }));
+  addEventListener('resize', () => { fit(); if (active >= 0) closeCard(); });
+  ta.value = SAMPLES[0]; fit();
+  const start = () => { if (started) return; started = true; render(); };
+  if (RM) start(); else new IntersectionObserver((es, o) => { if (es[0].isIntersecting) { start(); o.disconnect(); } }, { threshold: .3 }).observe(win);
+  if (!COARSE && !RM) addEventListener('pointermove', e => { const r = win.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) return; win.style.setProperty('--mx', clamp((e.clientX - r.left - r.width / 2) / innerWidth * 2, -1, 1).toFixed(3)); win.style.setProperty('--my', clamp((e.clientY - r.top - r.height / 2) / innerHeight * 2, -1, 1).toFixed(3)); }, { passive: true });
+}
+
+/* ---------- 3. How it works: scroll-scrubbed product demo; the window tilts flat as the scene pins ---------- */
 function demo(el) {
   const win = $('#win'), ed = $('#ed'), card = $('#card'), cursor = $('#cursor'), sent = $('#sent');
   const words = $$('.w', ed), steps = $$('.step', el), status = $('#status'), fixbtn = $('#fixbtn');
@@ -262,25 +380,22 @@ function demo(el) {
   const state = { fixed: words.map(() => false), clicked: false, pressed: false, step: -1 };
   let g = null;
 
-  function rel(node, anc, s) { // position of node inside anc, undoing any scale
+  function rel(node, anc) { // position of node inside anc, measured with the 3D tilt switched off
     const a = anc.getBoundingClientRect(), b = node.getBoundingClientRect();
-    return { x: (b.left - a.left) / s, y: (b.top - a.top) / s, w: b.width / s, h: b.height / s };
+    return { x: b.left - a.left, y: b.top - a.top, w: b.width, h: b.height };
   }
   function layout() {
-    const ent = win.classList.contains('in');
-    win.style.transition = 'none'; win.classList.add('in');
-    // measure the sentence in its uncorrected state so geometry matches what the viewer sees
+    win.style.transition = 'none'; win.style.transform = 'none';
     const saved = words.map(w => w._fx.t.textContent);
     words.forEach(w => { w._fx.t.textContent = w._fx.wrong; });
-    const s = win.getBoundingClientRect().width / win.offsetWidth || 1;
     const W = ed.offsetWidth, H = ed.offsetHeight;
-    const you = rel(words[1], ed, s);
+    const you = rel(words[1], ed);
     const cw = card.offsetWidth, ch = card.offsetHeight;
     const left = clamp(you.x - 26, 8, Math.max(8, W - cw - 8));
     const top = Math.min(you.y + you.h + 12, Math.max(8, H - ch - 8));
     card.style.left = left + 'px'; card.style.top = top + 'px';
     card.style.setProperty('--ox', clamp(you.x + you.w / 2 - left, 0, cw) + 'px');
-    const fb = rel(fixbtn, ed, s);
+    const fb = rel(fixbtn, ed);
     g = {
       W, H,
       start: { x: W * .84, y: H * .9 },
@@ -289,8 +404,7 @@ function demo(el) {
       end: { x: W * .9, y: H * .96 },
     };
     words.forEach((w, i) => { w._fx.t.textContent = saved[i]; });
-    if (!ent) win.classList.remove('in');
-    void win.offsetWidth; win.style.transition = '';
+    void win.offsetWidth; win.style.transition = ''; win.style.transform = '';
     state.laid = true;
   }
   function path(p) {
@@ -303,20 +417,16 @@ function demo(el) {
     else if (p < .82) { a = C; b = C; t = 0; }
     else { a = C; b = D; t = smooth(.82, .97, p); }
     const x = lerp(a.x, b.x, t), y = lerp(a.y, b.y, t);
-    // a gentle arc so the cursor feels hand-driven
-    const arc = Math.sin(t * Math.PI) * -14;
+    const arc = Math.sin(t * Math.PI) * -14; // a gentle arc so the cursor feels hand-driven
     return { x, y: y + arc };
   }
   function render(p) {
     if (!g) layout();
-    // underlines draw in
     words.forEach((w, i) => w.style.setProperty('--u', clamp((p - U_AT[i]) / .06).toFixed(3)));
     sent.classList.toggle('tint', p > .27 && p < .8);
     words[1].classList.toggle('hov', p > .45 && p < .8);
-    // card
     const c = smooth(.49, .56, p) * (1 - smooth(.785, .84, p));
     card.style.setProperty('--c', c.toFixed(3));
-    // cursor
     const pt = path(p);
     cursor.style.transform = `translate3d(${(pt.x - 3).toFixed(1)}px,${(pt.y - 2).toFixed(1)}px,0)`;
     cursor.style.setProperty('--cur', (smooth(.3, .35, p) * (1 - smooth(.93, .985, p))).toFixed(2));
@@ -324,7 +434,6 @@ function demo(el) {
     if (clicked !== state.clicked) { state.clicked = clicked; if (clicked) { cursor.classList.remove('click'); void cursor.offsetWidth; cursor.classList.add('click'); } }
     const pressed = p > .762;
     if (pressed !== state.pressed) { state.pressed = pressed; fixbtn.classList.toggle('press', pressed); if (pressed) { cursor.classList.remove('click'); void cursor.offsetWidth; cursor.classList.add('click'); } }
-    // editor words correct themselves one by one
     words.forEach((w, i) => {
       const f = p > FIX_AT[i];
       if (f !== state.fixed[i]) {
@@ -334,13 +443,13 @@ function demo(el) {
       }
     });
     status.textContent = p > .93 ? '0 suggestions' : p > .1 ? '4 suggestions' : '0 suggestions';
+    status.parentElement.classList.toggle('clear', p > .93);
     const step = p < .3 ? 0 : p < .54 ? 1 : p < .77 ? 2 : 3;
     if (step !== state.step) { state.step = step; steps.forEach((s, i) => s.classList.toggle('on', i === step)); }
   }
-  new IntersectionObserver(es => { if (es[0].isIntersecting) win.classList.add('in'); }, { threshold: .25 }).observe(win);
   addEventListener('resize', () => { g = null; if (state.laid) render(el._p ?? 0); });
   if (RM) {
-    steps.forEach(s => s.classList.add('on')); win.classList.add('in');
+    steps.forEach(s => s.classList.add('on'));
     words.forEach(w => { fxSet(w, 'wrong', true); w.style.setProperty('--u', 1); });
     sent.classList.add('tint'); words[1].classList.add('hov');
     card.style.setProperty('--c', 1); cursor.style.setProperty('--cur', 0);
@@ -348,9 +457,40 @@ function demo(el) {
     addEventListener('load', lay); if (document.readyState === 'complete') lay();
     return { update() {} };
   }
-  win.classList.remove('in');
   words.forEach(w => fxSet(w, 'wrong'));
-  return { update(p) { el._p = p; render(p); } };
+  return {
+    // tilt: two thirds on the way in, the rest as the scene pins
+    scroll() {
+      const top = el.getBoundingClientRect().top, vh = innerHeight;
+      const e = top > 0 ? smooth(0, 1, clamp(1 - top / vh)) * .65 : .65 + smooth(0, .14, el._p ?? 0) * .35;
+      win.style.setProperty('--e', e.toFixed(3));
+    },
+    update(p) { el._p = p; render(p); }
+  };
+}
+
+/* ---------- 4. Names: a lowercase name stays intact while a real typo is fixed ---------- */
+function names(el) {
+  const fxw = $('#nfx'), nm = $('#nm1'), st = $('#n-status'), fig = $('#fig'), cnt = $('#fig-n'), awake = watch($('#nwin'));
+  fxInit(fxw);
+  if (RM) { fxSet(fxw, 'wrong', true); nm.classList.add('named'); fig.classList.add('in'); return; }
+  fxSet(fxw, 'wrong');
+  new IntersectionObserver((es, o) => {
+    if (!es[0].isIntersecting) return;
+    fig.classList.add('in'); o.disconnect();
+    const t0 = performance.now(), step = now => { const t = clamp((now - t0) / 1600); cnt.textContent = (.08 * (1 - Math.pow(1 - t, 3))).toFixed(2); if (t < 1) requestAnimationFrame(step); };
+    cnt.textContent = '0.00'; requestAnimationFrame(step);
+  }, { threshold: .5 }).observe(fig);
+  (async () => {
+    for (;;) {
+      await until(awake);
+      fxSet(fxw, 'wrong'); nm.classList.remove('named'); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
+      await sleep(900); nm.classList.add('named'); await sleep(1100);
+      st.textContent = '1 suggestion'; st.parentElement.classList.remove('clear'); fxw.classList.add('u'); await sleep(1300);
+      fxPlay(fxw, { hold: 300 }); await sleep(1500); st.textContent = '0 suggestions'; st.parentElement.classList.add('clear');
+      await sleep(3600);
+    }
+  })();
 }
 
 /* ---------- 3. Privacy: manifesto lights up word by word ---------- */
@@ -381,28 +521,6 @@ function privacy(el) {
     }
   };
 }
-function stats() {
-  const tiles = $$('.tile');
-  const run = n => {
-    const target = +n.dataset.count;
-    if (RM) { n.textContent = target; return; }
-    const t0 = performance.now(), dur = 1500;
-    const step = now => {
-      const t = clamp((now - t0) / dur);
-      if (n.dataset.kind === 'scramble') n.textContent = t < 1 ? String(Math.floor(Math.random() * 9000) + 100).slice(0, Math.max(1, 4 - Math.floor(t * 3.4))) : '0';
-      else n.textContent = Math.round(target * (1 - Math.pow(2, -10 * t)) / (1 - Math.pow(2, -10)));
-      if (t < 1) requestAnimationFrame(step); else n.textContent = target;
-    };
-    requestAnimationFrame(step);
-  };
-  const o = new IntersectionObserver(es => es.forEach(e => {
-    if (!e.isIntersecting) return;
-    e.target.classList.add('in'); run($('.num', e.target)); o.unobserve(e.target);
-  }), { threshold: .35 });
-  tiles.forEach(t => { if (RM) t.classList.add('in'); else { $('.num', t).textContent = '0'; o.observe(t); } });
-}
-
-/* ---------- 4. Modes: the sentence rewrites itself with a kinetic diff ---------- */
 const MODES = [
   { n: 'Original', d: 'Grammar, spelling and punctuation run in every mode.', t: 'hi john, i was wondering if maybe you could possibly send me that report whenever you get a chance, thanks alot' },
   { n: 'Fix', d: 'Small fixes. Same voice.', t: 'Hi John, I was wondering if maybe you could possibly send me that report whenever you get a chance. Thanks a lot.' },
@@ -411,68 +529,44 @@ const MODES = [
   { n: 'Concise', d: 'Fewer words. Full meaning.', t: 'Hi John, could you send me that report when you can? Thanks.' },
   { n: 'Direct', d: 'Get straight to the point.', t: 'John, please send me that report. Thanks.' },
 ];
-function diffWords(a, b) { // word-level LCS; removals come before insertions in each change
-  const A = a.split(' '), B = b.split(' '), n = A.length, m = B.length;
-  const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = A[i] === B[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  const out = []; let i = 0, j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && A[i] === B[j]) { out.push({ k: 'keep', w: A[i] }); i++; j++; }
-    else {
-      const dels = [], ins = [];
-      while ((i < n || j < m) && !(i < n && j < m && A[i] === B[j])) {
-        if (j >= m || (i < n && L[i + 1][j] >= L[i][j + 1])) dels.push(A[i++]); else ins.push(B[j++]);
-      }
-      dels.forEach(w => out.push({ k: 'del', w })); ins.forEach(w => out.push({ k: 'ins', w }));
-    }
-  }
-  return out;
-}
-function modes(el, scene) {
-  const stage = $('#mstage'), text = $('#mtext'), label = $('#mlabel'), detail = $('#mdetail'), chips = $$('.mchip', el);
-  const SEG = (1 - .08) / 5;
-  const segStart = i => .08 + (i - 1) * SEG;
-  chips.forEach(c => c.addEventListener('click', () => jumpTo(scene.s, segStart(+c.dataset.i) + SEG * .72)));
-  if (RM) return { update() {} };
-  let built = -1, lastStage = -1;
-  function build(idx) {
-    built = idx; text.textContent = ''; lastStage = -1;
-    const toks = idx === 0 ? MODES[0].t.split(' ').map(w => ({ k: 'keep', w })) : diffWords(MODES[idx - 1].t, MODES[idx].t);
-    toks.forEach((t, i) => {
-      const s = document.createElement('span'); s.className = 'tk ' + t.k;
-      const inner = document.createElement('i'); inner.textContent = t.w + (i < toks.length - 1 ? ' ' : '');
-      inner._final = inner.textContent;
-      s.append(inner); text.append(s);
-    });
-    stage.classList.toggle('errs', idx === 1);
-    label.textContent = MODES[idx].n;
-    detail.textContent = MODES[idx].d;
-    chips.forEach(c => c.classList.toggle('on', +c.dataset.i === idx));
-  }
-  build(0); stage.dataset.s = '3';
-  return {
-    update(p) {
-      let idx = 0, s = 3;
-      if (p >= .08) {
-        idx = Math.min(5, 1 + Math.floor((p - .08) / SEG));
-        const t = (p - segStart(idx)) / SEG;
-        s = t < .1 ? 0 : t < .3 ? 1 : t < .52 ? 2 : 3;
-      }
-      if (idx !== built) build(idx);
-      if (s !== lastStage) {
-        const enter2 = s === 2 && lastStage !== -1 && lastStage < 2;
-        lastStage = s; stage.dataset.s = String(s);
-        if (enter2) $$('.tk.ins i', text).forEach(i => scramble(i, i._final, 520));
-      }
-    }
+function bento() {
+  const tiles = $$('.bt');
+  const run = n => {
+    const target = +n.dataset.count;
+    if (RM) { n.textContent = target; return; }
+    const t0 = performance.now(), dur = 1500;
+    const step = now => {
+      const t = clamp((now - t0) / dur);
+      n.textContent = t < 1 ? String(Math.floor(Math.random() * 9000) + 100).slice(0, Math.max(1, 4 - Math.floor(t * 3.4))) : target;
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   };
+  const o = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add('in'); const n = $('.num', e.target); if (n) run(n); o.unobserve(e.target);
+  }), { threshold: .25 });
+  tiles.forEach((t, i) => {
+    t.style.transitionDelay = ((i % 2) * 110) + 'ms';
+    if (!RM) o.observe(t); else { t.classList.add('in'); const n = $('.num', t); if (n) n.textContent = n.dataset.count; }
+    if (!COARSE && !RM) t.addEventListener('pointermove', e => { const r = t.getBoundingClientRect(); t.style.setProperty('--sx', (e.clientX - r.left) + 'px'); t.style.setProperty('--sy', (e.clientY - r.top) + 'px'); });
+  });
+  // modes tile: the same sentence in five voices
+  const chips = $$('.mchip', $('#mchips')), text = $('#mtext'), detail = $('#mdetail'), awake = watch($('#mchips'));
+  let cur = 1, touched = false;
+  const show = i => {
+    cur = i; text.textContent = '';
+    MODES[i].t.split(' ').forEach((w, k, a) => { const s = document.createElement('span'); s.className = 'w'; s.style.setProperty('--i', k); s.textContent = w + (k < a.length - 1 ? ' ' : ''); text.append(s); });
+    detail.textContent = MODES[i].d;
+    chips.forEach(c => { c.classList.toggle('on', +c.dataset.i === i); c.setAttribute('aria-pressed', String(+c.dataset.i === i)); });
+  };
+  chips.forEach(c => c.addEventListener('click', () => { touched = true; show(+c.dataset.i); }));
+  show(1);
+  if (!RM) setInterval(() => { if (!touched && awake()) show(cur % 5 + 1); }, 3800);
 }
 
-/* ---------- 5. Showcase: stacked screenshots fan out in 3D ---------- */
-function showcase(el) {
-  if (RM) return { update() {} };
-  return { update(p) { const f = smooth(.12, .62, p); el.style.setProperty('--f', f.toFixed(4)); } };
-}
+/* ---------- 7. The real app: screenshots tilt with scroll (CSS reads --p) ---------- */
+function real() { return { update() {} }; }
 
 /* ---------- 6. Compatibility marquees: base drift plus scroll-velocity boost and skew ---------- */
 const SV = { raw: 0, t: 0 }; // latest scroll velocity (px per ms) and when it was measured
@@ -762,19 +856,15 @@ function boot() {
   if ($('.nav-toggle')) nav();
   reveals(); magnetic(); anchors(); wordmark();
   notFound();
-  const mods = {
-    hero, demo, privacy, modes: el => modes(el, mods._s), showcase, final,
-  };
-  $$('.fg').forEach((h, i) => { if (!RM) frags(h, +h.dataset.n || 8, 100 + i * 13, false); });
+  const mods = { hero, demo, privacy, showcase: real, real, final };
   $$('[data-scene]').forEach(el => {
-    const name = el.dataset.scene, holder = {};
-    mods._s = holder;
+    const name = el.dataset.scene;
     const mod = mods[name] ? mods[name](el) : { update() {} };
-    holder.s = register(el, mod);
+    register(el, mod);
   });
-  // non-pinned sections only need parallax progress
-  $$('.works, .open').forEach(el => register(el, { update() {} }));
-  if ($('.tiles')) { stats(); marquees(); openSource(); }
+  if ($('#try')) tryIt($('#try'));
+  if ($('#names')) names($('#names'));
+  if ($('#bento')) { bento(); marquees(); openSource(); }
   if (!RM) irisInit();
   if (!RM) { addEventListener('scroll', schedule, { passive: true }); addEventListener('resize', () => { scenes.forEach(s => s.p = -1); schedule(); }); }
   frame();

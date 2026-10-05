@@ -4,7 +4,7 @@ Static marketing site for parzr.app. No build step, no dependencies, no third-pa
 
 ```
 public/
-  index.html      single page (8 scenes)
+  index.html      single page (hero, try it, how it works, names, privacy, bento, real app, compatibility, open source, finale)
   styles.css      tokens from mac/Sources/Parzr/Design.swift
   main.js         vanilla motion engine (requestAnimationFrame, IntersectionObserver, CSS custom properties)
   404.html        not found page
@@ -37,11 +37,13 @@ Repo and release URLs are one constant at the top of `public/main.js` (`LINKS`).
 
 ## How the motion works
 
-- Each pinned scene is a tall `section` with a `position: sticky` child. `main.js` measures the section against the viewport while it is on screen and writes `--p` (0 to 1) on it. CSS uses `--p` for parallax; scene modules use it for scrubbed state (demo, modes, showcase, privacy manifesto).
-- The kinetic correction (`fxPlay`) draws a dotted underline, strikes the wrong word, scrambles the right one in on a mint wash, then settles.
-- Only `transform`, `opacity`, `filter` and `clip-path` are animated, apart from two small one-off exceptions: the sentence tint in the demo and the width of changed words in the modes diff.
-- `prefers-reduced-motion: reduce` adds `.rm` to `<html>`: scenes stop pinning, nothing scrubs, every state is shown statically (the modes become a list, the screenshots a grid). `(pointer: coarse)` drops pointer parallax, blur and half the particles.
+- Pinned scenes (hero, how it works, privacy, finale) are a tall `section` with a `position: sticky` child. `main.js` measures the section against the viewport and writes `--p` (0 to 1) on it. Only that value is eased (a lerp), so the page scrolls natively and keyboard scrolling is untouched. CSS and scene modules read `--p`.
+- Issue marks match the app: a solid, rounded, thick underline with a soft tint, red (`--red`) for spelling, grammar and punctuation, blue (`--blue`) for style and tone, deeper on hover. Mint is only for the accepted fix. The kinetic correction (`fxPlay`) underlines in red, strikes the word, scrambles the right one in on a mint wash, then settles.
+- The hero editor is a live loop (type, underline, card, Fix sentence) over an aurora of drifting blooms (transform and opacity only), with pointer parallax. The how-it-works window tilts flat as its scene pins; scenes open with a circular iris (`clip-path`).
+- "Try it" is a small client-side checker (`RULES` and `NAMES` in `main.js`, a dozen hand-written rules). It never touches the network and it never underlines a word from the name list.
+- Backdrop blur is used only on the hero editor, where it sits over the moving aurora. Other windows are opaque gradients to keep scrolling cheap.
+- `prefers-reduced-motion: reduce` adds `.rm` to `<html>`: scenes stop pinning, nothing scrubs, every state is shown statically. `(pointer: coarse)` drops pointer parallax, blur, magnetic buttons and the aurora animation.
 
 ## Content rules
 
-Claims are limited to what `README.md`, `PRODUCT.md`, `DESIGN.md`, `docs/integrations.md`, `docs/architecture.md` and `benchmarks/README.md` support. The modes demo is labeled as an illustrative example. No testimonials, no invented numbers, no accuracy claims.
+Claims are limited to what `README.md`, `PRODUCT.md`, `DESIGN.md`, `docs/integrations.md`, `docs/architecture.md` and `benchmarks/README.md` support. The modes demo is labeled as an illustrative example, the try-it panel as a tiny in-page sample, and the name figure carries its benchmark footnote (Measured on Parzr's open name benchmark; synthetic sentences). No testimonials, no invented numbers, no accuracy claims.
