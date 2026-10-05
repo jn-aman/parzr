@@ -130,6 +130,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         panelModel.dismiss = { [weak self] in self?.closePanel() }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
         if !CommandLine.arguments.contains("--background") { showStudio() }
+        // First launch (or a revoked grant): ask once per launch so Parzr is not silently idle.
+        if !AXIsProcessTrusted() { Preferences.shared.promptForPermission() }
     }
     @objc private func toggleStatusPopover() {
         guard let button = statusItem?.button else { return }

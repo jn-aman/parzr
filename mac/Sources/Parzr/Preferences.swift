@@ -73,6 +73,11 @@ final class Preferences: ObservableObject {
         if !permissionGranted, let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") { NSWorkspace.shared.open(url) }
         watchPermission()
     }
+    /// Launch-time ask: macOS shows its own dialog (with Open System Settings); we do not open Settings ourselves.
+    func promptForPermission() {
+        permissionGranted = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
+        watchPermission()
+    }
     func refreshPermission() {
         permissionGranted = AXIsProcessTrusted()
         if permissionGranted { permissionWatch?.cancel(); permissionWatch = nil; permissionRequested = false }
@@ -80,7 +85,7 @@ final class Preferences: ObservableObject {
     func watchPermission() {
         guard permissionWatch == nil, !permissionGranted else { return }
         permissionWatch = Task { @MainActor [weak self] in
-            for _ in 0..<120 {
+            for _ in 0..<600 { // 10 minutes; app activation and the menu also refresh it
                 do { try await Task.sleep(for: .seconds(1)); try Task.checkCancellation() } catch { break }
                 guard let self else { return }
                 self.refreshPermission()
