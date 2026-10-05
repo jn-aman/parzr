@@ -133,6 +133,10 @@ flowchart LR
 
 The English challenge was authored for Parzr's rules, so it shows regressions rather than general accuracy; results on public benchmarks are in progress.
 
+<img src="docs/media/names.png" width="860" alt="How Parzr protects and capitalizes names: graded signals, a case-only guard, a blue capitalization suggestion, learning and the name benchmark">
+
+*How Parzr decides what is a name, why it never respells one, and how the benchmark above is measured.*
+
 <details>
 <summary><b>Build from source</b></summary>
 
@@ -170,6 +174,8 @@ Interactive native QA opens only authored fixtures and needs a desktop session w
 <summary><b>Releases</b></summary>
 
 One click: **Actions → Release → Run workflow** (or `gh workflow run release.yml -f bump=patch`). CI bumps every version file, tags, builds, signs, notarizes, staples and publishes the DMG with checksums. See [releases](docs/releases.md).
+
+<img src="docs/media/release.png" width="860" alt="How a release ships: the owner-only Release workflow bumps, tags and pushes atomically, then ci-release verifies, signs, notarizes and publishes the DMG; website.yml deploys parzr.app to Cloudflare Workers">
 
 </details>
 

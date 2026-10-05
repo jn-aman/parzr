@@ -1,6 +1,10 @@
 # Releases
 
-The workflow in [.github/workflows/ci-release.yml](../.github/workflows/ci-release.yml) verifies pull requests and branch pushes, builds a development DMG, and runs the distribution job for version tags. The [Release workflow](../.github/workflows/release.yml) bumps versions, tags and starts that distribution job. Remote execution requires a GitHub repository with Actions enabled.
+The workflow in [.github/workflows/ci-release.yml](../.github/workflows/ci-release.yml) verifies pull requests (except changes that only touch `website/**`, `docs/**` or Markdown), builds a development DMG, and runs the distribution job for version tags. It also runs on demand; a manual run on a branch verifies only. Plain pushes to the default branch do not run it. The [Release workflow](../.github/workflows/release.yml) bumps versions, tags and starts that distribution job. The [website workflow](../.github/workflows/website.yml) deploys `website/` to Cloudflare Workers when it changes on the default branch. Remote execution requires a GitHub repository with Actions enabled.
+
+![How a release ships and the site deploys: the owner-only Release workflow bumps, tags and pushes atomically, ci-release verifies then signs, notarizes and publishes, and website.yml deploys parzr.app](media/release.png)
+
+The diagram reads top to bottom. Only the owner can start a release: `release.yml` runs only for the repository owner on the default branch, and the signing job in `ci-release.yml` runs only for a `v*` tag started by the owner or by `github-actions[bot]`, inside the `release` environment that holds the signing secrets. Pull requests run the `verify` job and nothing else.
 
 ## Repository setup
 
