@@ -126,7 +126,10 @@ static GEC: OnceLock<Option<GecApi>> = OnceLock::new();
 fn gec_api() -> Option<&'static GecApi> {
     GEC.get_or_init(|| {
         use std::os::unix::ffi::OsStrExt;
-        let (library, _) = locations().ok()?;
+        // PARZR_GEC_RUNTIME points development runs at a separate build of the grammar model's runtime.
+        let library = std::env::var_os("PARZR_GEC_RUNTIME")
+            .map(PathBuf::from)
+            .or_else(|| Some(locations().ok()?.0))?;
         let path = CString::new(library.as_os_str().as_bytes()).ok()?;
         // SAFETY: NUL-terminated names; the handle is kept for the process lifetime.
         unsafe {

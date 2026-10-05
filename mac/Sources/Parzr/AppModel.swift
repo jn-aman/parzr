@@ -66,13 +66,14 @@ final class AppModel: ObservableObject {
         let requestMode: RewriteMode = debounce ? .fix : mode
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
         let capitalize = Preferences.shared.capitalizeNames(for: snapshot?.app.bundleIdentifier)
+        let gec = Preferences.shared.smartGrammar && requestMode == .fix
         let (starts, ends, deep) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true, !debounce && (mode != .fix || Preferences.shared.contextRefinement))
         analysisTask = Task { @MainActor in
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay))) }
                 try Task.checkCancellation()
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec)
                 try Task.checkCancellation()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)

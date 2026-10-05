@@ -27,6 +27,8 @@ final class Preferences: ObservableObject {
     @Published var appearance: String { didSet { defaults.set(appearance, forKey: "appearance") } }
     @Published var reduceMotion: Bool { didSet { defaults.set(reduceMotion, forKey: "reduceMotion") } }
     @Published var contextRefinement: Bool { didSet { defaults.set(contextRefinement, forKey: "contextRefinement") } }
+    /// The on-device grammar model (GECToR) beside the rules, for typing and explicit Fix checks.
+    @Published var smartGrammar: Bool { didSet { defaults.set(smartGrammar, forKey: "smartGrammar") } }
     @Published var showWordCount: Bool { didSet { defaults.set(showWordCount, forKey: "showWordCount") } }
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
     /// Opt-in: VS Code and Cursor show a screen-reader notice when Parzr asks for accessibility, so they stay untouched until enabled.
@@ -80,6 +82,7 @@ final class Preferences: ObservableObject {
         appearance = defaults.string(forKey: "appearance") ?? "graphite"
         reduceMotion = defaults.bool(forKey: "reduceMotion")
         contextRefinement = defaults.object(forKey: "contextRefinement") as? Bool ?? true
+        smartGrammar = defaults.object(forKey: "smartGrammar") as? Bool ?? true
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
         checkVSCode = defaults.bool(forKey: "checkVSCode"); onboardingCompleted = defaults.bool(forKey: "onboardingCompleted"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")

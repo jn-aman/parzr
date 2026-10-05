@@ -142,6 +142,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             guard granted, let self, self.onboarding?.isVisible == true, self.onboardingModel?.step == .accessibility else { return }
             NSApp.activate(ignoringOtherApps: true); self.onboarding?.makeKeyAndOrderFront(nil)
         }.store(in: &subscriptions)
+        // The grammar model compiles for the Neural Engine on first use (seconds): do it in the background once setup is finished, never during launch.
+        Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
+            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar() } }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).

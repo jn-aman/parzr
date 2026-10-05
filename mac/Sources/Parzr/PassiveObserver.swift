@@ -163,7 +163,7 @@ final class PassiveObserver {
                 let snapshot = try SelectionSnapshot.capture(passive: true)
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
-                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence)
+                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar)
                 // Automatic checks (typing and plain selection) never load the GPU model;
                 // it runs only for explicit checks and tone changes.
                 let engine = WritingEngine.typing

@@ -58,6 +58,19 @@ public actor WritingEngine {
         }
         throw ParzrError.message(Bundle.main.bundleURL.pathExtension == "app" ? "The bundled writing engine could not load. Reinstall Parzr." : "Build the local engine with cargo build --release, or set PARZR_ENGINE_PATH to its library.")
     }
+    /// Loads the on-device grammar model off every actor; the first run compiles it for the Neural Engine (seconds), later runs reload in well under a second.
+    @discardableResult
+    public nonisolated static func warmGrammar() async -> Bool {
+        await Task.detached(priority: .utility) {
+            let supplied = ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]
+            let paths = libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: supplied)
+            for path in paths {
+                guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let warm = dlsym(handle, "parzr_gec_warm") else { continue }
+                return unsafeBitCast(warm, to: (@convention(c) () -> Int32).self)() == 1
+            }
+            return false
+        }.value
+    }
     /// Lowercase words (shaped as `WordShape.shaped`) the system spell checker accepts in `text`; set by the app, which owns the checker.
     public typealias KnownWords = @Sendable (String) async -> Set<String>
     private var knownWords: KnownWords?
@@ -98,7 +111,7 @@ public actor WritingEngine {
         guard request.text.utf8.count <= 65_536 else { throw ParzrError.message("Select at most 64 KB of text.") }
         var tokens = request.tokens
         if tokens.isEmpty { tokens = Self.linguisticHints(for: request.text, known: await knownWords?(request.text) ?? []) }
-        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep)
+        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep, gec: request.gec)
         let input = try JSONEncoder().encode(enriched)
         guard let string = String(data: input, encoding: .utf8), let function = rewriteFunction, let cancellation else { throw ParzrError.message("The writing engine could not respond.") }
         let output = try await withTaskCancellationHandler {

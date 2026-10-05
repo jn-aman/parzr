@@ -235,6 +235,8 @@ struct StudioView: View {
                     }
                     divider
                     settingRow("Context refinement", detail: "Use the bundled model for full-passage grammar checks. Typing uses the lightweight engine; tone rewrites still use the model.") { toggle("Context refinement", $preferences.contextRefinement) }
+                    divider
+                    settingRow("Smart grammar (on-device model)", detail: "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. Nothing leaves your Mac.") { toggle("Smart grammar", $preferences.smartGrammar) }
                 }
                 group("PERSONAL DICTIONARY") {
                     VStack(alignment: .leading, spacing: 12) {

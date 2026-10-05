@@ -977,4 +977,36 @@ mod tests {
         );
         assert!(bad.is_empty(), "{}", bad.join("\n"));
     }
+
+    /// End to end with the native forward: raw corrections of the recorded Python results' inputs must
+    /// equal its outputs. PARZR_GEC_COMPARE is a results directory (<dataset>.json with inputs and outputs).
+    #[test]
+    fn native_forward_matches_a_python_run() {
+        let (Some(dir), Some(model)) = (std::env::var_os("PARZR_GEC_COMPARE"), shared()) else { return };
+        for name in ["eng1000", "clean100", "controls", "hinglish", "jfleg", "bea"] {
+            let Ok(raw) = std::fs::read(Path::new(&dir).join(format!("{name}.json"))) else { continue };
+            let data: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+            let (mut same, mut total, mut sentences, mut shown) = (0, 0, 0, 0);
+            for (input, want) in data["inputs"].as_array().unwrap().iter().zip(data["outputs"].as_array().unwrap()) {
+                let (input, want) = (input.as_str().unwrap(), want.as_str().unwrap());
+                let mut out = String::new();
+                let mut at = 0;
+                for (a, b) in pieces(input) {
+                    out.push_str(&input[at..a]);
+                    let piece = &input[a..b];
+                    sentences += 1;
+                    out.push_str(&model.correct(piece, &native).map_or(piece.to_owned(), |c| c.text));
+                    at = b;
+                }
+                out.push_str(&input[at..]);
+                total += 1;
+                same += usize::from(out == want);
+                if out != want && shown < 3 && std::env::var_os("PARZR_GEC_SHOW").is_some() {
+                    shown += 1;
+                    eprintln!("[{name}] {input:?}\n  python {want:?}\n  rust   {out:?}");
+                }
+            }
+            eprintln!("native vs python {name}: {same} of {total} texts identical ({sentences} sentences)");
+        }
+    }
 }

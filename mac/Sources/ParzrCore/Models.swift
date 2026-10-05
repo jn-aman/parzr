@@ -73,9 +73,11 @@ public struct EngineRequest: Codable, Sendable {
     public let sentence_start: Bool
     public let sentence_end: Bool
     public let deep: Bool
-    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], names: [String] = [], capitalizeNames: Bool = false, dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false) {
+    /// Also run the on-device grammar model beside the rules (Fix mode only; the engine ignores it without the model).
+    public let gec: Bool
+    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], names: [String] = [], capitalizeNames: Bool = false, dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false, gec: Bool = false) {
         self.text = text; self.mode = mode; self.dictionary = dictionary; self.names = names; capitalize_names = capitalizeNames; self.dialect = dialect; protected_ranges = protectedRanges; self.tokens = tokens; sentence_start = sentenceStart
-        self.deep = deep
+        self.deep = deep; self.gec = gec
         sentence_end = sentenceEnd
     }
 }

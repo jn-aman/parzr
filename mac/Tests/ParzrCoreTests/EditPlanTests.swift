@@ -24,6 +24,17 @@ final class EditPlanTests: XCTestCase {
         XCTAssertEqual(WordShape.shaped("don't"), "don't")
         XCTAssertNil(WordShape.shaped("Plan"))
     }
+    func testRequestEncodesTheGrammarModelFlagAndDefaultsItOff() throws {
+        func json(_ request: EngineRequest) throws -> String { try XCTUnwrap(String(data: JSONEncoder().encode(request), encoding: .utf8)) }
+        XCTAssertTrue(try json(EngineRequest(text: "He go.", gec: true)).contains("\"gec\":true"))
+        XCTAssertTrue(try json(EngineRequest(text: "He go.")).contains("\"gec\":false"))
+        // The engine rejects unknown fields, so the flag must round-trip through the real decoder when a library is available.
+    }
+    func testGrammarModelRequestsReachTheEngineWithoutBreakingIt() async throws {
+        guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
+        let result = try await WritingEngine.typing.rewrite(EngineRequest(text: "I goes home.", gec: true))
+        XCTAssertEqual(result.text, "I go home.")
+    }
     func testLinkedWordOrderEditsPreserveTheNamedRun() async throws {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library.") }
         let source = "Not only Mira did help, but she also stayed."

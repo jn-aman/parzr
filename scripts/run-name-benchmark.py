@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--engine', default=str(ROOT/'engine/target/release/parzr-engine'))
 parser.add_argument('--report', default=str(ROOT/'dist/qa/names/report.json'))
 parser.add_argument('--no-check', action='store_true', help='Report only; do not enforce thresholds')
+parser.add_argument('--gec', action='store_true', help='Also run the on-device grammar model (needs its runtime and files; CI leaves it off)')
 args = parser.parse_args()
 
 rows = [json.loads(line) for line in (ROOT/'benchmarks/names/corpus.jsonl').open()]
@@ -34,7 +35,7 @@ stats = collections.defaultdict(lambda: [0, 0])  # key -> [damaged, total]
 fixed = controls = errors = 0
 worst = []
 for row in rows:
-    engine.stdin.write(json.dumps({'text': row['text']}) + '\n'); engine.stdin.flush()
+    engine.stdin.write(json.dumps({'text': row['text'], **({'gec': True} if args.gec else {})}) + '\n'); engine.stdin.flush()
     out = json.loads(engine.stdout.readline())
     if 'error' in out:
         errors += 1; worst.append({'id': row['id'], 'text': row['text'], 'error': out['error']}); continue
