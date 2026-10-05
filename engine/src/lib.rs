@@ -442,17 +442,20 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     if req.protected_ranges.len() > 4096 || req.tokens.len() > 16_384 {
         return Err("Structural metadata exceeds its limit.".into());
     }
-    if req.protected_ranges.iter().any(|r| {
-        r.start_utf16 > r.end_utf16
-            || r.end_utf16 > length
-            || byte_at(&req.text, r.start_utf16).is_none()
-            || byte_at(&req.text, r.end_utf16).is_none()
-    }) || req.tokens.iter().any(|t| {
-        t.start_utf16 > t.end_utf16
-            || t.end_utf16 > length
-            || byte_at(&req.text, t.start_utf16).is_none()
-            || byte_at(&req.text, t.end_utf16).is_none()
-    }) {
+    let mut boundary = vec![false; length + 1];
+    let mut at = 0;
+    for c in req.text.chars() {
+        boundary[at] = true;
+        at += c.len_utf16();
+    }
+    boundary[at] = true;
+    let valid = |a: usize, b: usize| a <= b && b <= length && boundary[a] && boundary[b];
+    if !req
+        .protected_ranges
+        .iter()
+        .all(|r| valid(r.start_utf16, r.end_utf16))
+        || !req.tokens.iter().all(|t| valid(t.start_utf16, t.end_utf16))
+    {
         return Err("Invalid structural range.".into());
     }
     let index = req.names_index();
