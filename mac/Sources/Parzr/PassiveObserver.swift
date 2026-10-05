@@ -94,8 +94,10 @@ final class PassiveObserver {
                 self?.onDismiss?()
                 let snapshot = try SelectionSnapshot.capture(passive: true)
                 let request = EngineRequest(text: snapshot.text, dictionary: Preferences.shared.dictionary,
-                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, deep: snapshot.expectedSelection.length > 0 && Preferences.shared.selectedTextPopover && Preferences.shared.contextRefinement)
-                let engine = request.deep ? WritingEngine.shared : WritingEngine.typing
+                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence)
+                // Automatic checks (typing and plain selection) never load the GPU model;
+                // it runs only for explicit checks and tone changes.
+                let engine = WritingEngine.typing
                 let result = try await engine.rewrite(request)
                 try Task.checkCancellation(); try snapshot.validate()
                 guard !result.edits.isEmpty else { return }

@@ -1,32 +1,47 @@
 # Parzr
 
-A native, offline macOS writing assistant. Automatic underlines lead to small inline correction popups; select text and use a configurable shortcut for passage checking. Grammar, spelling and punctuation run in every mode; Professional, Friendly, Concise and Direct add deliberate tone changes.
+**A writing assistant that lives on your Mac. Offline. Open source. Free.**
 
-**Development beta.** A local app and DMG can be built now. Distribution signing/notarization requires a Developer ID certificate and notarization credentials. English coverage is growing; this project does not claim to detect every grammatical error or safely edit every application's custom document model.
+Parzr underlines grammar, spelling and punctuation as you write, in the apps you already use. Click a flagged word to see the whole corrected sentence and fix it in one keystroke. Select a passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct. Everything runs on your Mac: no account, no cloud, no telemetry.
 
-![Parzr compact inline correction](docs/qa/screenshots/rewrite.png)
+[**Download the public beta**](https://github.com/jn-aman/parzr/releases/latest) · [parzr.app](https://parzr.app) · Apple Silicon · macOS 13 or later
 
-Corrections stay beside your words in a compact 340 × 218 point card, with a corrected sentence preview and a Fix sentence action. The [writing space](docs/qa/screenshots/playground.png) includes visible writing modes and a suggestion review panel. The menu panel and inline cards follow Graphite, Paper or your Mac’s theme.
+![The Parzr correction card: the corrected sentence with removed words struck through and fixes in mint](docs/qa/screenshots/inline.png)
 
-## Build and run
+> **Public beta.** Parzr v0.1 is signed and notarized by Apple. English coverage is growing, and Parzr will not catch every error or work in every app's custom editor. Please [report what you find](https://github.com/jn-aman/parzr/issues).
 
-Requires an Apple Silicon Mac running macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+, and Node 22 for integration tests. Dependency downloads occur at build time; writing analysis runs offline.
+## Install
+
+1. Download `Parzr-x.y.z.dmg` from the [latest release](https://github.com/jn-aman/parzr/releases/latest) and check it against `SHA256SUMS` if you like.
+2. Open the DMG and drag **Parzr** to **Applications**, then open it from there.
+3. Allow **Accessibility** when asked (System Settings, Privacy & Security, Accessibility). Parzr needs it to read and correct text in other apps; it cannot grant this to itself.
+
+Then just write. Underlines appear when you pause. Click the word itself to open its fix; **Return** applies the whole sentence. Select text and press **Option+Space** for a full passage check or a tone rewrite. Change the shortcut, pause Parzr, or turn it off per app in Settings. Turn off **Show in Dock** to keep Parzr in the menu bar only.
+
+## What it does
+
+- **Fixes the whole sentence at once.** The card leads with the corrected sentence, removed words struck through and fixes in mint, so one keystroke repairs every error in it.
+- **Five writing modes.** Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
+- **Works where you write.** Native Mac apps through Accessibility (tested end to end in TextEdit), a browser extension for Chrome, Edge, Brave, Chromium and Firefox, a VS Code extension, and a language server for other editors. In canvas editors such as Google Docs, Option+Space copies your selection, checks it and pastes the fix. See [integrations](docs/integrations.md) for exactly what is verified.
+- **Private by construction.** Writing stays in memory on your Mac. No account, telemetry, writing logs or HTTP server. The model ships inside the app; nothing downloads at runtime.
+
+## How it works
+
+Parzr has its own Rust writing engine: tokenization, protected spans (links, code, names, numbers), phrase and context rules, verb morphology, frequency-ranked spelling, and minimal UTF-16 edit planning that preserves your formatting and Undo. Apple NaturalLanguage contributes word hints.
+
+Automatic checks use only this fast engine. Explicit passage checks and tone rewrites add the bundled **Qwen3.5-0.8B** model (Q5_K_M, 593 MB) through llama.cpp on Metal, followed by another grammar pass, and a guard keeps the model to plausible corrections. See [architecture](docs/architecture.md) and [grammar coverage](docs/grammar-coverage.md).
+
+## Build from source
+
+Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+, and Node 22 for the integration tests. Dependencies download at build time; writing analysis always runs offline.
 
 ```sh
-python3 scripts/build.py
+python3 scripts/build.py         # builds dist/Parzr.app (ad-hoc signed)
 open dist/Parzr.app
-python3 scripts/package.py
+python3 scripts/package.py       # optional: a local DMG
 ```
 
-The default local DMG is `dist/Parzr-0.1.0-local.dmg`, ad-hoc signed and not notarized. A local build made with `--sign` contains a Developer ID signed app; notarization is a separate release step. Drag the app to Applications and enable Accessibility. Select prose and press **Option+Space**. Record a different combination in **General → Check selected text**. Automatic suggestions are enabled by default after permission; click an inline mark to review a correction. Pause or disable them per app in Settings.
-
-Parzr has its own Rust writing compiler: tokenization, protected spans, phrase/context rules, verb morphology, local clause analysis, frequency-ranked spelling, grammar → tone → grammar pipeline, minimal UTF-16 edit planning, and source maps. Apple NaturalLanguage contributes hints across the macOS adapters. Automatic grammar uses the fast engine without loading model weights. Explicit passage checks and styles use bundled Qwen3.5-0.8B Q5_K_M through llama.cpp/Metal, followed by another grammar pass. The 593 MB model, runtime and attributed frequency data ship inside the app and DMG; no runtime download, local HTTP server, account or telemetry.
-
-## Integrations and verification
-
-See [editor integrations and evidence](docs/integrations.md), [grammar coverage](docs/grammar-coverage.md), [grammar evidence catalog](docs/grammar-evidence.md), [architecture](docs/architecture.md), [release setup](docs/releases.md), and [QA evidence](docs/qa/README.md). Browser and VS Code adapters are included. Compatibility is capability-based; unverified hosts are labeled.
-
-The [1,000-paragraph English challenge](benchmarks/README.md) measures actual corrections against authored references, with 100 clean controls and reproducible reports from both the packaged engine and native NLP path.
+Run the checks CI runs:
 
 ```sh
 python3 scripts/audit-public-repo.py
@@ -39,24 +54,16 @@ cargo build --release --locked --manifest-path engine/Cargo.toml
 export PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf"
 export PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib"
 PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
-npm ci
-npx playwright install chromium
-npm run test:editors
-npm run test:browser
+npm ci && npx playwright install chromium
+npm run test:editors && npm run test:browser
 ```
 
-Explicit native QA opens only authored fixtures. TextEdit testing exercises typing-driven highlights, a compact correction button, real AX replacement, formatting, paragraphs and Undo. UI testing exercises native controls and window restoration. These require an interactive macOS session; TextEdit testing also requires Accessibility:
+Interactive native QA opens only authored fixtures and needs a desktop session with Accessibility; see [QA evidence](docs/qa/README.md). The [1,000-paragraph English challenge](benchmarks/README.md) measures corrections against authored references with clean controls.
 
-```sh
-dist/Parzr.app/Contents/MacOS/parzr --integration-test dist/native-qa
-dist/Parzr.app/Contents/MacOS/parzr --typing-test dist/qa/typing
-dist/Parzr.app/Contents/MacOS/parzr --grammar-typing-test dist/qa/grammar-typing
-dist/Parzr.app/Contents/MacOS/parzr --paste-test dist/qa/paste
-dist/Parzr.app/Contents/MacOS/parzr --ui-test dist/qa/ui-controls
-```
+## Releases
 
-## Open source and roadmap
+Releases are built, signed, notarized and published by CI. See [releases](docs/releases.md).
 
-Apache-2.0; see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). Contributions should include error/valid-context fixtures, source provenance, intent preservation and editor safety checks. See [CONTRIBUTING.md](CONTRIBUTING.md).
+## Contributing
 
-The [Parzr.app website plan](docs/website-plan.md) targets Cloudflare after product acceptance. Release automation is implemented in `.github/workflows/ci-release.yml`; repository setup and secrets are still required before a real signed release can run.
+Apache-2.0; see [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES). New rules should come with error and valid-context fixtures, provenance, intent preservation and editor safety checks. See [CONTRIBUTING.md](CONTRIBUTING.md).
