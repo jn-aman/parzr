@@ -12,11 +12,14 @@ type Generate = unsafe extern "C" fn(*const c_char, *const c_char) -> *mut c_cha
 type Free = unsafe extern "C" fn(*mut c_char);
 type Cancel = unsafe extern "C" fn();
 type Hints = unsafe extern "C" fn(*const c_char) -> *mut c_char;
+type NameLogOdds = unsafe extern "C" fn(*const c_char, *const c_char, u32, u32) -> f64;
 struct Runtime {
     generate: Generate,
     free: Free,
     cancel: Cancel,
     hints: Hints,
+    /// Absent in a runtime built before the name judge existed: the explicit path then skips it.
+    name_log_odds: Option<NameLogOdds>,
     model: PathBuf,
 }
 static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
@@ -62,6 +65,7 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
         let free = dlsym(handle, c"parzr_model_string_free".as_ptr());
         let cancel = dlsym(handle, c"parzr_model_cancel".as_ptr());
         let hints = dlsym(handle, c"parzr_model_token_hints".as_ptr());
+        let judge = dlsym(handle, c"parzr_model_name_log_odds".as_ptr());
         if generate.is_null() || free.is_null() || cancel.is_null() || hints.is_null() {
             return Err("The bundled model runtime is incompatible.".into());
         }
@@ -70,6 +74,8 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
             free: std::mem::transmute::<*mut c_void, Free>(free),
             cancel: std::mem::transmute::<*mut c_void, Cancel>(cancel),
             hints: std::mem::transmute::<*mut c_void, Hints>(hints),
+            name_log_odds: (!judge.is_null())
+                .then(|| std::mem::transmute::<*mut c_void, NameLogOdds>(judge)),
             model,
         })
     }
@@ -86,6 +92,19 @@ pub fn linguistic_hints(text: &str) -> Result<Vec<crate::TokenHint>, String> {
         .map_err(|_| "The local language tagger returned invalid metadata.".into());
     unsafe { (r.free)(output) };
     result
+}
+/// log P(yes) - log P(no) that the word at `start_utf16..end_utf16` is a person's name, from one
+/// forward pass of the bundled model. None when the runtime lacks the judge or the model fails.
+pub fn name_log_odds(text: &str, start_utf16: usize, end_utf16: usize) -> Option<f32> {
+    let r = runtime().ok()?;
+    let judge = r.name_log_odds?;
+    let start = u32::try_from(byte_at(text, start_utf16)?).ok()?;
+    let end = u32::try_from(byte_at(text, end_utf16)?).ok()?;
+    let file = CString::new(r.model.to_string_lossy().as_bytes()).ok()?;
+    let input = CString::new(text).ok()?;
+    // SAFETY: both strings are NUL-terminated and live through this synchronous call.
+    let value = unsafe { judge(file.as_ptr(), input.as_ptr(), start, end) };
+    value.is_finite().then_some(value as f32)
 }
 #[cfg(not(target_os = "macos"))]
 fn load(_: &Path, _: PathBuf) -> Result<Runtime, String> {

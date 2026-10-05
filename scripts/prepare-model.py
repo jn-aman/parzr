@@ -71,7 +71,9 @@ if not quantized.exists():
         run([host_build/'bin/llama-quantize', '--allow-requantize', model, quantized, 'Q5_K_M'])
 if digest(quantized) != MODEL_SHA: raise SystemExit('Derived Q5 model failed SHA-256 verification.')
 model = quantized
-shutil.copy2(outputs[0], cache/'libparzr_model.dylib')
+# Replace, never overwrite in place: macOS caches code signatures per vnode and kills a process
+# that loads a library rewritten under it (exit 137, Code Signature Invalid).
+(cache/'libparzr_model.dylib').unlink(missing_ok=True); shutil.copy2(outputs[0], cache/'libparzr_model.dylib')
 shutil.copy2(source/'LICENSE', cache/'llama-LICENSE.txt')
 license_path = ROOT/'resources/ThirdParty/Qwen3.5-LICENSE.txt'
 if not license_path.is_file(): raise SystemExit('Missing Qwen3.5 Apache 2.0 license.')

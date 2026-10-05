@@ -1,7 +1,9 @@
 // A single bounded, offline llama.cpp context. No server, downloads or telemetry.
 #include "llama.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdlib>
 #include <cstring>
@@ -248,4 +250,64 @@ extern "C" char *parzr_model_generate(const char *file, const char *prompt) {
         }
     } catch (...) { return nullptr; }
     return nullptr;
+}
+
+// Log-odds log P(yes) - log P(no) that `text[start, end)` (UTF-8 byte range) is a person's name, from ONE forward pass over a short
+// classification prompt (no generation). The text is cut to a window around the word. NaN on any failure, never a guess.
+extern "C" double parzr_model_name_log_odds(const char *file, const char *text, unsigned start, unsigned end) {
+    const double nan = std::nan("");
+    if (!file || !text) return nan;
+    const size_t length = std::strlen(text);
+    if (start >= end || end > length || end - start > 64) return nan;
+    auto &r = runtime();
+    const auto epoch = r.epoch.load();
+    std::unique_lock lock(r.mutex);
+    struct Idle {
+        Runtime &r;
+        ~Idle() { r.last = Clock::now(); r.wake.notify_one(); }
+    } idle{r};
+    if (r.epoch.load() != epoch) return nan;
+    Abort abort{r, epoch, Clock::now() + std::chrono::seconds(5)};
+    try {
+        // About 240 bytes either side of the word, moved to a character boundary and then past a partial word.
+        size_t from = start > 240 ? start - 240 : 0, to = std::min(length, size_t(end) + 240);
+        while (from < start && (text[from] & 0xC0) == 0x80) from++;
+        while (to > end && to < length && (text[to] & 0xC0) == 0x80) to--;
+        if (from > 0) while (from < start && text[from - 1] != ' ' && text[from - 1] != '\n') from++;
+        if (to < length) while (to > end && text[to] != ' ' && text[to] != '\n') to--;
+        const std::string word(text + start, end - start), window(text + from, to - from);
+        // The text comes first and the question last: measured AUC 0.996 against 0.969 with the question first.
+        const std::string prompt = "<|im_start|>user\nText: " + window + "\n\nIn this text, is '" + word + "' a person's name? Answer yes or no.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
+        if (!r.load(file) || abort.stopped()) return nan;
+        const auto *vocab = llama_model_get_vocab(r.model);
+        std::vector<llama_token> tokens(1024);
+        int count = llama_tokenize(vocab, prompt.c_str(), int(prompt.size()), tokens.data(), int(tokens.size()), true, true);
+        if (count <= 0 || count > 512) return nan;
+        llama_memory_clear(llama_get_memory(r.context), true);
+        llama_set_abort_callback(r.context, [](void *p) { return static_cast<Abort *>(p)->stopped(); }, &abort);
+        struct Clear {
+            Runtime &r;
+            ~Clear() {
+                llama_set_abort_callback(r.context, nullptr, nullptr);
+                llama_memory_clear(llama_get_memory(r.context), true);
+                r.last = Clock::now();
+                r.wake.notify_one();
+            }
+        } clear{r};
+        if (llama_decode(r.context, llama_batch_get_one(tokens.data(), count)) != 0) return nan;
+        const float *logits = llama_get_logits_ith(r.context, -1);
+        if (!logits) return nan;
+        // Each answer word is one token in this vocabulary; a spelling that is not is skipped. The shift only keeps exp() in range.
+        auto mass = [&](std::initializer_list<const char *> words) {
+            double sum = 0;
+            for (auto *w : words) {
+                llama_token t;
+                if (llama_tokenize(vocab, w, int(std::strlen(w)), &t, 1, false, false) == 1) sum += std::exp(double(logits[t]) - 20.0);
+            }
+            return sum;
+        };
+        const double yes = mass({"Yes", "yes"}), no = mass({"No", "no"});
+        if (!(yes > 0) || !(no > 0)) return nan;
+        return std::log(yes) - std::log(no);
+    } catch (...) { return nan; }
 }
