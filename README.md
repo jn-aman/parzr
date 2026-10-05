@@ -70,6 +70,20 @@ Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, 
 <tr>
 <td valign="top">
 
+**Smart grammar on the Neural Engine**<br>
+New in 0.2.0. A small grammar model (GECToR) runs on your Mac's Neural Engine in about 2 ms per sentence and catches what rules cannot, like "will be release" (released) or "since three years" (for). Its fixes pass the same guards as everything else: names, links and code are left alone.
+
+</td>
+<td valign="top">
+
+**Fast enough to disappear**<br>
+From keystroke to underline in about 46 ms for a chat message and 83 ms for a 4 KB paragraph in a 64 KB document (median, pause included, on a busy Mac). It was 139 and 715 ms in 0.1.x.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
 **Five writing modes**<br>
 Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
 
@@ -77,7 +91,7 @@ Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliber
 <td valign="top">
 
 **Private by construction**<br>
-Writing stays in memory on your Mac. The model ships inside the app; nothing downloads at runtime and nothing is logged.
+Writing stays in memory on your Mac. Both models ship inside the app; nothing downloads at runtime and nothing is logged.
 
 </td>
 </tr>
@@ -97,6 +111,8 @@ Writing stays in memory on your Mac. The model ships inside the app; nothing dow
 
 Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, or hide it from the Dock in Settings.
 
+Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device model)"). Once setup is finished Parzr prepares the model in the background for the Neural Engine, which takes a few seconds the first time, so it is ready before you need it.
+
 ## Works where you write
 
 | Where | How | Status |
@@ -111,21 +127,39 @@ Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and
 
 ## How it works
 
-<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, and gets back minimal UTF-16 edits. Only on the explicit path (Option+Space or a tone) the engine calls a native runtime that runs Qwen3.5-0.8B through llama.cpp on Metal. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Everything stays inside the Mac, with no network."></p>
+<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, then asks the GECToR grammar model (gec.rs) about sentences it has not seen, and gets back minimal UTF-16 edits. A native runtime runs GECToR through Core ML on the Apple Neural Engine, always loaded, about 2 ms per sentence, and Qwen3.5-0.8B through llama.cpp on Metal only for Option+Space and tones. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Everything stays inside the Mac, with no network."></p>
 
-- **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. No model is loaded on this path.
-- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass. Names and links are masked from the model, guards keep it to plausible corrections, and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
-- **Private by construction:** the app, engine and model runtime make no network requests while checking text.
+- **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. The rules answer first, in well under a millisecond for a chat message.
+- **Smart grammar:** the engine then asks GECToR, a RoBERTa-base grammar tagger (method by Grammarly, Omelianchuk et al. 2020), about each sentence it has not seen before. The model tags words (keep, replace, append, verb form, plural) instead of rewriting, runs as Core ML int8 on the Apple Neural Engine in about 2 ms per sentence, uses about 18 MB of memory, stays loaded and is prewarmed in the background after launch. Answers are cached per sentence, so typing only pays for the sentence you are editing. Its edits pass Parzr's own guards: names, links and code are never touched, case is never changed, an unknown word is never respelled, code-mixed and Hinglish sentences are left alone, edits that belong together stand or fall together, and your choices (one or many, which article, "thanks for") are not second-guessed. A rule's edit always wins over the model's.
+- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
+- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; nothing downloads at runtime.
 - See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 
 ## Measured, in the open
 
+Typing checks on public English benchmarks, with 0.1.x for comparison. "Rules only" is 0.2.0 with Smart grammar turned off; the last column is the default.
+
+| | 0.1.x | 0.2.0, rules only | 0.2.0, Smart grammar (default) |
+| --- | --- | --- | --- |
+| BEA-2019 dev, F0.5 (precision / recall) | 0.202 (0.43 / 0.065) | 0.228 (0.63 / 0.06) | **0.529** (0.71 / 0.26) |
+| CoNLL-2014, F0.5 (precision) | 0.212 (0.48) | 0.222 (0.57) | **0.550** (0.72) |
+| JFLEG test, GLEU (F0.5) | 0.478 (0.533) | 0.479 (0.565) | **0.540** (0.690) |
+| False alarms on clean published text, per 1,000 words | 9.34 | 1.07 | 3.39 (chat 0, Hinglish 0) |
+| Names damaged: all / lowercase / held-out | 0.08% / 0.18% / 1.40% | 0.03% / 0.07% / 1.14% | 0.05% / 0.11% / 1.14% |
+| Real typos still corrected | 94.4% | 95.4% | 95.4% |
+
+**Reading the table.** Precision is the share of Parzr's suggestions that were right; recall is the share of the real mistakes it found. F0.5 combines the two and weighs precision twice as much as recall, the usual choice for grammar checkers because a wrong suggestion costs more than a missed one. GLEU scores how close a corrected sentence is to several human corrections (JFLEG, higher is better). The false-alarm row counts suggestions on 1,996 sentences of clean published text (Gutenberg, Wikipedia, chat, Indian English, Hinglish), so lower is better. Recall is still modest: on BEA-2019 dev Parzr finds about one error in four, and what it flags is right about seven times in ten. Smart grammar adds some false alarms over rules alone and stays well below 0.1.x.
+
+The public corpora are used for evaluation only and are not in this repository.
+
+Our own checks, authored for Parzr:
+
 | Benchmark | Result |
 | --- | --- |
-| [Names](benchmarks/names/README.md): 6,426 sentences, 23 naming traditions | 0.08% of names damaged (13% before), 1.4% on held-out names; checked on every release |
-| [English challenge](benchmarks/README.md): 3,000 authored paragraphs plus clean controls | Exact corrections on all, no clean text changed |
+| [Names](benchmarks/names/README.md): 6,426 sentences, 23 naming traditions | The names row above; CI runs it (rules only) |
+| [English challenge](benchmarks/README.md): 3,000 authored paragraphs plus clean controls | Exact corrections on all, no clean text changed (rules path) |
 
-The English challenge was authored for Parzr's rules, so it shows regressions rather than general accuracy; results on public benchmarks are in progress.
+The English challenge was authored for Parzr's rules, so it shows regressions rather than general accuracy.
 
 <img src="docs/media/names.png" width="860" alt="How Parzr protects and capitalizes names: graded signals, a case-only guard, a blue capitalization suggestion, learning and the name benchmark">
 
@@ -134,7 +168,7 @@ The English challenge was authored for Parzr's rules, so it shows regressions ra
 <details>
 <summary><b>Build from source</b></summary>
 
-Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+ and Node 22 for the integration tests. Dependencies download at build time; writing analysis always runs offline.
+Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+ and Node 22 for the integration tests. Dependencies download at build time, including the converted GECToR model (the `gector-v1` GitHub pre-release, hash-checked by `scripts/prepare-model.py`; `scripts/convert-gector.py` rebuilds it); writing analysis always runs offline.
 
 ```sh
 python3 scripts/build.py         # dist/Parzr.app (ad-hoc signed)
@@ -154,7 +188,7 @@ python3 scripts/prepare-model.py
 cargo build --release --locked --manifest-path engine/Cargo.toml
 export PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf"
 export PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib"
-python3 scripts/run-name-benchmark.py
+python3 scripts/run-name-benchmark.py          # add --gec to include Smart grammar
 PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
 npm ci && npx playwright install chromium
 npm run test:editors && npm run test:browser
@@ -177,4 +211,4 @@ One click: **Actions → Release → Run workflow** (or `gh workflow run release
 
 Issues and pull requests are welcome. New rules should come with error and valid-context fixtures, provenance, intent preservation and editor safety checks; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-Licensed under [Apache-2.0](LICENSE). Third-party components: [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+Parzr's code is licensed under [Apache-2.0](LICENSE). The bundled GECToR weights are for non-commercial use only (see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)); Parzr is free and non-commercial. Other third-party components are listed there too.
