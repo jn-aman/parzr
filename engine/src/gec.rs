@@ -108,18 +108,27 @@ impl Gec {
         let mut tags = vec![];
         for &p in &firsts {
             let row = &labels[p * LABELS..(p + 1) * LABELS];
-            let top = row.iter().copied().fold(f32::MIN, f32::max);
-            let sum: f32 = row.iter().map(|x| (x - top).exp()).sum();
-            let (mut best, mut best_p) = (0, -1f32);
+            let (mut top, mut at) = (f32::MIN, 0);
             for (i, x) in row.iter().enumerate() {
-                let mut prob = (x - top).exp() / sum;
-                if i == self.keep {
-                    prob += KEEP_CONFIDENCE;
-                }
-                if prob > best_p {
-                    (best, best_p) = (i, prob);
+                if *x > top {
+                    (top, at) = (*x, i);
                 }
             }
+            let sum: f32 = row.iter().map(|x| (x - top).exp()).sum();
+            // Softmax, then the bonus on $KEEP; the first index wins a tie, as argmax does.
+            let keep_p = (row[self.keep] - top).exp() / sum + KEEP_CONFIDENCE;
+            let top_p = 1.0 / sum
+                + if at == self.keep {
+                    KEEP_CONFIDENCE
+                } else {
+                    0.0
+                };
+            let (best, best_p) =
+                if at != self.keep && (keep_p > top_p || (keep_p == top_p && self.keep < at)) {
+                    (self.keep, keep_p)
+                } else {
+                    (at, top_p)
+                };
             let (a, b) = (detect[p * 2], detect[p * 2 + 1]);
             worst = worst.max(1.0 / (1.0 + (a - b).exp()));
             tags.push((best, best_p));
