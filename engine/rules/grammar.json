@@ -694,7 +694,7 @@
   },
   {
     "id": "grammar.modal_goes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>goes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>goes)\\b",
     "replacement": "go",
     "category": "Tense",
     "confidence": 0.97,
@@ -705,7 +705,7 @@
   },
   {
     "id": "grammar.modal_went",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>went)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>went)\\b",
     "replacement": "go",
     "category": "Tense",
     "confidence": 0.97,
@@ -716,7 +716,7 @@
   },
   {
     "id": "grammar.modal_comes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>comes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>comes)\\b",
     "replacement": "come",
     "category": "Tense",
     "confidence": 0.97,
@@ -727,7 +727,7 @@
   },
   {
     "id": "grammar.modal_came",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>came)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>came)\\b",
     "replacement": "come",
     "category": "Tense",
     "confidence": 0.97,
@@ -738,7 +738,7 @@
   },
   {
     "id": "grammar.modal_sends",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>sends)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>sends)\\b",
     "replacement": "send",
     "category": "Tense",
     "confidence": 0.97,
@@ -749,7 +749,7 @@
   },
   {
     "id": "grammar.modal_sent",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>sent)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>sent)\\b",
     "replacement": "send",
     "category": "Tense",
     "confidence": 0.97,
@@ -760,7 +760,7 @@
   },
   {
     "id": "grammar.modal_writes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>writes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>writes)\\b",
     "replacement": "write",
     "category": "Tense",
     "confidence": 0.97,
@@ -771,7 +771,7 @@
   },
   {
     "id": "grammar.modal_wrote",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>wrote)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>wrote)\\b",
     "replacement": "write",
     "category": "Tense",
     "confidence": 0.97,
@@ -782,7 +782,7 @@
   },
   {
     "id": "grammar.modal_reads",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>reads)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>reads)\\b",
     "replacement": "read",
     "category": "Tense",
     "confidence": 0.97,
@@ -793,7 +793,7 @@
   },
   {
     "id": "grammar.modal_takes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>takes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>takes)\\b",
     "replacement": "take",
     "category": "Tense",
     "confidence": 0.97,
@@ -804,7 +804,7 @@
   },
   {
     "id": "grammar.modal_took",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>took)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>took)\\b",
     "replacement": "take",
     "category": "Tense",
     "confidence": 0.97,
@@ -815,7 +815,7 @@
   },
   {
     "id": "grammar.modal_makes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>makes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>makes)\\b",
     "replacement": "make",
     "category": "Tense",
     "confidence": 0.97,
@@ -826,7 +826,7 @@
   },
   {
     "id": "grammar.modal_made",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>made)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>made)\\b",
     "replacement": "make",
     "category": "Tense",
     "confidence": 0.97,
@@ -837,7 +837,7 @@
   },
   {
     "id": "grammar.modal_does",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>does)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>does)\\b",
     "replacement": "do",
     "category": "Tense",
     "confidence": 0.97,
@@ -848,7 +848,7 @@
   },
   {
     "id": "grammar.modal_did",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>did)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>did)\\b",
     "replacement": "do",
     "category": "Tense",
     "confidence": 0.97,
@@ -859,7 +859,7 @@
   },
   {
     "id": "grammar.modal_has",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>has)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>has)\\b",
     "replacement": "have",
     "category": "Tense",
     "confidence": 0.97,
@@ -870,7 +870,7 @@
   },
   {
     "id": "grammar.modal_had",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>had)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>had)\\b",
     "replacement": "have",
     "category": "Tense",
     "confidence": 0.97,
@@ -881,7 +881,7 @@
   },
   {
     "id": "grammar.modal_runs",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>runs)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>runs)\\b",
     "replacement": "run",
     "category": "Tense",
     "confidence": 0.97,
@@ -892,7 +892,7 @@
   },
   {
     "id": "grammar.modal_ran",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>ran)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>ran)\\b",
     "replacement": "run",
     "category": "Tense",
     "confidence": 0.97,
@@ -903,7 +903,7 @@
   },
   {
     "id": "grammar.modal_works",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>works)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>works)\\b",
     "replacement": "work",
     "category": "Tense",
     "confidence": 0.97,
@@ -914,7 +914,7 @@
   },
   {
     "id": "grammar.modal_worked",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>worked)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>worked)\\b",
     "replacement": "work",
     "category": "Tense",
     "confidence": 0.97,
@@ -925,7 +925,7 @@
   },
   {
     "id": "grammar.modal_checks",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>checks)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>checks)\\b",
     "replacement": "check",
     "category": "Tense",
     "confidence": 0.97,
@@ -936,7 +936,7 @@
   },
   {
     "id": "grammar.modal_checked",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>checked)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>checked)\\b",
     "replacement": "check",
     "category": "Tense",
     "confidence": 0.97,
@@ -947,7 +947,7 @@
   },
   {
     "id": "grammar.modal_reviews",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>reviews)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>reviews)\\b",
     "replacement": "review",
     "category": "Tense",
     "confidence": 0.97,
@@ -958,7 +958,7 @@
   },
   {
     "id": "grammar.modal_reviewed",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>reviewed)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>reviewed)\\b",
     "replacement": "review",
     "category": "Tense",
     "confidence": 0.97,
@@ -969,7 +969,7 @@
   },
   {
     "id": "grammar.modal_agrees",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>agrees)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>agrees)\\b",
     "replacement": "agree",
     "category": "Tense",
     "confidence": 0.97,
@@ -980,7 +980,7 @@
   },
   {
     "id": "grammar.modal_agreed",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>agreed)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>agreed)\\b",
     "replacement": "agree",
     "category": "Tense",
     "confidence": 0.97,
@@ -991,7 +991,7 @@
   },
   {
     "id": "grammar.modal_contains",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>contains)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>contains)\\b",
     "replacement": "contain",
     "category": "Tense",
     "confidence": 0.97,
@@ -1002,7 +1002,7 @@
   },
   {
     "id": "grammar.modal_contained",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>contained)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>contained)\\b",
     "replacement": "contain",
     "category": "Tense",
     "confidence": 0.97,
@@ -1013,7 +1013,7 @@
   },
   {
     "id": "grammar.modal_becomes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>becomes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>becomes)\\b",
     "replacement": "become",
     "category": "Tense",
     "confidence": 0.97,
@@ -1024,7 +1024,7 @@
   },
   {
     "id": "grammar.modal_became",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>became)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>became)\\b",
     "replacement": "become",
     "category": "Tense",
     "confidence": 0.97,
@@ -1035,7 +1035,7 @@
   },
   {
     "id": "grammar.modal_gets",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>gets)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>gets)\\b",
     "replacement": "get",
     "category": "Tense",
     "confidence": 0.97,
@@ -1046,7 +1046,7 @@
   },
   {
     "id": "grammar.modal_got",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>got)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>got)\\b",
     "replacement": "get",
     "category": "Tense",
     "confidence": 0.97,
@@ -1057,7 +1057,7 @@
   },
   {
     "id": "grammar.modal_needs",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>needs)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>needs)\\b",
     "replacement": "need",
     "category": "Tense",
     "confidence": 0.97,
@@ -1068,7 +1068,7 @@
   },
   {
     "id": "grammar.modal_needed",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>needed)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>needed)\\b",
     "replacement": "need",
     "category": "Tense",
     "confidence": 0.97,
@@ -1079,7 +1079,7 @@
   },
   {
     "id": "grammar.modal_starts",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>starts)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>starts)\\b",
     "replacement": "start",
     "category": "Tense",
     "confidence": 0.97,
@@ -1090,7 +1090,7 @@
   },
   {
     "id": "grammar.modal_started",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>started)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>started)\\b",
     "replacement": "start",
     "category": "Tense",
     "confidence": 0.97,
@@ -1101,7 +1101,7 @@
   },
   {
     "id": "grammar.modal_finishes",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>finishes)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>finishes)\\b",
     "replacement": "finish",
     "category": "Tense",
     "confidence": 0.97,
@@ -1112,7 +1112,7 @@
   },
   {
     "id": "grammar.modal_finished",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>finished)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>finished)\\b",
     "replacement": "finish",
     "category": "Tense",
     "confidence": 0.97,
@@ -1123,7 +1123,7 @@
   },
   {
     "id": "grammar.modal_helps",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>helps)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>helps)\\b",
     "replacement": "help",
     "category": "Tense",
     "confidence": 0.97,
@@ -1134,7 +1134,7 @@
   },
   {
     "id": "grammar.modal_helped",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>helped)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>helped)\\b",
     "replacement": "help",
     "category": "Tense",
     "confidence": 0.97,
@@ -1145,7 +1145,7 @@
   },
   {
     "id": "grammar.modal_says",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>says)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>says)\\b",
     "replacement": "say",
     "category": "Tense",
     "confidence": 0.97,
@@ -1156,7 +1156,7 @@
   },
   {
     "id": "grammar.modal_said",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>said)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>said)\\b",
     "replacement": "say",
     "category": "Tense",
     "confidence": 0.97,
@@ -1167,7 +1167,7 @@
   },
   {
     "id": "grammar.modal_sees",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>sees)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>sees)\\b",
     "replacement": "see",
     "category": "Tense",
     "confidence": 0.97,
@@ -1178,7 +1178,7 @@
   },
   {
     "id": "grammar.modal_knows",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>knows)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>knows)\\b",
     "replacement": "know",
     "category": "Tense",
     "confidence": 0.97,
@@ -1189,7 +1189,7 @@
   },
   {
     "id": "grammar.modal_knew",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>knew)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>knew)\\b",
     "replacement": "know",
     "category": "Tense",
     "confidence": 0.97,
@@ -1200,7 +1200,7 @@
   },
   {
     "id": "grammar.modal_means",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>means)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>means)\\b",
     "replacement": "mean",
     "category": "Tense",
     "confidence": 0.97,
@@ -1211,7 +1211,7 @@
   },
   {
     "id": "grammar.modal_meant",
-    "pattern": "(?i)\\b(?:can|could|may|might|must|shall|should|will|would) (?:not |never )?(?P<target>meant)\\b",
+    "pattern": "(?i)\\b[\\p{L}']+ (?-i:(?:can|could|may|might|must|shall|should|will|would)) (?:not |never )?(?P<target>meant)\\b",
     "replacement": "mean",
     "category": "Tense",
     "confidence": 0.97,

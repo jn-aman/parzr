@@ -128,7 +128,7 @@ fn validate(req: &Request) -> Result<(), String> {
     }
     Ok(())
 }
-fn prompt(req: &Request, passage: &str) -> String {
+fn prompt(req: &Request, passage: &str, literals: &[Literal], strict: bool) -> String {
     let instruction = match req.mode {
         Mode::Fix => {
             "Fix the English text. Correct grammar, spelling, punctuation, and capitalization. Add necessary final punctuation. Do not answer the text or add information. Output only the corrected text."
@@ -156,10 +156,18 @@ fn prompt(req: &Request, passage: &str) -> String {
     } else {
         " This is part of a sentence. Preserve its initial case and do not add sentence punctuation to a fragment."
     };
-    let protection = if protected_spans(req).is_empty() {
-        ""
+    let protection = if literals.is_empty() {
+        String::new()
     } else {
-        " Preserve names, numbers, links, code, emojis and formatting markers exactly. Copy every ZXQPARZRKEEP token exactly once, without changing it."
+        let mut text = " Preserve names, numbers, links, code, emojis and formatting markers exactly. Copy every ZXQPARZRKEEP token exactly once, without changing it.".to_owned();
+        if strict {
+            let list: Vec<_> = literals.iter().map(|l| l.marker.as_str()).collect();
+            text.push_str(&format!(
+                " Your answer is rejected unless it contains each of these tokens, exactly as written and in the same order: {}.",
+                list.join(", ")
+            ));
+        }
+        text
     };
     let ending = if req.sentence_end {
         ""
@@ -175,12 +183,11 @@ fn prompt(req: &Request, passage: &str) -> String {
         "<|im_start|>system\n{instruction}{dialect}{boundary}{ending}{protection}<|im_end|>\n<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
 }
-fn generate(req: &Request, passage: &str) -> Result<String, String> {
-    let r = runtime()?;
-    let (masked, literals) = mask(passage, &protected_spans(req))?;
+/// One model call. Output that is blank or carries control tokens is not a suggestion.
+fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     let file =
         CString::new(r.model.to_string_lossy().as_bytes()).map_err(|_| "Invalid model path.")?;
-    let input = CString::new(prompt(req, &masked)).map_err(|_| "Invalid passage.")?;
+    let input = CString::new(prompt).map_err(|_| "Invalid passage.")?;
     // SAFETY: input pointers live throughout this synchronous call. Output freed exactly once.
     let output = unsafe { (r.generate)(file.as_ptr(), input.as_ptr()) };
     if output.is_null() {
@@ -191,15 +198,28 @@ fn generate(req: &Request, passage: &str) -> Result<String, String> {
         .map(str::to_owned)
         .map_err(|_| "The model returned invalid text.".to_string());
     unsafe { (r.free)(output) };
-    let mut result = result?;
+    let result = result?;
     if result.trim().is_empty() || result.contains("<|") || result.contains("<think>") {
         return Err("The model did not return a complete writing suggestion.".into());
     }
-    for (marker, literal) in literals {
-        if result.matches(&marker).count() != 1 {
-            return Err("The model could not retain a protected editor element. This suggestion was withheld.".into());
+    Ok(result)
+}
+fn generate(req: &Request, passage: &str) -> Result<String, String> {
+    let r = runtime()?;
+    let (masked, literals) = mask(passage, &protected_spans(req), &name_spans(req))?;
+    let mut result = String::new();
+    // The first answer must keep every placeholder. If it does not, ask once more with the
+    // placeholders spelled out; only then restore lost names by position.
+    for strict in [false, true] {
+        let output = infer(r, &prompt(req, &masked, &literals, strict))?;
+        match restore(&masked, &output, &literals, strict) {
+            Ok(text) => {
+                result = text;
+                break;
+            }
+            Err(error) if strict => return Err(error),
+            Err(_) => {}
         }
-        result = result.replace(&marker, &literal);
     }
     let prefix = &passage[..passage.len() - passage.trim_start().len()];
     let suffix = &passage[passage.trim_end().len()..];
@@ -207,29 +227,141 @@ fn generate(req: &Request, passage: &str) -> Result<String, String> {
     Ok(format!("{prefix}{body}{suffix}"))
 }
 
+const LOST: &str =
+    "The model could not retain a protected editor element. This suggestion was withheld.";
+
+/// Text the model must hand back untouched, hidden behind a placeholder in the prompt.
+struct Literal {
+    marker: String,
+    text: String,
+    /// Only letters, spaces, hyphens and apostrophes: a person's name rather than a link or code.
+    name: bool,
+    /// A lowercase name found by the engine ("aman"); the model used to capitalize these.
+    capitalize: bool,
+}
+
+fn name_chars(s: &str) -> bool {
+    s.chars()
+        .all(|c| c.is_alphabetic() || [' ', '-', '\'', '’'].contains(&c))
+}
+
+fn at_boundary(req: &Request, byte: usize) -> bool {
+    let before =
+        req.text[..byte].trim_end_matches([' ', '\t', '"', '“', '(', '[', '*', '•', '-', '>']);
+    if before.is_empty() {
+        return req.sentence_start;
+    }
+    before.ends_with(['.', '!', '?', ':', '\n'])
+}
+
+/// Words whose letters the model must never change: names (found, lowercase or capitalized
+/// inside a sentence), anything with diacritics, and ALL-CAPS words. The flag marks the ones
+/// that are also hidden from the model; capitalized ordinary words ("Hope", "Will") stay
+/// visible for context and are guarded when the model's edits come back.
+fn fixed_words(req: &Request, tokens: &[crate::tokenizer::Token<'_>]) -> Vec<(usize, bool, bool)> {
+    let shout = |t: &crate::tokenizer::Token<'_>| {
+        let head = t.surface.split(['\'', '’']).next().unwrap_or("");
+        head.chars().count() >= 2 && head.chars().all(char::is_uppercase)
+    };
+    let words = tokens.iter().filter(|t| t.is_word).count();
+    // A fully capitalized passage is shouting, not a list of names.
+    let shouting = tokens.iter().filter(|t| shout(t)).count() * 2 > words;
+    let mut out = vec![];
+    for (i, t) in tokens.iter().enumerate().filter(|(_, t)| t.is_word) {
+        // Chat shorthand such as "u" or "r" is not a name.
+        let lower = t.surface.chars().count() > 2 && crate::spelling::lowercase_name(tokens, i);
+        let accented = t
+            .surface
+            .chars()
+            .any(|c| !c.is_ascii() && c.is_alphabetic());
+        let capital = t.surface.chars().next().is_some_and(char::is_uppercase)
+            && t.surface.chars().count() > 1
+            && t.surface != "I"
+            && !t.surface.starts_with("I'")
+            && !t.surface.starts_with("I’")
+            && !at_boundary(req, t.start_byte);
+        let common = capital
+            && crate::spelling::known(&t.normalized)
+            && !crate::spelling::name_only(&t.normalized);
+        if lower || accented || (shout(t) && !shouting) || capital {
+            out.push((i, lower, !common || lower || accented));
+        }
+    }
+    out
+}
+
+/// Names that the model sees only as placeholders. Ranges are in UTF-16 units; the flag marks
+/// lowercase names.
+fn name_spans(req: &Request) -> Vec<(crate::TextRange, bool)> {
+    let tokens = crate::tokenizer::tokenize(&req.text, &req.tokens);
+    fixed_words(req, &tokens)
+        .into_iter()
+        .filter(|&(_, _, hidden)| hidden)
+        .map(|(i, lower, _)| {
+            (
+                crate::TextRange {
+                    start_utf16: tokens[i].start_utf16,
+                    end_utf16: tokens[i].end_utf16,
+                },
+                lower,
+            )
+        })
+        .collect()
+}
+
+/// Replaces protected text and names with placeholders. Adjacent name words ("Aman Jain",
+/// "Jean-Luc") share one placeholder so the model cannot split or reorder them.
 fn mask(
     passage: &str,
     protected: &[crate::TextRange],
-) -> Result<(String, Vec<(String, String)>), String> {
-    let mut ranges: Vec<_> = protected
+    names: &[(crate::TextRange, bool)],
+) -> Result<(String, Vec<Literal>), String> {
+    // (start, end, protected, lowercase name)
+    let mut ranges: Vec<(usize, usize, bool, bool)> = protected
         .iter()
         .filter(|r| r.start_utf16 < r.end_utf16)
+        .map(|r| (r.start_utf16, r.end_utf16, true, false))
+        .chain(
+            names
+                .iter()
+                .filter(|(r, _)| r.start_utf16 < r.end_utf16)
+                .map(|(r, lower)| (r.start_utf16, r.end_utf16, false, *lower)),
+        )
         .collect();
-    ranges.sort_by_key(|r| r.start_utf16);
-    let mut merged: Vec<(usize, usize)> = vec![];
+    ranges.sort_by_key(|r| (r.0, r.1));
+    let mut merged: Vec<(usize, usize, bool, bool)> = vec![];
     for r in ranges {
-        if let Some(last) = merged.last_mut()
-            && r.start_utf16 < last.1
-        {
-            last.1 = last.1.max(r.end_utf16);
-        } else {
-            merged.push((r.start_utf16, r.end_utf16));
+        let join = |last: &(usize, usize, bool, bool)| {
+            if r.0 < last.1 {
+                return true;
+            }
+            let (Some(a), Some(b), Some(c), Some(d)) = (
+                byte_at(passage, last.0),
+                byte_at(passage, last.1),
+                byte_at(passage, r.0),
+                byte_at(passage, r.1),
+            ) else {
+                return false;
+            };
+            let gap = &passage[b..c];
+            name_chars(&passage[a..b])
+                && name_chars(&passage[c..d])
+                && gap.chars().all(|ch| [' ', '-', '\'', '’'].contains(&ch))
+                && gap.chars().count() <= 1
+        };
+        match merged.last_mut() {
+            Some(last) if join(last) => {
+                last.1 = last.1.max(r.1);
+                last.2 |= r.2;
+                last.3 &= r.3;
+            }
+            _ => merged.push(r),
         }
     }
     let mut masked = String::new();
-    let mut literals = vec![];
+    let mut literals: Vec<Literal> = vec![];
     let mut cursor = 0;
-    for (a, b) in merged {
+    for (a, b, protected, lower) in merged {
         let start = byte_at(passage, a).ok_or("Invalid protected range.")?;
         let end = byte_at(passage, b).ok_or("Invalid protected range.")?;
         let literal = &passage[start..end];
@@ -241,17 +373,171 @@ fn mask(
         let mut serial = literals.len();
         let marker = loop {
             let candidate = format!("ZXQPARZRKEEP{serial}QXZ");
-            if !passage.contains(&candidate) && !literals.iter().any(|(m, _)| m == &candidate) {
+            if !passage.contains(&candidate) && !literals.iter().any(|l| l.marker == candidate) {
                 break candidate;
             }
             serial += 1;
         };
         masked.push_str(&marker);
-        literals.push((marker, literal.to_owned()));
+        literals.push(Literal {
+            marker,
+            text: literal.to_owned(),
+            name: name_chars(literal),
+            capitalize: lower
+                && !protected
+                && literal.chars().next().is_some_and(char::is_lowercase),
+        });
         cursor = end;
     }
     masked.push_str(&passage[cursor..]);
     Ok((masked, literals))
+}
+
+fn words(s: &str) -> Vec<(usize, usize)> {
+    let mut out = vec![];
+    let mut start = None;
+    for (i, c) in s.char_indices() {
+        match (c.is_whitespace(), start) {
+            (false, None) => start = Some(i),
+            (true, Some(a)) => {
+                out.push((a, i));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(a) = start {
+        out.push((a, s.len()));
+    }
+    out
+}
+
+/// Puts a lost placeholder back where the model dropped or mangled it, comparing the word
+/// sequences of the masked source and the answer. `None` when the position is not clear.
+fn place_lost(masked: &str, output: &str, marker: &str) -> Option<String> {
+    let key = |w: &str| {
+        w.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    let (old, new) = (words(masked), words(output));
+    let old_keys: Vec<_> = old.iter().map(|&(a, b)| key(&masked[a..b])).collect();
+    let new_keys: Vec<_> = new.iter().map(|&(a, b)| key(&output[a..b])).collect();
+    let at = old
+        .iter()
+        .position(|&(a, b)| masked[a..b].contains(marker))?;
+    let (a, b): (Vec<&str>, Vec<&str>) = (
+        old_keys.iter().map(String::as_str).collect(),
+        new_keys.iter().map(String::as_str).collect(),
+    );
+    let diff = TextDiff::from_slices(&a, &b);
+    let op = diff.ops().iter().find(|op| op.old_range().contains(&at))?;
+    let (o, n) = (op.old_range(), op.new_range());
+    // The model wrote one or two words where the name was: put the name there.
+    if o.len() == 1 && (1..=2).contains(&n.len()) {
+        let (a, b) = (new[n.start].0, new[n.end - 1].1);
+        let tail: String = output[a..b]
+            .chars()
+            .rev()
+            .take_while(|c| !c.is_alphanumeric())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        return Some(format!("{}{marker}{tail}{}", &output[..a], &output[b..]));
+    }
+    let greeted = old_keys[..at].iter().all(|k| {
+        ["hey", "hi", "hello", "dear", "yo", "thanks", "ok", "okay"].contains(&k.as_str())
+    });
+    let spot = if n.is_empty() {
+        new.get(n.start).map_or(output.len(), |w| w.0)
+    } else if greeted {
+        0
+    } else {
+        return None;
+    };
+    let (head, tail) = output.split_at(spot);
+    if head.trim().is_empty() {
+        // The name opens the passage: "aman can u check" becomes "Aman, can you check".
+        let addressed = old_keys.get(at + 1).is_some_and(|k| {
+            [
+                "can", "could", "will", "would", "should", "please", "pls", "plz", "u", "you",
+                "do", "did",
+            ]
+            .contains(&k.as_str())
+        });
+        let mut chars = tail.chars();
+        let soften = chars.next().is_some_and(char::is_uppercase)
+            && chars.next().is_some_and(char::is_lowercase);
+        let tail = match tail.chars().next() {
+            Some(c) if soften => c.to_lowercase().to_string() + &tail[c.len_utf8()..],
+            _ => tail.to_owned(),
+        };
+        let sep = if tail.is_empty() {
+            ""
+        } else if addressed {
+            ", "
+        } else {
+            " "
+        };
+        return Some(format!("{head}{marker}{sep}{tail}"));
+    }
+    let head = head.trim_end();
+    Some(if tail.is_empty() {
+        format!("{head} {marker}")
+    } else {
+        format!("{head} {marker} {tail}")
+    })
+}
+
+/// Puts the original text back behind every placeholder. When a placeholder is missing or
+/// repeated, only `recover` lets names (never links or code) be put back by position.
+fn restore(
+    masked: &str,
+    output: &str,
+    literals: &[Literal],
+    recover: bool,
+) -> Result<String, String> {
+    // The model sometimes lowercases a token ("zxqparzrkeep0qxz"); the letters are all that matter.
+    let mut result = output.to_owned();
+    for l in literals {
+        let lower = result.to_ascii_lowercase();
+        let needle = l.marker.to_ascii_lowercase();
+        let mut canonical = String::with_capacity(result.len());
+        let mut at = 0;
+        for (i, _) in lower.match_indices(&needle) {
+            canonical.push_str(&result[at..i]);
+            canonical.push_str(&l.marker);
+            at = i + needle.len();
+        }
+        canonical.push_str(&result[at..]);
+        result = canonical;
+    }
+    for l in literals {
+        match result.matches(&l.marker).count() {
+            1 => {}
+            n if recover && l.name => {
+                if n > 1 {
+                    // A repeated name: keep the first and drop the rest with one neighbouring space.
+                    let first = result.find(&l.marker).ok_or(LOST)? + l.marker.len();
+                    let rest = result[first..].replace(&format!(" {}", l.marker), "");
+                    let rest = rest.replace(&l.marker, "");
+                    result = format!("{}{rest}", &result[..first]);
+                } else {
+                    result = place_lost(masked, &result, &l.marker).ok_or(LOST)?;
+                }
+            }
+            _ => return Err(LOST.into()),
+        }
+    }
+    for l in literals {
+        let text = if l.capitalize {
+            crate::upper_first(&l.text)
+        } else {
+            l.text.clone()
+        };
+        result = result.replace(&l.marker, &text);
+    }
+    Ok(result)
 }
 
 fn continuation<'a>(req: &Request, output: &'a str) -> &'a str {
@@ -540,10 +826,16 @@ fn plausible(original: &str, replacement: &str) -> bool {
     extra_run(&long, &short).is_some_and(|extra| !extra.contains(' ') && closed(&extra))
 }
 
-/// A lowercase name ("aman jain") is never respelled or split: only case and punctuation may change.
-/// "aman" to "Am" passes the closeness test below, so names are screened first.
-fn keep_names(text: &str, hints: &[crate::TokenHint], all: Vec<Edit>) -> Vec<Edit> {
-    let tokens = crate::tokenizer::tokenize(text, hints);
+/// Names, accented words, ALL-CAPS words and capitalized words inside a sentence keep their
+/// letters in every mode: an edit that changes more than case there is dropped, together with
+/// the other half of a move. "aman" to "Am" passes the closeness test in Fix mode, so this runs
+/// before it.
+fn keep_names(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    let tokens = crate::tokenizer::tokenize(&req.text, &req.tokens);
+    let fixed: Vec<_> = fixed_words(req, &tokens)
+        .into_iter()
+        .map(|(i, _, _)| (tokens[i].start_utf16, tokens[i].end_utf16))
+        .collect();
     let alnum = |s: &str| {
         s.chars()
             .filter(|c| c.is_alphanumeric())
@@ -555,17 +847,47 @@ fn keep_names(text: &str, hints: &[crate::TokenHint], all: Vec<Edit>) -> Vec<Edi
             .filter(|w| w.chars().any(char::is_alphanumeric))
             .count()
     };
-    all.into_iter()
-        .filter(|e| {
-            alnum(&e.original) == alnum(&e.replacement)
+    // "jurgen" to "Jurgen" is a recase, but "jurgen" to "Jürgen" respells an unknown word that
+    // is most likely a name. Folding diacritics catches it.
+    let fold = |s: &str| {
+        s.chars()
+            .map(|c| match c {
+                'à'..='å' => 'a',
+                'ç' => 'c',
+                'è'..='ë' => 'e',
+                'ì'..='ï' => 'i',
+                'ñ' => 'n',
+                'ò'..='ö' | 'ø' => 'o',
+                'ù'..='ü' => 'u',
+                'ý' | 'ÿ' => 'y',
+                'š' | 'ş' => 's',
+                'ž' => 'z',
+                c => c,
+            })
+            .collect::<String>()
+    };
+    let accent_only = |e: &Edit| {
+        let o = alnum(&e.original);
+        words(&e.original) == 1
+            && !crate::spelling::known(&o)
+            && fold(&o) == fold(&alnum(&e.replacement))
+            && o != alnum(&e.replacement)
+    };
+    let ok = |e: &Edit| {
+        !accent_only(e)
+            && (alnum(&e.original) == alnum(&e.replacement)
                 && words(&e.original) == words(&e.replacement)
-                || !tokens.iter().enumerate().any(|(i, t)| {
-                    t.is_word
-                        && t.start_utf16 >= e.start_utf16
-                        && t.end_utf16 <= e.end_utf16
-                        && crate::spelling::lowercase_name(&tokens, i)
-                })
-        })
+                || !fixed
+                    .iter()
+                    .any(|&(a, b)| a < e.end_utf16 && b > e.start_utf16))
+    };
+    let dropped: Vec<_> = all
+        .iter()
+        .filter(|e| !ok(e))
+        .filter_map(|e| e.group_id.clone())
+        .collect();
+    all.into_iter()
+        .filter(|e| ok(e) && !e.group_id.as_ref().is_some_and(|g| dropped.contains(g)))
         .collect()
 }
 
@@ -813,8 +1135,9 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     if apply_edits(&req.text, &all)?.0 != text {
         return Err("The model returned an inconsistent edit plan.".into());
     }
+    let all = keep_names(req, all);
     let changes = if req.mode == Mode::Fix {
-        plausible_edits(keep_names(&req.text, &req.tokens, all))
+        plausible_edits(all)
     } else {
         all
     };
@@ -942,7 +1265,11 @@ mod tests {
     #[test]
     fn model_cannot_respell_or_split_a_lowercase_name() {
         let kept = |a: &str, b: &str| {
-            keep_names(a, &[], edits(a, b, Mode::Fix, &[]))
+            let req = Request {
+                text: a.into(),
+                ..Request::default()
+            };
+            keep_names(&req, edits(a, b, Mode::Fix, &[]))
                 .into_iter()
                 .map(|e| (e.original, e.replacement))
                 .collect::<Vec<_>>()
@@ -1080,12 +1407,13 @@ mod tests {
                     end_utf16: 14,
                 },
             ],
+            &[],
         )
         .unwrap();
         assert!(masked.contains(" hello\n"));
         let mut restored = masked;
-        for (marker, literal) in literals {
-            restored = restored.replace(&marker, &literal);
+        for l in literals {
+            restored = restored.replace(&l.marker, &l.text);
         }
         assert_eq!(restored, "😀 hello\n@Mira");
     }
@@ -1165,5 +1493,151 @@ mod tests {
             })
             .is_err()
         );
+    }
+
+    fn range(a: usize, b: usize) -> crate::TextRange {
+        crate::TextRange {
+            start_utf16: a,
+            end_utf16: b,
+        }
+    }
+    fn literal(marker: &str, text: &str, name: bool, capitalize: bool) -> Literal {
+        Literal {
+            marker: marker.into(),
+            text: text.into(),
+            name,
+            capitalize,
+        }
+    }
+    #[test]
+    fn adjacent_name_words_share_one_placeholder() {
+        let text = "hi Aman Jain and Jean-Luc, see 42";
+        let (masked, literals) = mask(
+            text,
+            &[range(31, 33)],
+            &[
+                (range(3, 7), false),
+                (range(8, 12), false),
+                (range(17, 21), false),
+                (range(22, 25), false),
+            ],
+        )
+        .unwrap();
+        let texts: Vec<_> = literals.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(texts, ["Aman Jain", "Jean-Luc", "42"], "{masked}");
+        assert_eq!(masked.matches("ZXQPARZRKEEP").count(), 3);
+        assert!(literals[0].name && literals[1].name && !literals[2].name);
+    }
+    #[test]
+    fn lost_names_are_restored_by_position_but_links_are_not() {
+        let marker = "ZXQPARZRKEEP0QXZ";
+        let masked = format!("hey {marker} can u send the file");
+        let aman = [literal(marker, "Aman", true, false)];
+        let back = |output: &str| restore(&masked, output, &aman, true);
+        assert_eq!(
+            back(&format!("Hey {marker}, can you send the file?")).unwrap(),
+            "Hey Aman, can you send the file?"
+        );
+        assert_eq!(
+            back("Could you please send the file?").unwrap(),
+            "Aman, could you please send the file?"
+        );
+        assert_eq!(
+            back("Hey, can you send the file?").unwrap(),
+            "Hey, Aman can you send the file?"
+        );
+        // Without recovery, and for links, a lost placeholder withholds the suggestion.
+        assert!(restore(&masked, "Could you send the file?", &aman, false).is_err());
+        let link = [literal(marker, "https://a.b/c", false, false)];
+        assert!(restore(&masked, "Could you send the file?", &link, true).is_err());
+        // A repeated name keeps its first copy.
+        assert_eq!(
+            restore(
+                &masked,
+                &format!("{marker}, can {marker} send it"),
+                &aman,
+                true
+            )
+            .unwrap(),
+            "Aman, can send it"
+        );
+    }
+    #[test]
+    fn a_lowercased_placeholder_still_counts() {
+        let marker = "ZXQPARZRKEEP0QXZ";
+        let tell = [literal(marker, "Harsha", true, false)];
+        assert_eq!(
+            restore(
+                &format!("tell {marker} now"),
+                "Tell zxqparzrkeep0qxz now.",
+                &tell,
+                false
+            )
+            .unwrap(),
+            "Tell Harsha now."
+        );
+    }
+    #[test]
+    fn lowercase_names_are_capitalized_when_restored() {
+        let marker = "ZXQPARZRKEEP0QXZ";
+        let aman = [literal(marker, "aman", true, true)];
+        assert_eq!(
+            restore(
+                &format!("hi {marker}"),
+                &format!("Hi {marker}!"),
+                &aman,
+                false
+            )
+            .unwrap(),
+            "Hi Aman!"
+        );
+    }
+    #[test]
+    fn names_are_fixed_words_in_every_mode() {
+        let req = Request {
+            text: "hey Hope can u ask jurgen and NITHYA, Ştefan or Bjørn at 9?".into(),
+            ..Request::default()
+        };
+        let tokens = crate::tokenizer::tokenize(&req.text, &[]);
+        let fixed: Vec<_> = fixed_words(&req, &tokens)
+            .into_iter()
+            .map(|(i, _, hidden)| (tokens[i].surface, hidden))
+            .collect();
+        assert_eq!(
+            fixed,
+            [
+                ("Hope", false),
+                ("jurgen", true),
+                ("NITHYA", true),
+                ("Ştefan", true),
+                ("Bjørn", true)
+            ]
+        );
+    }
+    #[test]
+    fn model_edits_may_recase_a_name_but_never_respell_or_drop_it() {
+        for (a, b, expected) in [
+            ("ask jurgen now", "Ask Jürgen now.", "Ask jurgen now."),
+            ("ask jurgen now", "Ask Jurgen now.", "Ask Jurgen now."),
+            ("NITHYA will go", "Nithya will go", "Nithya will go"),
+            (
+                "tell liam we are late",
+                "Tell Liar we are late.",
+                "Tell liam we are late.",
+            ),
+            ("I met jurgen", "I met Jürgen.", "I met jurgen."),
+            (
+                "hey Hope how r u",
+                "Hey Hopes, how are you?",
+                "Hey Hope how are you?",
+            ),
+        ] {
+            let req = Request {
+                text: a.into(),
+                ..Request::default()
+            };
+            let kept = keep_names(&req, edits(a, b, Mode::Professional, &[]));
+            assert_eq!(apply_edits(a, &kept).unwrap().0, expected, "{a} -> {b}");
+        }
     }
 }

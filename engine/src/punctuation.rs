@@ -202,6 +202,38 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             continue;
         }
         let previous = &tokens[i - 1];
+        // A name right after a preposition, determiner or transitive verb is its object
+        // ("I talked to Aman and he said it is fine"), not the start of a new sentence.
+        if [
+            "to", "with", "for", "from", "of", "at", "in", "on", "by", "about", "into", "onto",
+            "like", "than", "as", "per", "via", "near", "after", "before", "between", "among",
+            "through", "over", "under", "upon", "around", "toward", "towards", "against",
+            "without", "within", "the", "a", "an", "my", "your", "his", "our", "their", "its",
+            "dear", "hey", "hi", "hello", "thanks", "thank", "cc", "ask", "tell", "invite", "call",
+            "ping", "email", "meet", "see", "told", "asked", "met", "called", "emailed", "invited",
+            "thanked", "pinged", "texted", "text", "message", "messaged", "contact",
+        ]
+        .contains(&previous.normalized.as_str())
+            || (t.proper_name
+                && morphology::verb(&previous.normalized).is_some_and(|v| {
+                    morphology::predicate(&v.base)
+                        && crate::spelling::flags(&previous.normalized) & 2 == 0
+                }))
+        {
+            continue;
+        }
+        // A name after another capitalized word ("Aman Jain") is one name, not a new sentence.
+        if named_start
+            && previous.is_word
+            && previous.surface.chars().count() > 1
+            && previous
+                .surface
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase)
+        {
+            continue;
+        }
         if t.surface == "I"
             && tokens[start..i].iter().rev().take(7).any(|x| {
                 morphology::verb(&x.normalized).is_some_and(|v| {
@@ -264,5 +296,63 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             edits.push(edit);
         }
         start = i;
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+    /// Boundary marks proposed for `text`, with `names` tagged the way the language tagger does.
+    fn boundaries(text: &str, names: &[&str]) -> Vec<String> {
+        let mut hints = vec![];
+        for name in names {
+            for (byte, _) in text.match_indices(name) {
+                let start = text[..byte].encode_utf16().count();
+                hints.push(crate::TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + name.encode_utf16().count(),
+                    pos: "Noun".into(),
+                    lemma: String::new(),
+                    name: true,
+                });
+            }
+        }
+        let req = Request {
+            text: text.into(),
+            tokens: hints,
+            ..Request::default()
+        };
+        let mut edits = vec![];
+        check(&req, &mut edits);
+        edits
+            .into_iter()
+            .filter(|e| e.rule_id == "punctuation.missing_sentence_boundary")
+            .map(|e| e.replacement)
+            .collect()
+    }
+    #[test]
+    fn a_name_is_never_a_sentence_start_after_an_object_marker_or_another_name() {
+        for (text, names) in [
+            ("I talked to Aman and he said it is fine.", &["Aman"][..]),
+            ("I talked to Mark and he said it is fine.", &["Mark"]),
+            (
+                "I talked to Zo\u{eb} and she said it is fine.",
+                &["Zo\u{eb}"],
+            ),
+            (
+                "I met Aman Jain, and Aman's friend said aman jain was kind.",
+                &["Aman", "Jain"],
+            ),
+            ("I met Aman Jain and he said it is fine.", &["Aman", "Jain"]),
+        ] {
+            assert!(boundaries(text, names).is_empty(), "{text}");
+        }
+    }
+    #[test]
+    fn a_real_run_on_still_gets_its_period() {
+        assert_eq!(
+            boundaries("The report is done Aman will send it tomorrow", &["Aman"]),
+            ["."]
+        );
     }
 }

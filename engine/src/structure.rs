@@ -154,6 +154,15 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             prev -= 1;
         }
         let previous = tokens[prev].normalized.as_str();
+        // A capitalized word inside a sentence ("Hey Hope!", "invite Rose") is a name, not a
+        // verb to inflect. Only the lowercase-the-participle repair below may touch it.
+        if t.surface.chars().next().is_some_and(char::is_uppercase)
+            && !crate::starts_sentence(&req.text, t.start_byte, req)
+            && !(["be", "been", "being", "has", "have", "had"].contains(&previous)
+                && w == v.participle)
+        {
+            continue;
+        }
         if previous == "to" && prev > 0 && w == v.base && morphology::predicate(&v.base) {
             let governor = tokens[prev - 1].normalized.as_str();
             if [
@@ -253,7 +262,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             .find(|x| x.sentence == t.sentence)
             .is_some_and(|x| ["what", "whatever"].contains(&x.normalized.as_str()))
             && ["does", "do"].contains(&previous);
+        // "Will said hi" / "I think Will said": a capitalized or sentence-initial modal word
+        // directly before a verb is a subject name, not a modal.
+        let name_subject = auxiliary_base
+            && (tokens[prev].surface.starts_with(char::is_uppercase)
+                || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
         if auxiliary_base
+            && !name_subject
             && !nominal_what
             && w != "saw"
             && w != v.base
@@ -357,6 +372,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 "did", "does", "do", "can", "could", "will", "would", "should", "must",
             ]
             .contains(&tokens[prev - 1].normalized.as_str())
+            // "I talked to Will he said yes": a capitalized "Will" inside a sentence is a name.
+            && (!tokens[prev - 1].surface.starts_with(char::is_uppercase)
+                || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
         {
             if w != v.base {
                 emit(
@@ -514,6 +532,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .contains(&p.normalized.as_str())
         {
+            continue;
+        }
+        // After a modal or do-auxiliary the word is not a clause subject ("an will join" is a
+        // split name plus "will join"); agreement edits here fight the modal rules.
+        if auxiliary_base {
             continue;
         }
         if !(determiner_subject
