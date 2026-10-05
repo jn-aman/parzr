@@ -363,6 +363,18 @@ fn upper_first(s: &str) -> String {
         None => String::new(),
     }
 }
+/// A capitalized known misspelling mid-sentence ("for Teh meeting") was a slip of the Shift key,
+/// not a name: its correction is lowercase. Sentence starts and ALL-CAPS keep their case.
+fn typo_capital(replacement: String, original: &str, at_start: bool) -> String {
+    let letters: Vec<char> = original.chars().filter(|c| c.is_alphabetic()).collect();
+    let capitalized = letters.first().is_some_and(|c| c.is_uppercase())
+        && letters.iter().skip(1).all(|c| !c.is_uppercase());
+    if !at_start && capitalized && names::is_name_typo(&original.to_lowercase()) {
+        replacement.to_lowercase()
+    } else {
+        replacement
+    }
+}
 fn match_case(replacement: &str, original: &str) -> String {
     if original
         .chars()
@@ -472,7 +484,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             continue;
         }
         let original = &req.text[m.start()..m.end()];
-        let mut replacement = match_case(&rule.replacement, original);
+        let mut replacement = typo_capital(
+            match_case(&rule.replacement, original),
+            original,
+            starts_sentence(&req.text, m.start(), req),
+        );
         if starts_sentence(&req.text, m.start(), req)
             && req.text.trim_end().ends_with(['.', '!', '?'])
         {
@@ -507,7 +523,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             replacement = if rule.id == "grammar.between_you_i" {
                 "me".into()
             } else {
-                match_case(&replacement, m.as_str())
+                typo_capital(
+                    match_case(&replacement, m.as_str()),
+                    m.as_str(),
+                    starts_sentence(&req.text, m.start(), req),
+                )
             };
             if starts_sentence(&req.text, m.start(), req) && !replacement.is_empty() {
                 replacement = upper_first(&replacement);
@@ -919,6 +939,15 @@ pub unsafe extern "C" fn parzr_string_free(ptr: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn capitalized_known_typos_mid_sentence_get_lowercase_fixes() {
+        assert_eq!(typo_capital("The".into(), "Teh", false), "the");
+        assert_eq!(typo_capital("Their".into(), "Thier", false), "their");
+        assert_eq!(typo_capital("The".into(), "Teh", true), "The");
+        assert_eq!(typo_capital("THE".into(), "TEH", false), "THE");
+        // Not a known misspelling: keep the case match (a name or a deliberate capital).
+        assert_eq!(typo_capital("Mark".into(), "Mark", false), "Mark");
+    }
     /// Rules only, repeated to a fixed point like the pipeline's grammar loop (no model needed).
     fn fix(text: &str) -> String {
         let mut text = text.to_string();

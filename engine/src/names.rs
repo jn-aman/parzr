@@ -106,9 +106,10 @@ pub fn never_a_name(token: &str) -> bool {
     let lower = fold(token);
     let lower = base(&lower);
     let short = lower.chars().count() <= 2 && token.chars().next().is_some_and(char::is_lowercase);
-    // A known misspelling typed in lowercase stays correctable even when the system lexicon
-    // accepts its capitalized form as a name (aquire/Aquire, millenia/Millenia).
-    let typo = token.chars().next().is_some_and(char::is_lowercase) && is_name_typo(lower);
+    // A known misspelling stays correctable in any case: the system lexicon may accept its
+    // capitalized form (aquire/Aquire) and the tagger may call a capitalized typo a person ("for
+    // Teh meeting"). Names the user taught Parzr are matched separately and still win.
+    let typo = is_name_typo(lower);
     short || typo || SHORTHAND.contains(&lower) || CALENDAR.contains(&lower)
 }
 /// MEDIUM predicate: a bundled name that is not an ordinary word and not a known typo.
