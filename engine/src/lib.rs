@@ -421,6 +421,9 @@ fn starts_sentence(text: &str, byte: usize, req: &Request) -> bool {
         return req.sentence_start;
     }
     before.ends_with(['.', '!', '?', '\n'])
+        && !(before.ends_with('.')
+            && tokenizer::abbreviation_continues(text, before.len() - 1)
+            && !text[byte..].starts_with(char::is_uppercase))
 }
 fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String> {
     let started = Instant::now();
@@ -644,7 +647,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         {
             continue;
         }
-        if token.normalized == "i" && token.surface == "i" {
+        // "i.e." is an abbreviation, not the pronoun.
+        let dotted_abbreviation = req.text[token.end_byte..]
+            .strip_prefix('.')
+            .is_some_and(|rest| rest.starts_with(char::is_alphabetic));
+        if token.normalized == "i" && token.surface == "i" && !dotted_abbreviation {
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
@@ -716,7 +723,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .contains(&token.normalized.as_str())
             {
                 let gap = &req.text[previous.end_byte..token.start_byte];
+                // "a A$1.5 billion" and "US$ 5": the letter belongs to a currency or code token.
+                let code = req.text[token.end_byte..]
+                    .starts_with(|c: char| c.is_ascii_digit() || "$€£¥#/_-".contains(c));
                 if !gap.is_empty()
+                    && !code
                     && gap.chars().all(|c| c == ' ' || c == '\t')
                     && let Some(e) = make_edit(
                         &req.text,
@@ -1433,6 +1444,65 @@ mod tests {
             "We do bad work sometimes.",
         ] {
             assert_eq!(fix(input), input, "{input}");
+        }
+    }
+    #[test]
+    fn precise_grammar_rules_leave_valid_prose_alone() {
+        for input in [
+            // Plural objects after a transitive verb or a do verb are not verbs to de-inflect.
+            "Children play games after school.",
+            "The company can give jobs to many people.",
+            "You can get used to the noise quickly.",
+            "They do sports every weekend.",
+            "We do lots of work here.",
+            "What he can do is wait.",
+            // The head noun, not the nearest noun, agrees with the verb.
+            "Our lives are busy these days.",
+            "The world is a big place.",
+            "The roads near the station get busy.",
+            "All the teenagers continue to study.",
+            "Reading these chapters is a pleasure.",
+            "I sing a song and the world is perfect.",
+            // Inversion, subjunctive and collective names.
+            "Round the corner were three small shops.",
+            "Inside the box were two old letters.",
+            "He acted as though it were a game.",
+            "If I were you, I would go.",
+            "Leeds were beaten at home.",
+            // Contractions, possessives, causatives and Hinglish.
+            "Let's see what happens.",
+            "My brother's work is hard.",
+            "I saw him walk home.",
+            "She makes Maya attend class.",
+            "Thoda wait karo.",
+            // Abbreviations do not end sentences.
+            "We meet at 5 p.m. then walk home.",
+            "He studies U.S. history at school.",
+            "Bring pens and paper, etc. via the office.",
+            "Use a loop, i.e. a repeated step.",
+            // "but" meaning only, or sharing a subject.
+            "He had nothing but time.",
+            "It was all but over by noon.",
+            "She came but left early.",
+            // Codes and present-tense frames.
+            "The firm won a A$1.5 billion contract.",
+            "The report came out yesterday; it is only now that it has been possible to check it.",
+            // Not a run-on: subordinate openers, relatives, short clauses, adverbial runs.
+            "As I opened the gate I heard a low whistle from the garden.",
+            "She kept the letters in a box which I found in the attic last week.",
+            "He waited for an hour and then I joined him on the quay.",
+        ] {
+            assert_eq!(fix(input), input, "{input}");
+        }
+    }
+    #[test]
+    fn precise_grammar_rules_keep_their_real_fixes() {
+        for (input, expected) in [
+            ("Did she called him?", "Did she call him?"),
+            ("Does he works here?", "Does he work here?"),
+            ("My brothers is tall.", "My brothers are tall."),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
         }
     }
 }

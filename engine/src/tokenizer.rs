@@ -28,6 +28,39 @@ pub struct Token<'a> {
     pub lemma: String,
     pub proper_name: bool,
 }
+/// A period that closes an abbreviation ("p.m.", "U.S.", "Mr.", "etc.") rather than a sentence.
+/// It ends a sentence only before a capitalized word, and never after a title.
+pub fn abbreviation_continues(text: &str, dot: usize) -> bool {
+    const TITLES: [&str; 6] = ["mr", "mrs", "ms", "dr", "prof", "mt"];
+    const ABBREVIATIONS: [&str; 16] = [
+        "vs", "etc", "approx", "incl", "inc", "ltd", "co", "cf", "viz", "esp", "fig", "dept",
+        "govt", "st", "jr", "sr",
+    ];
+    let head = &text[..dot];
+    let start = head
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_alphabetic() || *c == '.')
+        .last()
+        .map_or(dot, |(i, _)| i);
+    let run = &head[start..];
+    let lower = run.to_lowercase();
+    // The "p." of "p.m." is one letter, a dot and another letter with no space.
+    if run.chars().count() == 1 && text[dot + 1..].starts_with(char::is_alphabetic) {
+        return true;
+    }
+    let dotted = run.contains('.') && run.split('.').all(|part| part.chars().count() == 1);
+    let title = TITLES.contains(&lower.as_str());
+    // An initial ("B. subg.") but never the pronoun "I".
+    let initial = run.chars().count() == 1 && run != "I" && run.starts_with(char::is_uppercase);
+    if !(dotted || title || initial || ABBREVIATIONS.contains(&lower.as_str())) {
+        return false;
+    }
+    title
+        || !text[dot + 1..]
+            .trim_start_matches([' ', '\t'])
+            .starts_with(char::is_uppercase)
+}
 pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let regex = RE.get_or_init(|| {
@@ -72,7 +105,9 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
             lemma: hint.map(|h| h.lemma.clone()).unwrap_or_default(),
             proper_name: hint.is_some_and(|h| h.name) && !crate::names::never_a_name(m.as_str()),
         });
-        if [".", "!", "?"].contains(&m.as_str()) {
+        if [".", "!", "?"].contains(&m.as_str())
+            && !(m.as_str() == "." && abbreviation_continues(text, m.start()))
+        {
             sentence += 1;
         }
         offset = end;
@@ -94,4 +129,34 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
         }
     }
     tokens
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn abbreviation_periods_do_not_split_sentences() {
+        let ids = |text: &str| -> Vec<usize> {
+            tokenize(text, &[])
+                .iter()
+                .filter(|t| t.is_word)
+                .map(|t| t.sentence)
+                .collect()
+        };
+        // One sentence each: titles, dotted abbreviations, "etc." before a lowercase word.
+        for text in [
+            "We met Dr. Rao at 5 p.m. today.",
+            "She teaches U.S. history.",
+            "Bring tea, etc. and cake.",
+            "Ask Mr. Lee about it.",
+        ] {
+            let ids = ids(text);
+            assert!(ids.iter().all(|s| *s == ids[0]), "{text}");
+        }
+        // A real sentence end after an abbreviation still splits before a capital.
+        let ids_end = ids("We left at 5 p.m. The rain stopped.");
+        assert_ne!(ids_end[0], *ids_end.last().unwrap());
+        let ids_plain = ids("I like tea. I like cake.");
+        assert_ne!(ids_plain[0], *ids_plain.last().unwrap());
+    }
 }
