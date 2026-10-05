@@ -190,6 +190,7 @@ function measure(s) {
 }
 function frame() {
   ticking = false;
+  scrollFx();
   for (const s of scenes) {
     if (!s.vis && s.p >= 0) continue;
     const p = measure(s);
@@ -225,14 +226,23 @@ function hero(el) {
   setTimeout(() => fxPlay(words[0], { hold: 250 }), 1100);
   setTimeout(() => fxPlay(words[1], { hold: 250 }), 1700);
   setTimeout(fixThird, 6500);
-  if (!COARSE) { // pointer parallax, eased, only while the hero is on screen
-    let tx = 0, ty = 0, cx = 0, cy = 0, run = false;
+  if (!COARSE) { // pointer parallax, cursor spotlight and headline tilt, all eased, only while the hero is on screen
+    const spot = $('#spot', el);
+    let tx = 0, ty = 0, cx = 0, cy = 0, px = innerWidth / 2, py = innerHeight * .4, sx = px, sy = py, run = false;
     const loop = () => {
-      cx = lerp(cx, tx, .08); cy = lerp(cy, ty, .08);
+      cx = lerp(cx, tx, .08); cy = lerp(cy, ty, .08); sx = lerp(sx, px, .12); sy = lerp(sy, py, .12);
       el.style.setProperty('--mx', cx.toFixed(3)); el.style.setProperty('--my', cy.toFixed(3));
-      if (Math.abs(cx - tx) + Math.abs(cy - ty) > .002) requestAnimationFrame(loop); else run = false;
+      spot.style.transform = `translate3d(${sx.toFixed(1)}px,${sy.toFixed(1)}px,0)`;
+      h1.style.transform = `perspective(1100px) rotateX(${(-cy * 4).toFixed(2)}deg) rotateY(${(cx * 4).toFixed(2)}deg)`;
+      if (Math.abs(cx - tx) + Math.abs(cy - ty) + Math.abs(sx - px) / 400 + Math.abs(sy - py) / 400 > .002) requestAnimationFrame(loop); else run = false;
     };
-    addEventListener('pointermove', e => { tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; if (!run && el.classList.contains('in-view')) { run = true; requestAnimationFrame(loop); } }, { passive: true });
+    addEventListener('pointermove', e => {
+      tx = e.clientX / innerWidth * 2 - 1; ty = e.clientY / innerHeight * 2 - 1; px = e.clientX; py = e.clientY;
+      if (!el.classList.contains('in-view')) return;
+      spot.classList.add('on');
+      if (!run) { run = true; requestAnimationFrame(loop); }
+    }, { passive: true });
+    document.documentElement.addEventListener('mouseleave', () => { spot.classList.remove('on'); tx = ty = 0; if (!run) { run = true; requestAnimationFrame(loop); } });
   }
   return {
     update(p) {
@@ -464,10 +474,42 @@ function showcase(el) {
   return { update(p) { const f = smooth(.12, .62, p); el.style.setProperty('--f', f.toFixed(4)); } };
 }
 
-/* ---------- 6. Compatibility marquees ---------- */
+/* ---------- 6. Compatibility marquees: base drift plus scroll-velocity boost and skew ---------- */
+const SV = { raw: 0, t: 0 }; // latest scroll velocity (px per ms) and when it was measured
 function marquees() {
   if (RM) return;
-  $$('.track').forEach(t => Array.from(t.children).forEach(c => { const k = c.cloneNode(true); k.setAttribute('aria-hidden', 'true'); t.append(k); }));
+  const rows = $$('.marquee').map(m => {
+    const t = $('.track', m);
+    Array.from(t.children).forEach(c => { const k = c.cloneNode(true); k.setAttribute('aria-hidden', 'true'); t.append(k); });
+    return { m, t, dir: +m.dataset.dir || 1, secs: m.hasAttribute('data-slow') ? 64 : 46, x: 0, half: 1, vis: false, hold: false };
+  });
+  const measure = () => rows.forEach(r => { r.half = r.t.scrollWidth / 2 || 1; if (r.dir < 0 && !r.x) r.x = -r.half; });
+  measure(); addEventListener('resize', measure); addEventListener('load', measure);
+  const io = new IntersectionObserver(es => es.forEach(e => { const r = rows.find(r => r.m === e.target); r.vis = e.isIntersecting; go(); }), { rootMargin: '10% 0px' });
+  rows.forEach(r => {
+    io.observe(r.m);
+    r.m.addEventListener('pointerenter', () => r.hold = true); r.m.addEventListener('pointerleave', () => r.hold = false);
+    r.m.addEventListener('focusin', () => r.hold = true); r.m.addEventListener('focusout', () => r.hold = false);
+  });
+  let sm = 0, last = 0, on = false;
+  const tick = now => {
+    const dt = Math.min(48, now - (last || now)); last = now;
+    const target = now - SV.t < 120 ? SV.raw : 0; // idle for 120 ms means the scroll has stopped
+    sm = lerp(sm, target, target ? .18 : .06); // quick to react, slow to ease back
+    const boost = 1 + clamp(Math.abs(sm) / 1.4) * 5.5, skew = clamp(sm / 2.4, -1, 1) * -6;
+    let busy = false;
+    for (const r of rows) {
+      if (!r.vis) continue;
+      busy = true;
+      if (!r.hold) {
+        r.x -= r.dir * (r.half / r.secs) * (dt / 1000) * boost;
+        if (r.x <= -r.half) r.x += r.half; else if (r.x > 0) r.x -= r.half;
+      }
+      r.t.style.transform = `translate3d(${r.x.toFixed(2)}px,0,0) skewX(${skew.toFixed(2)}deg)`;
+    }
+    if (busy) requestAnimationFrame(tick); else { on = false; last = 0; }
+  };
+  function go() { if (!on) { on = true; requestAnimationFrame(tick); } }
 }
 
 /* ---------- 7. Open source: typed code and copy ---------- */
@@ -565,6 +607,138 @@ function final(el) {
   };
 }
 
+/* ---------- Scroll effects: progress hairline, nav hide/show, iris transitions, velocity ---------- */
+const fx = { y: scrollY, t: performance.now(), nav: scrollY, irises: [] };
+function scrollFx() {
+  const now = performance.now(), y = scrollY, vh = innerHeight;
+  const prog = $('#progress');
+  if (prog && !RM) prog.style.transform = `scaleX(${clamp(y / Math.max(1, root.scrollHeight - vh)).toFixed(4)})`;
+  const dt = now - fx.t;
+  if (dt > 0 && y !== fx.y) { SV.raw = (y - fx.y) / dt; SV.t = now; fx.y = y; fx.t = now; }
+  const nv = $('#nav');
+  if (nv && !RM) {
+    const d = y - fx.nav; fx.nav = y;
+    const menu = $('#nav-links')?.classList.contains('open');
+    if (y < 90 || d < -6 || menu || nv.contains(document.activeElement) && nv.matches(':focus-within')) nv.classList.remove('hide');
+    else if (d > 22) nv.classList.add('hide'); // fast scroll down
+  }
+  for (const z of fx.irises) { // circular iris: the pin opens from the middle of the screen as its section arrives
+    const top = z.sec.getBoundingClientRect().top, e = clamp(1 - top / vh);
+    if (e >= 1) { if (z.v !== 'none') { z.pin.style.clipPath = 'none'; z.v = 'none'; } continue; }
+    // a disc that rises with the section, centred in the visible part of the pin, then blooms to cover the screen
+    const fit = e * vh / 2, R = lerp(fit * .8, Math.hypot(innerWidth / 2, vh / 2), Math.pow(e, 3));
+    const v = `circle(${R.toFixed(1)}px at 50% ${fit.toFixed(1)}px)`;
+    if (v !== z.v) { z.pin.style.clipPath = v; z.v = v; }
+  }
+}
+function irisInit() {
+  $$('.pin.iris').forEach(pin => fx.irises.push({ pin, sec: pin.closest('section'), v: '' }));
+}
+
+/* ---------- Reveals: H2 lines clip up from below, eyebrows fade and slide in ---------- */
+function reveals() {
+  if (RM) return;
+  const heads = $$('.h2');
+  const split = h => {
+    const sec = h.closest('section'), cv = sec.style.contentVisibility;
+    sec.style.contentVisibility = 'visible'; // sections that skip rendering must be laid out to be measured
+    h.classList.remove('split'); h.innerHTML = h._src;
+    const units = [], nodes = [];
+    Array.from(h.childNodes).forEach(n => {
+      if (n.nodeType === 3) n.textContent.split(/\s+/).filter(Boolean).forEach(w => { const u = document.createElement('span'); u.textContent = w; units.push(u); nodes.push(u, ' '); });
+      else if (n.nodeType === 1) { nodes.push(n, ' '); if (n.tagName !== 'BR') units.push(n); } // keep the authored <br class="lg"> so measured lines match
+    });
+    h.replaceChildren(...nodes);
+    const lines = [], ys = [];
+    units.forEach(u => { const y = Math.round(u.offsetTop / 8); const k = ys.indexOf(y); if (k < 0) { ys.push(y); lines.push([u]); } else lines[k].push(u); });
+    h.replaceChildren();
+    lines.forEach((l, i) => {
+      const ln = document.createElement('span'), inn = document.createElement('span');
+      ln.className = 'ln'; inn.className = 'ln-i'; inn.style.setProperty('--i', i);
+      l.forEach((u, k) => { if (k) inn.append(' '); inn.append(u); });
+      ln.append(inn); h.append(ln, ' ');
+    });
+    h.classList.add('split'); sec.style.contentVisibility = cv;
+  };
+  heads.forEach(h => { h._src = h.innerHTML; split(h); });
+  let w = innerWidth;
+  addEventListener('resize', () => { if (innerWidth === w) return; w = innerWidth; heads.forEach(split); });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('rv'); io.unobserve(e.target); } }), { threshold: .25, rootMargin: '0px 0px -6% 0px' });
+  heads.forEach(h => io.observe(h));
+  $$('.eyebrow').forEach(e => io.observe(e));
+}
+
+/* ---------- Magnetic buttons: a damped spring toward the pointer, 6px at most ---------- */
+function magnetic() {
+  if (RM || COARSE) return;
+  const S = new Map(); let run = false;
+  const step = () => {
+    let busy = false;
+    S.forEach((s, el) => {
+      s.vx = (s.vx + (s.tx - s.x) * .2) * .74; s.vy = (s.vy + (s.ty - s.y) * .2) * .74;
+      s.x += s.vx; s.y += s.vy;
+      const rest = Math.abs(s.tx - s.x) + Math.abs(s.ty - s.y) + Math.abs(s.vx) + Math.abs(s.vy) < .02;
+      if (rest && !s.tx && !s.ty) { el.style.translate = ''; S.delete(el); return; }
+      el.style.translate = `${s.x.toFixed(2)}px ${s.y.toFixed(2)}px`; busy = true;
+    });
+    if (busy) requestAnimationFrame(step); else run = false;
+  };
+  const kick = (el, tx, ty) => {
+    const s = S.get(el) || { x: 0, y: 0, vx: 0, vy: 0 }; s.tx = tx; s.ty = ty; S.set(el, s);
+    if (!run) { run = true; requestAnimationFrame(step); }
+  };
+  $$('.btn, .pill').forEach(el => {
+    el.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;
+      const r = el.getBoundingClientRect();
+      kick(el, clamp((e.clientX - r.left - r.width / 2) / (r.width / 2), -1, 1) * 6, clamp((e.clientY - r.top - r.height / 2) / (r.height / 2), -1, 1) * 6);
+    });
+    el.addEventListener('pointerleave', () => { if (S.has(el)) kick(el, 0, 0); });
+  });
+}
+
+/* ---------- Anchors: smooth scroll that lands exactly on the section top, below the fixed nav ---------- */
+function anchors() {
+  addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href^="#"]');
+    if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    const id = a.getAttribute('href').slice(1), t = id ? document.getElementById(id) : document.body;
+    if (!t) return;
+    e.preventDefault();
+    const go = () => t.getBoundingClientRect().top + scrollY + (t.matches('.pinned,.hero') || !id ? 1 : 0);
+    scrollTo({ top: go(), behavior: RM ? 'auto' : 'smooth' });
+    if (id) history.pushState(null, '', '#' + id);
+    // sections that skip rendering change height while we scroll past them, so correct once we arrive
+    const fix = () => { const d = go() - scrollY; if (Math.abs(d) > 3) scrollTo({ top: go(), behavior: 'auto' }); };
+    if ('onscrollend' in window) addEventListener('scrollend', fix, { once: true }); else setTimeout(fix, 1200);
+  });
+}
+
+/* ---------- Footer wordmark: types "Prazr", underlines it, then the r and a trade places ---------- */
+function wordmark() {
+  const m = $('#mk'), inn = $('#mk-in'); if (!m) return;
+  const fit = () => { // size the wordmark so it spans the viewport edge to edge, whatever the font
+    m.style.setProperty('--mk-fs', '100px');
+    const w = inn.offsetWidth; if (w) m.style.setProperty('--mk-fs', (100 * (m.clientWidth - 2 * Math.max(8, innerWidth * .012)) / w).toFixed(2) + 'px');
+  };
+  fit(); addEventListener('resize', fit);
+  if (RM) return;
+  const L = $$('.mk-l', inn), order = [0, 2, 1, 3, 4]; // typing order of P r a z r
+  L.forEach((l, i) => l.style.setProperty('--ti', order.indexOf(i)));
+  const swap = () => { m.style.setProperty('--sa', L[2].offsetWidth + 'px'); m.style.setProperty('--sr', -L[1].offsetWidth + 'px'); };
+  swap(); addEventListener('resize', swap);
+  m.classList.add('pre', 'typo');
+  new IntersectionObserver(async (es, o) => {
+    if (!es[0].isIntersecting) return;
+    o.disconnect(); swap();
+    m.classList.remove('pre'); await sleep(900);
+    m.classList.add('u'); await sleep(1300);
+    m.classList.add('fix'); await sleep(1100);
+    m.classList.remove('typo');
+    await sleep(2200); m.classList.remove('fix', 'u');
+  }, { threshold: .4 }).observe(m);
+}
+
 /* ---------- Nav ---------- */
 function nav() {
   const t = $('.nav-toggle'), l = $('#nav-links');
@@ -586,6 +760,7 @@ function notFound() {
 /* ---------- Boot ---------- */
 function boot() {
   if ($('.nav-toggle')) nav();
+  reveals(); magnetic(); anchors(); wordmark();
   notFound();
   const mods = {
     hero, demo, privacy, modes: el => modes(el, mods._s), showcase, final,
@@ -600,6 +775,7 @@ function boot() {
   // non-pinned sections only need parallax progress
   $$('.works, .open').forEach(el => register(el, { update() {} }));
   if ($('.tiles')) { stats(); marquees(); openSource(); }
+  if (!RM) irisInit();
   if (!RM) { addEventListener('scroll', schedule, { passive: true }); addEventListener('resize', () => { scenes.forEach(s => s.p = -1); schedule(); }); }
   frame();
 }

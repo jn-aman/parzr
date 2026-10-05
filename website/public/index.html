@@ -36,10 +36,12 @@
   <symbol id="i-dir" viewBox="0 0 16 16"><path d="M4.5 11.5l7-7M5.5 4.5h6v6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.4l3 3 6-6.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M10.5 3.9V3.6C10.5 2.7 9.8 2 8.9 2H4.1C3.2 2 2.5 2.7 2.5 3.6v5.3c0 .9.7 1.6 1.6 1.6h.4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 13V3M3.8 7.2L8 3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 .5a7.5 7.5 0 0 0-2.4 14.6c.4.1.5-.2.5-.4v-1.4c-2.1.5-2.5-.9-2.5-.9-.3-.9-.8-1.1-.8-1.1-.7-.5.1-.5.1-.5.8.1 1.200.8 1.200.8.7 1.200 1.800.9 2.200.7.1-.5.3-.9.5-1.100-1.700-.2-3.400-.8-3.400-3.700 0-.8.3-1.500.8-2-.1-.2-.4-1 .1-2 0 0 .6-.2 2 .8a6.800 6.800 0 0 1 3.600 0c1.400-1 2-.8 2-.8.4 1 .2 1.800.1 2 .5.5.8 1.200.8 2 0 2.900-1.700 3.500-3.400 3.700.3.2.5.7.5 1.400v2.100c0 .2.1.5.5.4A7.500 7.500 0 0 0 8 .5z"/></symbol>
 </svg>
 
 <a class="skip" href="#main">Skip to content</a>
+<div class="progress" id="progress" aria-hidden="true"></div>
 
 <header class="nav" id="nav">
   <nav class="nav-in" aria-label="Primary">
@@ -64,9 +66,10 @@
     <div class="layer d0 glow g2" aria-hidden="true"></div>
     <div class="layer d1 grid" aria-hidden="true"></div>
     <div class="layer d1 grain" aria-hidden="true"></div>
+    <div class="layer d2 spot" id="spot" aria-hidden="true"></div>
     <div class="layer d5 frags" id="frags" aria-hidden="true"></div>
     <div class="hero-c">
-      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Development beta<span class="sep" aria-hidden="true">/</span>Open source</p>
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Public beta<span class="sep" aria-hidden="true">·</span>Open source</p>
       <h1 id="hero-h" class="display hero-h" aria-label="Write like you meant it.">
         <span aria-hidden="true"><span class="fx" data-fixed data-wrong="Writ">Write</span> like <span class="fx" data-fixed data-wrong="yuo">you</span><br class="lg"> <span class="nw"><span class="fx" data-fixed data-wrong="ment">meant</span> it.</span></span>
       </h1>
@@ -75,7 +78,7 @@
         <a class="btn btn-primary" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
         <a class="btn btn-ghost" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">View source</a>
       </div>
-      <p class="micro">Apple Silicon · macOS 13 or later</p>
+      <p class="micro">Free · Apple Silicon · macOS 13 or later</p>
     </div>
     <div class="scroll-cue" aria-hidden="true"><span></span></div>
   </div>
@@ -123,7 +126,7 @@
 
 <!-- 3. PRIVACY -->
 <section class="scene pinned privacy" id="privacy" data-scene="privacy" aria-labelledby="priv-h">
-  <div class="pin">
+  <div class="pin iris">
     <div class="layer d0 rings" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div class="layer d1 glow g4" aria-hidden="true"></div>
     <div class="layer d5 fg" data-n="8" aria-hidden="true"></div>
@@ -150,7 +153,7 @@
       <li class="tile">
         <p class="stat"><span class="num" data-count="100">100</span><span class="unit pct">%</span></p>
         <h3 class="tile-t">offline after install</h3>
-        <p class="tile-d">A Rust engine does the grammar work. Nothing downloads at runtime; dependencies download only when you build from source.</p>
+        <p class="tile-d">A Rust engine does the grammar work, and the model ships inside the app. Nothing downloads while you write.</p>
       </li>
     </ul>
   </div>
@@ -158,7 +161,7 @@
 
 <!-- 4. MODES -->
 <section class="scene pinned modes" id="modes" data-scene="modes" aria-labelledby="modes-h">
-  <div class="pin">
+  <div class="pin iris">
     <div class="layer d0 glow g5" aria-hidden="true"></div>
     <div class="layer d1 grid" aria-hidden="true"></div>
     <div class="layer d5 fg" data-n="9" aria-hidden="true"></div>
@@ -315,26 +318,42 @@ python3 scripts/package.py</code></pre>
         <a class="btn btn-primary btn-lg" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download for Mac</a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">View source</a>
       </div>
-      <p class="micro">Apple Silicon · macOS 13 or later · Apache-2.0</p>
-      <p class="fine center">Parzr is a development beta. English coverage is growing, and it does not catch every error.</p>
+      <p class="micro">Free · Apple Silicon · macOS 13 or later</p>
+      <p class="fine center">Public beta. English coverage is growing, and Parzr will not catch every error.</p>
     </div>
   </div>
 </section>
 </main>
 
-<footer class="foot">
-  <div class="wrap foot-in">
+<footer class="foot" id="foot">
+  <div class="foot-glow" aria-hidden="true"></div>
+  <div class="wrap foot-top">
     <div class="foot-brand">
       <a class="brand" href="#top" aria-label="Parzr, back to top"><svg class="brand-mark" aria-hidden="true"><use href="#pmark"/></svg><span>Parzr</span></a>
-      <p>Your words never leave this Mac. Parzr runs its engine and model locally, with no account, no telemetry and no HTTP server. The browser extension passes text only to the native process on your Mac.</p>
+      <p class="foot-promise">Your words never leave this Mac.</p>
+      <p class="status-pill"><i class="live" aria-hidden="true"></i>v0.1 public beta</p>
     </div>
-    <ul class="foot-links">
-      <li><a href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">GitHub</a></li>
-      <li><a href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Releases</a></li>
-      <li><a href="https://github.com/jn-aman/parzr/blob/main/LICENSE" data-link="license" rel="noopener">Apache-2.0 license</a></li>
-    </ul>
+    <nav class="foot-col" aria-labelledby="fp-h">
+      <p class="foot-h" id="fp-h">Product</p>
+      <ul>
+        <li><a class="fl" href="https://github.com/jn-aman/parzr/releases/latest" data-link="release" rel="noopener">Download</a></li>
+        <li><a class="fl" href="#how">How it works</a></li>
+        <li><a class="fl" href="#privacy">Privacy</a></li>
+        <li><a class="fl" href="#modes">Writing modes</a></li>
+      </ul>
+    </nav>
+    <nav class="foot-col" aria-labelledby="fo-h">
+      <p class="foot-h" id="fo-h">Open source</p>
+      <ul>
+        <li><a class="fl" href="https://github.com/jn-aman/parzr" data-link="repo" rel="noopener">GitHub</a></li>
+        <li><a class="fl" href="https://github.com/jn-aman/parzr/releases" rel="noopener">Releases</a></li>
+        <li><a class="fl" href="https://github.com/jn-aman/parzr/blob/main/LICENSE" data-link="license" rel="noopener">Apache-2.0 license</a></li>
+        <li><a class="fl" href="#open">Build from source</a></li>
+      </ul>
+    </nav>
   </div>
-  <div class="wrap foot-base"><span>© 2026 Parzr. Licensed under Apache-2.0.</span><a href="#top">Back to top</a></div>
+  <div class="wrap foot-base"><span>© 2026 Parzr · Apache-2.0</span><a class="up fl" href="#top">Back to top<svg aria-hidden="true"><use href="#i-up"/></svg></a></div>
+  <div class="mk" id="mk" aria-hidden="true"><span class="mk-in" id="mk-in"><span class="mk-l" data-c="P">P</span><span class="mk-pair"><span class="mk-l mk-a" data-c="a">a</span><span class="mk-l mk-r" data-c="r">r</span></span><span class="mk-l" data-c="z">z</span><span class="mk-l" data-c="r">r</span></span></div>
 </footer>
 </body>
 </html>
