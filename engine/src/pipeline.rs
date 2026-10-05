@@ -159,19 +159,26 @@ impl Document {
         range
     }
     fn request(&self, original: &Request, protected: &[TextRange], mode: Mode) -> Request {
-        let mut starts = HashMap::new();
-        let mut ends = HashMap::new();
+        // Indexed by original UTF-16 offset: where that offset starts or ends now.
+        let size = self
+            .cells
+            .iter()
+            .filter_map(|c| c.origin)
+            .map(|o| o.1 + 1)
+            .max();
+        let mut starts = vec![None; size.unwrap_or(0)];
+        let mut ends = vec![None; size.unwrap_or(0)];
         let mut offset = 0;
         for c in &self.cells {
             if let Some((a, b)) = c.origin {
-                starts.insert(a, offset);
-                ends.insert(b, offset + c.ch.len_utf16());
+                starts[a] = Some(offset);
+                ends[b] = Some(offset + c.ch.len_utf16());
             }
             offset += c.ch.len_utf16();
         }
         let remap = |a: usize, b: usize| -> Option<(usize, usize)> {
-            let x = *starts.get(&a)?;
-            let y = *ends.get(&b)?;
+            let x = (*starts.get(a)?)?;
+            let y = (*ends.get(b)?)?;
             (y - x == b - a).then_some((x, y))
         };
         let mut req = original.clone();
@@ -228,19 +235,23 @@ impl Document {
         req
     }
     fn apply(&mut self, edits: &[Edit]) -> Result<(), String> {
-        let mut boundaries = HashMap::new();
-        let mut offset = 0;
+        // Cell index at each UTF-16 offset that starts a cell (or ends the text).
+        let mut boundaries = vec![];
         for (i, c) in self.cells.iter().enumerate() {
-            boundaries.insert(offset, i);
-            offset += c.ch.len_utf16();
+            boundaries.push(Some(i));
+            boundaries.resize(boundaries.len() + c.ch.len_utf16() - 1, None);
         }
-        boundaries.insert(offset, self.cells.len());
+        boundaries.push(Some(self.cells.len()));
         for edit in edits.iter().rev() {
-            let a = *boundaries
-                .get(&edit.start_utf16)
+            let a = boundaries
+                .get(edit.start_utf16)
+                .copied()
+                .flatten()
                 .ok_or("Invalid pipeline boundary.")?;
-            let b = *boundaries
-                .get(&edit.end_utf16)
+            let b = boundaries
+                .get(edit.end_utf16)
+                .copied()
+                .flatten()
                 .ok_or("Invalid pipeline boundary.")?;
             let mut intervals: Vec<(usize, usize)> = self.cells[a..b]
                 .iter()
