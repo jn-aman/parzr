@@ -33,7 +33,20 @@ staging.mkdir(); shutil.copytree(app,staging/'Parzr.app',symlinks=True)
 (staging/'Read me.txt').write_text('Parzr\n\nDrag Parzr.app to Applications. Open it, allow Accessibility, then select text and press Option+Space.\n\n'+('Developer ID signed and notarized release.\n' if args.release else ('Local build. Developer ID signed; not notarized.\n' if app_developer_id_signed else 'Local development build. Ad-hoc signed; not notarized or approved for distribution.\n')))
 name=f'Parzr-{version}.dmg' if args.release else f'Parzr-{version}-local.dmg'
 dmg=dist/name
-run(['hdiutil','create','-volname','Parzr','-srcfolder',staging,'-ov','-format','UDZO',dmg])
+# The mounted drive shows Parzr's icon: build writable, add .VolumeIcon.icns, flag the custom
+# icon in the volume root's FinderInfo (kHasCustomIcon), then compress. No Finder scripting.
+writable=dist/'Parzr-writable.dmg'; mount=dist/'dmg-mount'
+for stale in (writable,dmg):
+    if stale.exists(): stale.unlink()
+run(['hdiutil','create','-volname','Parzr','-srcfolder',staging,'-ov','-format','UDRW',writable])
+mount.mkdir(exist_ok=True)
+run(['hdiutil','attach',writable,'-nobrowse','-noverify','-noautoopen','-mountpoint',mount])
+try:
+    shutil.copy2(app/'Contents/Resources/AppIcon.icns',mount/'.VolumeIcon.icns')
+    run(['xattr','-wx','com.apple.FinderInfo','0000000000000000040000000000000000000000000000000000000000000000',mount])
+finally:
+    run(['hdiutil','detach',mount])
+run(['hdiutil','convert',writable,'-format','UDZO','-o',dmg]); writable.unlink(); mount.rmdir()
 if args.identity:
     run(['codesign','--force','--sign',args.identity,'--timestamp',dmg])
     run(['codesign','--verify','--strict',dmg])
