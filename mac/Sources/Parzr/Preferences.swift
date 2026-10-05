@@ -29,6 +29,15 @@ final class Preferences: ObservableObject {
     @Published var contextRefinement: Bool { didSet { defaults.set(contextRefinement, forKey: "contextRefinement") } }
     @Published var showWordCount: Bool { didSet { defaults.set(showWordCount, forKey: "showWordCount") } }
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
+    /// Names Parzr learned (undone fixes, repeated Ignores, "This is a name"); persisted, shared with the browser host and LSP through known-words.json.
+    @Published var learnedNames: [String] { didSet { defaults.set(learnedNames, forKey: "learnedNames") } }
+    @Published var useContactNames: Bool { didSet { defaults.set(useContactNames, forKey: "useContactNames") } }
+    @Published var nameCapitalization: String { didSet { defaults.set(nameCapitalization, forKey: "nameCapitalization") } }
+    /// Name tokens from Contacts; memory only, rebuilt at launch while authorized and purged otherwise.
+    @Published var contactNames: [String] = []
+    @Published var contactsNote: String?
+    private var ignoreCounts: [String: Int] { didSet { defaults.set(ignoreCounts, forKey: "ignoreCounts") } }
+    private(set) var ledger: RepetitionLedger { didSet { defaults.set(try? JSONEncoder().encode(ledger), forKey: "repetitionLedger") } }
     var boundedCheckingDelay: Double { checkingDelay.isFinite ? min(700, max(40, checkingDelay)) : 90 }
     var boundedFontSize: Double { editorFontSize.isFinite ? min(24, max(15, editorFontSize)) : 18 }
     var boundedLineSpacing: Double { editorLineSpacing.isFinite ? min(12, max(2, editorLineSpacing)) : 6 }
@@ -66,6 +75,11 @@ final class Preferences: ObservableObject {
         contextRefinement = defaults.object(forKey: "contextRefinement") as? Bool ?? true
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
+        learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
+        useContactNames = defaults.bool(forKey: "useContactNames")
+        nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.documents.rawValue
+        ignoreCounts = defaults.dictionary(forKey: "ignoreCounts") as? [String: Int] ?? [:]
+        ledger = defaults.data(forKey: "repetitionLedger").flatMap { try? JSONDecoder().decode(RepetitionLedger.self, from: $0) } ?? RepetitionLedger()
     }
     func requestPermission() {
         permissionRequested = true
@@ -104,6 +118,31 @@ final class Preferences: ObservableObject {
         guard !word.isEmpty, word.utf8.count <= 128, dictionary.count < 1000, !dictionary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
         dictionary.append(word)
     }
+    /// Adds a name (possessive stripped) once; false when it is not name-shaped, a duplicate, or the list is full.
+    @discardableResult
+    func learnName(_ raw: String) -> Bool {
+        guard let name = WritingEdit.nameToken(raw), learnedNames.count < 2000, !learnedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
+        learnedNames.append(name); return true
+    }
+    /// A user Ignore on a spelling or name-like edit counts toward learning its word as a name.
+    static let ignoresToLearn = 2
+    func noteIgnored(_ edit: WritingEdit) {
+        guard edit.category == "Spelling" || edit.nameCandidate != nil, let name = WritingEdit.nameToken(edit.original) else { return }
+        let key = name.lowercased()
+        guard ignoreCounts[key] != nil || ignoreCounts.count < 500 else { return }
+        let count = (ignoreCounts[key] ?? 0) + 1
+        if count >= Self.ignoresToLearn { learnName(name); ignoreCounts[key] = nil } else { ignoreCounts[key] = count }
+    }
+    /// A lowercase word kept through a passive check. Learned as a name after 3 sightings over 2 or more apps or days; see RepetitionLedger.
+    func noteSighting(_ word: String, app: String, day: Int) {
+        guard !learnedNames.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }), ledger.sight(word, app: app, day: day) else { return }
+        learnName(word)
+    }
+    /// The user applied a Parzr correction to this word, so repetition never learns it.
+    func noteApplied(_ word: String) { ledger.applied(word, day: Int(Date().timeIntervalSince1970 / 86_400)) }
+    var capitalizeNamesChoice: String { get { nameCapitalization } set { nameCapitalization = newValue } }
+    /// Maps the picker to the engine's `capitalize_names` for the app being written in (nil: the playground).
+    func capitalizeNames(for bundle: String?) -> Bool { (NameCapitalization(rawValue: nameCapitalization) ?? .documents).enabled(bundle: bundle) }
     // Key-path bindings for toggles (see AppModel.modeChoice).
     var automaticHighlights: Bool { get { passive && !paused } set { passive = newValue; paused = false } }
     var launchAtLoginChoice: Bool { get { launchAtLogin } set { setLogin(newValue) } }
@@ -111,9 +150,11 @@ final class Preferences: ObservableObject {
     func toggleApp(_ bundle: String) { if let i = disabledApps.firstIndex(of: bundle) { disabledApps.remove(at: i) } else { disabledApps.append(bundle) } }
 }
 
-/// Session-only names the engine must never "correct" (engine dictionary matching is ASCII case-insensitive, whole tokens, multi-word entries by phrase). Never persisted.
+/// Names the engine must never "correct" (it may only re-case them; matching is ASCII case-insensitive, whole tokens, multi-word entries by phrase).
+/// Sources: the user's own name, learned names, Contacts (opt-in), and names in the current text (session only, never persisted or shared).
 enum KnownNames {
     static let user = names(full: NSFullUserName(), short: NSUserName())
+    static let maxNames = 2000
     nonisolated static func names(full: String, short: String) -> [String] {
         let tokens = (full + " " + short).split { !$0.isLetter }.map(String.init).filter { $0.count >= 2 }
         let phrase = full.split { !$0.isLetter }.count > 1 ? [full.trimmingCharacters(in: .whitespacesAndNewlines)] : []
@@ -127,6 +168,8 @@ enum KnownNames {
         for sentence in String(text.prefix(65_536)).split(whereSeparator: { ".!?\n".contains($0) }) where found.count < 400 {
             let sentence = String(sentence)
             tagger.string = sentence
+            // Without a language short texts get no tags at all.
+            tagger.setLanguage(.english, range: sentence.startIndex..<sentence.endIndex)
             tagger.enumerateTags(in: sentence.startIndex..<sentence.endIndex, unit: .word, scheme: .nameType, options: [.omitWhitespace, .omitPunctuation, .omitOther]) { tag, range in
                 guard let tag, [.personalName, .placeName, .organizationName].contains(tag) else { return true }
                 var word = String(sentence[range])
@@ -135,18 +178,59 @@ enum KnownNames {
                 return true
             }
         }
-        return Array(merge(found).prefix(200))
+        return Array(merge(found, capitalizedMidSentence(in: text)).prefix(200))
     }
-    /// Order-preserving, case-insensitive dedupe within the engine limits (1000 entries, 128 bytes each); earlier lists win.
-    nonisolated static func merge(_ lists: [String]...) -> [String] {
+    /// Words capitalized in the middle of a sentence ("Hi Aman,"), which NLTagger can miss. Sentence starts, "I" and ALL CAPS words are skipped.
+    nonisolated static func capitalizedMidSentence(in text: String) -> [String] {
+        var found: [String] = []
+        let trim = CharacterSet.letters.union(CharacterSet(charactersIn: "'\u{2019}-")).inverted
+        for line in String(text.prefix(65_536)).split(whereSeparator: \.isNewline) {
+            var atStart = true
+            for token in line.split(whereSeparator: \.isWhitespace) {
+                let word = token.trimmingCharacters(in: trim)
+                if !atStart, word.count >= 2, word.first?.isUppercase == true, word.contains(where: \.isLowercase), found.count < 400 {
+                    var name = word
+                    for suffix in ["'s", "\u{2019}s"] where name.hasSuffix(suffix) { name.removeLast(suffix.count) }
+                    if name.count >= 2 { found.append(name) }
+                }
+                atStart = token.last.map { ".!?:".contains($0) } == true
+            }
+        }
+        return found
+    }
+    /// Order-preserving, case-insensitive dedupe within the engine limits (`limit` entries, 128 bytes each); earlier lists win.
+    nonisolated static func merge(_ lists: [String]..., limit: Int = 1000) -> [String] {
         var seen = Set<String>(), out: [String] = []
-        for word in lists.joined() where !word.isEmpty && word.utf8.count <= 128 && out.count < 1000 && seen.insert(word.lowercased()).inserted { out.append(word) }
+        for word in lists.joined() where !word.isEmpty && word.utf8.count <= 128 && out.count < limit && seen.insert(word.lowercased()).inserted { out.append(word) }
         return out
     }
-    /// Saved dictionary, then the user's name, then names found in `text`; the scan runs off the main actor.
-    @MainActor static func dictionary(for text: String) async -> [String] {
-        let saved = Preferences.shared.dictionary
+    /// Names that persist across sessions: the user's own, learned, and (when enabled) Contacts. Also what known-words.json shares.
+    @MainActor static func persistentNames() -> [String] {
+        let prefs = Preferences.shared
+        return merge(user, prefs.learnedNames, prefs.useContactNames ? prefs.contactNames : [], limit: maxNames)
+    }
+    /// Persistent names plus names found in `text` and lowercase names the system lexicon knows in `request` (both scans run off the main actor). Session names rank above Contacts when the cap bites.
+    @MainActor static func names(for text: String, request: String? = nil) async -> [String] {
+        let prefs = Preferences.shared
         let document = await Task.detached(priority: .utility) { documentNames(in: text) }.value
-        return merge(saved, user, document)
+        let lexicon = await SystemLexicon.shared.names(in: request ?? text)
+        return merge(user, prefs.learnedNames, document, lexicon, prefs.useContactNames ? prefs.contactNames : [], limit: maxNames)
+    }
+    @MainActor static func dictionary() -> [String] { merge(Preferences.shared.dictionary) }
+    /// Spelling edits for words the user taught macOS are not mistakes. Cheap: only flagged edits are asked.
+    @MainActor static func dropMacLearned(_ result: RewriteResult, from source: String) -> RewriteResult {
+        result.dropping(from: source) { $0.category == "Spelling" && NSSpellChecker.shared.hasLearnedWord($0.original) }
+    }
+}
+
+enum NameCapitalization: String, CaseIterable {
+    case never, documents, everywhere
+    static let chatApps = ["com.tinyspeck.slackmacgap", "com.microsoft.teams", "com.microsoft.teams2", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.hnc.Discord", "ru.keepcoder.Telegram", "com.apple.MobileSMS", "com.facebook.archon"]
+    func enabled(bundle: String?) -> Bool {
+        switch self {
+        case .never: false
+        case .everywhere: true
+        case .documents: !Self.chatApps.contains { bundle?.hasPrefix($0) == true }
+        }
     }
 }

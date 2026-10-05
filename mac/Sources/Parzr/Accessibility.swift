@@ -215,9 +215,14 @@ struct SelectionSnapshot {
     }
     func protectedRanges() -> [TextSpan] {
         guard let richText, richText.string == text else { return [] }
+        return Self.protectedSpans(in: richText)
+    }
+    /// Links and attachments, under both the AppKit keys and the "AXLink"/"AXAttachment" keys the Accessibility API uses, plus @mention runs.
+    nonisolated static func protectedSpans(in text: NSAttributedString) -> [TextSpan] {
+        let keys: [NSAttributedString.Key] = [.link, .attachment, NSAttributedString.Key("AXLink"), NSAttributedString.Key("AXAttachment")]
         var ranges: [TextSpan] = []
-        richText.enumerateAttributes(in: NSRange(location: 0, length: richText.length)) { attributes, range, _ in
-            if attributes[.link] != nil || attributes[.attachment] != nil { ranges.append(TextSpan(range)) }
+        text.enumerateAttributes(in: NSRange(location: 0, length: text.length)) { attributes, range, _ in
+            if keys.contains(where: { attributes[$0] != nil }) || (text.string as NSString).substring(with: range).hasPrefix("@") { ranges.append(TextSpan(range)) }
         }
         return ranges
     }
@@ -242,6 +247,7 @@ struct SelectionSnapshot {
             applied += 1
         }
         guard AX.string(element, kAXValueAttribute) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        FixLearning.record(edits, in: self)
         let delta = edits.reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
         if expectedSelection.length == 0 {
             // A passive paragraph is an analysis range, not the user's selection.

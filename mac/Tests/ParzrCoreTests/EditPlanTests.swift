@@ -103,6 +103,37 @@ final class EditPlanTests: XCTestCase {
         let decoded = try JSONDecoder().decode(EngineRequest.self, from: JSONEncoder().encode(request))
         XCTAssertEqual(decoded.text, request.text); XCTAssertFalse(decoded.sentence_start)
     }
+    func testRequestCarriesNamesAndCapitalizeFlag() throws {
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(EngineRequest(text: "x", names: ["Aman"], capitalizeNames: true))) as? [String: Any])
+        XCTAssertEqual(json["names"] as? [String], ["Aman"]); XCTAssertEqual(json["capitalize_names"] as? Bool, true)
+        let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(EngineRequest(text: "x"))) as? [String: Any])
+        XCTAssertEqual(plain["names"] as? [String], []); XCTAssertEqual(plain["capitalize_names"] as? Bool, false)
+    }
+    func testPossessiveCliticMergesIntoNameHintOnly() {
+        let text = "Aman's dog\u{2019}s book. Aman's"
+        let hints = [TokenHint(range: NSRange(location: 0, length: 4), pos: "Noun", lemma: "aman", name: true), TokenHint(range: NSRange(location: 4, length: 2), pos: "Particle", lemma: "'s", name: false),
+                     TokenHint(range: NSRange(location: 7, length: 3), pos: "Noun", lemma: "dog", name: false), TokenHint(range: NSRange(location: 10, length: 2), pos: "Particle", lemma: "'s", name: false)]
+        let merged = WritingEngine.mergePossessives(hints, in: text)
+        XCTAssertEqual(merged.count, 3)
+        XCTAssertEqual(merged[0].start_utf16, 0); XCTAssertEqual(merged[0].end_utf16, 6); XCTAssertTrue(merged[0].name)
+        XCTAssertEqual(merged[1].end_utf16, 10)
+    }
+    func testDroppingEditsRebuildsTheText() throws {
+        let source = "teh Aman cat"
+        let edits = [WritingEdit(start: 0, end: 3, replacement: "the", original: "teh", category: "Spelling"), WritingEdit(start: 4, end: 8, replacement: "A man", original: "Aman", category: "Spelling")]
+        let result = RewriteResult(version: "t", text: "the A man cat", edits: edits, source_map: [], elapsed_ms: 0, protected_count: 0, warnings: nil)
+        let trimmed = result.dropping(from: source) { $0.original == "Aman" }
+        XCTAssertEqual(trimmed.edits.map(\.original), ["teh"]); XCTAssertEqual(trimmed.text, "the Aman cat")
+        XCTAssertEqual(result.dropping(from: source) { _ in false }.edits.count, 2)
+    }
+    func testNativeEngineAcceptsNamesAndNeverRespellsThem() async throws {
+        guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply PARZR_ENGINE_PATH to exercise the packaged Rust bridge.") }
+        let text = "I met Aman Jain, and Aman's friend. aman jain was kind."
+        let result = try await WritingEngine.typing.rewrite(EngineRequest(text: text, names: ["Aman", "Jain"], capitalizeNames: true))
+        for edit in result.edits where edit.original.lowercased().contains("aman") || edit.original.lowercased().contains("jain") {
+            XCTAssertEqual(edit.replacement.lowercased(), edit.original.lowercased(), "names may only change case: \(edit)")
+        }
+    }
     func testNativeEngineBridge() async throws {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply PARZR_ENGINE_PATH to exercise the packaged Rust bridge.") }
         let result = try await WritingEngine.shared.rewrite(EngineRequest(text: "i hope your doing well. can you chek this once?"))

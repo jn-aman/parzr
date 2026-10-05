@@ -80,7 +80,7 @@ identity = args.identity if args.sign else '-'
 options = ['--options','runtime','--timestamp'] if args.sign else []
 for binary in ['Contents/Frameworks/libparzr_model.dylib','Contents/Frameworks/libparzr_engine.dylib','Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp']:
     run(['codesign','--force','--sign',identity,*options,stage/binary])
-run(['codesign','--force','--sign',identity,*options,stage])
+run(['codesign','--force','--sign',identity,*options,'--entitlements',ROOT/'resources/Parzr.entitlements',stage])
 run(['codesign','--verify','--deep','--strict',stage])
 run([sys.executable, ROOT/'scripts/audit-bundle.py', stage])
 if app.exists(): shutil.rmtree(app)

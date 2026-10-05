@@ -254,8 +254,9 @@ struct InlineCorrection: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: canApply, action: apply)
                 }
                 Spacer(minLength: 0)
-                if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore() }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
-                NativeButton(title: "Ignore", kind: .utility, action: ignore).fixedSize()
+                if let name = edit.nameCandidate { NativeButton(title: "", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); ignore() }).frame(width: 24, height: 24).help("This is a name: never correct \(name)") }
+                else if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore() }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore() }).fixedSize()
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }

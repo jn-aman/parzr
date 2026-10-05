@@ -84,6 +84,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
         panelModel.warm(); studioModel.warm()
+        Preferences.shared.syncContacts()
+        // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
+        let prefs = Preferences.shared
+        Publishers.CombineLatest4(prefs.$dictionary, prefs.$learnedNames, prefs.$contactNames, prefs.$useContactNames).debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { _ in KnownWordsFile.writeCurrent() }.store(in: &subscriptions)
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
         if let button = item.button {
@@ -310,6 +315,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                // Widest footer: Fix sentence, This word, the name button and Ignore must all fit the 340 pt card. Needs no engine.
+                let nameSource = "i met Aman Jain yestarday."
+                let nameEdits = [WritingEdit(start: 6, end: 10, replacement: "Amen", original: "Aman", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling."), WritingEdit(start: 16, end: 25, replacement: "yesterday", original: "yestarday", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling.")]
+                try render(InlineCorrection(edit: nameEdits[0], source: nameSource, edits: nameEdits, canApply: true, apply: {}, applySentence: {}, ignore: {}, close: {}), size: InlineCorrection.size, to: URL(fileURLWithPath: directory).appendingPathComponent("name-card.png"))
                 studioModel.engineReady = true; studioModel.playground("I recieved your mesage.\n\nCan you chek this?", debounce: true)
                 for _ in 0..<300 where studioModel.busy { try await Task.sleep(for: .milliseconds(50)) }
                 guard !studioModel.busy, studioModel.chosenEdits.count == 3 else { throw ParzrError.message("The snapshot's real draft check did not complete.") }
@@ -323,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 for route in [StudioRoute.general, .writing, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
+                try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
                 try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 330), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
                 try render(StudioView(model: studioModel, route: .about, renderingSnapshot: true), size: NSSize(width: 760, height: 540), to: URL(fileURLWithPath: directory).appendingPathComponent("about-small.png"))
                 print("Saved native UI snapshots to \(directory)"); NSApp.terminate(nil)

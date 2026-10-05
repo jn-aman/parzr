@@ -93,13 +93,15 @@ final class PassiveObserver {
                 try Task.checkCancellation()
                 self?.onDismiss?()
                 let snapshot = try SelectionSnapshot.capture(passive: true)
-                let request = EngineRequest(text: snapshot.text, dictionary: await KnownNames.dictionary(for: snapshot.fullText ?? snapshot.text),
+                FixLearning.observe(snapshot)
+                let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
                                             dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence)
                 // Automatic checks (typing and plain selection) never load the GPU model;
                 // it runs only for explicit checks and tone changes.
                 let engine = WritingEngine.typing
-                let result = try await engine.rewrite(request)
+                let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: request.text)
                 try Task.checkCancellation(); try snapshot.validate()
+                RepetitionLearning.observe(result.edits, in: snapshot)
                 guard !result.edits.isEmpty else { return }
                 self?.onSuggestion?(snapshot, result)
             } catch { /* Passive failures are quiet and never log writing text. */ }

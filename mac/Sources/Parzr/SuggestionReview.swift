@@ -23,8 +23,9 @@ struct SuggestionReview: View {
                             }.buttonStyle(.plain).help("Show this correction in your draft")
                             Text(edit.explanation).font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
                             HStack {
-                                NativeButton(title: "Ignore", kind: .utility, action: { ignore(edit) }).fixedSize()
-                                if edit.canAddToDictionary { NativeButton(title: "Save word", kind: .utility, label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore(edit) }).fixedSize() }
+                                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore(edit) }).fixedSize()
+                                if let name = edit.nameCandidate { NativeButton(title: "This is a name", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); ignore(edit) }).fixedSize() }
+                                else if edit.canAddToDictionary { NativeButton(title: "Save word", kind: .utility, label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore(edit) }).fixedSize() }
                                 Spacer()
                                 NativeButton(title: "Apply", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", enabled: !model.busy, action: { apply(edit) }).fixedSize()
                             }

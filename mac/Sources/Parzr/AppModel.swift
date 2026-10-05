@@ -38,6 +38,7 @@ final class AppModel: ObservableObject {
         focusedEditID = edits[(index + direction + edits.count) % edits.count].id
     }
     func warm() {
+        Task.detached(priority: .utility) { _ = await SystemLexicon.shared.names(in: "warm up the spelling server") } // the first lookup after launch can take 0.4 s
         Task { do { _ = try await WritingEngine.typing.rewrite(EngineRequest(text: "A clear message.", deep: false)); engineReady = true }
             catch { self.error = error.localizedDescription } }
     }
@@ -61,16 +62,17 @@ final class AppModel: ObservableObject {
         // Typing always takes the fast grammar path. Tone and passage review are explicit.
         let requestMode: RewriteMode = debounce ? .fix : mode
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
+        let capitalize = Preferences.shared.capitalizeNames(for: snapshot?.app.bundleIdentifier)
         let (starts, ends, deep) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true, !debounce && (mode != .fix || Preferences.shared.contextRefinement))
         analysisTask = Task { @MainActor in
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay))) }
                 try Task.checkCancellation()
-                let request = EngineRequest(text: original, mode: requestMode, dictionary: await KnownNames.dictionary(for: fullText),
+                let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep)
                 try Task.checkCancellation()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
-                let result = try await engine.rewrite(request)
+                let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); busy = false; engineReady = true
                 self.status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
@@ -122,6 +124,7 @@ final class AppModel: ObservableObject {
                 try snapshot.validate()
                 try transaction.stage(replacement); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
+                FixLearning.record(edits, in: snapshot)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 self.snapshot = nil; busy = false; dismiss?()
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
@@ -129,7 +132,7 @@ final class AppModel: ObservableObject {
     }
     func pasteFallback() {
         guard Preferences.shared.clipboardFallback, !chosenEdits.isEmpty, !busy, let snapshot else { return }
-        let replacement = preview
+        let replacement = preview, edits = chosenEdits
         let attributed = snapshot.richText.flatMap { try? EditPlan.apply(chosenEdits, to: $0) }
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
         busy = true; snapshot.app.activate(options: [])
@@ -140,6 +143,7 @@ final class AppModel: ObservableObject {
                 guard AX.setRange(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
                 try transaction.stage(replacement, attributed: attributed); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
+                FixLearning.record(edits, in: snapshot)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 busy = false; self.snapshot = nil; dismiss?()
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }

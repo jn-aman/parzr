@@ -22,6 +22,8 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSContactsUsageDescription</key>
+	<string>Parzr can treat names from your contacts as names, so it never corrects them. Names stay on this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

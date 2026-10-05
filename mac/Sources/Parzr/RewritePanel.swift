@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ParzrCore
 
@@ -54,8 +55,9 @@ struct RewritePanel: View {
                             NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: model.canApply, action: { model.applyCurrent() }).help("Apply this correction · Return")
                         }
                         Spacer(minLength: 0)
-                        if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); if let ignore { ignore(edit) } else { model.toggle(edit) } }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
-                        NativeButton(title: "Ignore", kind: .utility, action: { if let ignore { ignore(edit) } else { model.toggle(edit) } }).fixedSize()
+                        if let name = edit.nameCandidate { NativeButton(title: "", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); if let ignore { ignore(edit) } else { model.toggle(edit) } }).frame(width: 24, height: 24).help("This is a name: never correct \(name)") }
+                        else if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); if let ignore { ignore(edit) } else { model.toggle(edit) } }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
+                        NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); if let ignore { ignore(edit) } else { model.toggle(edit) } }).fixedSize()
                     } else { Spacer(minLength: 0) }
                     if showsModes { NativeButton(title: "", kind: .utility, symbol: "doc.on.doc", label: "Copy corrected passage", enabled: !model.busy && model.result != nil, action: model.copy).frame(width: 22, height: 22) }
                     if model.snapshot?.canPatch == false && model.snapshot?.copied != true && preferences.clipboardFallback {
@@ -75,6 +77,35 @@ extension WritingEdit {
         if replacement.isEmpty { return original.allSatisfy(\.isWhitespace) ? "Remove space" : "Remove “\(original)”" }
         if original.isEmpty { return replacement == " " ? "Add space" : "Insert “\(replacement)”" }
         return replacement.allSatisfy(\.isWhitespace) ? "Fix spacing" : "Use “\(replacement)”"
+    }
+    /// Letters, apostrophes, hyphens and spaces only, possessive stripped; nil for anything else.
+    static func nameToken(_ raw: String) -> String? {
+        var word = raw.trimmingCharacters(in: .whitespaces)
+        for suffix in ["'s", "\u{2019}s"] where word.hasSuffix(suffix) { word.removeLast(suffix.count) }
+        guard word.count >= 2, word.utf8.count <= 128, word.contains(where: \.isLetter), word.allSatisfy({ $0.isLetter || "'\u{2019}- ".contains($0) }) else { return nil }
+        return word
+    }
+    /// The name to offer "This is a name" for: a capitalized, hyphenated or multi-word spelling edit, or a grammar/model edit that splits or respells a token the system spell checker does not know.
+    /// Lowercase single-word spelling edits keep the dictionary button instead (never both).
+    func nameCandidate(flagged: (String) -> Bool = { NSSpellChecker.shared.checkSpelling(of: $0, startingAt: 0).location != NSNotFound }) -> String? {
+        guard let name = Self.nameToken(original), name.lowercased() != replacement.lowercased() else { return nil }
+        let nameLike = name.first?.isUppercase == true || name.contains { " -".contains($0) }
+        if category == "Spelling" { return nameLike ? name : nil }
+        let (a, b) = (name.lowercased().filter(\.isLetter), replacement.lowercased().filter(\.isLetter))
+        guard a.count >= 3, a.count <= 64 else { return nil }
+        let unknown = name.split(whereSeparator: { " -".contains($0) }).contains { flagged(String($0)) }
+        // A split or merge keeps every letter; a respelling must not be a real word ("Your" to "You're" is grammar, not a name).
+        if a == b { return nameLike || unknown ? name : nil }
+        return a.first == b.first && Self.distance(a, b) <= 2 && unknown ? name : nil
+    }
+    var nameCandidate: String? { nameCandidate() }
+    private static func distance(_ a: String, _ b: String) -> Int {
+        let (a, b) = (Array(a), Array(b)); var row = Array(0...b.count)
+        for i in a.indices {
+            var diagonal = row[0]; row[0] = i + 1
+            for j in b.indices { let up = row[j + 1]; row[j + 1] = min(row[j + 1] + 1, row[j] + 1, diagonal + (a[i] == b[j] ? 0 : 1)); diagonal = up }
+        }
+        return row[b.count]
     }
     var canAddToDictionary: Bool { category == "Spelling" && !original.isEmpty && original.utf8.count <= 128 && original.allSatisfy { $0.isLetter || $0 == "'" || $0 == "’" } }
 }

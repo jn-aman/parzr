@@ -6,6 +6,8 @@ import ParzrCore
 
 @MainActor
 final class PlaygroundTests: XCTestCase {
+    /// Tests that press Ignore on "mesage" write to the shared preferences; after two runs Parzr would learn it as a name and stop fixing it.
+    override func setUp() async throws { Preferences.shared.learnedNames = [] }
     func testCopiedSelectionComparisonIgnoresTrailingNewlinesOnly() {
         XCTAssertTrue(SelectionSnapshot.sameCopiedText("Hello world", "Hello world\n"))
         XCTAssertTrue(SelectionSnapshot.sameCopiedText("Hello world\r\n", "Hello world"))
@@ -225,5 +227,210 @@ final class KnownNamesTests: XCTestCase {
         XCTAssertTrue(names.contains("London"), "\(names)")
         XCTAssertFalse(names.contains("table"))
         XCTAssertTrue(names.allSatisfy { $0.contains(where: \.isUppercase) })
+    }
+}
+
+@MainActor
+final class NameHandlingTests: XCTestCase {
+    private func prefs() throws -> (Preferences, () -> Void) {
+        let name = "app.parzr.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        return (Preferences(defaults: defaults), { defaults.removePersistentDomain(forName: name) })
+    }
+    func testNamesMergeAllSourcesWithinLimits() {
+        let merged = KnownNames.merge(["Aman", "Jain"], ["aman", "Priya"], ["Acme Corp", String(repeating: "x", count: 129)], limit: KnownNames.maxNames)
+        XCTAssertEqual(merged, ["Aman", "Jain", "Priya", "Acme Corp"])
+        XCTAssertEqual(KnownNames.merge((0..<2500).map { "n\($0)" }, limit: KnownNames.maxNames).count, 2000)
+    }
+    func testCapitalizedMidSentenceWordsCountAsNames() {
+        let found = KnownNames.capitalizedMidSentence(in: "Hi Aman,\nI met Priya's cousin. Then Maria left. NASA called I think.")
+        XCTAssertEqual(found, ["Aman", "Priya", "Maria"], "\(found)")
+    }
+    func testDocumentNamesNeedNoTaggerHit() {
+        XCTAssertTrue(KnownNames.documentNames(in: "Thanks, see you soon. Hi Aman, welcome.").contains("Aman"))
+    }
+    func testIgnoringTwiceLearnsAName() throws {
+        let (prefs, cleanup) = try prefs(); defer { cleanup() }
+        let edit = WritingEdit(start: 0, end: 5, replacement: "Amen", original: "Aman", category: "Spelling")
+        prefs.noteIgnored(edit)
+        XCTAssertTrue(prefs.learnedNames.isEmpty)
+        prefs.noteIgnored(edit)
+        XCTAssertEqual(prefs.learnedNames, ["Aman"])
+        // Counts persist across launches and unrelated categories never count.
+        let other = WritingEdit(start: 0, end: 3, replacement: "the", original: "teh", category: "Grammar")
+        prefs.noteIgnored(other); prefs.noteIgnored(other)
+        XCTAssertEqual(prefs.learnedNames, ["Aman"])
+        XCTAssertEqual(Preferences.ignoresToLearn, 2)
+    }
+    func testLearnNameStripsPossessiveAndRejectsNonNames() throws {
+        let (prefs, cleanup) = try prefs(); defer { cleanup() }
+        XCTAssertTrue(prefs.learnName("Aman\u{2019}s")); XCTAssertEqual(prefs.learnedNames, ["Aman"])
+        XCTAssertFalse(prefs.learnName("aman")); XCTAssertFalse(prefs.learnName("a1b")); XCTAssertFalse(prefs.learnName(String(repeating: "a", count: 129)))
+        XCTAssertTrue(prefs.learnName("Jean-Luc Picard")); XCTAssertEqual(prefs.learnedNames.count, 2)
+    }
+    func testCapitalizeNamesMappingByBundle() throws {
+        let (prefs, cleanup) = try prefs(); defer { cleanup() }
+        XCTAssertEqual(prefs.nameCapitalization, "documents")
+        XCTAssertTrue(prefs.capitalizeNames(for: nil)); XCTAssertTrue(prefs.capitalizeNames(for: "com.apple.mail"))
+        XCTAssertFalse(prefs.capitalizeNames(for: "com.tinyspeck.slackmacgap"))
+        prefs.nameCapitalization = "never"; XCTAssertFalse(prefs.capitalizeNames(for: "com.apple.mail")); XCTAssertFalse(prefs.capitalizeNames(for: nil))
+        prefs.nameCapitalization = "everywhere"; XCTAssertTrue(prefs.capitalizeNames(for: "com.tinyspeck.slackmacgap"))
+    }
+    func testChatAppsStayQuietUnlessEverywhere() {
+        XCTAssertEqual(NameCapitalization.chatApps, ["com.tinyspeck.slackmacgap", "com.microsoft.teams", "com.microsoft.teams2", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.hnc.Discord", "ru.keepcoder.Telegram", "com.apple.MobileSMS", "com.facebook.archon"])
+        for bundle in NameCapitalization.chatApps { XCTAssertFalse(NameCapitalization.documents.enabled(bundle: bundle), bundle); XCTAssertTrue(NameCapitalization.everywhere.enabled(bundle: bundle)) }
+    }
+    func testKnownWordsFileShapeAndAtomicWrite() throws {
+        let data = try KnownWordsFile.data(dictionary: ["parzr"], names: ["Aman", "Jain"])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["version", "dictionary", "names"])
+        XCTAssertEqual(json["version"] as? Int, 1); XCTAssertEqual(json["dictionary"] as? [String], ["parzr"]); XCTAssertEqual(json["names"] as? [String], ["Aman", "Jain"])
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("parzr-\(UUID().uuidString)/Parzr")
+        defer { try? FileManager.default.removeItem(at: dir.deletingLastPathComponent()) }
+        let url = dir.appendingPathComponent("known-words.json")
+        try KnownWordsFile.write(dictionary: ["a"], names: ["B"], to: url); try KnownWordsFile.write(dictionary: ["c"], names: [], to: url)
+        XCTAssertEqual(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: AnyHashable], ["version": 1, "dictionary": ["c"], "names": [String]()] as [String: AnyHashable])
+        XCTAssertTrue(KnownWordsFile.url.path.hasSuffix("Application Support/Parzr/known-words.json"))
+    }
+    func testNameButtonRules() {
+        func edit(_ original: String, _ replacement: String, _ category: String) -> WritingEdit { WritingEdit(start: 0, end: original.utf16.count, replacement: replacement, original: original, category: category) }
+        let never: (String) -> Bool = { _ in false }
+        XCTAssertEqual(edit("Aman", "Amen", "Spelling").nameCandidate(flagged: never), "Aman")
+        XCTAssertEqual(edit("Aman\u{2019}s", "Amen's", "Spelling").nameCandidate(flagged: never), "Aman")
+        XCTAssertEqual(edit("aman jain", "Amen Jain", "Spelling").nameCandidate(flagged: never), "aman jain")
+        XCTAssertNil(edit("chek", "check", "Spelling").nameCandidate(flagged: never), "ordinary words keep the dictionary button")
+        XCTAssertNil(edit("Aman", "aman", "Spelling").nameCandidate(flagged: never))
+        XCTAssertEqual(edit("Aman", "A man", "Grammar").nameCandidate(flagged: never), "Aman")
+        XCTAssertEqual(edit("aman", "A man", "Grammar").nameCandidate(flagged: { $0 == "aman" }), "aman")
+        XCTAssertNil(edit("their", "there", "Grammar").nameCandidate(flagged: never))
+        XCTAssertNil(edit("Your", "You're", "Grammar").nameCandidate(flagged: never), "grammar swaps of real words are not names")
+        XCTAssertEqual(edit("Jain", "Jan", "Grammar").nameCandidate(flagged: { $0 == "Jain" }), "Jain")
+        XCTAssertNil(edit("a1", "b", "Spelling").nameCandidate(flagged: never))
+    }
+    func testUndoRevertDetection() {
+        let fix = FixLearning.Fix(pid: 1, element: 2, original: "Aman", replacement: "Amen", location: 7, time: Date(timeIntervalSince1970: 1000))
+        let now = Date(timeIntervalSince1970: 1030)
+        XCTAssertEqual(FixLearning.state(of: fix, in: "Hello, Amen Jain", now: now), .pending)
+        XCTAssertEqual(FixLearning.state(of: fix, in: "Hello, Aman Jain", now: now), .reverted)
+        XCTAssertEqual(FixLearning.state(of: fix, in: "Hello, Zed Jain", now: now), .gone)
+        XCTAssertEqual(FixLearning.state(of: fix, in: "Hello, Aman Jain", now: Date(timeIntervalSince1970: 1061)), .gone)
+        XCTAssertTrue(FixLearning.tracks(WritingEdit(start: 0, end: 3, replacement: "the", original: "teh")))
+        XCTAssertFalse(FixLearning.tracks(WritingEdit(start: 0, end: 4, replacement: "Aman", original: "aman")), "case-only fixes are not learned")
+        XCTAssertFalse(FixLearning.tracks(WritingEdit(start: 0, end: 9, replacement: "Amen Jain", original: "aman jain")))
+    }
+    func testAccessibilityLinkMentionAndAttachmentKeysAreProtected() {
+        let text = NSMutableAttributedString(string: "see docs hello now")
+        text.addAttribute(NSAttributedString.Key("AXLink"), value: URL(string: "https://x.test")!, range: NSRange(location: 4, length: 4))
+        text.addAttribute(.link, value: URL(string: "https://y.test")!, range: NSRange(location: 0, length: 3))
+        text.addAttribute(NSAttributedString.Key("AXAttachment"), value: 1, range: NSRange(location: 15, length: 3))
+        text.addAttribute(NSAttributedString.Key("AXMarkedMisspelled"), value: 1, range: NSRange(location: 9, length: 5))
+        let spans = SelectionSnapshot.protectedSpans(in: text).map { NSRange(location: $0.start_utf16, length: $0.end_utf16 - $0.start_utf16) }
+        XCTAssertEqual(spans, [NSRange(location: 0, length: 3), NSRange(location: 4, length: 4), NSRange(location: 15, length: 3)])
+        let mention = NSMutableAttributedString(string: "hi "); mention.append(NSAttributedString(string: "@priya", attributes: [.font: NSFont.boldSystemFont(ofSize: 12)])); mention.append(NSAttributedString(string: " ok"))
+        XCTAssertEqual(SelectionSnapshot.protectedSpans(in: mention).map(\.start_utf16), [3])
+    }
+    func testContactTokensKeepNamesOnly() {
+        XCTAssertEqual(ContactNames.tokens(person: ["Priya", "Rao Iyer", ""], organization: "Acme Corp"), ["Priya", "Rao", "Iyer", "Acme Corp"])
+        XCTAssertEqual(ContactNames.tokens(person: ["x"], organization: "3M & Co"), [])
+    }
+}
+
+final class NameGateTests: XCTestCase {
+    final class Calls: @unchecked Sendable { var passes = 0, accepts = 0 }
+    /// Stand-in lexicon: "jatin", "jean-luc", "recieve" and "teh" are misspelled when lowercase; only the Capitalized names are accepted.
+    func gate(_ calls: Calls = Calls()) -> NameGate {
+        let bad: Set<String> = ["jatin", "jean-luc", "recieve", "teh"], good: Set<String> = ["Jatin", "Jean-Luc"]
+        return NameGate(probe: LexiconProbe(
+            misspelled: { text in calls.passes += 1; return text.split(whereSeparator: { !($0.isLetter || "'\u{2019}-".contains($0)) }).map(String.init).filter { NameGate.shaped($0).map(bad.contains) == true } },
+            accepts: { calls.accepts += 1; return good.contains($0) }))
+    }
+    func testShapeAndCapitalization() {
+        XCTAssertEqual(NameGate.shaped("jatin"), "jatin")
+        XCTAssertEqual(NameGate.shaped("jatin's"), "jatin")
+        XCTAssertEqual(NameGate.shaped("jatin\u{2019}s"), "jatin")
+        XCTAssertEqual(NameGate.shaped("jean-luc"), "jean-luc")
+        XCTAssertEqual(NameGate.shaped("o'neil"), "o'neil")
+        XCTAssertEqual(NameGate.shaped("'jatin'"), "jatin")
+        XCTAssertNil(NameGate.shaped("Jatin")); XCTAssertNil(NameGate.shaped("jaTin")); XCTAssertNil(NameGate.shaped("j")); XCTAssertNil(NameGate.shaped("a1b")); XCTAssertNil(NameGate.shaped("--"))
+        XCTAssertEqual(NameGate.capitalized("jatin"), "Jatin")
+        XCTAssertEqual(NameGate.capitalized("jean-luc"), "Jean-Luc")
+        XCTAssertEqual(NameGate.capitalized("mary-ann-lee"), "Mary-Ann-Lee")
+        XCTAssertEqual(NameGate.capitalized("o'neil"), "O'neil")
+    }
+    func testNamesAreLowercaseWordsRejectedLowercaseButAcceptedCapitalized() {
+        var gate = gate()
+        XCTAssertEqual(gate.names(in: "Looping in jatin and jean-luc, please recieve teh plan. Jatin's idea, jatin's plan."), ["jatin", "jean-luc"])
+        XCTAssertEqual(gate.names(in: "I recieve teh news"), [], "typos stay fixable")
+        XCTAssertEqual(gate.names(in: "Looping in Jatin."), [], "already capitalized words are not lowercase names")
+    }
+    func testResultsAreCachedPerWord() {
+        let calls = Calls(); var gate = gate(calls)
+        XCTAssertEqual(gate.names(in: "ask jatin about teh plan"), ["jatin"])
+        XCTAssertEqual(calls.passes, 1); XCTAssertEqual(calls.accepts, 2, "only the two lexicon-rejected words ask for the Capitalized form")
+        XCTAssertEqual(gate.names(in: "teh jatin ask"), ["jatin"])
+        XCTAssertEqual(calls.passes, 1, "every word was cached, so no spell-check pass"); XCTAssertEqual(calls.accepts, 2)
+        XCTAssertEqual(gate.names(in: "ask jatin about jean-luc"), ["jatin", "jean-luc"])
+        XCTAssertEqual(calls.passes, 2); XCTAssertEqual(calls.accepts, 3)
+    }
+    func testTokenCapAndCacheBound() {
+        XCTAssertEqual(NameGate.candidates(in: "ask jatin ask jatin").count, 2)
+        let words = (0..<500).map { i in String((0..<4).map { Character(UnicodeScalar(97 + (i / Int(pow(26.0, Double($0))) % 26))!) }) }
+        XCTAssertEqual(NameGate.candidates(in: words.joined(separator: " ")).count, NameGate.maxTokens)
+        var cache = LRUCache<Bool>(capacity: 16)
+        for i in 0..<100 { cache.set(true, for: "k\(i)"); _ = cache.value(for: "k0") }
+        XCTAssertLessThanOrEqual(cache.count, 16)
+        XCTAssertNotNil(cache.value(for: "k0"), "recently used entries survive eviction"); XCTAssertNil(cache.value(for: "k1"))
+    }
+}
+
+final class RepetitionLearningTests: XCTestCase {
+    func testThreeSightingsOverTwoDaysLearn() {
+        var ledger = RepetitionLedger()
+        XCTAssertFalse(ledger.sight("jatin", app: "a", day: 1)); XCTAssertFalse(ledger.sight("jatin", app: "a", day: 1))
+        XCTAssertFalse(ledger.sight("jatin", app: "a", day: 1), "three sightings on one day in one app are not enough")
+        XCTAssertTrue(ledger.sight("jatin", app: "a", day: 2))
+        XCTAssertNil(ledger.entries["jatin"], "a learned word leaves the ledger")
+    }
+    func testThreeSightingsOverTwoAppsLearnButTwoDoNot() {
+        var ledger = RepetitionLedger()
+        XCTAssertFalse(ledger.sight("Jatin", app: "a", day: 1)); XCTAssertFalse(ledger.sight("jatin", app: "b", day: 1))
+        XCTAssertTrue(ledger.sight("jatin", app: "b", day: 1))
+    }
+    func testAppliedCorrectionBlocksLearningAndLedgerIsCapped() {
+        var ledger = RepetitionLedger()
+        _ = ledger.sight("teh", app: "a", day: 1); ledger.applied("teh", day: 1)
+        for day in 2...6 { XCTAssertFalse(ledger.sight("teh", app: "b", day: day)) }
+        for i in 0..<(RepetitionLedger.capacity + 50) { _ = ledger.sight("w\(i)", app: "a", day: i) }
+        XCTAssertEqual(ledger.entries.count, RepetitionLedger.capacity)
+        XCTAssertNil(ledger.entries["w0"], "oldest evicted"); XCTAssertNotNil(ledger.entries["w\(RepetitionLedger.capacity + 49)"])
+        let data = try? JSONEncoder().encode(ledger)
+        XCTAssertFalse(String(decoding: data ?? Data(), as: UTF8.self).contains("Looping"), "words and counts only")
+    }
+    func testOnlyLowercaseSingleWordSpellingEditsCount() {
+        let text = "ask jatin about it, and Priya, teh jean-luc"
+        func edit(_ word: String, _ category: String = "Spelling") -> WritingEdit { let s = (text as NSString).range(of: word); return WritingEdit(start: s.location, end: s.location + s.length, replacement: "x", original: word, category: category) }
+        XCTAssertEqual(RepetitionLearning.candidates(in: [edit("jatin"), edit("Priya"), edit("jean-luc"), edit("about", "Grammar")], text: text), ["jatin"])
+        XCTAssertTrue(RepetitionLearning.candidates(in: [WritingEdit(start: 0, end: 5, replacement: "x", original: "jatin", category: "Spelling")], text: "jatin").isEmpty, "a word still being typed (nothing after it) does not count")
+    }
+    func testASightingCountsOncePerAppearanceInAField() {
+        let first = RepetitionLearning.fresh(["jatin"], previous: [], fullText: "ask jatin")
+        XCTAssertEqual(first.fresh, ["jatin"])
+        let again = RepetitionLearning.fresh(["jatin"], previous: first.present, fullText: "ask jatin now")
+        XCTAssertTrue(again.fresh.isEmpty, "later checks of the same text are not new sightings")
+        let cleared = RepetitionLearning.fresh([], previous: again.present, fullText: "")
+        XCTAssertTrue(cleared.present.isEmpty)
+        XCTAssertEqual(RepetitionLearning.fresh(["jatin"], previous: cleared.present, fullText: "jatin ok").fresh, ["jatin"], "typed again in an emptied field")
+    }
+    @MainActor func testPreferencesLearnsAfterSightingsAndNeverAfterApply() throws {
+        let suite = "parzr-rep-\(UUID().uuidString)"; let defaults = UserDefaults(suiteName: suite)!; defer { defaults.removePersistentDomain(forName: suite) }
+        let prefs = Preferences(defaults: defaults)
+        prefs.noteSighting("jatin", app: "a", day: 1); prefs.noteSighting("jatin", app: "b", day: 1)
+        XCTAssertTrue(prefs.learnedNames.isEmpty)
+        XCTAssertEqual(Preferences(defaults: defaults).ledger.entries["jatin"]?.keys.count, 2, "the ledger persists")
+        prefs.noteSighting("jatin", app: "b", day: 2)
+        XCTAssertEqual(prefs.learnedNames, ["jatin"])
+        prefs.noteApplied("teh")
+        for day in 1...5 { prefs.noteSighting("teh", app: "a\(day)", day: day) }
+        XCTAssertEqual(prefs.learnedNames, ["jatin"])
     }
 }

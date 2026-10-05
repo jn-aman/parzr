@@ -52,6 +52,8 @@ public actor WritingEngine {
         // Per-call tagger; NLTagger mutable state never crosses worker boundaries.
         let tagger = NLTagger(tagSchemes: [.lexicalClass, .lemma, .nameType])
         tagger.string = text
+        // Without a language, short texts get no tags and "aman jain" is detected as Indonesian.
+        tagger.setLanguage(.english, range: text.startIndex..<text.endIndex)
         var hints: [TokenHint] = []
         tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lexicalClass, options: [.omitWhitespace, .omitPunctuation]) { tag, range in
             let lemma = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lemma).0?.rawValue ?? String(text[range]).lowercased()
@@ -62,14 +64,25 @@ public actor WritingEngine {
             hints.append(TokenHint(range: NSRange(range, in: text), pos: tag?.rawValue ?? "Other", lemma: lemma, name: named))
             return true
         }
-        return hints
+        return mergePossessives(hints, in: text)
+    }
+    /// NLTagger splits "Aman's" into "Aman" and "'s"; fold the clitic into the name's range so the hint matches the engine's token.
+    static func mergePossessives(_ hints: [TokenHint], in text: String) -> [TokenHint] {
+        let ns = text as NSString
+        var out: [TokenHint] = []
+        for hint in hints {
+            if let last = out.last, last.name, last.end_utf16 == hint.start_utf16, hint.end_utf16 <= ns.length, ["'s", "\u{2019}s"].contains(ns.substring(with: NSRange(location: hint.start_utf16, length: hint.end_utf16 - hint.start_utf16))) {
+                out[out.count - 1] = TokenHint(range: NSRange(location: last.start_utf16, length: hint.end_utf16 - last.start_utf16), pos: last.pos, lemma: last.lemma, name: true)
+            } else { out.append(hint) }
+        }
+        return out
     }
     public func rewrite(_ request: EngineRequest) async throws -> RewriteResult {
         try Task.checkCancellation()
         try load()
         guard request.text.utf8.count <= 65_536 else { throw ParzrError.message("Select at most 64 KB of text.") }
         let tokens = request.tokens.isEmpty ? Self.linguisticHints(for: request.text) : request.tokens
-        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep)
+        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep)
         let input = try JSONEncoder().encode(enriched)
         guard let string = String(data: input, encoding: .utf8), let function = rewriteFunction, let cancellation else { throw ParzrError.message("The writing engine could not respond.") }
         let output = try await withTaskCancellationHandler {

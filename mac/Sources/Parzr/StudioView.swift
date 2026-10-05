@@ -39,6 +39,7 @@ struct StudioView: View {
     var renderingSnapshot: Bool
     @State private var draft: String
     @State private var dictionaryWord = ""
+    @State private var nameWord = ""
     @State private var ignored: Set<String> = []
     @State private var appliedCount = 0
     @State private var reviewVisible = false
@@ -69,6 +70,8 @@ struct StudioView: View {
         .onChange(of: model.result?.edits) { _ in model.selectedEdits.subtract(ignored) }
         .onChange(of: preferences.dialect) { _ in model.playground(draft, debounce: true) }
         .onChange(of: preferences.dictionary) { _ in model.playground(draft, debounce: true) }
+        .onChange(of: preferences.learnedNames) { _ in model.playground(draft, debounce: true) }
+        .onChange(of: preferences.nameCapitalization) { _ in model.playground(draft, debounce: true) }
     }
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -237,6 +240,20 @@ struct StudioView: View {
                         ForEach(preferences.dictionary, id: \.self) { word in HStack { Text(word).font(.system(size: 12)); Spacer(); NativeButton(title: "", kind: .utility, symbol: "minus.circle", label: "Remove \(word)", action: { preferences.dictionary.removeAll { $0 == word } }).frame(width: 24, height: 24) } }
                     }.padding(16)
                 }
+                group("NAMES") {
+                    settingRow("Suggest capitalizing names", detail: "Offer to fix the case of a name, like aman to Aman. Chat apps stay quiet unless you choose Everywhere.") {
+                        ChoiceStrip(label: "Suggest capitalizing names", choices: [("Never", "never"), ("Email and documents", "documents"), ("Everywhere", "everywhere")], selection: $preferences.capitalizeNamesChoice)
+                    }
+                    divider
+                    settingRow("Use names from Contacts", detail: "Treat the names in your contacts as names, so Parzr never corrects them. Only the names are used, and they stay on this Mac.") { toggle("Use names from Contacts", $preferences.contactsChoice) }
+                    if let note = preferences.contactsNote { Text(note).font(.system(size: 11)).foregroundStyle(Color.errorInk).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12) }
+                    divider
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Names Parzr learned. It learns a name when you undo a fix, ignore a flag twice, or choose “This is a name”.").font(.system(size: 11)).foregroundStyle(Color.textSecondary)
+                        HStack { TextField("Add a name", text: $nameWord).textFieldStyle(.roundedBorder).onSubmit(addName); NativeButton(title: "Add", enabled: WritingEdit.nameToken(nameWord) != nil, action: addName).fixedSize() }
+                        if !preferences.learnedNames.isEmpty { ScrollView { LazyVStack(spacing: 0) { ForEach(preferences.learnedNames, id: \.self) { name in HStack { Text(name).font(.system(size: 12)); Spacer(); NativeButton(title: "", kind: .utility, symbol: "minus.circle", label: "Remove \(name)", action: { preferences.learnedNames.removeAll { $0 == name } }).frame(width: 24, height: 24) } } } }.frame(height: min(200, CGFloat(preferences.learnedNames.count) * 28)) }
+                    }.padding(16)
+                }
                 notice("Grammar, spelling, and punctuation are checked in every mode. The model unloads after 30 seconds of inactivity.", symbol: "leaf")
             case .appearance:
                 group("LOOK & FEEL") {
@@ -269,7 +286,7 @@ struct StudioView: View {
                 group("ALWAYS LOCAL") {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your words stay on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
-                        Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary and preferences are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary, learned names and preferences are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
                 group("CLIPBOARD & SESSION") {
@@ -325,5 +342,6 @@ struct StudioView: View {
         HStack(alignment: .center, spacing: 18) { VStack(alignment: .leading, spacing: 5) { Text(title).font(.system(size: 12, weight: .medium)); Text(detail).font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true).lineSpacing(2) }; Spacer(minLength: 8); control() }.padding(16)
     }
     private var runningApps: [NSRunningApplication] { NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && $0.bundleIdentifier != Bundle.main.bundleIdentifier }.sorted { ($0.localizedName ?? "") < ($1.localizedName ?? "") } }
+    private func addName() { if preferences.learnName(nameWord) { nameWord = "" } }
     private func addWord() { let word = dictionaryWord.trimmingCharacters(in: .whitespacesAndNewlines); guard !word.isEmpty, word.utf8.count <= 128, preferences.dictionary.count < 1000, !preferences.dictionary.contains(word) else { return }; preferences.dictionary.append(word); dictionaryWord = "" }
 }

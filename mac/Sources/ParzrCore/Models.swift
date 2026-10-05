@@ -62,16 +62,28 @@ public struct EngineRequest: Codable, Sendable {
     public let text: String
     public let mode: RewriteMode
     public let dictionary: [String]
+    /// Names the engine may only re-case, never respell or split. Case-insensitive.
+    public let names: [String]
+    public let capitalize_names: Bool
     public let dialect: String
     public let protected_ranges: [TextSpan]
     public let tokens: [TokenHint]
     public let sentence_start: Bool
     public let sentence_end: Bool
     public let deep: Bool
-    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false) {
-        self.text = text; self.mode = mode; self.dictionary = dictionary; self.dialect = dialect; protected_ranges = protectedRanges; self.tokens = tokens; sentence_start = sentenceStart
+    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], names: [String] = [], capitalizeNames: Bool = false, dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false) {
+        self.text = text; self.mode = mode; self.dictionary = dictionary; self.names = names; capitalize_names = capitalizeNames; self.dialect = dialect; protected_ranges = protectedRanges; self.tokens = tokens; sentence_start = sentenceStart
         self.deep = deep
         sentence_end = sentenceEnd
+    }
+}
+public extension RewriteResult {
+    /// Drops edits (and their linked partners) the caller rejects. `source` is the text the engine was given; `source_map` is not kept in step.
+    func dropping(from source: String, where reject: (WritingEdit) -> Bool) -> RewriteResult {
+        let gone = Set(edits.filter(reject).flatMap { EditPlan.related(to: $0, in: edits) }.map(\.id))
+        guard !gone.isEmpty else { return self }
+        let kept = edits.filter { !gone.contains($0.id) }
+        return RewriteResult(version: version, text: (try? EditPlan.apply(kept, to: source)) ?? source, edits: kept, source_map: [], elapsed_ms: elapsed_ms, protected_count: protected_count, warnings: warnings)
     }
 }
 public enum ParzrError: LocalizedError, Sendable {
