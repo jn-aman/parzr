@@ -31,7 +31,9 @@ if not args.skip_build:
         environment['CARGO_ENCODED_RUSTFLAGS'] = '\x1f'.join(rustflags)
         run(command,env=environment)
     swift = ['swift','build','-c','release','--package-path','mac', '-Xswiftc', '-file-prefix-map', '-Xswiftc', f'{pathlib.Path.home()}=/build-user']
-    swift += ['--arch','arm64']
+    # Pin the Swift Build engine: the deprecated native one (Swift 6.3 default) embeds the
+    # absolute build path in package resource accessors, which the bundle audit rejects.
+    swift += ['--arch','arm64','--build-system','swiftbuild']
     run(swift)
 # Build into a staging bundle then replace only this builder's named artifact.
 stage = dist/'Parzr-staging.app'
@@ -39,7 +41,7 @@ if stage.exists(): shutil.rmtree(stage)
 for directory in ['Contents/MacOS','Contents/Frameworks','Contents/Resources']:
     (stage/directory).mkdir(parents=True,exist_ok=True)
 command = ['swift','build','-c','release','--package-path','mac','--show-bin-path']
-command += ['--arch','arm64']
+command += ['--arch','arm64','--build-system','swiftbuild']
 bin_path = pathlib.Path(subprocess.check_output(command,cwd=ROOT,text=True).strip())
 shutil.copy2(bin_path/'parzr', stage/'Contents/MacOS/parzr')
 for bundle in bin_path.glob('*.bundle'):
