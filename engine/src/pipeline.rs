@@ -600,14 +600,15 @@ mod tests {
 
     #[test]
     fn each_word_is_asked_once_per_request() {
-        let text = "zqarav said zqarav and recieve recieve";
+        // "mangaer" is a typo that is not on the always-correct list, so the judge is consulted.
+        let text = "zqarav said zqarav and mangaer mangaer";
         let document = Document::new(text);
         let mut judge = Judge::new(true, fake);
         let before = queries();
         for _ in 0..3 {
             let mut edits = vec![
                 spelling(text, "zqarav", "zebra"),
-                spelling(text, "recieve", "receive"),
+                spelling(text, "mangaer", "manager"),
             ];
             judge.screen(&document, &mut edits, &mut vec![]);
             assert_eq!(edits.len(), 1);
