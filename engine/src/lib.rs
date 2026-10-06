@@ -1019,6 +1019,18 @@ pub unsafe extern "C" fn parzr_string_free(ptr: *mut c_char) {
         drop(unsafe { CString::from_raw(ptr) });
     }
 }
+/// 1 when `word` is a reviewed misspelling (teh, recieved, alot) that must never be learned as a name.
+/// # Safety
+/// `word` must be NULL or a valid NUL-terminated string alive for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn parzr_is_known_misspelling(word: *const c_char) -> i32 {
+    if word.is_null() {
+        return 0;
+    }
+    // SAFETY: the C ABI caller guarantees a valid NUL-terminated string.
+    let word = unsafe { CStr::from_ptr(word) }.to_str();
+    i32::from(word.is_ok_and(names::is_known_misspelling))
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1402,6 +1414,38 @@ mod tests {
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
+    }
+    #[test]
+    fn known_misspelling_ffi_answers_for_typos_and_names() {
+        let ask = |w: &str| {
+            let w = CString::new(w).unwrap();
+            unsafe { parzr_is_known_misspelling(w.as_ptr()) }
+        };
+        assert_eq!((ask("Recieved"), ask("teh"), ask("sentense")), (1, 1, 1));
+        assert_eq!((ask("Aman"), ask("hope")), (0, 0));
+        assert_eq!(unsafe { parzr_is_known_misspelling(std::ptr::null()) }, 0);
+    }
+    #[test]
+    fn learned_misspellings_in_names_are_ignored_but_real_names_still_win() {
+        let pass = rewrite_once(
+            &Request {
+                text: "i recieved teh file from aman".into(),
+                names: ["teh", "recieved", "Aman"].map(String::from).to_vec(),
+                capitalize_names: true,
+                ..Request::default()
+            },
+            false,
+        )
+        .unwrap();
+        let edit = |original: &str| pass.edits.iter().find(|e| e.original == original);
+        assert_eq!(edit("recieved").unwrap().replacement, "received");
+        assert_eq!(edit("teh").unwrap().replacement, "the");
+        assert_eq!(edit("aman").unwrap().replacement, "Aman");
+        assert!(
+            pass.edits
+                .iter()
+                .all(|e| e.rule_id != "names.capitalize" || e.original == "aman")
+        );
     }
     #[test]
     fn typos_beside_names_and_other_typos_are_still_fixed() {

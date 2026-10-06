@@ -63,6 +63,23 @@ pub fn is_bundled_name(lower: &str) -> bool {
 pub fn is_name_typo(lower: &str) -> bool {
     typos().binary_search(&lower).is_ok()
 }
+/// A reviewed misspelling: a listed typo or the source of a one-word phrase rule (teh, recieved,
+/// alot). Never taken as a name; the user's `dictionary` keeps one on purpose. Lexicon
+/// suggestions are not used: they also fire on real names (greta, great).
+pub fn is_known_misspelling(word: &str) -> bool {
+    static SOURCES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    let lower = fold(word);
+    let lower = base(&lower);
+    let sources = SOURCES.get_or_init(|| {
+        crate::rules::phrases()
+            .rules
+            .iter()
+            .map(|r| r.source.as_str())
+            .filter(|s| !s.contains(' '))
+            .collect()
+    });
+    is_name_typo(lower) || sources.contains(lower)
+}
 /// Unicode case folding used for every name comparison (matches `Token::normalized`).
 pub fn fold(s: &str) -> String {
     s.to_lowercase().replace('’', "'")
@@ -192,7 +209,7 @@ impl NameIndex {
         for word in &req.dictionary {
             index.dictionary.add(word, false);
         }
-        for name in &req.names {
+        for name in req.names.iter().filter(|n| !is_known_misspelling(n)) {
             index.names.add(name, true);
         }
         index
@@ -497,6 +514,24 @@ mod tests {
         assert!(is_bundled_name("aman") && is_bundled_name("jain"));
         assert!(is_name_typo("teh") && !is_bundled_name("teh"));
         assert!(load("# note\nZoë\nana\nana\n").contains(&"zoë"));
+    }
+    #[test]
+    fn known_misspellings_are_not_names_but_real_names_are() {
+        for typo in [
+            "teh", "Recieved", "alot", "sentense", "sentance", "recieve", "Teh's",
+        ] {
+            assert!(is_known_misspelling(typo), "{typo}");
+        }
+        for name in bundled()
+            .iter()
+            .chain(["aarav", "priyanka", "zoë", "jain", "aman", "hope"].iter())
+        {
+            assert!(!is_known_misspelling(name), "{name}");
+        }
+        assert_eq!(level("a teh b", &["teh"], "teh"), 0);
+        assert_eq!(level("a teh b", &[], "teh"), 0);
+        // An explicit dictionary word is the user's deliberate choice, so it stays.
+        assert_eq!(level_of("a teh b", &[], &["teh"])[1].1, STRONG);
     }
     #[test]
     fn request_names_are_strong_with_unicode_possessive_and_parts() {
