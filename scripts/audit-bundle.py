@@ -24,6 +24,8 @@ required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Co
 for name in required:
     if not (app/name).is_file():
         sys.exit('Missing bundled runtime resource: '+name)
+# The self tests' fixture editor (mac/Sources/ParzrFixture) is test-only and never ships.
+if any('ParzrFixture' in path.name for path in app.rglob('*')): sys.exit('The test-only ParzrFixture editor must not be bundled.')
 for name in ['Contents/MacOS/parzr','Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp','Contents/Frameworks/libparzr_engine.dylib','Contents/Frameworks/libparzr_model.dylib']:
     if subprocess.check_output(['lipo','-archs',str(app/name)],text=True).strip() != 'arm64':
         sys.exit('Parzr requires Apple Silicon only: '+name)

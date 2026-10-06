@@ -10,6 +10,9 @@ final class Preferences: ObservableObject {
     /// Self tests and snapshots apply a fix and undo it, which teaches learning: they run on a throwaway suite, never the owner's preferences.
     nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--click-test", "--snapshot"]
     nonisolated static var isSelfTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: selfTestFlags) }
+    /// The editor tests that drive a `ParzrFixture` process: they must show nothing and take no focus, so not even Parzr's own Studio window opens.
+    nonisolated static let fixtureTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test"]
+    nonisolated static var isFixtureTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: fixtureTestFlags) }
     nonisolated static let selfTestSuite = "app.parzr.desktop.selftest"
     static let selfTestDefaults: UserDefaults? = {
         guard isSelfTest, let suite = UserDefaults(suiteName: selfTestSuite) else { return nil }

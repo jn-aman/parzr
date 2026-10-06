@@ -35,7 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         showStudio()
         return true
     }
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { showStudio(); return false }
+    /// AppKit asks this once after launch; the Studio opens then, except under a fixture editor test, which must never put a Parzr window or the app's focus on the owner's screen.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { if !Preferences.isFixtureTest { showStudio() }; return false }
     func applicationWillTerminate(_ notification: Notification) { passive?.stop(); inline.stop() }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -54,14 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         if let index = CommandLine.arguments.firstIndex(of: "--paste-test"), CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
-                do { try await runAutomaticPasteTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic TextEdit paste regression passed."); NSApp.terminate(nil) }
+                do { try await runAutomaticPasteTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic fixture paste regression passed."); NSApp.terminate(nil) }
                 catch { fputs("Automatic paste regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             return
         }
         if let index = CommandLine.arguments.firstIndex(of: "--typing-test"), CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
-                do { try await runAutomaticTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic TextEdit typing regression passed."); NSApp.terminate(nil) }
+                do { try await runAutomaticTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic fixture typing regression passed."); NSApp.terminate(nil) }
                 catch { fputs("Automatic typing regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             return
@@ -75,14 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         if let index = CommandLine.arguments.firstIndex(of: "--grammar-typing-test"),CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
-                do { try await runGrammarTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic TextEdit grammar regression passed."); NSApp.terminate(nil) }
+                do { try await runGrammarTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic fixture grammar regression passed."); NSApp.terminate(nil) }
                 catch { fputs("Automatic grammar regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             return
         }
         if let index = CommandLine.arguments.firstIndex(of: "--integration-test"), CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
-                do { try await runNativeIntegrationTest(reportDirectory: CommandLine.arguments[index + 1]); print("Native TextEdit integration passed."); NSApp.terminate(nil) }
+                do { try await runNativeIntegrationTest(reportDirectory: CommandLine.arguments[index + 1]); print("Native fixture integration passed."); NSApp.terminate(nil) }
                 catch { fputs("Native integration failed: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             return

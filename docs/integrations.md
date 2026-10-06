@@ -151,7 +151,7 @@ Neovim, Emacs, Zed, Helix and Sublime can use this route through compatible LSP 
 
 | Editor family / example | Implemented route | Evidence / remaining verification |
 |---|---|---|
-| TextEdit | Native AX | Authored RTF typing, inline application, formatting, caret and Undo tests |
+| TextEdit | Native AX | Verified earlier on TextEdit itself; the automated typing, paste, inline application, formatting, caret and Undo tests now drive a fixture AppKit text view (same text system), never TextEdit |
 | Mail compose | AX text markers (WebKit) | Read, selection, word bounds and attributed text verified live on a fixture compose; typed replacement not exercised |
 | Microsoft Word | Native AX, typed replacement | Text and selection read verified; replacement unverified |
 | Xcode | Native AX, comments and strings only | Semantic-type filtering unit-tested; works as a text editor today |

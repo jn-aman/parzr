@@ -79,7 +79,7 @@ final class InlineSuggestions {
         }
     }
     private var textIsCurrent: Bool {
-        guard let s = shown?.snapshot, !s.app.isTerminated, s.app == NSWorkspace.shared.frontmostApplication,
+        guard let s = shown?.snapshot, !s.app.isTerminated, s.app == SelfTestTarget.watched,
               let focused = AX.focusedText(s.app), CFEqual(focused, s.element) else { return false }
         if let full = s.fullText { return AX.text(s.element) == full }
         return AX.string(s.element, kAXSelectedTextAttribute) == s.text
@@ -125,7 +125,7 @@ final class InlineSuggestions {
             shown = (snapshot, result, current.probe); return true
         }
         reset(); prepareRevision(snapshot)
-        guard snapshot.app == NSWorkspace.shared.frontmostApplication, !snapshot.text.isEmpty else { overlay.clear(); return false }
+        guard snapshot.app == SelfTestTarget.watched, !snapshot.text.isEmpty else { overlay.clear(); return false }
         let edits = result.edits.filter { !ignored.contains($0.id) }
         shown = (snapshot, result, nil)
         if edits.isEmpty { overlay.clear(); return true }
@@ -135,7 +135,7 @@ final class InlineSuggestions {
             let local = edit.range.length > 0 ? edit.range : (snapshot.text as NSString).rangeOfComposedCharacterSequence(at: min(edit.start_utf16, max(0, snapshot.text.utf16.count - 1)))
             let global = NSRange(location: snapshot.selection.location + local.location, length: local.length)
             guard let bounds = AX.bounds(snapshot.element, global), bounds.width > 0, bounds.height < 70,
-                  NSScreen.screens.contains(where: { $0.visibleFrame.contains(bounds) }) else { return nil }
+                  SelfTestTarget.shows(bounds) else { return nil }
             return (edit, global, bounds)
         }
         var items: [MarkItem] = []
@@ -145,7 +145,7 @@ final class InlineSuggestions {
             sentenceLoop: for range in SentencePreview.sentenceRanges(in: snapshot.text, containing: placed.map(\.edit)) {
                 for line in AX.lineRects(snapshot.element, NSRange(location: snapshot.selection.location + range.location, length: range.length)) {
                     let rect = line.insetBy(dx: -1, dy: 0)
-                    guard rect.height < 70, NSScreen.screens.contains(where: { $0.visibleFrame.contains(rect) }) else { continue }
+                    guard rect.height < 70, SelfTestTarget.shows(rect) else { continue }
                     if washes >= 40 { break sentenceLoop }
                     washes += 1; items.append(MarkItem(shape: MarkShape(kind: .wash, rect: rect)))
                 }
@@ -204,7 +204,7 @@ final class InlineSuggestions {
         let root = RewritePanel(model: model, ignore: { [weak self] edit in self?.ignore(edit) }, showsModes: snapshot.expectedSelection.length > 0)
         setHost(root, in: panel)
         let wasVisible = correction?.isVisible == true
-        guard let visible = (NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main)?.visibleFrame else { dismiss(); return false }
+        guard let visible = SelfTestTarget.visibleFrame(for: anchor) else { dismiss(); return false }
         let final = CorrectionPlacement.origin(anchor: anchor, size: RewritePanel.size, visible: visible)
         let animate = !wasVisible && !Preferences.shared.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         correction?.alphaValue = animate ? 0 : 1

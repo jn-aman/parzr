@@ -172,7 +172,7 @@ struct SelectionSnapshot {
     var markDrift: CGFloat { docs ? 4 : 1.5 }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
-        guard let app = NSWorkspace.shared.frontmostApplication, let element = AX.focusedText(app),
+        guard let app = SelfTestTarget.watched, let element = AX.focusedText(app),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element), !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
@@ -229,7 +229,7 @@ struct SelectionSnapshot {
 
     func validate() throws {
         if copied {
-            guard !app.isTerminated, app == NSWorkspace.shared.frontmostApplication, !IsSecureEventInputEnabled() else { throw ParzrError.message("Your selection changed. Select the text again.") }
+            guard !app.isTerminated, app == SelfTestTarget.watched, !IsSecureEventInputEnabled() else { throw ParzrError.message("Your selection changed. Select the text again.") }
             return
         }
         guard !app.isTerminated, !IsSecureEventInputEnabled(), !AX.isSecure(element),

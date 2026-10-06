@@ -59,7 +59,7 @@ If the signed build fails after the tag is pushed, fix the problem on the defaul
 
 If the default branch is protected against direct pushes, allow the GitHub Actions app to bypass that rule for this workflow; otherwise the push step fails and nothing is released (the push is atomic, so no tag is left behind).
 
-Interactive TextEdit, installed-browser and editor UI checks require a real desktop session and are not established by headless CI alone. Track compatibility evidence in [integrations](integrations.md). Required hosted checks and a protected release environment should enforce the final acceptance gate.
+The fixture-editor tests (`--paste-test`, `--typing-test`, `--grammar-typing-test`, `--integration-test`) need Accessibility but show nothing on screen and take no focus; installed-browser and editor UI checks require a real desktop session and are not established by headless CI alone. Track compatibility evidence in [integrations](integrations.md). Required hosted checks and a protected release environment should enforce the final acceptance gate.
 
 ## Automatic updates
 

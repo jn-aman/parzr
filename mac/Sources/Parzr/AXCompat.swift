@@ -215,7 +215,7 @@ extension AX {
         }
         // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
         let docs = isDocsText(element)
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
+        guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
               let focus = focusedText(app), CFEqual(focus, element), docs || select(element, range) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }

@@ -288,6 +288,31 @@ final class NameHandlingTests: XCTestCase {
         XCTAssertNotEqual(Preferences.selfTestSuite, "app.parzr.desktop")
         XCTAssertFalse(Preferences.isSelfTest, "an ordinary launch keeps the real preferences")
     }
+    func testFixtureEditorTestsAreSelfTestsAndProductBehaviourIsUnchanged() {
+        XCTAssertTrue(Set(Preferences.fixtureTestFlags).isSubset(of: Preferences.selfTestFlags))
+        XCTAssertFalse(Preferences.isFixtureTest, "an ordinary launch still opens the Studio")
+        // With no fixture set, Parzr checks the frontmost app on the screens, as always.
+        XCTAssertNil(SelfTestTarget.app); XCTAssertNil(SelfTestTarget.stage)
+        XCTAssertEqual(SelfTestTarget.watched?.processIdentifier, NSWorkspace.shared.frontmostApplication?.processIdentifier)
+        XCTAssertFalse(SelfTestTarget.shows(CGRect(x: 200_000, y: 200_000, width: 10, height: 10)), "off every screen is not drawable outside a fixture test")
+    }
+    func testMarkClickLandsWhereTheEventSaysNotWhereThePointerIs() throws {
+        _ = NSApplication.shared
+        let window = MarkWindow()
+        window.setFrame(CGRect(x: 90_000, y: 90_000, width: 200, height: 60), display: false)
+        window.orderFrontRegardless(); defer { window.orderOut(nil) }
+        try XCTSkipIf(window.windowNumber <= 0, "no window server window in this environment")
+        var pressed = 0
+        let shape = MarkShape(kind: .underline, rect: CGRect(x: 90_020, y: 90_020, width: 60, height: 16))
+        window.marks.apply([MarkItem(shape: shape, owner: "a", label: "Review spelling correction", tip: "") { pressed += 1 }], origin: window.frame.origin)
+        func click(_ type: NSEvent.EventType, at point: CGPoint) {
+            window.sendEvent(NSEvent.mouseEvent(with: type, location: window.convertPoint(fromScreen: point), modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!)
+        }
+        click(.leftMouseDown, at: CGPoint(x: 90_150, y: 90_050)); click(.leftMouseUp, at: CGPoint(x: 90_150, y: 90_050))
+        XCTAssertEqual(pressed, 0, "a click beside the underline does nothing")
+        click(.leftMouseDown, at: CGPoint(x: shape.rect.midX, y: shape.rect.midY)); click(.leftMouseUp, at: CGPoint(x: shape.rect.midX, y: shape.rect.midY))
+        XCTAssertEqual(pressed, 1, "a click on the underline presses it, wherever the real pointer is")
+    }
     func testCapitalizeNamesMappingByBundle() throws {
         let (prefs, cleanup) = try prefs(); defer { cleanup() }
         XCTAssertEqual(prefs.nameCapitalization, "everywhere")

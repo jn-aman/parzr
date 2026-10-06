@@ -44,7 +44,7 @@ final class PassiveObserver {
     init() {
         installMonitors()
         activationToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.attach() }
+            MainActor.assumeIsolated { if SelfTestTarget.app == nil { self?.attach() } }
         }
         Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps)
             .sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
@@ -63,7 +63,7 @@ final class PassiveObserver {
         }
         observer = nil; observed = []; attachedPID = nil
         guard Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
-              let app = NSWorkspace.shared.frontmostApplication, let bundle = app.bundleIdentifier,
+              let app = SelfTestTarget.watched, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, Preferences.shared.enabled(for: bundle),
               !isExcluded(bundle) else { return }
         AX.prepare(app, force: true)
@@ -74,7 +74,7 @@ final class PassiveObserver {
                 let owner = Unmanaged<PassiveObserver>.fromOpaque(context).takeUnretainedValue()
                 if notification as String == kAXFocusedUIElementChangedNotification {
                     AX.forgetFocus()
-                    if let app = NSWorkspace.shared.frontmostApplication { AX.prepare(app, force: true) }
+                    if let app = SelfTestTarget.watched { AX.prepare(app, force: true) }
                     owner.attachFocused()
                 }
                 owner.changed(value: notification as String == kAXValueChangedNotification)
@@ -90,12 +90,12 @@ final class PassiveObserver {
         changed()
     }
     private func inputChanged() {
-        guard !stopped, let attachedPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == attachedPID else { return }
+        guard !stopped, let attachedPID, SelfTestTarget.watched?.processIdentifier == attachedPID else { return }
         changed()
     }
     /// A key went down in the attached editor. The text has not changed yet, so nothing is dismissed.
     func keyPressed(wordEnd: Bool) {
-        guard !stopped, let attachedPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == attachedPID else { return }
+        guard !stopped, let attachedPID, SelfTestTarget.watched?.processIdentifier == attachedPID else { return }
         pacer.ceiling = Preferences.shared.boundedCheckingDelay
         schedule(pacer.key(at: ProcessInfo.processInfo.systemUptime, wordEnd: wordEnd))
     }
@@ -106,7 +106,7 @@ final class PassiveObserver {
     /// Firefox stays silent when the user blocked accessibility services: after several keystrokes with no text field resolved, offer the hint.
     private func noteKeystroke() {
         noteDocsKeystroke()
-        guard !stopped, let app = NSWorkspace.shared.frontmostApplication, Compat.isFirefox(app.bundleIdentifier), !Preferences.shared.firefoxHintDismissed, !Preferences.shared.firefoxHint else { return }
+        guard !stopped, let app = SelfTestTarget.watched, Compat.isFirefox(app.bundleIdentifier), !Preferences.shared.firefoxHintDismissed, !Preferences.shared.firefoxHint else { return }
         firefoxKeystrokes += 1
         guard firefoxKeystrokes >= Compat.firefoxHintKeystrokes else { return }
         firefoxKeystrokes = 0
@@ -116,7 +116,7 @@ final class PassiveObserver {
     /// Google Docs shows nothing to read until its "braille support" is on: after several keystrokes with no text, offer the one-time setup hint.
     private func noteDocsKeystroke() {
         let prefs = Preferences.shared
-        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = NSWorkspace.shared.frontmostApplication, Compat.isChromium(app.bundleIdentifier) else { return }
+        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = SelfTestTarget.watched, Compat.isChromium(app.bundleIdentifier) else { return }
         docsKeystrokes += 1
         guard docsKeystrokes >= Compat.docsHintKeystrokes else { return }
         docsKeystrokes = 0
@@ -131,14 +131,14 @@ final class PassiveObserver {
             }
         }
         observed.removeAll { $0.1 != kAXFocusedUIElementChangedNotification }
-        guard let app = NSWorkspace.shared.frontmostApplication else { return }
+        guard let app = SelfTestTarget.watched else { return }
         guard let focused = AX.focusedText(app), !AX.isSecure(focused) else {
             // The first queries after activation can see only the menu bar while Firefox or VS Code switch accessibility on; look once more.
             if retry, Compat.needsFocusRetry(bundle: app.bundleIdentifier, vscodeEnabled: Preferences.shared.checkVSCode) {
                 focusRetry?.cancel()
                 focusRetry = Task { @MainActor [weak self] in
                     try? await Task.sleep(for: .milliseconds(1500))
-                    guard !Task.isCancelled, let self, !self.stopped, NSWorkspace.shared.frontmostApplication?.processIdentifier == self.attachedPID else { return }
+                    guard !Task.isCancelled, let self, !self.stopped, SelfTestTarget.watched?.processIdentifier == self.attachedPID else { return }
                     self.attachFocused(retry: false); self.changed()
                 }
             }

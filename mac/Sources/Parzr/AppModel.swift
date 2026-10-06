@@ -131,7 +131,7 @@ final class AppModel: ObservableObject {
         guard !edits.isEmpty, edits.allSatisfy({ chosenEdits.contains($0) }) else { return }
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
         busy = true
-        snapshot.app.activate(options: [])
+        SelfTestTarget.bringForward(snapshot.app)
         if snapshot.copied { applyCopied(snapshot, edits); return }
         Task { @MainActor in
             do {
@@ -166,7 +166,7 @@ final class AppModel: ObservableObject {
         let replacement = preview, edits = chosenEdits
         let attributed = snapshot.richText.flatMap { try? EditPlan.apply(chosenEdits, to: $0) }
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
-        busy = true; snapshot.app.activate(options: [])
+        busy = true; SelfTestTarget.bringForward(snapshot.app)
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {

@@ -18,4 +18,4 @@ Settings use native segmented navigation, pickers, switches and a shortcut recor
 
 Route transitions use a 140 millisecond ease-out, disabled by Reduce Motion. Use native pressed and focus feedback. Avoid idle animation and decorative interior shadows; external correction windows use the macOS shadow.
 
-The palette is defined in `mac/Sources/Parzr/Design.swift`; native source is authoritative. QA captures actual native screens and tests button actions, automatic TextEdit highlights, compact correction application, formatting preservation, Undo and window restoration. Generated reports belong under ignored `dist/`.
+The palette is defined in `mac/Sources/Parzr/Design.swift`; native source is authoritative. QA captures actual native screens and tests button actions, automatic highlights in a fixture editor, compact correction application, formatting preservation, Undo and window restoration. Generated reports belong under ignored `dist/`.

@@ -136,12 +136,14 @@ final class MarkView: NSView, NSViewToolTipOwner {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .group }
     override func accessibilityLabel() -> String? { "Parzr corrections" }
+    /// Where the event happened on screen. Taken from the event, not the live pointer, so a click delivered straight to this window lands where it says.
+    private func screenPoint(of event: NSEvent) -> CGPoint { event.window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation }
     override func mouseDown(with event: NSEvent) {
-        pressed = hitIndex(at: NSEvent.mouseLocation); setHover(pressed)
+        pressed = hitIndex(at: screenPoint(of: event)); setHover(pressed)
     }
     override func mouseUp(with event: NSEvent) {
         let target = pressed; pressed = nil
-        guard let target, hitIndex(at: NSEvent.mouseLocation) == target else { return }
+        guard let target, hitIndex(at: screenPoint(of: event)) == target else { return }
         items[target].press?()
     }
 }
@@ -167,21 +169,20 @@ final class MarkOverlay {
     private var cursorIsHand = false
     private(set) var items: [MarkItem] = []
     var hasMarks: Bool { items.contains { $0.shape.kind == .underline } }
-    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID { (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0 }
     func element(for owner: String) -> MarkElement? { windows.values.lazy.compactMap { $0.marks.element(for: owner) }.first }
     /// Shows exactly `items`: shapes already on screen keep their layers, the rest are added or dropped.
     func apply(_ items: [MarkItem]) {
         self.items = items
-        var byScreen: [CGDirectDisplayID: (NSScreen, [MarkItem])] = [:]
+        var byScreen: [CGDirectDisplayID: (CGRect, [MarkItem])] = [:]
         for item in items {
-            guard let screen = NSScreen.screens.first(where: { $0.frame.intersects(item.shape.rect) }) ?? NSScreen.main else { continue }
-            byScreen[Self.displayID(screen), default: (screen, [])].1.append(item)
+            guard let surface = SelfTestTarget.surface(for: item.shape.rect) else { continue }
+            byScreen[surface.id, default: (surface.frame, [])].1.append(item)
         }
         for (id, window) in windows where byScreen[id] == nil { window.orderOut(nil); window.marks.apply([], origin: .zero); window.ignoresMouseEvents = true }
-        for (id, (screen, group)) in byScreen {
+        for (id, (frame, group)) in byScreen {
             let window = windows[id] ?? MarkWindow()
             windows[id] = window
-            let box = group.reduce(CGRect.null) { $0.union($1.shape.extent) }.insetBy(dx: -8, dy: -8).intersection(screen.frame)
+            let box = group.reduce(CGRect.null) { $0.union($1.shape.extent) }.insetBy(dx: -8, dy: -8).intersection(frame)
             if window.frame != box { window.setFrame(box, display: false) }
             window.marks.apply(group, origin: box.origin)
             if !window.isVisible { window.orderFrontRegardless() }
