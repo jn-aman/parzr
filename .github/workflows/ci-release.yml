@@ -160,7 +160,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PARZR_RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes dist/Parzr-*.dmg dist/SHA256SUMS dist/extensions/parzr-* LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/*.delta dist/update/appcast.xml
+          # Required assets must exist; deltas are optional (the first updater release has none to diff against).
+          shopt -s nullglob
+          required=(dist/Parzr-*.dmg dist/SHA256SUMS dist/extensions/parzr-* LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/appcast.xml)
+          for pattern in 'dist/Parzr-*.dmg' 'dist/extensions/parzr-*.vsix' 'dist/extensions/parzr-*.zip' 'dist/update/Parzr-*.zip' 'dist/update/appcast.xml'; do
+            matches=($pattern)
+            if [ ${#matches[@]} -eq 0 ]; then echo "::error::missing release asset $pattern"; exit 1; fi
+          done
+          deltas=(dist/update/*.delta)
+          echo "Publishing ${#required[@]} assets and ${#deltas[@]} deltas"
+          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes "${required[@]}" "${deltas[@]}"
       - name: Verify the published update feed
         # The feed is live the moment the release is. Re-check what users will download; if it is bad,
         # draft the release so the feed (releases/latest) falls back to the previous release.

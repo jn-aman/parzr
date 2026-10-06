@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-LOCAL_DIRS = {'.git', '.agents', '.codex', '.impeccable', '.vscode', '.build', 'target', 'dist', 'node_modules', '__pycache__', 'test-results', 'playwright-report'}
+LOCAL_DIRS = {'.git', '.agents', '.claude', '.codex', '.impeccable', '.vscode', '.build', 'target', 'dist', 'node_modules', '__pycache__', 'test-results', 'playwright-report'}
 LOCAL_NAMES = {'.DS_Store', 'skills-lock.json'}
 PRIVATE_GLOBS = ['.env', '.env.*', '*.p12', '*.p8', '*.pem', '*.key', '*.cer', '*.keychain-db', '*.mobileprovision', '*.provisionprofile', '*.xcuserstate', '*.pyc', '*.vsix', '*.dmg']
 
