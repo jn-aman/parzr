@@ -183,8 +183,12 @@ final class UpdatePresenter {
     private var host: NSHostingView<UpdatePanelView>?
     private var subscriptions: Set<AnyCancellable> = []
     private var announced: UpdatePhase?
-    /// Off only for the dev update test, which must never take the keyboard from someone working.
+    #if DEBUG
+    /// Off only for the debug update test, which must never take the keyboard from someone working.
     var allowsFocus = true
+    #else
+    private let allowsFocus = true
+    #endif
     init(model: UpdateModel = .shared, anchor: @escaping () -> NSRect?) {
         self.model = model; self.anchor = anchor
         Publishers.CombineLatest3(model.$phase, model.$shown, model.$focus).receive(on: RunLoop.main).sink { [weak self] phase, shown, focus in self?.update(phase: phase, shown: shown, focus: focus) }.store(in: &subscriptions)

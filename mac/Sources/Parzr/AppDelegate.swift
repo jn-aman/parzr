@@ -95,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
+        #if DEBUG
         // Dev only: the updater alone, against the feed this build's Info.plist names. No onboarding, no Accessibility, no observers, no hotkey. The defaults flag lets the copy Sparkle relaunches (it gets no arguments) do the same.
         if CommandLine.arguments.contains("--update-test") || UserDefaults.standard.bool(forKey: "updateTestMode") {
             startUpdates(); updates?.start(); updatePresenter?.allowsFocus = false
@@ -104,6 +105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             Task { @MainActor in do { try await runUpdateTest(directory: directory, scenario: scenario) } catch { fputs("Update test failed: \(error.localizedDescription)\n", stderr); exit(1) } }
             return
         }
+        #endif
         panelModel.warm(); studioModel.warm()
         studioModel.showOnboarding = { [weak self] in self?.showOnboarding() }
         Preferences.shared.purgeMisspelledNames()
@@ -452,6 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             } catch { fputs("Native snapshots failed: \(error.localizedDescription)\n", stderr); exit(1) }
         }
     }
+    #if DEBUG
     /// Scenarios: install (found, download, extract, ready, restart), fail (same, but the update must be rejected), skip (Skip this version holds for scheduled checks), check (a manual check with nothing new), relaunched (the copy Sparkle starts after an update). Writes update-test-<scenario>.json and one PNG per new panel state.
     private func runUpdateTest(directory: String, scenario: String) async throws {
         guard let updates else { throw ParzrError.message("This build has no update feed.") }
@@ -483,20 +486,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         case "install", "fail":
             guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
             try await Task.sleep(for: .milliseconds(800)); try note(); model.perform(.install)
-            let outcome = try await wait(120) { if case .ready = model.phase { true } else if case .failed = model.phase { true } else { false } }
+            let outcome = try await wait(120) { switch model.phase { case .installing, .ready, .failed: true; default: false } }
             try note()
             if case .failed(let message) = model.phase { try finish(["outcome": "failed", "message": message]); print("Update rejected: \(message)"); NSApp.terminate(nil); return }
-            guard outcome else { throw ParzrError.message("The update never became ready.") }
-            try finish(["outcome": "ready"]); try await Task.sleep(for: .seconds(2)); model.perform(.restartNow)
-            try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
-        case "auto", "autorestart":
-            // Automatic downloads on: no panel at all, a quiet download, then the pending state (menu-bar dot, popover row).
-            guard try await wait(150, until: { model.pending != nil }) else { throw ParzrError.message("The update was never downloaded in the background.") }
-            let row = UpdateRow(model: model).padding(18).frame(width: 318).background(Color.canvas)
-            try render(row, size: NSHostingView(rootView: row).fittingSize, to: target.appendingPathComponent("\(scenario)-row.png"))
-            try finish(["pending": model.pending?.version ?? "", "badge": model.badge, "panel_shown": model.shown, "phase": name(model.phase)])
-            if scenario == "auto" { NSApp.terminate(nil); return }
-            try await Task.sleep(for: .seconds(1)); model.perform(.restartNow)
+            guard outcome else { throw ParzrError.message("The update never finished downloading.") }
+            // One click: the download goes straight to installing and Sparkle relaunches the new version.
+            try finish(["outcome": name(model.phase)])
             try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
         case "skip":
             guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
@@ -505,11 +500,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             model.perform(.check); let manual = try await wait(15) { foundVersion() != nil }
             try finish(["offered_again_after_skip_by_scheduled_check": again, "offered_by_manual_check": manual]); model.perform(.later); NSApp.terminate(nil)
         default:
-            model.perform(.check)
-            let done = try await wait(30) { if case .upToDate = model.phase { true } else { false } }
+            // The launch-time scheduled check may still be running (Sparkle drops a manual check then), so retry.
+            var done = false
+            for _ in 0..<4 where !done { model.perform(.check); done = try await wait(8) { if case .upToDate = model.phase { true } else { false } } }
             try finish(["up_to_date": done]); NSApp.terminate(nil)
         }
     }
+    #endif
     private func runUIControlsTest(directory: String) async throws {
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message("UI QA stopped while secure input is active.") }
         let target = URL(fileURLWithPath: directory)

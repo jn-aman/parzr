@@ -17,6 +17,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private var cancellation: (() -> Void)?
     private var installNow: (() -> Void)?
     private var restartRequested = false
+    /// The user already pressed Install and Relaunch (or Restart now): no second confirmation once the download is ready.
+    private var confirmedInstall = false
     private var userInitiated = false
     private var clock: Timer?
     private var countdownStart = Date()
@@ -42,14 +44,16 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         model.canCheck = true; model.lastChecked = updater.lastUpdateCheckDate
         announceIfUpdated()
     }
+    #if DEBUG
     func checkInBackground() { if model.canCheck { updater.checkForUpdatesInBackground() } }
+    #endif
     func checkNow() { guard model.canCheck else { return }; if updater.sessionInProgress { showUpdateInFocus() } else { updater.checkForUpdates() } }
 
     // MARK: Actions from the panel, popover row and Settings
     func perform(_ action: UpdateAction) {
         switch action {
         case .check: checkNow()
-        case .install: if let reply = foundReply { foundReply = nil; reply(.install) }
+        case .install: if let reply = foundReply { foundReply = nil; confirmedInstall = true; reply(.install) }
         case .later:
             if let reply = foundReply, case .found(let info) = model.phase { foundReply = nil; model.available = info; reply(.dismiss) }
             else if let reply = readyReply, case .ready(let info) = model.phase { readyReply = nil; model.pending = info; reply(.dismiss) }
@@ -171,7 +175,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     }
     func showExtractionReceivedProgress(_ progress: Double) { if case .extracting(let info, _) = model.phase { model.phase = .extracting(info, progress: progress) } }
     func showReady(toInstallAndRelaunch reply: @escaping @Sendable (SPUUserUpdateChoice) -> Void) {
-        if restartRequested { reply(.install); return }
+        if restartRequested || confirmedInstall { reply(.install); return }
         guard let info = model.available ?? model.pending else { reply(.install); return }
         readyReply = reply; model.phase = .ready(info); model.available = nil; present(focus: true)
     }
@@ -184,7 +188,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping @Sendable () -> Void) { acknowledgement() }
     func showUpdateInFocus() { if model.phase != .idle { present(focus: true) } else if model.pending != nil { restartRequested = false; present(focus: true) } else { updater.checkForUpdates() } }
     func dismissUpdateInstallation() {
-        foundReply = nil; readyReply = nil; cancellation = nil; restartRequested = false; userInitiated = false
+        foundReply = nil; readyReply = nil; cancellation = nil; restartRequested = false; confirmedInstall = false; userInitiated = false
         // Toasts and the pending dot outlive the session; an unfinished panel does not.
         switch model.phase {
         case .upToDate, .failed, .updated, .countdown: break
