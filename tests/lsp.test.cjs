@@ -14,15 +14,15 @@ test('LSP one quickfix applies both linked word-order parts',()=>{const original
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const starts=out=>out.find(m=>m.method==='textDocument/publishDiagnostics').params.diagnostics.map(d=>d.range.start.character);
 test('LSP initializationOptions.names protect a word the engine would otherwise respell',()=>{
- assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')])).includes(4));
- assert.ok(!starts(run([{id:1,method:'initialize',params:{initializationOptions:{names:['mesage']}}},open('Ask mesage about it.')])).includes(4));
+ assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('I read the projet today.')])).includes(11));
+ assert.ok(!starts(run([{id:1,method:'initialize',params:{initializationOptions:{names:['projet']}}},open('I read the projet today.')])).includes(11));
 });
 test('LSP merges the app known-words.json from HOME',()=>{
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'parzr-home-'));try{
   fs.mkdirSync(path.join(home,'Library/Application Support/Parzr'),{recursive:true});
-  fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),JSON.stringify({version:1,dictionary:[],names:['mesage']}));
-  assert.ok(!starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')],{HOME:home})).includes(4));
+  fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),JSON.stringify({version:1,dictionary:[],names:['projet']}));
+  assert.ok(!starts(run([{id:1,method:'initialize',params:{}},open('I read the projet today.')],{HOME:home})).includes(11));
   fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),'not json');
-  assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('Ask mesage about it.')],{HOME:home})).includes(4));
+  assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('I read the projet today.')],{HOME:home})).includes(11));
  }finally{fs.rmSync(home,{recursive:true,force:true});}
 });

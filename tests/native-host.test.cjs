@@ -10,14 +10,14 @@ function homeWith(contents){
  if(contents!==undefined){fs.mkdirSync(path.join(home,'Library/Application Support/Parzr'),{recursive:true});fs.writeFileSync(path.join(home,'Library/Application Support/Parzr/known-words.json'),contents);}
  return home;
 }
-const request={text:'Ask mesage about it.',mode:'fix'};
+const request={text:'I read the projet today.',mode:'fix'};
 test('native host merges names from known-words.json into every request',()=>{
- const withFile=homeWith(JSON.stringify({version:1,dictionary:['Zorblax'],names:['mesage']})),without=homeWith();
+ const withFile=homeWith(JSON.stringify({version:1,dictionary:['Zorblax'],names:['projet']})),without=homeWith();
  try{
-  assert.ok(ask(request,without).edits.some(e=>e.original==='mesage'));
-  assert.ok(!ask(request,withFile).edits.some(e=>e.original==='mesage'));
+  assert.ok(ask(request,without).edits.some(e=>e.original==='projet'));
+  assert.ok(!ask(request,withFile).edits.some(e=>e.original==='projet'));
  }finally{fs.rmSync(withFile,{recursive:true,force:true});fs.rmSync(without,{recursive:true,force:true});}
 });
 test('native host ignores an invalid known-words.json',()=>{
- const home=homeWith('{not json');try{assert.ok(ask(request,home).edits.some(e=>e.original==='mesage'));}finally{fs.rmSync(home,{recursive:true,force:true});}
+ const home=homeWith('{not json');try{assert.ok(ask(request,home).edits.some(e=>e.original==='projet'));}finally{fs.rmSync(home,{recursive:true,force:true});}
 });
