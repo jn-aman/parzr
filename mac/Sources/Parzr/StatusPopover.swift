@@ -12,6 +12,7 @@ struct StatusPopover: View {
     var welcome: () -> Void = {}
     var quit: () -> Void
     static let firefoxHint = "Firefox is blocking accessibility. In Firefox, open Settings, Privacy & Security, Permissions, turn off \"Prevent accessibility services from accessing your browser\", then restart Firefox."
+    static let docsHint = "To check Google Docs as you type, turn on Tools, Accessibility, Screen reader support and Braille support in Docs. Once per Google account. Option+Space still works there meanwhile."
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack { Brand(); Spacer(); Circle().fill(engineReady ? Color.mintAccent : Color.textSecondary).frame(width: 6, height: 6) }
@@ -38,6 +39,15 @@ struct StatusPopover: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(Self.firefoxHint).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                     NativeButton(title: "Dismiss", kind: .utility, label: "Dismiss Firefox hint", action: { preferences.dismissFirefoxHint() }).fixedSize()
+                }.padding(13).graphiteSurface()
+            }
+            if preferences.docsHint {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Self.docsHint).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 6) {
+                        NativeButton(title: "Not now", kind: .utility, label: "Hide the Google Docs hint for now", action: { preferences.dismissDocsHint(forever: false) }).fixedSize()
+                        NativeButton(title: "Don't show again", kind: .utility, label: "Never show the Google Docs hint again", action: { preferences.dismissDocsHint(forever: true) }).fixedSize()
+                    }
                 }.padding(13).graphiteSurface()
             }
             Rectangle().fill(Color.hairline).frame(height: 0.5)

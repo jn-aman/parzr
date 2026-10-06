@@ -63,7 +63,7 @@ Parzr never respells a name, it gives it its capital: "aman jain" becomes "Aman 
 <td valign="top">
 
 **No extension, anywhere**<br>
-Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, Mail, Word and native apps. Option+Space covers the rest, even Google Docs.
+Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, Mail, Word and native apps. Google Docs works too, after a one-time switch in Docs. Option+Space covers the rest.
 
 </td>
 </tr>
@@ -121,7 +121,8 @@ Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device mod
 | TextEdit, Mail, Word, Xcode comments | macOS Accessibility | TextEdit verified end to end; Mail and Word reads verified |
 | Slack, Teams, Notion, Discord (Electron) | macOS Accessibility | Supported, not yet tested here |
 | VS Code, Cursor (Markdown and text) | Opt-in setting | Unit-tested |
-| Google Docs and other canvas editors | Option+Space copies, checks and pastes the fix | Supported |
+| Google Docs (Chrome, Edge, Brave, Arc) | Native underlines, card and fixes once Docs' screen reader and braille support are on (Tools, Accessibility); otherwise Option+Space copies, checks and pastes | Verified in Chrome |
+| Other canvas editors | Option+Space copies, checks and pastes the fix | Supported |
 
 Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and language-server adapters remain in the repo as optional extras for developers.
 

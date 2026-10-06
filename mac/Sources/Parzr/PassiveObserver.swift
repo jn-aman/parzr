@@ -19,7 +19,7 @@ final class PassiveObserver {
     private var subscriptions: Set<AnyCancellable> = []
     private var stopped = false
     private var focusRetry: Task<Void, Never>?
-    private var firefoxKeystrokes = 0
+    private var firefoxKeystrokes = 0, docsKeystrokes = 0
     /// Counts monitor (re)installs; a grant after launch must install fresh ones, since monitors made before the grant never deliver.
     private(set) var monitorInstalls = 0
     private let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.zed.Zed", "com.jetbrains"]
@@ -56,7 +56,7 @@ final class PassiveObserver {
     }
     func attach() {
         guard !stopped else { return }
-        work?.cancel(); pending = false; focusRetry?.cancel(); firefoxKeystrokes = 0; AX.forgetFocus(); onDismiss?()
+        work?.cancel(); pending = false; focusRetry?.cancel(); firefoxKeystrokes = 0; docsKeystrokes = 0; AX.forgetFocus(); onDismiss?()
         if let observer {
             for (element, notification) in observed { AXObserverRemoveNotification(observer, element, notification as CFString) }
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
@@ -105,12 +105,23 @@ final class PassiveObserver {
     }
     /// Firefox stays silent when the user blocked accessibility services: after several keystrokes with no text field resolved, offer the hint.
     private func noteKeystroke() {
+        noteDocsKeystroke()
         guard !stopped, let app = NSWorkspace.shared.frontmostApplication, Compat.isFirefox(app.bundleIdentifier), !Preferences.shared.firefoxHintDismissed, !Preferences.shared.firefoxHint else { return }
         firefoxKeystrokes += 1
         guard firefoxKeystrokes >= Compat.firefoxHintKeystrokes else { return }
         firefoxKeystrokes = 0
         let role = AX.focused(app).flatMap { AX.string($0, kAXRoleAttribute) }
         if Compat.firefoxHintNeeded(bundle: app.bundleIdentifier, focusedRole: role, hasText: AX.focusedText(app) != nil, keystrokes: Compat.firefoxHintKeystrokes, dismissed: Preferences.shared.firefoxHintDismissed) { Preferences.shared.firefoxHint = true }
+    }
+    /// Google Docs shows nothing to read until its "braille support" is on: after several keystrokes with no text, offer the one-time setup hint.
+    private func noteDocsKeystroke() {
+        let prefs = Preferences.shared
+        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = NSWorkspace.shared.frontmostApplication, Compat.isChromium(app.bundleIdentifier) else { return }
+        docsKeystrokes += 1
+        guard docsKeystrokes >= Compat.docsHintKeystrokes else { return }
+        docsKeystrokes = 0
+        guard let focused = AX.focusedText(app) else { return }
+        if Compat.docsHintNeeded(isDocs: AX.isDocsText(focused), value: AX.string(focused, kAXValueAttribute), keystrokes: Compat.docsHintKeystrokes, dismissed: prefs.docsHintDismissed) { prefs.docsHint = true }
     }
     private func attachFocused(retry: Bool = true) {
         // Focus changes detach old text observers so inactive fields are never analyzed.

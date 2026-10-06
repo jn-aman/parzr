@@ -101,10 +101,33 @@ Neovim, Emacs, Zed, Helix and Sublime can use this route through compatible LSP 
 | VS Code (extension) | Automatic diagnostics, inline code actions, passage styles | Engine/API harness checks stale versions, linked fixes, Undo transactions and local prose restrictions; actual extension-host UI acceptance pending |
 | Cursor and other VS Code forks | Same extension | Individual fork acceptance pending |
 | Neovim / Emacs / Zed / Helix / Sublime | Bundled LSP | Protocol tests; individual clients need setup/UI acceptance |
-| Google Docs canvas / closed shadow DOM / custom document models | Native probe, dedicated adapter where available, Copy fallback | Automatic formatting-safe editing not verified |
+| Google Docs (screen reader and braille support on) | Native, no extension: hidden text area plus caret geometry, typed replacement | Verified in Chrome: underlines, card, apply, Undo |
+| Google Docs with the support off, other canvas editors, custom document models | Copy fallback | Automatic formatting-safe editing not verified |
 
 Sources for adapter behavior: [Electron accessibility activation](https://github.com/electron/electron/blob/main/docs/tutorial/accessibility.md), [Chrome activeTab](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab), [cross-browser MV3 background scripts](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/background), and [Firefox native data consent](https://extensionworkshop.com/documentation/develop/best-practices-for-collecting-user-data-consents/).
 
-## Canvas editors (Google Docs)
+## Google Docs (Chrome, Edge, Brave, Arc)
 
-Google Docs draws text on a canvas, so macOS Accessibility exposes no document text or selection there. The explicit check shortcut falls back to copying the selection: Parzr sends Cmd+C, reads the text, and restores the previous clipboard. Applying re-copies to confirm the selection is unchanged, then pastes the corrected text over it and restores the clipboard again. Automatic underlines are not available in canvas editors.
+Google Docs draws its page on a canvas, so by default macOS Accessibility sees no text there. Docs has a screen reader mode that publishes the text, and Parzr reads it natively, with no browser extension.
+
+**One-time setup, once per Google account.** In Docs choose Tools, Accessibility, then turn on "Turn on screen reader support" and "Turn on braille support". Parzr never toggles these for you. Until they are on, Parzr sees only two zero-width characters in Docs; after you type a few keys it shows a hint in the menu-bar popover ("Don't show again" is remembered), and Option+Space keeps working through the copy and paste fallback.
+
+**What works with it on**
+
+- Automatic underlines while you type, for the paragraph the caret is in.
+- Click an underline to open the correction card, anchored under the word; apply one fix or the whole sentence.
+- Option+Space on a selection reads it through Accessibility (no clipboard) and applies the same way.
+- Applying selects the range and types the replacement, because Docs accepts a write to the selected text and ignores it. The text is read back to confirm, and one Cmd+Z in Docs restores the original word. The caret is put back where you were typing.
+
+**How the positions are found.** Docs' text area has no word geometry. Parzr combines two things Docs does expose: a hidden copy of the paragraph text with true horizontal positions, and the caret's position on screen (the origin of its text-event frame). A word's place is the caret plus its offset in the hidden copy; the hidden copy's lines are about 4 percent taller than the real ones, which Parzr corrects with a measured factor. Docs also counts selection offsets without paragraph breaks, so Parzr converts those, and decides which side of a paragraph break the caret is on from its horizontal position.
+
+**Limits**
+
+- Marks follow the caret: they show only while the caret is on screen, and they hide while you scroll and return when it settles. A document with a selection has no visible caret element, so only the card anchors there, not word underlines.
+- The text Docs exposes is the part of the document around the caret, not always all of it.
+- Line spacing, zoom (100 and 150 percent measured) and font sizes (11 and 16 point measured) are handled; a caret on a blank line has no hidden text to anchor on, so no marks appear until it moves.
+- Replacements are typed, so Docs' own auto-substitutions (smart quotes, auto-capitalization) can alter a replacement; Parzr reads the text back and reports a mismatch instead of continuing.
+- Docs pages other than documents (Sheets, Slides) are not handled.
+- Safari is not covered: it does not host Docs' screen reader text area the same way.
+
+Without the setup, or in any other canvas editor, the explicit check shortcut falls back to copying the selection: Parzr sends Cmd+C, reads the text, and restores the previous clipboard. Applying re-copies to confirm the selection is unchanged, then pastes the corrected text over it and restores the clipboard again. Automatic underlines are not available there.

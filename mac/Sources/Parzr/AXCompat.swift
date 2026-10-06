@@ -38,6 +38,22 @@ enum Compat {
     static func reviewAnchor(frame: CGRect) -> CGRect {
         CGRect(x: max(frame.minX, frame.maxX - 60), y: frame.minY + 8, width: 1, height: min(22, max(1, frame.height)))
     }
+    /// Google Docs draws its page on a canvas; its only text surface is this hidden text area in an iframe, trusted only on a docs.google.com document page.
+    static let docsTextDescription = "Document content"
+    static func isGoogleDocsURL(_ url: String?) -> Bool {
+        guard let url, let parts = URLComponents(string: url) else { return false }
+        return parts.host == "docs.google.com" && parts.path.hasPrefix("/document/")
+    }
+    /// With "braille support" off, Docs fills the text area with zero-width characters only: the real text exists on the canvas, so there is nothing to read.
+    static func docsTextHidden(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return value.unicodeScalars.allSatisfy { $0 == "\u{200B}" || CharacterSet.whitespacesAndNewlines.contains($0) }
+    }
+    /// Keystrokes in Docs with no readable text before the setup hint appears (a new empty document reads the same until the first characters land).
+    static let docsHintKeystrokes = 8
+    static func docsHintNeeded(isDocs: Bool, value: String?, keystrokes: Int, dismissed: Bool) -> Bool {
+        isDocs && !dismissed && keystrokes >= docsHintKeystrokes && docsTextHidden(value)
+    }
     /// Xcode's semantic runs: only comments, documentation and strings are prose.
     static func isCheckable(semanticType: String?) -> Bool {
         guard let type = semanticType?.split(separator: ".").last?.lowercased() else { return false }
@@ -72,7 +88,8 @@ enum ReplacePlan {
     enum Step: Equatable { case axText, typed }
     enum Verdict: Equatable { case applied, unchanged, diverged }
     /// A settable selection range is required for either path; a settable selected text only picks the cheaper one.
-    static func first(textSettable: Bool, rangeSettable: Bool) -> Step? { rangeSettable ? (textSettable ? .axText : .typed) : nil }
+    /// Google Docs accepts the AXSelectedText write and does nothing, so it is typed at once instead of waiting out a write that cannot land.
+    static func first(textSettable: Bool, rangeSettable: Bool, docs: Bool = false) -> Step? { rangeSettable ? (textSettable && !docs ? .axText : .typed) : nil }
     /// `unchanged` is the only state that may fall back to typing; anything else could double-apply.
     static func verdict(before: String, after: String?, expected: String) -> Verdict {
         guard let after else { return .diverged }
@@ -182,7 +199,7 @@ extension AX {
 
     /// Replaces `range`: AXSelectedText when the editor honours it, otherwise Unicode key events posted to the app. Verified by re-reading the text.
     static func replace(_ element: AXUIElement, in app: NSRunningApplication, range: NSRange, with replacement: String, before: String, expected: String) async throws {
-        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element)), select(element, range) else {
+        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: isDocsText(element)), select(element, range) else {
             throw ParzrError.message("The editor refused a range edit.")
         }
         if first == .axText, AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, replacement as CFString) == .success {
@@ -193,9 +210,17 @@ extension AX {
             case .unchanged: break
             }
         }
+        // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
+        let docs = isDocsText(element)
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
-              let focus = focusedText(app), CFEqual(focus, element), select(element, range) else {
+              let focus = focusedText(app), CFEqual(focus, element), docs || select(element, range) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
+        }
+        if docs {
+            var held = false
+            for _ in 0..<40 { if self.range(element) == range { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
+            guard held else { throw ParzrError.message("Docs did not select the text. Try again.") }
+            try await Task.sleep(for: .milliseconds(120))
         }
         for event in TypedReplacement.events(for: replacement) {
             post(event, to: app.processIdentifier)

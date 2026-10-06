@@ -38,6 +38,9 @@ final class Preferences: ObservableObject {
     @Published var firefoxHintDismissed: Bool { didSet { defaults.set(firefoxHintDismissed, forKey: "firefoxHintDismissed") } }
     /// Shown in the menu-bar popover when Firefox blocks accessibility; not persisted, so it returns next launch until dismissed.
     @Published var firefoxHint = false
+    /// Google Docs reads only with its "braille support" on. "Don't show again" persists; the hint itself returns next launch otherwise.
+    @Published var docsHintDismissed: Bool { didSet { defaults.set(docsHintDismissed, forKey: "docsHintDismissed") } }
+    @Published var docsHint = false
     /// Names Parzr learned (undone fixes, repeated Ignores, "This is a name"); persisted, shared with the browser host and LSP through known-words.json.
     @Published var learnedNames: [String] { didSet { defaults.set(learnedNames, forKey: "learnedNames") } }
     @Published var useContactNames: Bool { didSet { defaults.set(useContactNames, forKey: "useContactNames") } }
@@ -85,7 +88,7 @@ final class Preferences: ObservableObject {
         smartGrammar = defaults.object(forKey: "smartGrammar") as? Bool ?? true
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true
-        checkVSCode = defaults.bool(forKey: "checkVSCode"); onboardingCompleted = defaults.bool(forKey: "onboardingCompleted"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed")
+        checkVSCode = defaults.bool(forKey: "checkVSCode"); onboardingCompleted = defaults.bool(forKey: "onboardingCompleted"); firefoxHintDismissed = defaults.bool(forKey: "firefoxHintDismissed"); docsHintDismissed = defaults.bool(forKey: "docsHintDismissed")
         learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
         useContactNames = defaults.bool(forKey: "useContactNames")
         nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.everywhere.rawValue
@@ -126,6 +129,7 @@ final class Preferences: ObservableObject {
         catch { launchError = "macOS could not change login settings: \(error.localizedDescription)" }
     }
     func dismissFirefoxHint() { firefoxHint = false; firefoxHintDismissed = true }
+    func dismissDocsHint(forever: Bool) { docsHint = false; if forever { docsHintDismissed = true } }
     func enabled(for bundle: String) -> Bool { !disabledApps.contains(bundle) }
     func saveWord(_ word: String) {
         guard !word.isEmpty, word.utf8.count <= 128, dictionary.count < 1000, !dictionary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }

@@ -88,7 +88,7 @@ final class InlineSuggestions {
         guard textIsCurrent, let s = shown else { return false }
         guard let p = s.probe else { return true }
         guard let now = AX.bounds(s.snapshot.element, p.range) else { return false }
-        return abs(now.minX - p.rect.minX) < 1.5 && abs(now.minY - p.rect.minY) < 1.5
+        return abs(now.minX - p.rect.minX) < s.snapshot.markDrift && abs(now.minY - p.rect.minY) < s.snapshot.markDrift
     }
     private func closeCard() {
         correction?.orderOut(nil)
@@ -155,7 +155,7 @@ final class InlineSuggestions {
             let style = ["Style", "Tone"].contains(edit.category)
             if Preferences.shared.highlightFill { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: bounds, style: style), owner: edit.id)) }
             items.append(MarkItem(shape: MarkShape(kind: .underline, rect: bounds, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
-                guard let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < 2, abs(now.minX - bounds.minX) < 2 else { self?.dismiss(); return }
+                guard let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
                 self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
             })
             if probe == nil { probe = (global, bounds) }

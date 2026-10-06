@@ -61,7 +61,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
-        if let index = CommandLine.arguments.firstIndex(of: "--grammar-typing-test"), CommandLine.arguments.indices.contains(index + 1) {
+        if let index = CommandLine.arguments.firstIndex(of: "--docs-test"), CommandLine.arguments.indices.contains(index + 1) {
+            Task { @MainActor in
+                do { try await runGoogleDocsTest(reportDirectory: CommandLine.arguments[index + 1]); print("Google Docs regression passed."); NSApp.terminate(nil) }
+                catch { fputs("Google Docs regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--grammar-typing-test"),CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
                 do { try await runGrammarTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic TextEdit grammar regression passed."); NSApp.terminate(nil) }
                 catch { fputs("Automatic grammar regression failed: \(error.localizedDescription)\n", stderr); exit(1) }

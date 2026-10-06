@@ -12,14 +12,17 @@ enum AX {
         return value
     }
     static func string(_ element: AXUIElement, _ attribute: String) -> String? { get(element, attribute) as? String }
-    static func range(_ element: AXUIElement) -> NSRange? {
+    /// The selection as the editor reports it. Google Docs counts offsets without paragraph breaks, so `range` converts those to value offsets.
+    static func rawRange(_ element: AXUIElement) -> NSRange? {
         guard let value = get(element, kAXSelectedTextRangeAttribute), CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var range = CFRange()
         guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
         return NSRange(location: range.location, length: range.length)
     }
+    static func range(_ element: AXUIElement) -> NSRange? { isDocsText(element) ? docsSelection(element) : rawRange(element) }
     static func setRange(_ element: AXUIElement, _ range: NSRange) -> Bool {
-        var range = CFRange(location: range.location, length: range.length)
+        let target = isDocsText(element) ? docsSelectionRange(element, range) : range
+        var range = CFRange(location: target.location, length: target.length)
         guard let value = AXValueCreate(.cfRange, &range) else { return false }
         return AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success
     }
@@ -45,7 +48,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil }
+    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -87,7 +90,8 @@ enum AX {
         verdicts = Array((verdicts.filter { now - $0.time < verdictLifetime } + walked.map { ($0, secure, now) }).suffix(32))
         return secure
     }
-    static func bounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
+    /// AX range bounds as the API reports them: global coordinates with the origin at the top left of the primary display.
+    static func axBounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
         var cf = CFRange(location: range.location, length: range.length)
         guard let parameter = AXValueCreate(.cfRange, &cf) else { return nil }
         var value: CFTypeRef?
@@ -95,9 +99,16 @@ enum AX {
               let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
         var rect = CGRect.zero
         guard AXValueGetValue(value as! AXValue, .cgRect, &rect), rect.width >= 0, rect.height > 0 else { return nil }
-        // AX global coordinates originate at the top of the primary display.
+        return rect
+    }
+    /// Cocoa coordinates (origin at the bottom left of the primary display).
+    static func cocoa(_ rect: CGRect) -> CGRect {
         let top = NSScreen.screens.first?.frame.maxY ?? 0
         return CGRect(x: rect.minX, y: top - rect.maxY, width: rect.width, height: rect.height)
+    }
+    static func bounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
+        if isDocsText(element) { return docsBounds(element, range).map(cocoa) }
+        return axBounds(element, range).map(cocoa)
     }
     static func line(_ element: AXUIElement, _ index: Int) -> Int? {
         var value: CFTypeRef?
@@ -116,6 +127,7 @@ enum AX {
     /// One rect per visual line of `range`; editors without line APIs only get a single-line fallback.
     static func lineRects(_ element: AXUIElement, _ range: NSRange) -> [CGRect] {
         guard range.length > 0 else { return [] }
+        if isDocsText(element) { return docsLines(element, range).map(cocoa).filter { $0.width > 0 } }
         if let first = line(element, range.location), let last = line(element, NSMaxRange(range) - 1), last >= first, lineRange(element, first) != nil {
             var rects: [CGRect] = []
             for index in first...min(last, first + 7) {
@@ -151,7 +163,11 @@ struct SelectionSnapshot {
     let copied: Bool
     /// Whether the editor accepts a minimal range patch, asked once at capture: a live AX query on every card render could time out under load and grey out Apply.
     let canPatch: Bool
+    /// Google Docs through its hidden text area: replacements are typed, and range geometry comes from `DocsGeometry` rather than AX bounds.
+    let docs: Bool
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
+    /// How far a mark's re-measured position may drift before it is dropped: Docs positions are rebuilt from the caret, so they move a point or two with it.
+    var markDrift: CGFloat { docs ? 4 : 1.5 }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
         guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
@@ -161,8 +177,12 @@ struct SelectionSnapshot {
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
         guard let selectedRange = AX.selection(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
         let full = AX.text(element)
+        let docs = AX.isDocsText(element)
+        // Docs with braille support off: only zero-width characters here, so the explicit check falls back to copying.
+        if docs, Compat.docsTextHidden(full) { throw ParzrError.message("Select the words you want to improve, then try again.") }
         var selection = selectedRange
-        var text = AX.string(element, kAXSelectedTextAttribute) ?? ""
+        // Docs' own selected text lacks the paragraph breaks its ranges skip, so its text always comes from the value.
+        var text = docs ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
         if passive {
             guard let full, selectedRange.location <= (full as NSString).length,
                   selectedRange.length <= (full as NSString).length - selectedRange.location,
@@ -181,8 +201,9 @@ struct SelectionSnapshot {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, selection.length > 0 else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536, text.utf16.count == selection.length else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
-                                 bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: AX.attributed(element, selection), copied: false,
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element)) != nil)
+                                 bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
+                                 // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -196,7 +217,7 @@ struct SelectionSnapshot {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536 else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
         let range = NSRange(location: 0, length: text.utf16.count)
-        return SelectionSnapshot(app: app, element: element, selection: range, expectedSelection: range, text: text, fullText: nil, bounds: nil, richText: nil, copied: true, canPatch: false)
+        return SelectionSnapshot(app: app, element: element, selection: range, expectedSelection: range, text: text, fullText: nil, bounds: nil, richText: nil, copied: true, canPatch: false, docs: false)
     }
     /// Two copies of the same range may differ only by trailing newlines.
     nonisolated static func sameCopiedText(_ a: String, _ b: String) -> Bool {
@@ -276,7 +297,15 @@ struct SelectionSnapshot {
                 if relativeCaret >= edit.end_utf16 { caret += edit.replacement.utf16.count - edit.range.length }
                 else if relativeCaret > edit.start_utf16 { caret = selection.location + edit.start_utf16 + edit.replacement.utf16.count }
             }
-            _ = AX.select(element, NSRange(location: min(max(0, caret), expected.utf16.count), length: 0))
+            let target = min(max(0, caret), expected.utf16.count)
+            if docs, let first = edits.first {
+                // The typed replacement left the caret after the earliest edit; walk it back to the writer's place (see docsMoveCaret).
+                let after = min(selection.location + first.start_utf16 + first.replacement.utf16.count, expected.utf16.count)
+                let span = NSRange(location: min(after, target), length: abs(target - after))
+                await AX.docsMoveCaret(app, by: ((expected as NSString).substring(with: span).count) * (target >= after ? 1 : -1))
+            } else {
+                _ = AX.select(element, NSRange(location: target, length: 0))
+            }
         } else {
             _ = AX.select(element, NSRange(location: selection.location, length: selection.length + delta))
         }
