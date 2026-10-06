@@ -10,6 +10,7 @@ mod morphology;
 mod names;
 mod pipeline;
 mod punctuation;
+mod real_word;
 mod rules;
 mod spelling;
 mod structure;
@@ -775,7 +776,18 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             && !edits
                 .iter()
                 .any(|e| e.start_utf16 <= token.start_utf16 && e.end_utf16 >= token.end_utf16)
-            && let Some((id, replacement, reason)) = spelling::slot_fix(&tokens, index).or_else(|| {
+            // Context-backed keyboard slips go first: "os" is "is" here, whatever else it transposes to.
+            && let Some((id, replacement, reason)) = real_word::fix(&tokens, index)
+                .map(|replacement| {
+                    let reason =
+                        format!("Did you mean “{replacement}”? This looks like a keyboard slip.");
+                    ("spelling.real_word", replacement, reason)
+                })
+                .or_else(|| {
+                    spelling::slot_fix(&tokens, index)
+                        .map(|(id, replacement, reason)| (id, replacement, reason.to_string()))
+                })
+                .or_else(|| {
                 spelling::suggest(
                     token,
                     &req.dialect,
@@ -788,7 +800,8 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                     (
                         "spelling.delete_index",
                         replacement,
-                        "The dictionary and local word context suggest this spelling or word boundary.",
+                        "The dictionary and local word context suggest this spelling or word boundary."
+                            .to_string(),
                     )
                 })
             })
@@ -799,7 +812,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 replacement,
                 "Spelling",
                 id,
-                reason,
+                &reason,
                 0.80,
             )
         {

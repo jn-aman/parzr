@@ -1,0 +1,361 @@
+{
+  "note": "Authored for Parzr (fresh sentences, none from public sets). Positives hold one keyboard-slip real word each; negatives are correct text that must stay untouched.",
+  "positives": [
+    [
+      "this os do bad.",
+      "This is so bad."
+    ],
+    [
+      "I think this os a good idea.",
+      "I think this is a good idea."
+    ],
+    [
+      "The weather os nice today.",
+      "The weather is nice today."
+    ],
+    [
+      "She os my best friend.",
+      "She is my best friend."
+    ],
+    [
+      "Nobody knows what os going on.",
+      "Nobody knows what is going on."
+    ],
+    [
+      "Our house os near the river.",
+      "Our house is near the river."
+    ],
+    [
+      "We bought a lot if apples.",
+      "We bought a lot of apples."
+    ],
+    [
+      "It was one if the best days of my life.",
+      "It was one of the best days of my life."
+    ],
+    [
+      "Most if the students passed the exam.",
+      "Most of the students passed the exam."
+    ],
+    [
+      "I come form a small town.",
+      "I come from a small town."
+    ],
+    [
+      "She borrowed a book form the library.",
+      "She borrowed a book from the library."
+    ],
+    [
+      "The letter was sent form London.",
+      "The letter was sent from London."
+    ],
+    [
+      "He took a bit if time to answer.",
+      "He took a bit of time to answer."
+    ],
+    [
+      "I an very happy with the result.",
+      "I am very happy with the result."
+    ],
+    [
+      "I an going to the market now.",
+      "I am going to the market now."
+    ],
+    [
+      "We gave to leave before noon.",
+      "We have to leave before noon."
+    ],
+    [
+      "They gave been waiting for an hour.",
+      "They have been waiting for an hour."
+    ],
+    [
+      "Did you finish tour homework yet?",
+      "Did you finish your homework yet?"
+    ],
+    [
+      "Please bring tour books to class.",
+      "Please bring your books to class."
+    ],
+    [
+      "We went our for dinner last night.",
+      "We went out for dinner last night."
+    ],
+    [
+      "Please bring out books tomorrow.",
+      "Please bring our books tomorrow."
+    ],
+    [
+      "It is top late to change the plan.",
+      "It is too late to change the plan."
+    ],
+    [
+      "That bag is top heavy for me.",
+      "That bag is too heavy for me."
+    ],
+    [
+      "She drove her cat to work this morning.",
+      "She drove her car to work this morning."
+    ],
+    [
+      "He parked the cat in the garage.",
+      "He parked the car in the garage."
+    ],
+    [
+      "I like thus book very much.",
+      "I like this book very much."
+    ],
+    [
+      "Can you give then a call tonight?",
+      "Can you give them a call tonight?"
+    ],
+    [
+      "I told then about the trip.",
+      "I told them about the trip."
+    ],
+    [
+      "You ate welcome to join us.",
+      "You are welcome to join us."
+    ],
+    [
+      "We ate happy to see you again.",
+      "We are happy to see you again."
+    ],
+    [
+      "We live on a small village near the coast.",
+      "We live in a small village near the coast."
+    ],
+    [
+      "He lives on a quiet neighborhood.",
+      "He lives in a quiet neighborhood."
+    ],
+    [
+      "She was born on March of 1990 in Pune.",
+      "She was born in March of 1990 in Pune."
+    ],
+    [
+      "I will meet you on the morning.",
+      "I will meet you in the morning."
+    ],
+    [
+      "The food os ready on the table.",
+      "The food is ready on the table."
+    ],
+    [
+      "I do not know whether he os coming.",
+      "I do not know whether he is coming."
+    ],
+    [
+      "It is a pity that she os leaving.",
+      "It is a pity that she is leaving."
+    ],
+    [
+      "He is the owner if the shop.",
+      "He is the owner of the shop."
+    ],
+    [
+      "What is the name if your school?",
+      "What is the name of your school?"
+    ],
+    [
+      "We need to talk about the rest if the plan.",
+      "We need to talk about the rest of the plan."
+    ],
+    [
+      "The school is far form my house.",
+      "The school is far from my house."
+    ],
+    [
+      "He is different form his brother.",
+      "He is different from his brother."
+    ],
+    [
+      "We had a great trio to the mountains.",
+      "We had a great trip to the mountains."
+    ],
+    [
+      "Yes, I do agree with you, bit I have one concern.",
+      "Yes, I do agree with you, but I have one concern."
+    ],
+    [
+      "The picture on the wall os crooked.",
+      "The picture on the wall is crooked."
+    ],
+    [
+      "It os raining again, and the roads are wet.",
+      "It is raining again, and the roads are wet."
+    ],
+    [
+      "Where os the nearest bus stop?",
+      "Where is the nearest bus stop?"
+    ],
+    [
+      "Which one os your favorite?",
+      "Which one is your favorite?"
+    ],
+    [
+      "My sister os a doctor in Delhi.",
+      "My sister is a doctor in Delhi."
+    ],
+    [
+      "Everything os ready for the trip.",
+      "Everything is ready for the trip."
+    ],
+    [
+      "He asked whether the store os open.",
+      "He asked whether the store is open."
+    ],
+    [
+      "The kitchen os full of smoke.",
+      "The kitchen is full of smoke."
+    ],
+    [
+      "I told them to be home by ten, bit they came late.",
+      "I told them to be home by ten, but they came late."
+    ],
+    [
+      "Is tour sister coming to the wedding?",
+      "Is your sister coming to the wedding?"
+    ],
+    [
+      "I had lunch with tour parents.",
+      "I had lunch with your parents."
+    ],
+    [
+      "She came back form the market with fresh fruit.",
+      "She came back from the market with fresh fruit."
+    ],
+    [
+      "This is the end if the road.",
+      "This is the end of the road."
+    ],
+    [
+      "It is a long way form here.",
+      "It is a long way from here."
+    ],
+    [
+      "The teacher gave then extra time.",
+      "The teacher gave them extra time."
+    ],
+    [
+      "Tell then I said hello.",
+      "Tell them I said hello."
+    ],
+    [
+      "The nearest ATM os two blocks away.",
+      "The nearest ATM is two blocks away."
+    ],
+    [
+      "There os a bakery on the corner.",
+      "There is a bakery on the corner."
+    ],
+    [
+      "The new phone os faster than the old one.",
+      "The new phone is faster than the old one."
+    ],
+    [
+      "The soup os too hot to eat.",
+      "The soup is too hot to eat."
+    ],
+    [
+      "Her answer os correct.",
+      "Her answer is correct."
+    ],
+    [
+      "Why os the door locked?",
+      "Why is the door locked?"
+    ],
+    [
+      "The road os closed for repairs.",
+      "The road is closed for repairs."
+    ],
+    [
+      "The pitch os too wet to play on today.",
+      "The pitch is too wet to play on today."
+    ]
+  ],
+  "negatives": [
+    "The macOS and iOS apps share one codebase.",
+    "They do bad things when nobody is looking.",
+    "So do I, but only on weekends.",
+    "Call me if you can make it on time.",
+    "I want to go home before it gets dark.",
+    "She said she would come, but she did not.",
+    "The old form of the word is no longer used.",
+    "Please fill in the form and sign at the bottom.",
+    "He comes from a small town near the coast.",
+    "We are going out for dinner tonight.",
+    "Please take our books to the library.",
+    "He is not too old to learn new things.",
+    "She parked her car in front of the house.",
+    "The cat slept on the warm window sill.",
+    "I like this book more than the last one.",
+    "And then we walked back to the hotel.",
+    "I gave them the keys and left.",
+    "We have to leave before the rain starts.",
+    "You are welcome to stay as long as you like.",
+    "I am happy to help with the move.",
+    "He lives in a quiet neighborhood by the lake.",
+    "The meeting starts at nine in the morning.",
+    "A lot of people came to the festival.",
+    "Most of the students passed the exam.",
+    "Rose sat on the bus and read her book.",
+    "Mark said he would bring the food.",
+    "Will you join us for lunch on Friday?",
+    "The program imports os and sys at the top.",
+    "Set the PATH variable and restart the shell.",
+    "The center of the city was closed to traffic.",
+    "The theater opens its doors at seven.",
+    "He took a bit of time to think about it.",
+    "It is a matter of time before they arrive.",
+    "Tea or coffee, whichever you prefer.",
+    "I do not know if he will come.",
+    "What is the name of your school?",
+    "Our team won the match on Sunday.",
+    "He was out of breath after the climb.",
+    "She bought a top and a pair of shoes.",
+    "The ship sailed at dawn and reached the port by dusk.",
+    "They found the lost dog in the park.",
+    "The river is round the bend and past the bridge.",
+    "Do not worry about the small things.",
+    "If it rains, we will stay inside.",
+    "As if to prove the point, he laughed loudly.",
+    "The test results were better than expected.",
+    "He sat on the bench and watched the game.",
+    "I am sure that you can do it.",
+    "Let me know when you are ready to go.",
+    "The thus-called experts were wrong.",
+    "And thus the story came to an end.",
+    "We walked in the rain for an hour.",
+    "The tree is green and tall in summer.",
+    "My brother is taller than my father.",
+    "The bat flew out of the cave at night.",
+    "She is going to a party on the weekend.",
+    "Their house is on the hill, near the old mill.",
+    "Hello Aman, please send me the files today.",
+    "We met Priya and Rohan at the station.",
+    "The yard was full of leaves after the storm.",
+    "That was a great trip, and we saw so many things.",
+    "No one knew who had left the door open.",
+    "It is time to go to bed, so say goodnight.",
+    "Kal we will meet at the cafe yaar, it is too good.",
+    "The doc is in the shared folder, please check it.",
+    "Honestly, I think it is fine as it is.",
+    "Import os at the top, then call listdir on the folder.",
+    "We ate in the garden after sunset.",
+    "Most or all of the money went to charity.",
+    "Is driving by car cheaper than taking the train?",
+    "The red ball is round in shape.",
+    "She gave a rest to her sore feet.",
+    "There is just one way out of the valley.",
+    "The loss of the old library was a blow to the town.",
+    "He sat down and ate a slow lunch.",
+    "Either you or your brother can drive.",
+    "I will tell them if they ask.",
+    "Our manager was sued for the debt.",
+    "It was one of those quiet evenings.",
+    "From here to the station is a short walk.",
+    "We came from the north side of the city.",
+    "Are you free for lunch on Tuesday?"
+  ]
+}

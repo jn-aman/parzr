@@ -34,7 +34,7 @@ struct Lexicon {
     canonical: HashMap<String, String>,
     deletes: HashMap<String, Vec<String>, Fast>,
 }
-fn frequency(word: &str) -> u16 {
+pub(crate) fn frequency(word: &str) -> u16 {
     static FREQUENCIES: OnceLock<HashMap<String, u16, Fast>> = OnceLock::new();
     FREQUENCIES
         .get_or_init(|| {
@@ -744,7 +744,7 @@ fn unknown_alphabetic(token: &Token<'_>) -> bool {
 /// missing letter away from a frequent word, or it is two frequent words run together. A name
 /// like "aman" has none of these (the one-letter edits it has, "a man" or "amen", are exactly
 /// the false positives), so typo-shaped words keep their corrections even beside names.
-fn swaps_to_common(word: &str) -> bool {
+pub(crate) fn swaps_to_common(word: &str) -> bool {
     let bytes = word.as_bytes();
     word.is_ascii()
         && (0..bytes.len().saturating_sub(1)).any(|i| {
