@@ -20,6 +20,7 @@ Set the release environment secrets:
 | PARZR_NOTARY_KEY_BASE64 | Base64-encoded App Store Connect notarization API private key |
 | PARZR_NOTARY_KEY_ID | API key identifier |
 | PARZR_NOTARY_ISSUER | API issuer identifier |
+| SPARKLE_ED_PRIVATE_KEY | Sparkle EdDSA private key (the base64 text `generate_keys -x` writes), used only to sign update files; see [Update signing key](#update-signing-key) |
 
 Optional variable PARZR_BUNDLE_ID defaults to app.parzr.desktop. Keep credentials in the CI secret store or local keychain; never in source files, release notes or attachments.
 
@@ -35,16 +36,16 @@ From the terminal (GitHub CLI, authenticated for the repository):
 gh workflow run release.yml -f bump=patch
 ```
 
-Use `-f bump=minor` or `-f bump=major` for larger bumps, or `-f version=X.Y.Z` to set an exact version (it overrides `bump`). From the browser: Actions, Release, Run workflow, pick `bump` (default patch) or type an exact version, then Run workflow. Run it from the default branch.
+Use `-f bump=minor` or `-f bump=major` for larger bumps, or `-f version=X.Y.Z` to set an exact version (it overrides `bump`). Two optional inputs shape the in-app update: `-f critical=true` (see [Critical updates](#critical-updates)) and `-f notes='First point | Second point'` (the short list users see; if empty, the commit subjects since the previous tag are used, so write real notes for anything users should read). From the browser: Actions, Release, Run workflow, pick `bump` (default patch) or type an exact version, then Run workflow. Run it from the default branch.
 
 The workflow runs on a cheap Linux runner with no signing credentials and does the following:
 
 1. Checks out the default branch with full history and tags, and requires a clean working tree.
 2. Runs `scripts/bump-version.py`, which computes the next version from `engine/Cargo.toml` and rewrites the version in `engine/Cargo.toml`, the `parzr-engine` entry in `engine/Cargo.lock`, `resources/Info.plist` (CFBundleShortVersionString, and CFBundleVersion as an incrementing build number), `extensions/browser/manifest.json` and `extensions/vscode/package.json`. It refuses to go backwards or reuse an existing tag, and finishes by running `scripts/check-release-version.py`.
 3. Commits "Release vX.Y.Z" as the person who started the workflow (no co-author or bot trailers), creates the annotated tag `vX.Y.Z`, and pushes the commit and tag together.
-4. Starts [ci-release.yml](../.github/workflows/ci-release.yml) on the new tag with `gh workflow run`, and links the run in the job summary. Pushes made with the built-in token do not trigger other workflows, but a manual dispatch is allowed, so the build is started explicitly.
+4. Starts [ci-release.yml](../.github/workflows/ci-release.yml) on the new tag with `gh workflow run` (passing `critical` and `notes` through), and links the run in the job summary. Pushes made with the built-in token do not trigger other workflows, but a manual dispatch is allowed, so the build is started explicitly.
 
-On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, and only then publishes the immutable DMG, SHA-256 checksums and licenses. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
+On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas and `appcast.xml` as one release. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
 
 Preview a bump locally without writing anything:
 
@@ -59,6 +60,86 @@ If the signed build fails after the tag is pushed, fix the problem on the defaul
 If the default branch is protected against direct pushes, allow the GitHub Actions app to bypass that rule for this workflow; otherwise the push step fails and nothing is released (the push is atomic, so no tag is left behind).
 
 Interactive TextEdit, installed-browser and editor UI checks require a real desktop session and are not established by headless CI alone. Track compatibility evidence in [integrations](integrations.md). Required hosted checks and a protected release environment should enforce the final acceptance gate.
+
+## Automatic updates
+
+From 0.3 the app updates itself with Sparkle 2.9.5. It checks once a day, asks before installing, and the check can be turned off in Settings. Its only network request is that check: a plain GET of the feed from GitHub, sending nothing about the user or their writing (GitHub sees an IP address and the app and macOS version, like any download).
+
+**The feed.** The app's `SUFeedURL` is `https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml`. Every app release carries an `appcast.xml` asset with exactly one item: that release. GitHub resolves `latest` to the newest published, non-draft, non-prerelease release, so the feed is always the newest release's own file, and deleting or drafting a bad release makes the feed fall back to the previous release by itself. No server, no separate publishing step.
+
+**What a release uploads** (one `gh release create`, so the feed never exists without its files):
+
+| Asset | What it is |
+|---|---|
+| `Parzr-X.Y.Z.dmg`, `SHA256SUMS`, licenses | The download for new installs, unchanged |
+| `Parzr-X.Y.Z.zip` | The update archive: the notarized, stapled `Parzr.app` made with `ditto -c -k --sequesterRsrc --keepParent` |
+| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (usually under 1 MB against 700 MB for the zip) |
+| `appcast.xml` | One item: `sparkle:version` is the build number (CFBundleVersion, which `bump-version.py` increments), `sparkle:shortVersionString` is X.Y.Z, minimum macOS 13.0, arm64 only, the zip and delta enclosures with EdDSA signatures and lengths, the notes, and either `phasedRolloutInterval` or `criticalUpdate` |
+
+**Notes format.** The item's `<description sparkle:format="markdown">` holds a CDATA Markdown bullet list (`- first point`, `- second point`, at most 6 lines of 160 characters). Sparkle exposes it as `itemDescription` with `itemDescriptionFormat == "markdown"`.
+
+**Phased rollout.** Normal releases carry `sparkle:phasedRolloutInterval` 43200 (12 hours): automatic checks open the update to a new seventh of users every 12 hours from the item's publication date, so it spreads over about 3.5 days. A user who clicks Check for Updates gets it at once. This is also the safety net: yank a bad release (below) within the first day and most users never see it.
+
+**What CI verifies.** [scripts/make-appcast.py](../scripts/make-appcast.py) `build` refuses an app that is not stapled and Gatekeeper-approved, lacks `Sparkle.framework`, or whose `SUPublicEDKey` is not the pinned public key. It signs the zip and deltas, writes the appcast, and then re-reads its own output: XML shape (one item, versions, URLs under the release's download path, lengths on disk), every EdDSA signature checked against the public key with a stdlib Ed25519 verifier (independent of Sparkle's tools), the zip extracted and compared with the app, and every delta applied to the previous app and compared with the new app byte for byte. Sparkle's `BinaryDelta` and `sign_update` come from the pinned Sparkle 2.9.5 tarball, checked against its SHA-256 before use. After publishing, `make-appcast.py verify` downloads the live `appcast.xml` and every file it points to, re-verifies lengths and signatures, and checks that `releases/latest/download/appcast.xml` is byte-identical. If that fails, the workflow drafts the release (so the feed falls back) and goes red.
+
+Run the same checks by hand against any published release (no key needed):
+
+```sh
+python3 scripts/make-appcast.py verify --appcast https://github.com/jn-aman/parzr/releases/download/vX.Y.Z/appcast.xml
+```
+
+The first updater release (0.3.0) has no previous update zips, so it ships without deltas; each later release adds them.
+
+## Critical updates
+
+For a security or data-loss fix, run the release with `critical=true`:
+
+```sh
+gh workflow run release.yml -f bump=patch -f critical=true -f notes='Fixes a crash that could lose text | Please update now'
+```
+
+The item then carries `<sparkle:criticalUpdate>` instead of a phased rollout: every user sees it on their next check and Sparkle will not let them skip it.
+
+## Yanking a bad release
+
+Do this as soon as a release is found to be bad, before fixing anything:
+
+```sh
+gh release edit vX.Y.Z --draft      # or: gh release delete vX.Y.Z (keeps the tag; add --cleanup-tag to drop it)
+```
+
+`releases/latest` then points at the previous release, whose `appcast.xml` offers only that older version. Effects to know:
+
+- Users who have not updated yet stop being offered the bad version immediately. Within the 3.5 day phased window that is most of them.
+- Users who already installed it are not downgraded (Sparkle never installs an older build). They need a newer fix: ship the next version with `critical=true` if it is serious. Version numbers only go up; do not reuse the yanked one.
+- A draft keeps the assets for inspection; the DMG link on the site and README (`releases/latest`) also falls back to the previous DMG.
+- Check the result: `python3 scripts/make-appcast.py verify --appcast https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml` should now report the previous version.
+
+## Update signing key
+
+Sparkle accepts an update only if its EdDSA signature verifies against `SUPublicEDKey` (`j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0=`, in `resources/Info.plist` and pinned in `scripts/make-appcast.py`). Whoever holds the private key can sign updates for every install, so it is the most sensitive secret in the project after the Developer ID certificate.
+
+Where it lives:
+
+- The owner's login keychain, account `app.parzr.desktop` (item "Private key for signing Sparkle updates").
+- The GitHub `release` environment secret `SPARKLE_ED_PRIVATE_KEY`, the base64 text that `generate_keys --account app.parzr.desktop -x FILE` writes. The workflow gives it to `sign_update` on stdin; it is never written to disk or printed, and only the signing step of the release job receives it.
+- Back it up in a password manager as a secure note. Export, store, then delete the file:
+
+```sh
+generate_keys --account app.parzr.desktop -x /tmp/parzr-ed.key
+# copy the contents into the password manager, then
+rm -P /tmp/parzr-ed.key
+```
+
+Use a throwaway account (for example `--account parzr-update-test`) for any experiment, never `app.parzr.desktop`.
+
+If the key is lost or leaked, rotate it with an update (Sparkle's "Rotating signing keys"): Sparkle accepts a release that changes the EdDSA key as long as it keeps the same Apple Developer ID signing identity (it allows changing the certificate or the EdDSA key in one release, never both).
+
+1. Generate a new key: `generate_keys --account app.parzr.desktop-2`, export it with `-x`, and note the new public key.
+2. In one commit set the new `SUPublicEDKey` in `resources/Info.plist` and `PUBLIC_KEY` in `scripts/make-appcast.py`, and replace the `SPARKLE_ED_PRIVATE_KEY` environment secret with the new private key.
+3. Release normally. The update zip, deltas and appcast are signed with the new key; existing installs, which still hold the old public key, accept it because the app is signed with the unchanged Developer ID identity, and from then on trust the new key. Do not change the Developer ID certificate in this release.
+4. If the app ever enables `SUVerifyUpdateBeforeExtraction`, Sparkle only allows an EdDSA rotation through a Developer ID signed DMG update archive; this repository does not enable it.
+5. A leaked key (as opposed to a lost one) also needs the old key treated as hostile: yank releases signed after the leak, and rotate before the attacker can also control the feed (the feed is only the owner's GitHub releases, so the attacker needs that too). Once everyone has updated past the rotation, delete the old key from the keychain and password manager.
 
 ## Local packaging
 
