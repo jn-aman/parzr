@@ -111,7 +111,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; no model d
 
 Parzr updates itself from 0.3 on, so if you have 0.2.x, install 0.3 once by hand. From then on it checks GitHub once a day, downloads a new version quietly and installs it when you quit Parzr or after five idle minutes, with a 10 second countdown you can cancel. Turn either off in **Settings, General, Updates**; **Check for Updates** in the menu bar and About works any time.
 
-Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, or hide it from the Dock in Settings.
+Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, hide it from the Dock, or quit it from Settings, General (Parzr still shows its menus and Dock icon while its window is open).
 
 Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device model)"). Once setup is finished Parzr prepares the model in the background for the Neural Engine, which takes a few seconds the first time, so it is ready before you need it.
 

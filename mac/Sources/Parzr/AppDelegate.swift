@@ -178,8 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }.store(in: &subscriptions)
         Preferences.shared.$showInDock.dropFirst().removeDuplicates().sink { [weak self] show in
             // Changing policy can deactivate the app; keep an open Parzr window in front.
-            guard let self, self.studio?.isVisible == true else { return }
-            NSApp.setActivationPolicy(show ? .regular : .accessory)
+            guard let self else { return }
+            self.updateActivationPolicy()
+            guard self.studio?.isVisible == true else { return }
             Task { @MainActor in NSApp.activate(ignoringOtherApps: true); self.studio?.makeKeyAndOrderFront(nil) }
         }.store(in: &subscriptions)
         let hotkey = GlobalHotkey(); self.hotkey = hotkey
@@ -334,24 +335,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.title = "Welcome to Parzr"; window.titlebarAppearsTransparent = true; window.isReleasedWhenClosed = false; window.delegate = self
         window.contentView = NSHostingView(rootView: view); window.collectionBehavior = [.moveToActiveSpace]
         window.center(); onboarding = window
-        if Preferences.shared.showInDock { NSApp.setActivationPolicy(.regular) }
+        NSApp.setActivationPolicy(.regular)
         NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); window.orderFrontRegardless()
     }
     func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, window === onboarding else { return }
-        onboardingModel?.complete(); onboarding = nil; onboardingModel = nil
+        guard let window = notification.object as? NSWindow else { return }
+        if window === onboarding { onboardingModel?.complete(); onboarding = nil; onboardingModel = nil }
+        updateActivationPolicy(closing: window)
+    }
+    /// An accessory app never owns the menu bar, so a Parzr window the user works in (the editor, the welcome guide) makes the app regular whatever Show in Dock says; with it off, the last one closing goes back to menu-bar-only. A minimized window counts as open.
+    private func updateActivationPolicy(closing: NSWindow? = nil) {
+        let open = [studio, onboarding].contains { $0 !== closing && ($0?.isVisible == true || $0?.isMiniaturized == true) }
+        NSApp.setActivationPolicy(Preferences.shared.showInDock || open ? .regular : .accessory)
     }
     func showStudio(route: StudioRoute? = nil) {
         studioModel.clearDraftUndo = { [weak self] in self?.studio?.undoManager?.removeAllActions() }
         if let route { studioModel.studioRoute = route }
-        if Preferences.shared.showInDock { NSApp.setActivationPolicy(.regular) }
+        NSApp.setActivationPolicy(.regular)
         closePanel()
         if studio == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
             window.appearance = Preferences.shared.appearance == "system" ? nil : NSAppearance(named: Preferences.shared.appearance == "paper" ? .aqua : .darkAqua)
             window.title = "Parzr"; window.titlebarAppearsTransparent = true; window.titleVisibility = .hidden
             window.contentView = NSHostingView(rootView: StudioView(model: studioModel)); window.minSize = NSSize(width: 760, height: 540); window.isReleasedWhenClosed = false
-            window.collectionBehavior = [.moveToActiveSpace]
+            window.collectionBehavior = [.moveToActiveSpace]; window.delegate = self
             window.center(); studio = window
         }
         if studio?.isMiniaturized == true { studio?.deminiaturize(nil) }
@@ -705,8 +712,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message("UI QA stopped while secure input is active.") }
         let target = URL(fileURLWithPath: directory)
         try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        // Menu-bar-only mode: an open Parzr window still brings the app menus and takes the menu bar; closing it gives both back.
+        Preferences.shared.showInDock = false
+        guard NSApp.activationPolicy() == .accessory else { throw ParzrError.message("The test did not start menu-bar-only.") }
         showStudio(route: .playground)
         guard let studio, let host = studio.contentView else { throw ParzrError.message("The editor window did not open.") }
+        guard NSApp.activationPolicy() == .regular, NSApp.mainMenu?.items.map(\.title).contains("Window") == true else { throw ParzrError.message("Opening the editor with Show in Dock off did not give Parzr its menus.") }
+        for _ in 0..<40 where NSWorkspace.shared.menuBarOwningApplication?.processIdentifier != getpid() { try await Task.sleep(for: .milliseconds(50)) }
+        guard NSWorkspace.shared.menuBarOwningApplication?.processIdentifier == getpid() else { throw ParzrError.message("Parzr did not take the menu bar while its editor is open.") }
         try await Task.sleep(for: .milliseconds(200))
         guard let sample = NativeControls.find(label: "Try a sample", in: host), sample.accessibilityPerformPress() else { throw ParzrError.message("The sample button did not activate.") }
         for _ in 0..<80 { try await Task.sleep(for: .milliseconds(50)); if !studioModel.busy && studioModel.chosenEdits.count == 3 { break } }
@@ -746,6 +759,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard pasteboard.string(forType: .string) == "I received your message.\n\nCan you check this?" else { throw ParzrError.message("Copy did not use the corrected draft.") }
         guard let gear = NativeControls.find(label: "Settings", in: host), gear.accessibilityPerformPress(), studioModel.studioRoute == .general else { throw ParzrError.message("The Settings button did not open settings.") }
         try await Task.sleep(for: .milliseconds(300))
+        guard NativeControls.find(label: "Quit Parzr", in: host) != nil else { throw ParzrError.message("Settings has no Quit Parzr button.") }   // found, never pressed
         guard let done = NativeControls.find(label: "Return to editor", in: host), done.accessibilityPerformPress(), studioModel.studioRoute == .playground else { throw ParzrError.message("The Done button did not return to the editor.") }
         let menu = NSMenu(); menuNeedsUpdate(menu)
         guard let settings = menu.items.first(where: { $0.title == "Settings…" }), let action = settings.action, NSApp.sendAction(action, to: settings.target, from: settings), studioModel.studioRoute == .general else { throw ParzrError.message("The menu Settings action did not open settings.") }
@@ -757,7 +771,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         try await Task.sleep(for: .milliseconds(200))
         guard studio.isVisible, !studio.isMiniaturized else { throw ParzrError.message("Reopening did not restore the minimized window.") }
         studio.close()
+        guard NSApp.activationPolicy() == .accessory else { throw ParzrError.message("Closing the editor with Show in Dock off did not return Parzr to the menu bar.") }
         _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+        guard NSApp.activationPolicy() == .regular else { throw ParzrError.message("Reopening the editor did not bring back Parzr's menus.") }
         guard studio.isVisible else { throw ParzrError.message("Reopening did not restore the closed window.") }
         let reviewStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         reviewStatusItem.autosaveName = "parzr.selftest"   // removing it forgets its own spot, never the real icon's ("Item-0" lives in the app's real defaults)
@@ -784,7 +800,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         studioModel.studioRoute = .playground
         try await Task.sleep(for: .milliseconds(300))
         guard studioModel.source.isEmpty, let clearedDraft = textView(host), clearedDraft.string.isEmpty, clearedDraft.undoManager?.canUndo != true else { throw ParzrError.message("Session clear left text or Undo history behind.") }
-        let report: [String: Any] = ["sample_button": true, "apply_all_button": true, "copy_button": true, "settings_button": true, "done_button": true, "clear_session_button": true, "draft_native_undo": true, "menu_settings_action": true, "status_panel_settings": true, "status_panel_about": true, "status_panel_editor": true, "reopen_visible": true, "reopen_minimized": true, "reopen_closed": true, "status": "passed"]
+        let report: [String: Any] = ["sample_button": true, "apply_all_button": true, "copy_button": true, "settings_button": true, "done_button": true, "clear_session_button": true, "draft_native_undo": true, "menu_settings_action": true, "status_panel_settings": true, "status_panel_about": true, "status_panel_editor": true, "reopen_visible": true, "reopen_minimized": true, "reopen_closed": true, "menus_while_open": true, "menu_bar_only_after_close": true, "quit_button": true, "status": "passed"]
         try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: target.appendingPathComponent("ui-controls-results.json"))
         studio.close()
     }
