@@ -93,6 +93,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--editor-typing-test"), CommandLine.arguments.indices.contains(index + 1) {
+            Task { @MainActor in
+                do {
+                    studioModel.engineReady = true; showStudio(route: .playground)
+                    guard let studio, let host = studio.contentView else { throw ParzrError.message("The editor window did not open.") }
+                    try await Task.sleep(for: .milliseconds(300))
+                    try await runEditorTypingTest(model: studioModel, host: host, window: studio, directory: CommandLine.arguments[index + 1]); print("Editor typing regression passed."); NSApp.terminate(nil)
+                } catch { fputs("Editor typing regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
