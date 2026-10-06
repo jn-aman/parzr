@@ -16,6 +16,6 @@ Parzr uses those interaction patterns as a checklist, with on-device processing 
 | Per-app control | Menu-panel and Apps settings switches | Native source-code/terminal passive checks stay excluded |
 | Appearance and motion | Graphite, Paper or System across the studio, menu panel and correction cards; reduced motion | Native text editing, keyboard controls and Undo retained |
 | Startup and permissions | Login item, shortcut recording, Accessibility setup and permission refresh | macOS requires the user to grant permission |
-| Support and transparency | About, version/build, bundled licenses, capability report and an email issue draft | Reports do not automatically include writing or send email |
+| Support and transparency | About, version/build, bundled licenses, capability report and a prefilled GitHub issue draft | Reports do not automatically include writing; nothing is sent until you submit the issue |
 
 Remaining feature work includes evaluated tone detection, calibrated readability feedback, configurable house style, contextual vocabulary alternatives, long-document analysis and independently tested writing-goal controls. These are not labeled as implemented. Adding them requires evidence that they help without changing meaning or adding latency to typing.

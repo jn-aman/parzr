@@ -1,6 +1,6 @@
 # Parzr website
 
-Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app itself sends nothing.
+Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app sends no writing anywhere (its only network request is the optional daily update check).
 
 ```
 public/

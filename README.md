@@ -57,13 +57,13 @@ Solid, thick underlines you cannot miss, like the tools you know. Hover to highl
 <td valign="top">
 
 **Built to respect names**<br>
-Parzr never respells a name, it gives it its capital: "aman jain" becomes "Aman Jain", "thanks, priya" becomes "thanks, Priya". Parzr learns names from your undo, your Ignore, the macOS dictionary and (opt-in) Contacts.
+Parzr never respells a name, it gives it its capital: "aman jain" becomes "Aman Jain", "thanks, priya" becomes "thanks, Priya". Parzr learns names from your undo, your Ignore, the macOS dictionary and (opt-in) Contacts, and never learns a known misspelling like "teh" as one.
 
 </td>
 <td valign="top">
 
-**No extension, anywhere**<br>
-Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, Mail, Word and native apps. Google Docs works too, after a one-time switch in Docs. Option+Space covers the rest.
+**No extension needed**<br>
+Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, Mail, Word and native apps. Google Docs works too, after a one-time switch in Docs. Option+Space covers the rest. [Optional extensions](#optional-extensions) add more for VS Code, Neovim and the browser.
 
 </td>
 </tr>
@@ -71,7 +71,7 @@ Works through macOS Accessibility in Safari, Chrome, Brave, Edge, Arc, Firefox, 
 <td valign="top">
 
 **Smart grammar on the Neural Engine**<br>
-New in 0.2. A small grammar model (GECToR) runs on your Mac's Neural Engine in about 2 ms per sentence and catches what rules cannot, like "will be release" (released) or "since three years" (for). Its fixes pass the same guards as everything else: names, links and code are left alone.
+Since 0.2. A small grammar model (GECToR) runs on your Mac's Neural Engine in about 2 ms per sentence and catches what rules cannot, like "will be release" (released) or "since three years" (for). Its fixes pass the same guards as everything else: names, links and code are left alone.
 
 </td>
 <td valign="top">
@@ -91,7 +91,7 @@ Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliber
 <td valign="top">
 
 **Private by construction**<br>
-Writing stays in memory on your Mac. Both models ship inside the app; nothing downloads at runtime and nothing is logged.
+Writing stays in memory on your Mac. Both models ship inside the app; no model downloads at runtime and nothing is logged.
 
 </td>
 </tr>
@@ -109,7 +109,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; nothing do
 2. Drag **Parzr** to **Applications** and open it.
 3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
 
-Parzr updates itself from 0.3 on; if you have 0.2.x, download 0.3 once.
+Parzr updates itself from 0.3 on, so if you have 0.2.x, install 0.3 once by hand. From then on it checks GitHub once a day, downloads a new version quietly and installs it when you quit Parzr or after five idle minutes, with a 10 second countdown you can cancel. Turn either off in **Settings, General, Updates**; **Check for Updates** in the menu bar and About works any time.
 
 Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, or hide it from the Dock in Settings.
 
@@ -126,7 +126,19 @@ Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device mod
 | Google Docs (Chrome, Edge, Brave, Arc) | Native underlines, card and fixes once Docs' screen reader and braille support are on (Tools, Accessibility); otherwise Option+Space copies, checks and pastes | Verified in Chrome |
 | Other canvas editors | Option+Space copies, checks and pastes the fix | Supported |
 
-Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and language-server adapters remain in the repo as optional extras for developers.
+Details and evidence: [integrations](docs/integrations.md).
+
+### Optional extensions
+
+Parzr needs no extension anywhere. Three optional adapters exist for the cases where Accessibility cannot do the job. All three run the local rules engine on your Mac (no Smart grammar, no network) and need Parzr installed in Applications.
+
+| You want | Install | Steps |
+| --- | --- | --- |
+| Real squiggles, the Problems panel and quick fixes in VS Code or Cursor | `parzr-vscode-X.Y.Z.vsix` from the [latest release](https://github.com/jn-aman/parzr/releases/latest) | In VS Code: Extensions, "...", **Install from VSIX**, pick the file |
+| Cards and fixes inside web editors that Accessibility cannot read or edit (Chrome, Edge, Brave, Chromium, Firefox 140+) | `parzr-browser-extension-X.Y.Z.zip` from the release, or the copy inside the app (Settings, Integrations, **Open integrations**) | Load it unpacked, then register it once with `connect-browser.py` |
+| Neovim, Helix, Emacs, Zed or Sublime (editors Parzr cannot see) | Nothing to download | Point the editor's LSP client at `/Applications/Parzr.app/Contents/MacOS/parzr-lsp` |
+
+Step by step instructions, what was tested and the from-source routes are in [integrations](docs/integrations.md#install-the-optional-extensions).
 
 ## How it works
 
@@ -135,7 +147,7 @@ Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and
 - **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. The rules answer first, in well under a millisecond for a chat message.
 - **Smart grammar:** the engine then asks GECToR, a RoBERTa-base grammar tagger (method by Grammarly, Omelianchuk et al. 2020), about each sentence it has not seen before. The model tags words (keep, replace, append, verb form, plural) instead of rewriting, runs as Core ML int8 on the Apple Neural Engine in about 2 ms per sentence, uses about 18 MB of memory, stays loaded and is prewarmed in the background after launch. Answers are cached per sentence, so typing only pays for the sentence you are editing. Its edits pass Parzr's own guards: names, links and code are never touched, case is never changed, an unknown word is never respelled, code-mixed and Hinglish sentences are left alone, edits that belong together stand or fall together, and your choices (one or many, which article, "thanks for") are not second-guessed. A rule's edit always wins over the model's.
 - **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
-- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; nothing downloads at runtime. The app's only network request is a daily check for a new version (a plain request to GitHub for a small signed update file); it sends nothing about you or your writing, GitHub sees what any download shows (your IP address and the app version), and Settings can turn it off.
+- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; no model downloads at runtime. The app's only network request is a daily check for a new version (a plain request to GitHub for a small signed update file); it sends nothing about you or your writing, GitHub sees what any download shows (your IP address and the app version), and Settings can turn it off.
 - See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 
 ## Measured, in the open
@@ -204,7 +216,7 @@ Interactive native QA opens only authored fixtures and needs a desktop session w
 <details>
 <summary><b>Releases</b></summary>
 
-One click: **Actions → Release → Run workflow** (or `gh workflow run release.yml -f bump=patch`). CI bumps every version file, tags, builds, signs, notarizes, staples and publishes the DMG with checksums. See [releases](docs/releases.md).
+One click: **Actions → Release → Run workflow** (or `gh workflow run release.yml -f bump=patch`). CI bumps every version file, tags, builds, signs, notarizes, staples and publishes the DMG with checksums, the update feed that installed apps check, and the optional VS Code and browser extension files. See [releases](docs/releases.md).
 
 <img src="docs/media/release.png" width="860" alt="How a release ships: the owner-only Release workflow bumps, tags and pushes atomically, then ci-release verifies, signs, notarizes and publishes the DMG; website.yml deploys parzr.app to Cloudflare Workers">
 

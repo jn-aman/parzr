@@ -45,7 +45,7 @@ The workflow runs on a cheap Linux runner with no signing credentials and does t
 3. Commits "Release vX.Y.Z" as the person who started the workflow (no co-author or bot trailers), creates the annotated tag `vX.Y.Z`, and pushes the commit and tag together.
 4. Starts [ci-release.yml](../.github/workflows/ci-release.yml) on the new tag with `gh workflow run` (passing `critical` and `notes` through), and links the run in the job summary. Pushes made with the built-in token do not trigger other workflows, but a manual dispatch is allowed, so the build is started explicitly.
 
-On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas and `appcast.xml` as one release. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
+On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas, `appcast.xml` and the optional extension files as one release. The extension files come from `scripts/package-extensions.py` (the same script runs on every pull request, so a packaging break shows before a tag): `parzr-vscode-X.Y.Z.vsix` is built with the pinned `@vscode/vsce` 4.0.0 on Node 22, and `parzr-browser-extension-X.Y.Z.zip` is the contents of `extensions/browser` with fixed timestamps. Both versions come from the manifests that `check-release-version.py` already tied to the tag, and both are appended to `SHA256SUMS`. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
 
 Preview a bump locally without writing anything:
 
@@ -63,7 +63,9 @@ Interactive TextEdit, installed-browser and editor UI checks require a real desk
 
 ## Automatic updates
 
-From 0.3 the app updates itself with Sparkle 2.9.5. It checks once a day, asks before installing, and the check can be turned off in Settings. Its only network request is that check: a plain GET of the feed from GitHub, sending nothing about the user or their writing (GitHub sees an IP address and the app and macOS version, like any download).
+From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no updater, so they install 0.3 by hand once. Its only network request is the update check: a plain GET of the feed from GitHub every 24 hours (`SUScheduledCheckInterval` 86400, started only after the welcome guide is finished), sending nothing about the user or their writing (`SUEnableSystemProfiling` is off; GitHub sees an IP address and the app and macOS version, like any download).
+
+**What the user sees.** The defaults are on (`SUEnableAutomaticChecks`, `SUAutomaticallyUpdate`): a new version downloads quietly in the background and installs when the user quits Parzr, or after five minutes without keyboard or mouse use and with no Parzr window or card open (15 seconds for a critical update), after a 10 second countdown that any input cancels (the next attempt waits 30 minutes). A scheduled update panel waits for a 4 second pause in typing so it never lands mid-sentence. Settings, General, Updates has two switches: **Check for updates automatically** and **Download and install automatically** (unavailable while checks are off). With only checking on, Parzr offers the update in its own panel and the user installs it. The welcome guide has the same check switch, and **Check for Updates** in the menu bar, the status popover and About works at any time. After an update, a short "Updated to X" note appears once.
 
 **The feed.** The app's `SUFeedURL` is `https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml`. Every app release carries an `appcast.xml` asset with exactly one item: that release. GitHub resolves `latest` to the newest published, non-draft, non-prerelease release, so the feed is always the newest release's own file, and deleting or drafting a bad release makes the feed fall back to the previous release by itself. No server, no separate publishing step.
 
@@ -71,9 +73,10 @@ From 0.3 the app updates itself with Sparkle 2.9.5. It checks once a day, asks b
 
 | Asset | What it is |
 |---|---|
-| `Parzr-X.Y.Z.dmg`, `SHA256SUMS`, licenses | The download for new installs, unchanged |
+| `Parzr-X.Y.Z.dmg`, `SHA256SUMS`, licenses | The download for new installs, unchanged. `SHA256SUMS` also lists the two extension files below |
+| `parzr-vscode-X.Y.Z.vsix`, `parzr-browser-extension-X.Y.Z.zip` | The optional VS Code and browser extensions, for [manual install](integrations.md#install-the-optional-extensions). Not part of the update feed; their lower-case names keep them out of the `Parzr-*.zip` update globs |
 | `Parzr-X.Y.Z.zip` | The update archive: the notarized, stapled `Parzr.app` made with `ditto -c -k --sequesterRsrc --keepParent` |
-| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (usually under 1 MB against 700 MB for the zip) |
+| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (small next to the zip, because the bundled models are identical between releases; the 0.2.2 DMG is 731 MB) |
 | `appcast.xml` | One item: `sparkle:version` is the build number (CFBundleVersion, which `bump-version.py` increments), `sparkle:shortVersionString` is X.Y.Z, minimum macOS 13.0, arm64 only, the zip and delta enclosures with EdDSA signatures and lengths, the notes, and either `phasedRolloutInterval` or `criticalUpdate` |
 
 **Notes format.** The item's `<description sparkle:format="markdown">` holds a CDATA Markdown bullet list (`- first point`, `- second point`, at most 6 lines of 160 characters). Sparkle exposes it as `itemDescription` with `itemDescriptionFormat == "markdown"`.

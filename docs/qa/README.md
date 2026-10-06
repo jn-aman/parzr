@@ -1,6 +1,6 @@
 # Verification
 
-Use synthetic fixtures only. Public screenshots in screenshots/ depict the current product. Generated JSON reports, local paths, integration fixtures and packaged artifacts belong in ignored dist/qa or dist/native-qa.
+Use synthetic fixtures only. Every native self-test and snapshot flag (`--typing-test`, `--paste-test`, `--grammar-typing-test`, `--integration-test`, `--ui-test`, `--docs-test`, `--snapshot`) runs on a throwaway settings suite, `app.parzr.desktop.selftest`, which is wiped at start and exit and never writes `known-words.json`, so a test that applies a fix and undoes it cannot teach your real Parzr a name. Public screenshots in screenshots/ depict the current product. Generated JSON reports, local paths, integration fixtures and packaged artifacts belong in ignored dist/qa or dist/native-qa.
 
 The Rust suites check rules, valid contexts, grammar in every mode, composed edit plans, protected spans and Unicode. Swift tests check the native bridge, attributed edits, the playground viewport, draft invalidation during debounce, and correction acceptance with native Undo. The app’s `--health-check` exercises the bundled engine without opening a window or reading editor text; it also reports whether Accessibility is granted and suggestions are paused. Node tests check editor/native-host and LSP protocols. Playwright checks Chromium DOM behavior against the compiled engine through a test messaging bridge.
 
