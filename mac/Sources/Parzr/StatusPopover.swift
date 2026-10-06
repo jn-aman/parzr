@@ -3,6 +3,7 @@ import AppKit
 
 struct StatusPopover: View {
     @ObservedObject var preferences = Preferences.shared
+    @ObservedObject var updates = UpdateModel.shared
     let engineReady: Bool
     let sourceApp: NSRunningApplication?
     var check: () -> Void
@@ -15,6 +16,7 @@ struct StatusPopover: View {
     static let docsHint = "To check Google Docs as you type, turn on Tools, Accessibility, Screen reader support and Braille support in Docs. Once per Google account. Option+Space still works there meanwhile."
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
+            UpdateRow(model: updates)
             HStack { Brand(); Spacer(); Circle().fill(engineReady ? Color.mintAccent : Color.textSecondary).frame(width: 6, height: 6) }
             HStack(spacing: 6) { Image(systemName: "lock"); Text("Local writing assistant"); Spacer(); Text("v\(Support.version)") }.font(.system(size: 10)).foregroundStyle(Color.textSecondary)
             VStack(spacing: 10) {
@@ -52,8 +54,8 @@ struct StatusPopover: View {
             }
             Rectangle().fill(Color.hairline).frame(height: 0.5)
             HStack { NativeButton(title: "Open editor", symbol: "square.and.pencil", label: "Open Parzr", action: editor); Spacer(); NativeButton(title: "Settings", symbol: "slider.horizontal.3", action: settings) }
-            HStack { NativeButton(title: "About Parzr", kind: .utility, action: about); Spacer(); NativeButton(title: "Quit", kind: .utility, label: "Quit Parzr", action: quit) }
-            NativeButton(title: "Welcome and permissions…", kind: .utility, label: "Welcome and permissions", action: welcome).fixedSize()
+            HStack { NativeButton(title: "About Parzr", kind: .utility, action: about); Spacer(); UpdateCheckButton(model: updates) }
+            HStack { NativeButton(title: "Welcome and permissions…", kind: .utility, label: "Welcome and permissions", action: welcome).fixedSize(); Spacer(); NativeButton(title: "Quit", kind: .utility, label: "Quit Parzr", action: quit) }
         }.padding(18).frame(width: 318).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }
 }

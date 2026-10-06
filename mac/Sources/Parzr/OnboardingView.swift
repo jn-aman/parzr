@@ -7,6 +7,7 @@ struct OnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @ObservedObject var model: OnboardingModel
     @ObservedObject private var preferences: Preferences
+    @ObservedObject private var updates = UpdateModel.shared
     var renderingSnapshot = false
     var settings: () -> Void = {}
     var finish: () -> Void = {}
@@ -190,6 +191,12 @@ struct OnboardingView: View {
                 tip("globe", "Works in Safari, Chrome, Firefox and native apps. No extension needed.")
                 divider
                 tip("menubar.arrow.up.rectangle", "Click the Parzr icon in the menu bar to pause or change settings.")
+                divider
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.mintAccent).frame(width: 20)
+                    Text("Parzr checks GitHub once a day for a new version. It sends nothing about you or your writing.").font(.system(size: 12)).lineSpacing(2).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle("Check for updates automatically", isOn: $updates.automaticChecks).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize()
+                }.padding(.horizontal, 16).padding(.vertical, 11)
                 if !granted {
                     divider
                     HStack(spacing: 10) { warning("Accessibility is still off, so Parzr cannot check other apps yet.").frame(maxWidth: .infinity, alignment: .leading); NativeButton(title: "Enable…", action: { preferences.requestPermission() }).fixedSize() }.padding(.horizontal, 16).padding(.vertical, 9)

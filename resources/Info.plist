@@ -28,5 +28,19 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Parzr contributors. Third-party notices included.</string>
+	<key>SUAllowsAutomaticUpdates</key>
+	<true/>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

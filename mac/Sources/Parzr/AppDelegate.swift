@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var subscriptions: Set<AnyCancellable> = []
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
+    private var updates: UpdateController?
+    private var updatePresenter: UpdatePresenter?
+    private var updateDot: NSView?
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showStudio()
         return true
@@ -107,10 +110,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             button.setAccessibilityLabel("Parzr writing assistant")
         }
         item.button?.target = self; item.button?.action = #selector(toggleStatusPopover)
-        Preferences.shared.$paused.combineLatest(Preferences.shared.$passive).sink { [weak self] paused, automatic in
-            let inactive = paused || !automatic
+        Preferences.shared.$paused.combineLatest(Preferences.shared.$passive, UpdateModel.shared.$pending.combineLatest(UpdateModel.shared.$available)).sink { [weak self] paused, automatic, update in
+            let inactive = paused || !automatic, badge = update.0 != nil || update.1 != nil
             self?.statusItem?.button?.image = ParzrMark.menuImage(paused: inactive)
-            self?.statusItem?.button?.setAccessibilityLabel(inactive ? "Parzr, highlights paused" : "Parzr, automatic highlights enabled")
+            self?.statusItem?.button?.setAccessibilityLabel((inactive ? "Parzr, highlights paused" : "Parzr, automatic highlights enabled") + (badge ? ", update ready" : ""))
+            self?.showUpdateDot(badge)
         }.store(in: &subscriptions)
         Preferences.shared.$appearance.removeDuplicates().sink { [weak self] value in
             let appearance = value == "system" ? nil : NSAppearance(named: value == "paper" ? .aqua : .darkAqua)
@@ -158,6 +162,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
         if OnboardingFlow.shouldShow(completed: Preferences.shared.onboardingCompleted, granted: Preferences.shared.permissionGranted) { showOnboarding() }
         else if !CommandLine.arguments.contains("--background") { showStudio() }
+        startUpdates()
+    }
+    /// Sparkle's updater and Parzr's own update panel. Only reached in a normal launch (every test and snapshot mode returns above), and it checks nothing until the welcome flow is done.
+    private func startUpdates() {
+        let anchor: () -> NSRect? = { [weak self] in self?.statusItem?.button?.window?.frame }
+        guard let controller = UpdateController(isBusy: { [weak self] in
+            guard let self else { return false }
+            return self.panel?.isVisible == true || self.inline.isPresenting || self.studio?.isKeyWindow == true || self.onboarding?.isVisible == true || self.panelModel.busy || self.studioModel.busy
+        }) else { return }
+        updates = controller; updatePresenter = UpdatePresenter(anchor: anchor)
+        if Preferences.shared.onboardingCompleted { controller.start() }
+        else { Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { [weak controller] _ in controller?.start() }.store(in: &subscriptions) }
+    }
+    /// A small mint dot on the menu-bar icon while an update is waiting.
+    private func showUpdateDot(_ visible: Bool) {
+        guard let button = statusItem?.button else { return }
+        if !visible { updateDot?.removeFromSuperview(); updateDot = nil; return }
+        guard updateDot == nil else { return }
+        let dot = NSView(frame: NSRect(x: button.bounds.maxX - 9, y: 4, width: 7, height: 7))
+        dot.wantsLayer = true; dot.layer?.backgroundColor = NSColor(red: 0.22, green: 0.80, blue: 0.54, alpha: 1).cgColor; dot.layer?.cornerRadius = 3.5
+        dot.layer?.borderWidth = 1; dot.layer?.borderColor = NSColor.black.withAlphaComponent(0.35).cgColor
+        dot.autoresizingMask = [.minXMargin, .maxYMargin]; dot.setAccessibilityElement(false)
+        button.addSubview(dot); updateDot = dot
     }
     @objc private func toggleStatusPopover() {
         guard let button = statusItem?.button else { return }
@@ -184,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func makeMenu() -> NSMenu {
         let main = NSMenu(); let app = NSMenu(); let appItem = NSMenuItem(); appItem.submenu = app; main.addItem(appItem)
         let about = app.addItem(withTitle: "About Parzr", action: #selector(openAbout), keyEquivalent: ""); about.target = self
+        let check = app.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""); check.target = self
         app.addItem(.separator())
         let settings = app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ","); settings.target = self
         let welcome = app.addItem(withTitle: "Welcome and permissions…", action: #selector(openWelcome), keyEquivalent: ""); welcome.target = self
@@ -234,6 +262,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func enableEditorAccess() { Preferences.shared.requestPermission() }
     @objc private func openEditor() { showStudio(route: .playground) }
     @objc private func openAbout() { showStudio(route: .about) }
+    @objc private func checkForUpdates() { UpdateModel.shared.perform(.check) }
     @objc private func openSettings() { showStudio(route: .general) }
     @objc private func openWelcome() { showOnboarding() }
     /// The guided setup. Opens at the Accessibility step when that is still missing for a returning user; closing it by any route marks it completed.
@@ -364,6 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 let nameSource = "i met Aman Jain yestarday."
                 let nameEdits = [WritingEdit(start: 6, end: 10, replacement: "Amen", original: "Aman", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling."), WritingEdit(start: 16, end: 25, replacement: "yesterday", original: "yestarday", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling.")]
                 try render(InlineCorrection(edit: nameEdits[0], source: nameSource, edits: nameEdits, canApply: true, apply: {}, applySentence: {}, ignore: {}, close: {}), size: InlineCorrection.size, to: URL(fileURLWithPath: directory).appendingPathComponent("name-card.png"))
+                UpdateModel.shared.canCheck = true; UpdateModel.shared.lastChecked = Date().addingTimeInterval(-7200)
                 studioModel.engineReady = true; studioModel.playground("I recieved your mesage.\n\nCan you chek this?", debounce: true)
                 for _ in 0..<300 where studioModel.busy { try await Task.sleep(for: .milliseconds(50)) }
                 guard !studioModel.busy, studioModel.chosenEdits.count == 3 else { throw ParzrError.message("The snapshot's real draft check did not complete.") }
@@ -379,6 +409,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
                 try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, welcome: {}, quit: {}), size: NSSize(width: 318, height: 334), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
+                // Update surfaces: one PNG per state, from a bare model (no Sparkle, no network).
+                let notes = "## What's new\n- **Smarter names:** fewer wrong fixes on names and places.\n- Updates arrive quietly now, and you can read what changed first.\n- Fixed a rare stall when switching apps mid-sentence.\n\nFull notes on the [releases page](https://github.com/jn-aman/parzr/releases)."
+                let release = UpdateInfo(version: "0.3.0", build: "7", bytes: 14_800_000, notes: notes, notesFormat: "markdown")
+                let phases: [(String, UpdatePhase)] = [("checking", .checking), ("found", .found(release)), ("found-critical", .found({ var r = release; r.critical = true; return r }())),
+                    ("downloading", .downloading(release, received: 6_100_000, total: 14_800_000)), ("extracting", .extracting(release, progress: 0.4)), ("ready", .ready(release)), ("installing", .installing(release)),
+                    ("countdown", .countdown(release, seconds: 7)), ("uptodate", .upToDate("Parzr 0.3.0 is the latest version.")), ("failed", .failed(UpdateText.friendly(NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)))), ("updated", .updated("0.3.0"))]
+                for (name, phase) in phases {
+                    let model = UpdateModel(); model.phase = phase
+                    let view = UpdatePanelView(model: model, renderingSnapshot: true)
+                    try render(view, size: NSHostingView(rootView: view).fittingSize, to: URL(fileURLWithPath: directory).appendingPathComponent("update-\(name).png"))
+                }
+                let rowModel = UpdateModel(); rowModel.pending = release
+                UpdateModel.shared.pending = release
+                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, welcome: {}, quit: {}), size: NSSize(width: 318, height: 408), to: URL(fileURLWithPath: directory).appendingPathComponent("menu-update.png"))
+                UpdateModel.shared.pending = nil
+                try render(UpdateRow(model: rowModel).padding(18).frame(width: 318).background(Color.canvas), size: NSSize(width: 318, height: 92), to: URL(fileURLWithPath: directory).appendingPathComponent("update-row.png"))
                 try render(StudioView(model: studioModel, route: .about, renderingSnapshot: true), size: NSSize(width: 760, height: 540), to: URL(fileURLWithPath: directory).appendingPathComponent("about-small.png"))
                 // Onboarding: one PNG per step; the Accessibility step in both states. Previews never touch macOS permissions.
                 let welcome = OnboardingModel(step: .welcome)

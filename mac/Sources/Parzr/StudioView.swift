@@ -35,6 +35,7 @@ struct StudioView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @ObservedObject var model: AppModel
     @ObservedObject var preferences = Preferences.shared
+    @ObservedObject var updates = UpdateModel.shared
     var route: StudioRoute?
     var renderingSnapshot: Bool
     @State private var draft: String
@@ -214,6 +215,11 @@ struct StudioView: View {
                 group("SETUP") {
                     settingRow("Welcome and permissions", detail: preferences.permissionGranted ? "Accessibility is on. Review Contacts, login and the shortcut, or try Parzr again." : "Accessibility is off. Parzr cannot check other apps until you allow it.") { NativeButton(title: "Open", action: { model.showOnboarding?() }).fixedSize() }
                 }
+                group("UPDATES") {
+                    settingRow("Check for updates automatically", detail: "Parzr checks GitHub once a day for a new version. It sends nothing about you or your writing.") { toggle("Check for updates automatically", $updates.automaticChecks) }
+                    divider
+                    settingRow("Download and install automatically", detail: "New versions download quietly and install when you quit Parzr or step away. You can cancel the restart.") { toggle("Download and install automatically", $updates.automaticDownloads).disabled(!updates.automaticChecks) }
+                }
                 group("YOUR SHORTCUT") {
                     settingRow("Check selected text", detail: "Click to record. Use ⌘, ⌥, or ⌃. Escape cancels.") {
                         VStack(alignment: .trailing, spacing: 6) {
@@ -324,6 +330,9 @@ struct StudioView: View {
                         Text("Version \(Support.version) · Apple Silicon · \(Support.build)").font(.system(size: 12)).foregroundStyle(Color.textSecondary)
                         Text("An open-source writing assistant that checks grammar and rewrites text on your Mac. Your words stay with you.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(20)
+                }
+                group("UPDATES") {
+                    settingRow("Software update", detail: updates.statusLine) { UpdateCheckButton(model: updates, kind: .secondary) }
                 }
                 group("HELP & SUPPORT") {
                     settingRow("Report an issue", detail: "Tell us what happened. You choose what to include.") { NativeButton(title: "Report an issue", symbol: "exclamationmark.bubble", action: Support.reportIssue).fixedSize() }
