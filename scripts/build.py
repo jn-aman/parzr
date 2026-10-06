@@ -49,6 +49,10 @@ for bundle in bin_path.glob('*.bundle'):
 # Sparkle (auto-update). Parzr is not sandboxed, so Sparkle's XPC services are dropped (https://sparkle-project.org/documentation/sandboxing/ "Removing XPC Services"); the binaries are thinned to arm64 like the rest of the app and re-signed below.
 sparkle = stage/'Contents/Frameworks/Sparkle.framework'
 shutil.copytree(bin_path/'Sparkle.framework', sparkle, symlinks=True)
+# The licence (with its bundled components) ships from resources/ThirdParty; a Sparkle bump must refresh it.
+upstream_license = ROOT/'mac/.build/artifacts/sparkle/Sparkle/LICENSE'
+if upstream_license.exists() and upstream_license.read_bytes() != (ROOT/'resources/ThirdParty/Sparkle-LICENSE.txt').read_bytes():
+    sys.exit('resources/ThirdParty/Sparkle-LICENSE.txt differs from the pinned Sparkle LICENSE; update it and THIRD_PARTY_NOTICES')
 shutil.rmtree(sparkle/'Versions/B/XPCServices'); (sparkle/'XPCServices').unlink()
 for name in ['Versions/B/Sparkle', 'Versions/B/Autoupdate', 'Versions/B/Updater.app/Contents/MacOS/Updater']:
     run(['lipo', sparkle/name, '-thin', 'arm64', '-output', sparkle/name])

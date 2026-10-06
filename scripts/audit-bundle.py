@@ -17,6 +17,7 @@ app = args.app
 required = ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Resources/LICENSE', 'Contents/Resources/THIRD_PARTY_NOTICES', 'Contents/Resources/PrivacyInfo.xcprivacy', 'Contents/Resources/Integrations/extensions/browser/manifest.json', 'Contents/Resources/Integrations/extensions/vscode/package.json']
 required += ['Contents/Resources/ThirdParty/EnglishFrequency-data.json', 'Contents/Resources/ThirdParty/EnglishFrequency-NOTICES.md', 'Contents/Resources/ThirdParty/EnglishFrequency-LICENSE.txt']
 required += ['Contents/Frameworks/libparzr_model.dylib', 'Contents/Resources/Model/manifest.json', 'Contents/Resources/Model/llama-LICENSE.txt', 'Contents/Resources/ThirdParty/Qwen3.5-LICENSE.txt']
+required += ['Contents/Resources/ThirdParty/Pow-LICENSE.txt', 'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt']
 gector = 'Contents/Resources/Model/gector/'
 required += [gector+name for name in ['manifest.json', 'vocab.json', 'merges.txt', 'added_tokens.json', 'labels.txt', 'verb-form-vocab.txt', 'gector.mlmodelc/coremldata.bin', 'gector.mlmodelc/model.mil', 'gector.mlmodelc/weights/weight.bin']]
 required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Contents/Resources/Integrations/extensions/browser/content.js', 'Contents/Resources/Integrations/extensions/browser/background.js']
@@ -37,6 +38,9 @@ for name in ['Versions/B/Autoupdate', 'Versions/B/Updater.app']:
     if 'runtime' not in subprocess.run(['codesign','-dvv',str(sparkle/name)],capture_output=True,text=True).stderr.split('flags=')[-1].split('\n')[0]:
         sys.exit('Sparkle helper is not signed with the hardened runtime: '+name)
 if '@executable_path/../Frameworks' not in subprocess.check_output(['otool','-l',str(app/'Contents/MacOS/parzr')],text=True): sys.exit('The app executable cannot find Contents/Frameworks (missing rpath).')
+sparkle_license = (app/'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt').read_text()
+for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVerifier']:
+    if part not in sparkle_license: sys.exit('Sparkle-LICENSE.txt is incomplete (missing '+part+')')
 # Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, a daily check.
 feed, key = info.get('SUFeedURL', ''), info.get('SUPublicEDKey', '')
 if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) != 32: sys.exit('Info.plist needs an https SUFeedURL and a 32-byte SUPublicEDKey.')

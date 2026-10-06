@@ -52,6 +52,17 @@ Used for brief success feedback in native controls. Its resource bundle and
 full license (Resources/ThirdParty/Pow-LICENSE.txt) ship with the app.
 Parzr's icon and brand mark are original project assets.
 
+Automatic updates
+Sparkle 2.9.5: Copyright Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński,
+Mayur Pawashe, C.W. Betts, Petroules Corporation, Big Nerd Ranch. MIT license.
+https://github.com/sparkle-project/Sparkle
+Sparkle.framework ships in the app and runs the daily update check. Its
+bundled third-party components, bsdiff and bspatch 4.3 (Colin Percival, BSD),
+sais-lite (Yuta Mori, MIT), the portable Ed25519 implementation (Orson Peters,
+zlib) and SUSignatureVerifier (Mark Hamlin, BSD), are licensed as listed in the
+full text of Sparkle's LICENSE, which ships with the app as
+Resources/ThirdParty/Sparkle-LICENSE.txt. The XPC services are removed.
+
 English word frequency data (wordfreq 3.1.1)
 Copyright Robyn Speer and the credited upstream source contributors.
 https://github.com/rspeer/wordfreq
