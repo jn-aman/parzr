@@ -5,6 +5,8 @@ import ParzrCore
 struct DraftEditor: NSViewRepresentable {
     @Binding var text: String
     var edits: [WritingEdit]
+    /// The marks come from an earlier version of the text: drawn, but a click offers no fix.
+    var provisional = false
     var fontSize: Double = 18
     var lineSpacing: Double = 6
     var highlightFill = true
@@ -46,7 +48,7 @@ struct DraftEditor: NSViewRepresentable {
             editor.textStorage?.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: editor.string.utf16.count))
         }
         if restoreUndoRegistration { undo?.enableUndoRegistration() }
-        editor.suggestions = edits
+        editor.suggestions = provisional ? [] : edits
         editor.ignore = ignore
         if editor.string != text && !editor.hasMarkedText() {
             let selected = editor.selectedRange()
@@ -67,19 +69,25 @@ struct DraftEditor: NSViewRepresentable {
             if let edit = edits.first(where: { $0.id == focusedEditID }), let range = editor.displayRange(for: edit) { editor.scrollRangeToVisible(range) }
         }
         guard let layout = editor.layoutManager else { return }
+        // Redraw the marks only when they or the text moved: rewriting identical marks on every update is wasted work and a chance to flash.
+        let marks = edits.compactMap { edit in editor.displayRange(for: edit).map { Mark(range: $0, category: edit.category) } }
+        guard context.coordinator.drawn != Drawn(marks: marks, string: editor.string, fill: highlightFill, appearance: editor.effectiveAppearance.name) else { return }
+        context.coordinator.drawn = Drawn(marks: marks, string: editor.string, fill: highlightFill, appearance: editor.effectiveAppearance.name)
         let full = NSRange(location: 0, length: editor.string.utf16.count)
         layout.removeTemporaryAttribute(.underlineStyle, forCharacterRange: full)
         layout.removeTemporaryAttribute(.underlineColor, forCharacterRange: full)
         layout.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
-        for edit in edits {
-            guard let range = editor.displayRange(for: edit) else { continue }
-            layout.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.thick.rawValue, .underlineColor: NSColor(Color.ink(for: edit.category)), .backgroundColor: NSColor(Color.ink(for: edit.category)).withAlphaComponent(highlightFill ? 0.12 : 0)], forCharacterRange: range)
+        for mark in marks {
+            layout.addTemporaryAttributes([.underlineStyle: NSUnderlineStyle.thick.rawValue, .underlineColor: NSColor(Color.ink(for: mark.category)), .backgroundColor: NSColor(Color.ink(for: mark.category)).withAlphaComponent(highlightFill ? 0.12 : 0)], forCharacterRange: mark.range)
         }
     }
+    struct Mark: Equatable { let range: NSRange, category: String }
+    struct Drawn: Equatable { let marks: [Mark], string: String, fill: Bool, appearance: NSAppearance.Name }
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: DraftEditor
         var writingFromBinding = false
         var lastFocusedID: String?
+        var drawn: Drawn?
         init(_ parent: DraftEditor) { self.parent = parent }
         func textDidChange(_ notification: Notification) {
             if let editor = notification.object as? CorrectionTextView {

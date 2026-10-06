@@ -221,7 +221,7 @@ private struct OnboardingTryField: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            DraftEditor(text: $model.draft, edits: editor.source == model.draft ? editor.chosenEdits : [], fontSize: 16, lineSpacing: 5, highlightFill: preferences.highlightFill, ignore: { editor.toggle($0) })
+            DraftEditor(text: $model.draft, edits: editor.marks(for: model.draft), provisional: editor.provisional || editor.source != model.draft, fontSize: 16, lineSpacing: 5, highlightFill: preferences.highlightFill, ignore: { editor.toggle($0) })
                 .frame(height: 66).background(Color.writingSurface)
             Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
             HStack(spacing: 8) {

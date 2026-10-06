@@ -16,8 +16,8 @@ func runEditorTypingTest(model: AppModel, host: NSView, window: NSWindow, direct
         throw ParzrError.message("The check did not settle with \(count) suggestions.")
     }
     type("I recieved your mesage. "); try await settled(2)
-    let marked = ["recieved", "mesage"].map { (editor.string as NSString).range(of: $0).location }
-    func marksPresent() -> Bool { marked.allSatisfy { layout.temporaryAttribute(.underlineStyle, atCharacterIndex: $0, effectiveRange: nil) != nil } }
+    // Wherever the words are now, they must stay marked.
+    func marksPresent() -> Bool { ["recieved", "mesage"].allSatisfy { layout.temporaryAttribute(.underlineStyle, atCharacterIndex: (editor.string as NSString).range(of: $0).location, effectiveRange: nil) != nil } }
     guard marksPresent() else { throw ParzrError.message("The baseline marks are not drawn.") }
     try NativeControls.snapshot(host, to: target.appendingPathComponent("typing-0-before.png"))
     var edits = 0
@@ -36,7 +36,7 @@ func runEditorTypingTest(model: AppModel, host: NSView, window: NSWindow, direct
             try? await Task.sleep(for: .milliseconds(4))
         }
     }
-    let typed = "Can you chek this and tel me?", expected = editor.string + typed
+    let typed = "Can you chek this and tel me?", expected = "Hi! " + editor.string + typed
     var frame = 1, caretMoved = 0
     let delays = [70, 110, 60, 140, 90] // realistic cadence, mostly inside the checking delay
     for character in typed {
@@ -47,8 +47,14 @@ func runEditorTypingTest(model: AppModel, host: NSView, window: NSWindow, direct
         if [3, 9, 17, 24].contains(frame) { try NativeControls.snapshot(host, to: target.appendingPathComponent("typing-\(frame)-mid.png")) }
         frame += 1
     }
+    // Typing in front of the marks moves them; they must travel with the text.
+    editor.setSelectedRange(NSRange(location: 0, length: 0))
+    for character in "Hi! " {
+        type(String(character)); try await Task.sleep(for: .milliseconds(delays[frame % delays.count])); frame += 1
+        if frame == 33 { try NativeControls.snapshot(host, to: target.appendingPathComponent("typing-front-mid.png")) }
+    }
     sampler.cancel()
-    let rewrites = edits - typed.count
+    let rewrites = edits - typed.count - 4
     try await settled(2)
     try NativeControls.snapshot(host, to: target.appendingPathComponent("typing-9-after.png"))
     let report: [String: Any] = ["samples": samples, "samples_missing_marks": missingMarks, "samples_busy": busy, "samples_check_disabled": checkDisabled, "samples_copy_disabled": copyDisabled,

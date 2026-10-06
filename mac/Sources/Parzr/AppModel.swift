@@ -8,6 +8,8 @@ final class AppModel: ObservableObject {
     @Published var mode: RewriteMode = .fix
     @Published var result: RewriteResult?
     @Published var busy = false
+    /// The shown edits come from an earlier version of the text, carried over typing. They are drawn but never applied.
+    @Published private(set) var provisional = false
     @Published var error: String?
     @Published var status: String?
     @Published var source = ""
@@ -28,7 +30,7 @@ final class AppModel: ObservableObject {
     private var clipboard: ClipboardTransaction?
     var chosenEdits: [WritingEdit] { result?.edits.filter { selectedEdits.contains($0.id) } ?? [] }
     var preview: String { (try? EditPlan.apply(chosenEdits, to: source)) ?? source }
-    var canApply: Bool { !busy && !chosenEdits.isEmpty && (snapshot?.canPatch == true || snapshot?.copied == true) }
+    var canApply: Bool { !busy && !provisional && !chosenEdits.isEmpty && (snapshot?.canPatch == true || snapshot?.copied == true) }
     var focusedEdit: WritingEdit? { chosenEdits.first { $0.id == focusedEditID } ?? chosenEdits.first }
     var sentenceEdits: [WritingEdit] { focusedEdit.map { SentencePreview.edits(source: source, edits: chosenEdits, focused: $0) } ?? [] }
     var fixesSentence: Bool { (snapshot?.expectedSelection.length ?? 0) == 0 && sentenceEdits.count > 1 }
@@ -54,14 +56,36 @@ final class AppModel: ObservableObject {
         selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = .fix; self.result = result
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
-        busy = false; engineReady = true; error = nil; status = nil
+        provisional = false; busy = false; engineReady = true; error = nil; status = nil
         status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
     }
-    func playground(_ text: String, debounce: Bool = false) { snapshot = nil; source = text; sourceApp = "Playground"; status = nil; analyze(debounce: debounce) }
+    func playground(_ text: String, debounce: Bool = false) {
+        let old = source
+        snapshot = nil; source = text; sourceApp = "Playground"; status = nil
+        if debounce, text != old { carryOver(from: old) }
+        analyze(debounce: debounce)
+    }
+    /// Typing keeps the marks that the keystroke did not touch, shifted to where the text now is, so nothing flashes while the next check runs.
+    private func carryOver(from old: String) {
+        guard let result else { return }
+        let change = EditRemap.Change(from: old, to: source)
+        var moved: [WritingEdit] = [], ids: [String: String] = [:]
+        for edit in result.edits { if let shifted = change.shift(edit) { moved.append(shifted); ids[edit.id] = shifted.id } }
+        selectedEdits = Set(selectedEdits.compactMap { ids[$0] }); focusedEditID = focusedEditID.flatMap { ids[$0] }
+        self.result = result.replacingEdits(moved); provisional = true
+    }
+    /// The edits to draw over `text`, which may be one keystroke ahead of the model.
+    func marks(for text: String) -> [WritingEdit] {
+        guard text != source else { return chosenEdits }
+        let change = EditRemap.Change(from: source, to: text)
+        return chosenEdits.compactMap { change.shift($0) }
+    }
     func analyze(debounce: Bool = false) {
         analysisTask?.cancel(); generation += 1
         let current = generation; let original = source
-        result = nil; selectedEdits = []; error = nil; status = nil; busy = true
+        error = nil; status = nil
+        // An explicit check clears the old answer and shows Checking at once; typing keeps its marks and only shows Checking if the wait is long.
+        if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true }
         // Typing always takes the fast grammar path. Tone and passage review are explicit.
         let requestMode: RewriteMode = debounce ? .fix : mode
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
@@ -69,21 +93,24 @@ final class AppModel: ObservableObject {
         let gec = Preferences.shared.smartGrammar && requestMode == .fix
         let (starts, ends, deep) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true, !debounce && (mode != .fix || Preferences.shared.contextRefinement))
         analysisTask = Task { @MainActor in
+            var slow: Task<Void, Never>?
+            defer { slow?.cancel() }
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay))) }
                 try Task.checkCancellation()
+                if debounce { slow = Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); if !Task.isCancelled, current == generation { busy = true } } }
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec)
                 try Task.checkCancellation()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
-                self.result = result; selectedEdits = Set(result.edits.map(\.id)); busy = false; engineReady = true
+                self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
                 self.status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
                 didAnalyze?()
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
-                self.error = error.localizedDescription; busy = false
+                self.error = error.localizedDescription; result = nil; selectedEdits = []; provisional = false; busy = false
             }
         }
     }
@@ -94,7 +121,7 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
-    func copy() { guard !busy, result != nil else { return }; NSPasteboard.general.clearContents(); NSPasteboard.general.setString(preview, forType: .string); status = "Copied to clipboard" }
+    func copy() { guard !busy, !provisional, result != nil else { return }; NSPasteboard.general.clearContents(); NSPasteboard.general.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
     func applyBest() { if fixesSentence { applySentence() } else { applyCurrent() } }
@@ -153,5 +180,28 @@ final class AppModel: ObservableObject {
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
         }
     }
-    func clearSession() { analysisTask?.cancel(); generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+    func clearSession() { analysisTask?.cancel(); generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+}
+
+/// Carries edit offsets across a text change (UTF-16, the engine's unit) so marks can stay put while a new check runs.
+enum EditRemap {
+    struct Change {
+        let start: Int, oldEnd: Int, delta: Int, unchanged: Bool
+        /// The span of `old` that became `new`, found from the common prefix and suffix and never cutting a surrogate pair.
+        init(from old: String, to new: String) {
+            let (a, b) = (Array(old.utf16), Array(new.utf16)), shared = min(a.count, b.count)
+            var prefix = 0, suffix = 0
+            while prefix < shared, a[prefix] == b[prefix] { prefix += 1 }
+            if prefix > 0, UTF16.isLeadSurrogate(a[prefix - 1]) { prefix -= 1 }
+            while suffix < shared - prefix, a[a.count - 1 - suffix] == b[b.count - 1 - suffix] { suffix += 1 }
+            if suffix > 0, UTF16.isTrailSurrogate(a[a.count - suffix]) { suffix -= 1 }
+            (start, oldEnd, delta, unchanged) = (prefix, a.count - suffix, b.count - a.count, old == new)
+        }
+        /// Kept as is when wholly before the change, moved by the length change when wholly after, dropped when it overlaps or touches it.
+        func shift(_ edit: WritingEdit) -> WritingEdit? {
+            if unchanged || edit.end_utf16 < start { return edit }
+            guard edit.start_utf16 > oldEnd else { return nil }
+            return WritingEdit(start: edit.start_utf16 + delta, end: edit.end_utf16 + delta, replacement: edit.replacement, original: edit.original, category: edit.category, ruleID: edit.rule_id, explanation: edit.explanation, confidence: edit.confidence, groupID: edit.group_id)
+        }
+    }
 }

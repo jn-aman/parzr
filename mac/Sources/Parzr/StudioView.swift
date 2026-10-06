@@ -143,7 +143,7 @@ struct StudioView: View {
                 }.padding(.horizontal, 16).padding(.vertical, 12)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
                 ZStack(alignment: .topLeading) {
-                    DraftEditor(text: $draft, edits: model.source == draft ? model.chosenEdits : [], fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) })
+                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) })
                     if draft.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("A thought. A message. A first draft.").font(.system(size: preferences.boundedFontSize)).foregroundStyle(Color.textSecondary.opacity(0.7))
@@ -153,7 +153,7 @@ struct StudioView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.writingSurface)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
                 HStack(spacing: 8) {
-                    if model.busy { ProgressView().controlSize(.mini); Text("Checking…") }
+                    if model.busy || (model.result == nil && model.error == nil && !draft.isEmpty) { ProgressView().controlSize(.mini); Text("Checking…") } // before the first answer there is nothing else to show
                     else if model.error != nil { Image(systemName: "exclamationmark.circle").foregroundStyle(Color.errorInk); Text("Check unavailable") }
                     else if draft.isEmpty { Image(systemName: "text.cursor"); Text("A clean slate") }
                     else { Circle().fill(Color.mintAccent).frame(width: 5, height: 5); Text(model.chosenEdits.isEmpty ? "Grammar checked" : "\(model.chosenEdits.count) suggestions").lineLimit(1).help("Click a mint-marked word, or choose Review to see every suggestion") }
@@ -162,7 +162,7 @@ struct StudioView: View {
                         NativeButton(title: "Review", symbol: "list.bullet", label: "Review suggestions", action: { reviewVisible.toggle() }).fixedSize()
                             .popover(isPresented: $reviewVisible, arrowEdge: .bottom) {
                                 SuggestionReview(model: model, apply: { edit in
-                                    guard model.source == draft, let next = try? EditPlan.apply(EditPlan.related(to: edit, in: model.chosenEdits), to: draft) else { return }
+                                    guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(EditPlan.related(to: edit, in: model.chosenEdits), to: draft) else { return }
                                     draft = next
                                 }, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false })
                             }
@@ -170,9 +170,9 @@ struct StudioView: View {
                     if draft.isEmpty { NativeButton(title: "Try a sample", action: { draft = "I recieved your mesage.\n\nCan you chek this?" }).fixedSize() }
                     else {
                         NativeButton(title: "Check passage", symbol: "checkmark", enabled: !model.busy, action: { model.playground(draft) }).fixedSize().help("Review the whole passage with the selected writing mode")
-                        NativeButton(title: model.status == "Copied to clipboard" ? "Copied" : "Copy", symbol: model.status == "Copied to clipboard" ? "checkmark" : "doc.on.doc", enabled: model.result != nil && !model.busy && model.source == draft, action: { model.copy() }).fixedSize()
+                        NativeButton(title: model.status == "Copied to clipboard" ? "Copied" : "Copy", symbol: model.status == "Copied to clipboard" ? "checkmark" : "doc.on.doc", enabled: model.result != nil && !model.busy, action: { guard model.source == draft else { return }; model.copy() }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: model.status == "Copied to clipboard", isEnabled: animate)
-                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && model.source == draft && !model.chosenEdits.isEmpty, action: { guard model.source == draft else { return }; draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
+                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: appliedCount, isEnabled: animate)
                     }
                 }.font(.system(size: 11)).foregroundStyle(Color.textSecondary).padding(.horizontal, 16).padding(.vertical, 12)

@@ -473,7 +473,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 try render(InlineCorrection(edit: nameEdits[0], source: nameSource, edits: nameEdits, canApply: true, apply: {}, applySentence: {}, ignore: {}, close: {}), size: InlineCorrection.size, to: URL(fileURLWithPath: directory).appendingPathComponent("name-card.png"))
                 UpdateModel.shared.canCheck = true; UpdateModel.shared.lastChecked = Date().addingTimeInterval(-7200)
                 studioModel.engineReady = true; studioModel.playground("I recieved your mesage.\n\nCan you chek this?", debounce: true)
-                for _ in 0..<300 where studioModel.busy { try await Task.sleep(for: .milliseconds(50)) }
+                for _ in 0..<300 where studioModel.busy || studioModel.result == nil { try await Task.sleep(for: .milliseconds(50)) }
                 guard !studioModel.busy, studioModel.chosenEdits.count == 3 else { throw ParzrError.message("The snapshot's real draft check did not complete.") }
                 try render(StudioView(model: studioModel, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("playground.png"))
                 if let edit = studioModel.chosenEdits.first { try render(InlineCorrection(edit: edit, source: studioModel.source, edits: studioModel.chosenEdits, canApply: true, apply: {}, applySentence: {}, ignore: {}, close: {}), size: InlineCorrection.size, to: URL(fileURLWithPath: directory).appendingPathComponent("draft-card.png")) }
@@ -597,7 +597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard studioModel.source == "I received your message.\n\nCan you check this?" else { throw ParzrError.message("Apply all did not update the native draft.") }
         guard draft.undoManager?.canUndo == true else { throw ParzrError.message("Apply all did not preserve native Undo.") }
         draft.undoManager?.undo()
-        for _ in 0..<80 { try await Task.sleep(for: .milliseconds(50)); if !studioModel.busy && studioModel.source == sampleSource { break } }
+        for _ in 0..<80 { try await Task.sleep(for: .milliseconds(50)); if !studioModel.busy && !studioModel.provisional && studioModel.source == sampleSource { break } }
         guard studioModel.source == sampleSource else {
             let diagnostics: [String: Any] = ["fixture_only": true, "model": studioModel.source, "draft": draft.string, "undo_action": draft.undoManager?.undoActionName ?? "", "can_undo": draft.undoManager?.canUndo == true]
             try JSONSerialization.data(withJSONObject: diagnostics, options: [.prettyPrinted, .sortedKeys]).write(to: target.appendingPathComponent("undo-failure.json"))

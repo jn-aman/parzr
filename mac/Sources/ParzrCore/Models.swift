@@ -83,6 +83,10 @@ public struct RewriteResult: Codable, Sendable {
     public let elapsed_ms: Double
     public let protected_count: Int
     public let warnings: [String]?
+    /// The same result with other edits: marks carried over typing keep the warnings and timing of the check they came from.
+    public func replacingEdits(_ edits: [WritingEdit]) -> RewriteResult {
+        RewriteResult(version: version, text: text, edits: edits, source_map: source_map, elapsed_ms: elapsed_ms, protected_count: protected_count, warnings: warnings)
+    }
 }
 public struct TokenHint: Codable, Sendable {
     public let start_utf16: Int, end_utf16: Int
