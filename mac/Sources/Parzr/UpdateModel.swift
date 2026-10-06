@@ -109,11 +109,8 @@ enum UpdatePolicy {
         if busy || idle + 1.5 < elapsed { return .cancel }
         return remaining <= 1 ? .install : .tick(remaining - 1)
     }
-    /// The "Updated to X" toast: the version changed to a newer one since the last run.
-    static func shouldAnnounce(previous: String?, current: String) -> Bool {
-        guard let previous, previous != current, current != "Development" else { return false }
-        return SUStandardVersionComparator.default.compareVersion(previous, toVersion: current) == .orderedAscending
-    }
+    /// The "Updated to X" toast: only when Sparkle recorded installing exactly this version. A manual install (no record, or one for another version) shows nothing.
+    static func shouldAnnounce(installed: String?, current: String) -> Bool { installed == current && current != "Development" }
 }
 
 enum UpdateText {

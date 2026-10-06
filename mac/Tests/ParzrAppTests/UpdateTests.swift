@@ -29,12 +29,13 @@ final class UpdateTests: XCTestCase {
         XCTAssertEqual(UpdatePolicy.step(remaining: 6, idle: 400, elapsed: 4, busy: true), .cancel, "a card opened")
         XCTAssertEqual(UpdatePolicy.step(remaining: 6, idle: 4.5, elapsed: 5, busy: false), .tick(5), "timer jitter is not input")
     }
-    func testTheUpdatedToastShowsOnlyAfterAnUpgrade() {
-        XCTAssertTrue(UpdatePolicy.shouldAnnounce(previous: "0.2.2", current: "0.2.10"))
-        XCTAssertFalse(UpdatePolicy.shouldAnnounce(previous: nil, current: "0.2.2"), "first run")
-        XCTAssertFalse(UpdatePolicy.shouldAnnounce(previous: "0.2.2", current: "0.2.2"))
-        XCTAssertFalse(UpdatePolicy.shouldAnnounce(previous: "0.3.0", current: "0.2.2"), "a downgrade is not news")
-        XCTAssertFalse(UpdatePolicy.shouldAnnounce(previous: "0.2.2", current: "Development"))
+    func testTheUpdatedToastShowsOnlyForAnUpdateSparkleInstalled() {
+        XCTAssertTrue(UpdatePolicy.shouldAnnounce(installed: "0.3.2", current: "0.3.2"), "the recorded version is the running one")
+        XCTAssertTrue(UpdatePolicy.shouldAnnounce(installed: "0.2.10", current: "0.2.10"))
+        XCTAssertFalse(UpdatePolicy.shouldAnnounce(installed: "0.3.3", current: "0.3.2"), "a record for another version: the user installed by hand")
+        XCTAssertFalse(UpdatePolicy.shouldAnnounce(installed: nil, current: "0.3.2"), "no record: a manual install or a first run")
+        XCTAssertFalse(UpdatePolicy.shouldAnnounce(installed: "0.3.4", current: "0.3.2"), "a downgrade is not news")
+        XCTAssertFalse(UpdatePolicy.shouldAnnounce(installed: "Development", current: "Development"))
     }
     func testVersionAndSizeDisplay() {
         let info = UpdateInfo(version: "0.2.3", bytes: 14_800_000)

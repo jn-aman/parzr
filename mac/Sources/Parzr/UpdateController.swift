@@ -5,7 +5,8 @@ import Sparkle
 /// Owns Sparkle's updater and is its user driver, so Parzr's own panel replaces Sparkle's windows. Never created in test or snapshot modes.
 @MainActor
 final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
-    private static let lastRunKey = "updateLastRunVersion"
+    /// The version Sparkle is about to install (or has downloaded to install on quit), consumed and cleared by the next launch.
+    private static let installedKey = "updateInstalledVersion"
     let model: UpdateModel
     private var updater: SPUUpdater!
     private let isBusy: () -> Bool
@@ -82,9 +83,9 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         dismissal = work; DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }
     private func announceIfUpdated() {
-        let current = Support.version, previous = defaults.string(forKey: Self.lastRunKey)
-        defaults.set(current, forKey: Self.lastRunKey)
-        guard UpdatePolicy.shouldAnnounce(previous: previous, current: current), Preferences.shared.onboardingCompleted else { return }
+        let current = Support.version, installed = defaults.string(forKey: Self.installedKey)
+        defaults.removeObject(forKey: Self.installedKey)   // a stale record (the install never happened) must not announce a later manual install
+        guard UpdatePolicy.shouldAnnounce(installed: installed, current: current), Preferences.shared.onboardingCompleted else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MainActor.assumeIsolated { [weak self] in self?.toast(.updated(current), after: 12) } }
     }
     static var bundleVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "" }
@@ -122,10 +123,12 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem, immediateInstallationBlock: @escaping () -> Void) -> Bool {
         // Downloaded in the background: show the dot and the popover row, and install on quit or when the user steps away.
         model.pending = UpdateInfo(item: item, current: Self.bundleVersion); model.available = nil
+        defaults.set(item.displayVersionString, forKey: Self.installedKey)   // Sparkle installs it when Parzr quits and never calls willInstallUpdate then
         installNow = immediateInstallation(immediateInstallationBlock); startClock()
         return true
     }
     private func immediateInstallation(_ block: @escaping () -> Void) -> () -> Void { { [weak self] in self?.installNow = nil; block() } }
+    func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) { defaults.set(item.displayVersionString, forKey: Self.installedKey) }
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) { model.lastChecked = updater.lastUpdateCheckDate }
 
     // MARK: SPUUserDriver

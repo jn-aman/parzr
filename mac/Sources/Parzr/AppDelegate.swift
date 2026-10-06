@@ -562,7 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
     #if DEBUG
-    /// Scenarios: install (found, download, extract, ready, restart), fail (same, but the update must be rejected), skip (Skip this version holds for scheduled checks), check (a manual check with nothing new), relaunched (the copy Sparkle starts after an update). Writes update-test-<scenario>.json and one PNG per new panel state.
+    /// Scenarios: install (found, download, extract, ready, restart), fail (same, but the update must be rejected), skip (Skip this version holds for scheduled checks), check (a manual check with nothing new), relaunched (the copy Sparkle starts after an update, or a manual copy: the Updated toast must show only after an install by the updater), quit (waits for a background download, then quits so Sparkle installs on quit). Writes update-test-<scenario>.json and one PNG per new panel state.
     private func runUpdateTest(directory: String, scenario: String) async throws {
         guard let updates else { throw ParzrError.message("This build has no update feed.") }
         let model = UpdateModel.shared, target = URL(fileURLWithPath: directory), start = Date()
@@ -590,6 +590,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let shown = try await wait(20) { if case .updated = model.phase { true } else { false } }
             try await Task.sleep(for: .seconds(8))
             try finish(["updated_toast": shown]); NSApp.terminate(nil)
+        case "quit":
+            guard try await wait(150, until: { model.pending != nil }) else { throw ParzrError.message("No update was downloaded.") }
+            try finish(["pending": model.pending?.version ?? ""]); NSApp.terminate(nil)
         case "install", "fail":
             guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
             try await Task.sleep(for: .milliseconds(800)); try note(); model.perform(.install)
