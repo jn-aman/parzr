@@ -6,7 +6,17 @@ import ServiceManagement
 
 @MainActor
 final class Preferences: ObservableObject {
-    static let shared = Preferences()
+    static let shared = Preferences(defaults: selfTestDefaults ?? .standard)
+    /// Self tests and snapshots apply a fix and undo it, which teaches learning: they run on a throwaway suite, never the owner's preferences.
+    nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--snapshot"]
+    nonisolated static var isSelfTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: selfTestFlags) }
+    nonisolated static let selfTestSuite = "app.parzr.desktop.selftest"
+    static let selfTestDefaults: UserDefaults? = {
+        guard isSelfTest, let suite = UserDefaults(suiteName: selfTestSuite) else { return nil }
+        suite.removePersistentDomain(forName: selfTestSuite)
+        atexit { UserDefaults(suiteName: Preferences.selfTestSuite)?.removePersistentDomain(forName: Preferences.selfTestSuite) }
+        return suite
+    }()
     private let defaults: UserDefaults
     @Published var passive: Bool { didSet { defaults.set(passive, forKey: "passive") } }
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: "paused") } }
@@ -138,8 +148,13 @@ final class Preferences: ObservableObject {
     /// Adds a name (possessive stripped) once; false when it is not name-shaped, a duplicate, or the list is full.
     @discardableResult
     func learnName(_ raw: String) -> Bool {
-        guard let name = WritingEdit.nameToken(raw), learnedNames.count < 2000, !learnedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
+        guard let name = WritingEdit.nameToken(raw), !WritingEngine.isKnownMisspelling(name), learnedNames.count < 2000, !learnedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
         learnedNames.append(name); return true
+    }
+    /// Drops learned names and Ignore counts that are known misspellings (older versions learned "teh" from an undone fix). Idempotent, so it runs at every launch.
+    func purgeMisspelledNames() {
+        learnedNames.removeAll { WritingEngine.isKnownMisspelling($0) }
+        ignoreCounts = ignoreCounts.filter { !WritingEngine.isKnownMisspelling($0.key) }
     }
     /// A user Ignore on a spelling or name-like edit counts toward learning its word as a name.
     static let ignoresToLearn = 2

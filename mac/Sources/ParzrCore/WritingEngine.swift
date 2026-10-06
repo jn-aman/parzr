@@ -71,6 +71,14 @@ public actor WritingEngine {
             return false
         }.value
     }
+    private nonisolated static let misspellingCheck: (@convention(c) (UnsafePointer<CChar>?) -> Int32)? = {
+        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]) {
+            if let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let check = dlsym(handle, "parzr_is_known_misspelling") { return unsafeBitCast(check, to: (@convention(c) (UnsafePointer<CChar>?) -> Int32).self) }
+        }
+        return nil
+    }()
+    /// True for a reviewed misspelling (teh, recieved, alot): never learned as a name. False when the engine is missing or older.
+    public nonisolated static func isKnownMisspelling(_ word: String) -> Bool { misspellingCheck?(word) == 1 }
     /// Lowercase words (shaped as `WordShape.shaped`) the system spell checker accepts in `text`; set by the app, which owns the checker.
     public typealias KnownWords = @Sendable (String) async -> Set<String>
     private var knownWords: KnownWords?

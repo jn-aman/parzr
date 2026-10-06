@@ -269,6 +269,26 @@ final class NameHandlingTests: XCTestCase {
         XCTAssertFalse(prefs.learnName("aman")); XCTAssertFalse(prefs.learnName("a1b")); XCTAssertFalse(prefs.learnName(String(repeating: "a", count: 129)))
         XCTAssertTrue(prefs.learnName("Jean-Luc Picard")); XCTAssertEqual(prefs.learnedNames.count, 2)
     }
+    func testKnownMisspellingsAreNeverLearnedAndOldOnesArePurged() throws {
+        let (prefs, cleanup) = try prefs(); defer { cleanup() }
+        for typo in ["teh", "Recieved", "alot", "sentense"] { XCTAssertFalse(prefs.learnName(typo), typo) }
+        // An undone fix of a typo, a repeated Ignore and the repetition ledger all route through learnName.
+        let edit = WritingEdit(start: 0, end: 8, replacement: "received", original: "recieved", category: "Spelling")
+        prefs.noteIgnored(edit); prefs.noteIgnored(edit)
+        XCTAssertTrue(prefs.learnedNames.isEmpty)
+        for day in 0..<3 { prefs.noteSighting("recieve", app: "app\(day)", day: day) }
+        XCTAssertTrue(prefs.learnedNames.isEmpty)
+        // Migration: names stored by an older version (the owner's six) go, real names stay.
+        prefs.learnedNames = ["teh", "Aman", "sentense", "recieved", "sentance", "recieve", "alot", "Priya"]
+        prefs.purgeMisspelledNames()
+        XCTAssertEqual(prefs.learnedNames, ["Aman", "Priya"])
+    }
+    func testSelfTestsUseAThrowawaySuiteNotTheOwnersDefaults() {
+        for flag in ["--integration-test", "--typing-test", "--grammar-typing-test", "--paste-test", "--ui-test", "--snapshot"] { XCTAssertTrue(Preferences.selfTestFlags.contains(flag), flag) }
+        XCTAssertNotEqual(Preferences.selfTestSuite, Bundle.main.bundleIdentifier)
+        XCTAssertNotEqual(Preferences.selfTestSuite, "app.parzr.desktop")
+        XCTAssertFalse(Preferences.isSelfTest, "an ordinary launch keeps the real preferences")
+    }
     func testCapitalizeNamesMappingByBundle() throws {
         let (prefs, cleanup) = try prefs(); defer { cleanup() }
         XCTAssertEqual(prefs.nameCapitalization, "everywhere")

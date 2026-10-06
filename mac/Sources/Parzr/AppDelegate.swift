@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         panelModel.warm(); studioModel.warm()
         studioModel.showOnboarding = { [weak self] in self?.showOnboarding() }
+        Preferences.shared.purgeMisspelledNames()
         Preferences.shared.syncContacts()
         // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
         let prefs = Preferences.shared

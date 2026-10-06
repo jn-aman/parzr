@@ -56,7 +56,7 @@ enum KnownWordsFile {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data(dictionary: dictionary, names: names).write(to: url, options: .atomic)
     }
-    @MainActor static func writeCurrent() { try? write(dictionary: KnownNames.dictionary(), names: KnownNames.persistentNames(), to: url) }
+    @MainActor static func writeCurrent() { guard !Preferences.isSelfTest else { return }; try? write(dictionary: KnownNames.dictionary(), names: KnownNames.persistentNames(), to: url) }
 }
 
 /// A fix Parzr just applied to one word. If the original comes back at the same spot within a minute, the user undid it: the word is a name.
