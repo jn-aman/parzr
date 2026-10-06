@@ -16,6 +16,8 @@ func runGrammarTypingTest(reportDirectory: String) async throws {
         ("narrative", "Yesterday I goes to the market and buyer some vegetables but the shopkeeper was not there so I was waiting for him many times. Then my friend come and tell me that he don’t works there anymore. We was confused because nobody was knowing where he went, so we just goes back home without buying nothing.", "Yesterday, I went to the market and bought some vegetables, but the shopkeeper was not there, so I waited for him for a long time. Then my friend came and told me that he did not work there anymore. We were confused because nobody knew where he had gone, so we just went back home without buying anything.", "works"),
     ]
     var reports: [[String: Any]] = []
+    // Closed together at the end: closing the first fixture would leave TextEdit with no window, and it can raise its Open panel over the second.
+    var opened: [URL] = []; defer { opened.forEach(closeFixture) }
     for (name, phrase, expected, selectedWord) in cases {
         let initial = String(phrase.dropLast())
         let font = NSFont.systemFont(ofSize: 16)
@@ -24,6 +26,7 @@ func runGrammarTypingTest(reportDirectory: String) async throws {
         fixture.addAttribute(.font, value: NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask), range: anchor)
         let url = directory.appendingPathComponent("grammar-\(name)-\(UUID().uuidString).rtf")
         try fixture.data(from: NSRange(location: 0, length: fixture.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]).write(to: url)
+        opened.append(url)
         _ = try await NSWorkspace.shared.open([url], withApplicationAt: textEdit, configuration: NSWorkspace.OpenConfiguration())
         var editor: NSRunningApplication?; var element: AXUIElement?
         for _ in 0..<50 {
@@ -118,6 +121,7 @@ func runNativeIntegrationTest(reportDirectory: String) async throws {
     let url = directory.appendingPathComponent("parzr-qa-\(UUID().uuidString).rtf")
     try fixture.data(from: NSRange(location: 0, length: fixture.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]).write(to: url)
     guard let textEdit = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.TextEdit") else { throw ParzrError.message("TextEdit is unavailable.") }
+    defer { closeFixture(url) }
     _ = try await NSWorkspace.shared.open([url], withApplicationAt: textEdit, configuration: NSWorkspace.OpenConfiguration())
     var editor: NSRunningApplication?; var element: AXUIElement?
     for _ in 0..<50 {
@@ -201,6 +205,7 @@ func runAutomaticTypingTest(reportDirectory: String) async throws {
     let url = directory.appendingPathComponent("typing-\(UUID().uuidString).rtf")
     try fixture.data(from: NSRange(location: 0, length: fixture.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]).write(to: url)
     guard let textEdit = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.TextEdit") else { throw ParzrError.message("TextEdit is unavailable.") }
+    defer { closeFixture(url) }
     _ = try await NSWorkspace.shared.open([url], withApplicationAt: textEdit, configuration: NSWorkspace.OpenConfiguration())
     var editor: NSRunningApplication?; var element: AXUIElement?
     for _ in 0..<50 {
@@ -270,6 +275,7 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
     let url = directory.appendingPathComponent("paste-\(UUID().uuidString).rtf")
     let initial = NSAttributedString(string: prefix, attributes: [.font: NSFont.systemFont(ofSize: 16)])
     try initial.data(from: NSRange(location: 0, length: initial.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]).write(to: url)
+    defer { closeFixture(url) }
     _ = try await NSWorkspace.shared.open([url], withApplicationAt: textEdit, configuration: NSWorkspace.OpenConfiguration())
     var target: NSRunningApplication?; var element: AXUIElement?
     for _ in 0..<50 {
@@ -327,4 +333,27 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
     guard AX.string(element, kAXValueAttribute) == expected else { throw ParzrError.message("Fix sentence did not apply both corrections.") }
     let report: [String: Any] = ["status": "passed", "synthetic_fixture_only": true, "real_cmd_v": true, "real_word_click": true, "trailing_newline": true, "automatic_marks": checked.edits.count, "lowercase_done": true, "corrected_sentence_preview": true, "fix_sentence_applied": true, "warm_engine": true, "elapsed_ms": Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15]
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("paste-results.json"))
+}
+
+/// Closes the TextEdit window showing exactly this fixture (matched by AXDocument), discards a keep-changes sheet if one asks, then deletes the file. Synchronous so `defer` can run it on every exit path; touches no other document.
+@MainActor
+func closeFixture(_ url: URL) {
+    func spin(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+    func path(_ s: String?) -> String? { s.flatMap { URL(string: $0)?.resolvingSymlinksInPath().path } }
+    let target = url.resolvingSymlinksInPath().path
+    func window(_ app: NSRunningApplication) -> AXUIElement? {
+        (AX.get(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute) as? [AXUIElement])?.first { path(AX.string($0, kAXDocumentAttribute)) == target }
+    }
+    func press(_ element: AXUIElement) { AXUIElementPerformAction(element, kAXPressAction as CFString) }
+    defer { try? FileManager.default.removeItem(at: url) }
+    guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.TextEdit").first, let first = window(app) else { return }
+    if let close = AX.get(first, kAXCloseButtonAttribute) { press(close as! AXUIElement) }
+    for _ in 0..<40 {
+        spin(0.05)
+        guard let open = window(app) else { return }
+        // "Ask to keep changes" sheet: discard, never Save.
+        let sheet = (AX.get(open, kAXChildrenAttribute) as? [AXUIElement])?.first { AX.string($0, kAXRoleAttribute) == kAXSheetRole }
+        let buttons = sheet.flatMap { AX.get($0, kAXChildrenAttribute) as? [AXUIElement] } ?? []
+        if let discard = buttons.first(where: { ["Revert Changes", "Don\u{2019}t Save", "Don't Save", "Delete"].contains(AX.string($0, kAXTitleAttribute) ?? "") }) { press(discard) }
+    }
 }
