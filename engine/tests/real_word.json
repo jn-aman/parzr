@@ -356,6 +356,7 @@
     "It was one of those quiet evenings.",
     "From here to the station is a short walk.",
     "We came from the north side of the city.",
-    "Are you free for lunch on Tuesday?"
+    "Are you free for lunch on Tuesday?",
+    "Use os.path.join to build the file path."
   ]
 }

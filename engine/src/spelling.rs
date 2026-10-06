@@ -387,7 +387,7 @@ const ARTICLE_LIKE: [&str; 21] = [
     "the", "a", "an", "my", "your", "his", "her", "our", "their", "this", "that", "these", "those",
     "its", "all", "each", "every", "some", "any", "most", "many",
 ];
-const COPULAS: [&str; 15] = [
+pub(crate) const COPULAS: [&str; 15] = [
     "is", "are", "was", "were", "am", "be", "been", "being", "it's", "that's", "he's", "she's",
     "there's", "here's", "what's",
 ];

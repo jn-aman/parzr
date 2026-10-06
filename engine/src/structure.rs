@@ -442,14 +442,16 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && (tokens[prev].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
         // "do sports", "need to do is", "can do lots of": do is the main verb with an object or a
-        // complement, so what follows is not a verb to de-inflect.
+        // complement, so what follows is not a verb to de-inflect. After a form of "be" ("I was do
+        // tired") it is a slip for "so", and "tired" stays an adjective.
         let main_do = ["do", "does", "did"].contains(&previous)
             && (prev > 0
-                && [
+                && ([
                     "to", "can", "could", "may", "might", "must", "shall", "should", "will",
                     "would",
                 ]
                 .contains(&tokens[prev - 1].normalized.as_str())
+                    || spelling::COPULAS.contains(&tokens[prev - 1].normalized.as_str()))
                 || ["is", "are", "was", "were", "am"].contains(&w)
                 // "does not works" is still an auxiliary; only "do sports" has the noun at once.
                 || prev + 1 == i

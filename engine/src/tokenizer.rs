@@ -33,8 +33,12 @@ pub struct Token<'a> {
     pub system_known: bool,
 }
 /// A period that closes an abbreviation ("p.m.", "U.S.", "Mr.", "etc.") rather than a sentence.
-/// It ends a sentence only before a capitalized word, and never after a title.
+/// It ends a sentence only before a capitalized word, and never after a title. A period glued to a
+/// lowercase letter ("os.path.join", "example.com", "config.yaml") is a separator, never an end.
 pub fn abbreviation_continues(text: &str, dot: usize) -> bool {
+    if text[dot + 1..].starts_with(char::is_lowercase) {
+        return true;
+    }
     const TITLES: [&str; 6] = ["mr", "mrs", "ms", "dr", "prof", "mt"];
     const ABBREVIATIONS: [&str; 16] = [
         "vs", "etc", "approx", "incl", "inc", "ltd", "co", "cf", "viz", "esp", "fig", "dept",
@@ -164,5 +168,16 @@ mod tests {
         assert_ne!(ids_end[0], *ids_end.last().unwrap());
         let ids_plain = ids("I like tea. I like cake.");
         assert_ne!(ids_plain[0], *ids_plain.last().unwrap());
+        // A dot glued to a lowercase letter is a code or domain separator, not a sentence end.
+        for text in [
+            "Use os.path.join here.",
+            "Visit example.com today.",
+            "the file config.yaml is",
+        ] {
+            let ids = ids(text);
+            assert!(ids.iter().all(|s| *s == ids[0]), "{text}");
+        }
+        let ids_end = ids("I left. then I came back.");
+        assert_ne!(ids_end[0], *ids_end.last().unwrap());
     }
 }

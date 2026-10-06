@@ -1056,6 +1056,20 @@ mod tests {
         // Not a known misspelling: keep the case match (a name or a deliberate capital).
         assert_eq!(typo_capital("Mark".into(), "Mark", false), "Mark");
     }
+    #[test]
+    fn a_dot_glued_to_a_lowercase_letter_is_not_a_sentence_end() {
+        for text in [
+            "Use os.path.join here.",
+            "Visit example.com today.",
+            "Open the file config.yaml now.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        assert_eq!(
+            fix("I left. then I came back."),
+            "I left. Then I came back."
+        );
+    }
     /// Rules only, repeated to a fixed point like the pipeline's grammar loop (no model needed).
     fn fix(text: &str) -> String {
         let mut text = text.to_string();
@@ -1524,6 +1538,14 @@ mod tests {
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
+    }
+    #[test]
+    fn do_after_a_form_of_be_is_a_slip_for_so_and_the_adjective_is_kept() {
+        assert_eq!(fix("I was do tired."), "I was so tired.");
+        assert_eq!(fix("I am do happy."), "I am so happy.");
+        assert_eq!(fix("She is do tired."), "She is so tired.");
+        assert_eq!(fix("Did you saw it?"), "Did you see it?");
+        assert_eq!(fix("I do not liked it."), "I do not like it.");
     }
     #[test]
     fn precise_grammar_rules_leave_valid_prose_alone() {
