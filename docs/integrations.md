@@ -41,22 +41,22 @@ Settings: `parzr.automatic` (on), `parzr.dictionary`, `parzr.names`, `parzr.engi
 A browser extension cannot start programs by itself, so there are two parts: the extension, and a small file that tells the browser where Parzr's native host lives. **Parzr.app never writes into a browser's folders; you run the registration script once.**
 
 1. Get the extension folder. Either open **Settings, Integrations, Open integrations** in Parzr and use `extensions/browser`, or download `parzr-browser-extension-X.Y.Z.zip` from the release and unzip it (Finder makes a folder with `manifest.json` inside). Keep the folder where it is: the browser loads it from there each time.
-2. Open `chrome://extensions` (`edge://extensions`, `brave://extensions`), switch on **Developer mode**, choose **Load unpacked** and select the folder that contains `manifest.json`. Copy the 32 letter **ID** shown under the extension's name.
-3. Register the host, in Terminal, with that ID and your browser (`chrome`, `edge`, `brave` or `chromium`):
+2. Open `chrome://extensions` (`edge://extensions`, `brave://extensions`), switch on **Developer mode**, choose **Load unpacked** and select the folder that contains `manifest.json`. The extension always gets the same ID (`hhfnplahgjogkpcbjekcbmlhgjmngdjd`), because its manifest carries a fixed public key, wherever the folder is.
+3. Register the host, in Terminal, with your browser (`chrome`, `edge`, `brave` or `chromium`):
 
    ```sh
-   python3 /Applications/Parzr.app/Contents/Resources/Integrations/connect-browser.py --browser chrome --extension-id PASTE_THE_ID_HERE
+   python3 /Applications/Parzr.app/Contents/Resources/Integrations/connect-browser.py --browser chrome
    ```
 
-   It writes `dev.parzr.engine.json` into that browser's `NativeMessagingHosts` folder under `~/Library/Application Support` (Google/Chrome, Microsoft Edge, BraveSoftware/Brave-Browser or Chromium). The file names `Parzr.app/Contents/MacOS/parzr-native-host` and allows only your extension's ID to start it. Use `--app /path/to/Parzr.app` if Parzr is elsewhere. The script needs `python3`; on a Mac without developer tools, macOS offers to install them the first time. No browser restart is needed.
+   It writes `dev.parzr.engine.json` into that browser's `NativeMessagingHosts` folder under `~/Library/Application Support` (Google/Chrome, Microsoft Edge, BraveSoftware/Brave-Browser or Chromium). The file names `Parzr.app/Contents/MacOS/parzr-native-host` and allows only the extension's fixed ID to start it (pass `--extension-id` only for a fork or a store build with a different ID). Use `--app /path/to/Parzr.app` if Parzr is elsewhere. The script needs `python3`; on a Mac without developer tools, macOS offers to install them the first time. No browser restart is needed.
 4. Pin the extension (the puzzle piece menu), open a page with a text field and click the Parzr button or press Alt+Shift+P (change it at `chrome://extensions/shortcuts`). The extension checks only the page you activated; activate it again after navigating. A `!` on the button means the browser does not allow extensions on that page (for example `chrome://` pages).
 
-If the card says "Connect the Parzr native host first", step 3 is missing or the ID is wrong. An unpacked extension's ID comes from its folder path, so loading a different folder or moving it gives a new ID: run step 3 again with it.
+If the card says "Connect the Parzr native host first", step 3 is missing, or it named a different browser than the one you loaded the extension into. Moving or reloading the folder does not change the ID, so step 3 is needed only once per browser. Check the ID under the extension's name on the extensions page if in doubt.
 
-**Firefox 140 or newer.** Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on** and select `manifest.json` in the folder, then run the script with the add-on's fixed ID:
+**Firefox 140 or newer.** Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on** and select `manifest.json` in the folder, then run the script; it already knows the add-on's fixed ID (`parzr@parzr.app`):
 
 ```sh
-python3 /Applications/Parzr.app/Contents/Resources/Integrations/connect-browser.py --browser firefox --extension-id parzr@parzr.app
+python3 /Applications/Parzr.app/Contents/Resources/Integrations/connect-browser.py --browser firefox
 ```
 
 A temporary add-on disappears when Firefox quits (a permanent one needs Mozilla's signing, which Parzr does not have). Arc has no `--browser` option and Safari has no extension; both work through the native Accessibility route without one.
@@ -94,7 +94,7 @@ The browser extension needs no build: load `extensions/browser` unpacked as abov
 Checked on this Mac with throwaway profiles (nothing was installed into a real browser or VS Code):
 
 - The VSIX builds, and installs with `code --install-extension` into a separate user-data and extensions directory. The engine process the extension starts answered the extension's request with corrections.
-- The browser ZIP, unpacked, loads in Chromium (Chrome for Testing) with a fresh profile. Before registering, the extension's connection fails with "Specified native messaging host not found". After `connect-browser.py`, the same browser (still running) started `parzr-native-host` and got corrections back ("I recieved teh mesage" became "I received the message").
+- The browser ZIP, unpacked, loads in Chromium (Chrome for Testing) with a fresh profile and shows the fixed ID. Before registering, the extension's connection fails with "Specified native messaging host not found". After `connect-browser.py`, the same browser (still running) started `parzr-native-host` and got corrections back ("I recieved teh mesage" became "I received the message").
 - `parzr-lsp` answered an initialize request, published diagnostics for a Markdown document and returned a quick fix, over stdio.
 
 Not checked: the toolbar click and Alt+Shift+P (Chrome only grants a page to the extension on a real click), Firefox, Edge, Brave, Cursor, and the Neovim snippet above (no Neovim here). The extension's page adapter is covered by the Playwright suite, which talks to the engine through a test bridge rather than native messaging.
@@ -121,7 +121,7 @@ Off by default. Turn on **Settings, Apps, Check prose in VS Code and Cursor** to
 
 The shared extension supports Chrome 121+, Edge, Brave, Chromium, and Firefox 140+. Browser installation and an installed native-host connection are separate from DOM adapter verification. Safari currently uses the native accessibility route; a Safari extension wrapper is not shipped.
 
-Install steps, for Chromium browsers and Firefox, are in [Install the optional extensions](#browser-extension-chrome-edge-brave-chromium-firefox). The short version: load `extensions/browser` unpacked, then run `connect-browser.py` once with the extension's ID so the browser may start `parzr-native-host`. Persistent Firefox distribution requires Mozilla add-on signing; Developer ID signing of the macOS app does not sign the add-on.
+Install steps, for Chromium browsers and Firefox, are in [Install the optional extensions](#browser-extension-chrome-edge-brave-chromium-firefox). The short version: load `extensions/browser` unpacked, then run `connect-browser.py` once for your browser (the extension's ID is fixed) so the browser may start `parzr-native-host`. Persistent Firefox distribution requires Mozilla add-on signing; Developer ID signing of the macOS app does not sign the add-on.
 
 Activate Parzr once on the current HTTP(S) page using its toolbar button or Alt+Shift+P. It checks writing as you type in focused text inputs, textareas and editable rich-text composers. Underlines open a 260 px correction card. Selected passages open a 300 px review with a visible Fix all button and writing styles. Escape dismisses the current check; typing starts a fresh check. Page navigation requires activation again. Browser shortcut settings control the browser shortcut separately.
 

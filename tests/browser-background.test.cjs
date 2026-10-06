@@ -2,6 +2,11 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {readFileSync}=require('node:fs');
 const vm=require('node:vm');
+test('the manifest key yields the extension ID that connect-browser.py registers by default',()=>{
+ const der=Buffer.from(JSON.parse(readFileSync('extensions/browser/manifest.json','utf8')).key,'base64');
+ const id=[...require('node:crypto').createHash('sha256').update(der).digest('hex').slice(0,32)].map(c=>String.fromCharCode(97+parseInt(c,16))).join('');
+ assert.ok(readFileSync('scripts/connect-browser.py','utf8').includes(`CHROMIUM_ID = '${id}'`));
+});
 function event(){const callbacks=[];return {addListener:fn=>callbacks.push(fn),emit:(...args)=>callbacks.map(fn=>fn(...args))};}
 function background(){
  const sent=[], timers=[], port={onMessage:event(),onDisconnect:event(),postMessage:r=>sent.push(r),disconnect:()=>{}};
