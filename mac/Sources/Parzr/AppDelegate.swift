@@ -117,6 +117,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--click-test"), CommandLine.arguments.indices.contains(index + 1) {
+            let directory = CommandLine.arguments[index + 1]
+            Task { @MainActor in
+                do {
+                    var problems: [String] = []
+                    showOnboarding(step: .tryIt)
+                    guard let onboarding, let host = onboarding.contentView else { throw ParzrError.message("The onboarding window did not open.") }
+                    try await Task.sleep(for: .milliseconds(500))
+                    do { try await runCardClickTest(host: host, window: onboarding, surface: "onboarding", typing: nil, directory: directory) } catch { problems.append(error.localizedDescription) }
+                    onboarding.close()
+                    studioModel.engineReady = true; showStudio(route: .playground)
+                    guard let studio, let host = studio.contentView else { throw ParzrError.message("The editor window did not open.") }
+                    try await Task.sleep(for: .milliseconds(500))
+                    do { try await runCardClickTest(host: host, window: studio, surface: "studio", typing: "i recieved your mesage, can you chek it?", directory: directory) } catch { problems.append(error.localizedDescription) }
+                    guard problems.isEmpty else { throw ParzrError.message(problems.joined(separator: "\n")) }
+                    print("Card click regression passed."); NSApp.terminate(nil)
+                } catch { fputs("Card click regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }

@@ -106,6 +106,10 @@ final class CorrectionTextView: NSTextView {
     var suggestions: [WritingEdit] = []
     var ignore: (WritingEdit) -> Void = { _ in }
     private var correction: NSPopover?
+    private var correctionEdit: WritingEdit?
+    /// The edit whose card is on screen, and that card's view (read by the click self test).
+    var shownCorrection: WritingEdit? { correction?.isShown == true ? correctionEdit : nil }
+    var correctionView: NSView? { correction?.contentViewController?.view }
 
     func dismissCorrection() { correction?.close(); correction = nil }
 
@@ -126,14 +130,16 @@ final class CorrectionTextView: NSTextView {
         guard glyph < layout.numberOfGlyphs else { return }
         let index = layout.characterIndexForGlyph(at: glyph)
         guard let edit = suggestions.first(where: { displayRange(for: $0).map { NSLocationInRange(index, $0) } == true }), let range = displayRange(for: edit) else { dismissCorrection(); return }
+        // The click must land on the word itself, across the full height of its line (underline and line spacing included); nearest-glyph lookup alone also answers for blank space past a line's end.
         let glyphs = layout.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
         let rect = layout.boundingRect(forGlyphRange: glyphs, in: container).offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y)
-        guard rect.insetBy(dx: 2, dy: 4).contains(point) else { dismissCorrection(); return }
+        let hit = layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container), line = layout.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        guard local.x >= hit.minX, local.x <= hit.maxX, local.y >= line.minY, local.y <= line.maxY else { dismissCorrection(); return }
         dismissCorrection()
         let popover = NSPopover(); popover.behavior = .transient
         popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }))
         popover.contentSize = InlineCorrection.size
-        correction = popover
+        correction = popover; correctionEdit = edit
         popover.show(relativeTo: rect, of: self, preferredEdge: .maxY)
     }
 
