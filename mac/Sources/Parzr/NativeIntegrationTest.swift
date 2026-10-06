@@ -248,6 +248,16 @@ func runAutomaticTypingTest(reportDirectory: String) async throws {
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("typing-results.json"))
 }
 
+/// The owner of the frontmost on-screen window that contains `point` (global top-left coordinates).
+func frontWindowOwner(at point: CGPoint) -> (pid: pid_t, name: String)? {
+    let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+    for window in list {
+        guard let bounds = window[kCGWindowBounds as String] as? [String: CGFloat], CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0).contains(point), (window[kCGWindowAlpha as String] as? Double ?? 1) > 0 else { continue }
+        return ((window[kCGWindowOwnerPID as String] as? pid_t) ?? 0, (window[kCGWindowOwnerName as String] as? String) ?? "?")
+    }
+    return nil
+}
+
 /// A real Cmd+V into an authored document, including the trailing-newline case.
 @MainActor
 func runAutomaticPasteTest(reportDirectory: String) async throws {
@@ -292,9 +302,13 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
           let bounds = AX.bounds(element, NSRange(location: prefix.utf16.count + edit.start_utf16, length: edit.range.length)) else { throw ParzrError.message("The pasted word has no visible range.") }
     try snapshot.validate()
     let point = CGPoint(x: bounds.midX, y: (NSScreen.screens.first?.frame.maxY ?? 0) - bounds.midY)
+    // Another Parzr watching the same fixture (an installed copy) draws its own overlay over the word, and the frontmost one takes the click: put ours in front first.
+    let overlayWindow = inline.markedView(for: edit).flatMap { ($0.accessibilityParent() as? NSView)?.window }
     // A real pointer moves onto the word before it clicks; the mark overlay takes clicks only while the pointer is on an underline.
     CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
     try await Task.sleep(for: .milliseconds(60))
+    for _ in 0..<10 where frontWindowOwner(at: point)?.pid != getpid() { overlayWindow?.orderFrontRegardless(); try await Task.sleep(for: .milliseconds(30)) }
+    if let front = frontWindowOwner(at: point), front.pid != getpid() { throw ParzrError.message("The pasted word is covered by \(front.name) (pid \(front.pid)), so the click cannot reach the mark overlay.") }
     let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)
     let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)
     down?.post(tap: .cghidEventTap)
