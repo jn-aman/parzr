@@ -42,6 +42,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         model.canCheck = true; model.lastChecked = updater.lastUpdateCheckDate
         announceIfUpdated()
     }
+    func checkInBackground() { if model.canCheck { updater.checkForUpdatesInBackground() } }
     func checkNow() { guard model.canCheck else { return }; if updater.sessionInProgress { showUpdateInFocus() } else { updater.checkForUpdates() } }
 
     // MARK: Actions from the panel, popover row and Settings

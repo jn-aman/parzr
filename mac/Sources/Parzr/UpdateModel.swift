@@ -134,6 +134,8 @@ enum UpdateText {
             switch SUError(rawValue: OSStatus(error.code)) {
             case .signatureError, .validationError, .insufficientSigningError, .notValidUpdateError:
                 return "The update did not pass Parzr's security check, so it was not installed. Nothing on your Mac changed."
+            case .unarchivingError:
+                return "The download was damaged, so it was not installed. Parzr will try again later."
             case .downloadError, .appcastError, .appcastParseError, .resumeAppcastError:
                 return "Parzr could not read the update from GitHub. It will try again later."
             case .installationWriteNoPermissionError, .authenticationFailure, .installationCanceledError, .installationAuthorizeLaterError:

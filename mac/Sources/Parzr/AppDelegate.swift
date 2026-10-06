@@ -95,6 +95,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
+        // Dev only: the updater alone, against the feed this build's Info.plist names. No onboarding, no Accessibility, no observers, no hotkey. The defaults flag lets the copy Sparkle relaunches (it gets no arguments) do the same.
+        if CommandLine.arguments.contains("--update-test") || UserDefaults.standard.bool(forKey: "updateTestMode") {
+            startUpdates(); updates?.start(); updatePresenter?.allowsFocus = false
+            let arguments = CommandLine.arguments, index = arguments.firstIndex(of: "--update-test")
+            let directory = index.flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil } ?? UserDefaults.standard.string(forKey: "updateTestDirectory") ?? NSTemporaryDirectory()
+            let scenario = index.flatMap { arguments.indices.contains($0 + 2) ? arguments[$0 + 2] : nil } ?? "relaunched"
+            Task { @MainActor in do { try await runUpdateTest(directory: directory, scenario: scenario) } catch { fputs("Update test failed: \(error.localizedDescription)\n", stderr); exit(1) } }
+            return
+        }
         panelModel.warm(); studioModel.warm()
         studioModel.showOnboarding = { [weak self] in self?.showOnboarding() }
         Preferences.shared.purgeMisspelledNames()
@@ -441,6 +450,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-6-skipped.png"))
                 print("Saved native UI snapshots to \(directory)"); NSApp.terminate(nil)
             } catch { fputs("Native snapshots failed: \(error.localizedDescription)\n", stderr); exit(1) }
+        }
+    }
+    /// Scenarios: install (found, download, extract, ready, restart), fail (same, but the update must be rejected), skip (Skip this version holds for scheduled checks), check (a manual check with nothing new), relaunched (the copy Sparkle starts after an update). Writes update-test-<scenario>.json and one PNG per new panel state.
+    private func runUpdateTest(directory: String, scenario: String) async throws {
+        guard let updates else { throw ParzrError.message("This build has no update feed.") }
+        let model = UpdateModel.shared, target = URL(fileURLWithPath: directory), start = Date()
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        var timeline: [[String: Any]] = [], seen = Set<String>(), last = ""
+        func name(_ phase: UpdatePhase) -> String { String(describing: phase).split(separator: "(").first.map(String.init) ?? "idle" }
+        func note() throws {
+            let kind = name(model.phase)
+            if kind != last { last = kind; timeline.append(["t": (Date().timeIntervalSince(start) * 10).rounded() / 10, "phase": kind, "shown": model.shown, "pending": model.pending?.version ?? "", "available": model.available?.version ?? ""]) }
+            if kind != "idle", seen.insert(kind).inserted {
+                let view = UpdatePanelView(model: model, renderingSnapshot: true)
+                try render(view, size: NSHostingView(rootView: view).fittingSize, to: target.appendingPathComponent("\(scenario)-\(kind).png"))
+            }
+        }
+        func wait(_ seconds: Double, until done: () -> Bool) async throws -> Bool {
+            for _ in 0..<Int(seconds * 5) { try note(); if done() { return true }; try await Task.sleep(for: .milliseconds(200)) }
+            return false
+        }
+        func finish(_ result: [String: Any]) throws {
+            try JSONSerialization.data(withJSONObject: ["scenario": scenario, "version": Support.version, "timeline": timeline, "result": result], options: [.prettyPrinted, .sortedKeys]).write(to: target.appendingPathComponent("update-test-\(scenario).json"))
+        }
+        func foundVersion() -> String? { if case .found(let info) = model.phase { info.version } else { nil } }
+        switch scenario {
+        case "relaunched":
+            let shown = try await wait(20) { if case .updated = model.phase { true } else { false } }
+            try await Task.sleep(for: .seconds(8))
+            try finish(["updated_toast": shown]); NSApp.terminate(nil)
+        case "install", "fail":
+            guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
+            try await Task.sleep(for: .milliseconds(800)); try note(); model.perform(.install)
+            let outcome = try await wait(120) { if case .ready = model.phase { true } else if case .failed = model.phase { true } else { false } }
+            try note()
+            if case .failed(let message) = model.phase { try finish(["outcome": "failed", "message": message]); print("Update rejected: \(message)"); NSApp.terminate(nil); return }
+            guard outcome else { throw ParzrError.message("The update never became ready.") }
+            try finish(["outcome": "ready"]); try await Task.sleep(for: .seconds(2)); model.perform(.restartNow)
+            try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
+        case "auto", "autorestart":
+            // Automatic downloads on: no panel at all, a quiet download, then the pending state (menu-bar dot, popover row).
+            guard try await wait(150, until: { model.pending != nil }) else { throw ParzrError.message("The update was never downloaded in the background.") }
+            let row = UpdateRow(model: model).padding(18).frame(width: 318).background(Color.canvas)
+            try render(row, size: NSHostingView(rootView: row).fittingSize, to: target.appendingPathComponent("\(scenario)-row.png"))
+            try finish(["pending": model.pending?.version ?? "", "badge": model.badge, "panel_shown": model.shown, "phase": name(model.phase)])
+            if scenario == "auto" { NSApp.terminate(nil); return }
+            try await Task.sleep(for: .seconds(1)); model.perform(.restartNow)
+            try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
+        case "skip":
+            guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
+            model.perform(.skip); _ = try await wait(3) { false }
+            updates.checkInBackground(); let again = try await wait(15) { foundVersion() != nil }
+            model.perform(.check); let manual = try await wait(15) { foundVersion() != nil }
+            try finish(["offered_again_after_skip_by_scheduled_check": again, "offered_by_manual_check": manual]); model.perform(.later); NSApp.terminate(nil)
+        default:
+            model.perform(.check)
+            let done = try await wait(30) { if case .upToDate = model.phase { true } else { false } }
+            try finish(["up_to_date": done]); NSApp.terminate(nil)
         }
     }
     private func runUIControlsTest(directory: String) async throws {

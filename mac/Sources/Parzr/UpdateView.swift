@@ -35,7 +35,7 @@ struct UpdatePanelView: View {
             }.accessibilityElement(children: .combine)
             if let notes = info.notes, !ReleaseNotes.blocks(notes, format: info.notesFormat).isEmpty { notesView(notes, info.notesFormat) }
             actions {
-                NativeButton(title: "Skip this version", kind: .utility, action: { model.perform(.skip) })
+                if !info.critical { NativeButton(title: "Skip this version", kind: .utility, action: { model.perform(.skip) }) }
                 Spacer(minLength: 4)
                 NativeButton(title: "Later", kind: .secondary, key: "\u{1b}", action: { model.perform(.later) })
                 NativeButton(title: "Install and Relaunch", kind: .primary, key: "\r", action: { model.perform(.install) })
@@ -94,18 +94,20 @@ struct UpdatePanelView: View {
         }.accessibilityElement(children: .combine)
     }
     private func actions<Content: View>(@ViewBuilder _ content: () -> Content) -> some View { HStack(spacing: 8, content: content) }
+    /// Markdown only when the appcast says so; anything else is shown as plain text, never as HTML.
+    private func rich(_ text: String, _ format: String?) -> AttributedString { format == "markdown" ? ReleaseNotes.inline(text) : AttributedString(text) }
     private func notesView(_ notes: String, _ format: String?) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(Array(ReleaseNotes.blocks(notes, format: format).enumerated()), id: \.offset) { _, block in
                     switch block {
-                    case .heading(let text): Text(ReleaseNotes.inline(text)).font(.system(size: 11, weight: .semibold)).padding(.top, 2)
+                    case .heading(let text): Text(rich(text, format)).font(.system(size: 11, weight: .semibold)).padding(.top, 2)
                     case .bullet(let text):
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Circle().fill(Color.mintAccent).frame(width: 4, height: 4).offset(y: -2).accessibilityHidden(true)
-                            Text(ReleaseNotes.inline(text)).font(.system(size: 12)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                            Text(rich(text, format)).font(.system(size: 12)).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                         }
-                    case .paragraph(let text): Text(ReleaseNotes.inline(text)).font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    case .paragraph(let text): Text(rich(text, format)).font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).padding(13)
@@ -181,6 +183,8 @@ final class UpdatePresenter {
     private var host: NSHostingView<UpdatePanelView>?
     private var subscriptions: Set<AnyCancellable> = []
     private var announced: UpdatePhase?
+    /// Off only for the dev update test, which must never take the keyboard from someone working.
+    var allowsFocus = true
     init(model: UpdateModel = .shared, anchor: @escaping () -> NSRect?) {
         self.model = model; self.anchor = anchor
         Publishers.CombineLatest3(model.$phase, model.$shown, model.$focus).receive(on: RunLoop.main).sink { [weak self] phase, shown, focus in self?.update(phase: phase, shown: shown, focus: focus) }.store(in: &subscriptions)
@@ -189,7 +193,7 @@ final class UpdatePresenter {
     private func update(phase: UpdatePhase, shown: Bool, focus: Bool) {
         guard shown, phase != .idle else { hide(); return }
         let panel = self.panel ?? makePanel()
-        let wasVisible = panel.isVisible
+        let wasVisible = panel.isVisible, focus = focus && allowsFocus
         resize(panel)
         if !wasVisible {
             if motion { panel.alphaValue = 0 }
@@ -221,8 +225,10 @@ final class UpdatePresenter {
         let size = host.fittingSize
         let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor()?.origin ?? .zero) }) ?? NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
+        // A status item the menu bar has hidden (too many icons, the notch) reports a frame near the left edge: ignore it.
+        let icon = anchor().flatMap { $0.minX > screen.frame.midX ? $0 : nil }
         let top = panel.isVisible ? panel.frame.maxY : visible.maxY - 8
-        let right = panel.isVisible ? panel.frame.maxX : min(visible.maxX - 12, (anchor()?.maxX ?? visible.maxX) - 4)
+        let right = panel.isVisible ? panel.frame.maxX : min(visible.maxX - 12, (icon?.maxX ?? visible.maxX) - 4)
         panel.setFrame(NSRect(x: max(visible.minX + 8, right - size.width), y: max(visible.minY + 8, top - size.height), width: size.width, height: size.height), display: true)
     }
     private func hide() {

@@ -50,6 +50,7 @@ final class UpdateTests: XCTestCase {
         XCTAssertTrue(offline.contains("try again later"))
         let signature = UpdateText.friendly(NSError(domain: SUSparkleErrorDomain, code: Int(SUError.signatureError.rawValue), userInfo: [NSLocalizedDescriptionKey: "raw: EdDSA mismatch"]))
         XCTAssertTrue(signature.contains("security check") && !signature.contains("EdDSA"))
+        XCTAssertTrue(UpdateText.friendly(NSError(domain: SUSparkleErrorDomain, code: Int(SUError.unarchivingError.rawValue))).contains("damaged"))
         XCTAssertTrue(UpdateText.friendly(NSError(domain: "x", code: 1)).contains("untouched"))
     }
     func testNoUpdateMessageFollowsTheReason() {
