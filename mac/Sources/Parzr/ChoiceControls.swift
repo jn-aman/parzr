@@ -23,24 +23,30 @@ struct ChoiceStrip<Value: Equatable>: View {
         }.padding(3).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 8))
     }
 }
+/// Every mode shows icon and name; `compact` is the tighter card size. The tooltip and VoiceOver hint say what the mode does.
 struct ModeChoices: View {
     @Binding var mode: RewriteMode
     var compact = false
     var body: some View {
-        HStack(spacing: compact ? 2 : 5) {
-            ForEach(RewriteMode.allCases) { item in
-                Button { mode = item } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: item.symbol).font(.system(size: compact ? 11 : 12))
-                        if !compact { Text(item.title).font(.system(size: 11, weight: .medium)) }
-                    }.foregroundStyle(mode == item ? Color.mintAccent : Color.textSecondary)
-                        .padding(.horizontal, compact ? 7 : 9).frame(height: compact ? 25 : 31)
-                        .background(mode == item ? Color.accentWash : Color.clear, in: RoundedRectangle(cornerRadius: 7))
-                        .contentShape(RoundedRectangle(cornerRadius: 7))
-                }.buttonStyle(.plain).help("\(item.title) · \(item.detail)")
-                    .accessibilityLabel("\(item.title) mode").accessibilityAddTraits(mode == item ? [.isSelected] : [])
-            }
+        HStack(spacing: compact ? 1 : 5) {
+            ForEach(RewriteMode.allCases) { item in ModeChip(item: item, selected: mode == item, compact: compact) { mode = item } }
         }
+    }
+}
+private struct ModeChip: View {
+    let item: RewriteMode, selected: Bool, compact: Bool, choose: () -> Void
+    @State private var hover = false
+    var body: some View {
+        Button(action: choose) {
+            HStack(spacing: compact ? 3 : 5) {
+                Image(systemName: item.symbol).font(.system(size: compact ? 10 : 12))
+                Text(item.title).font(.system(size: 11, weight: selected ? .semibold : .medium)).lineLimit(1).fixedSize()
+            }.foregroundStyle(selected ? Color.mintAccent : Color.textSecondary)
+                .padding(.horizontal, compact ? 4 : 9).frame(height: compact ? 24 : 31)
+                .background(selected ? Color.accentWash : hover ? Color.textPrimary.opacity(0.06) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }.buttonStyle(.plain).onHover { hover = $0 }.help("\(item.title): \(item.help)")
+            .accessibilityLabel("\(item.title) mode").accessibilityHint(item.help).accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 }
 @MainActor enum Support {

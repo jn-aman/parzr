@@ -16,6 +16,38 @@ public enum RewriteMode: String, Codable, Sendable, CaseIterable, Identifiable {
         case .direct: "Get straight to the point."
         }
     }
+    /// A few words for the card header. Mirrors the engine's prompts (engine/src/model.rs), which every tone also runs through grammar again.
+    public var summary: String {
+        switch self {
+        case .fix: "Grammar and spelling only"
+        case .professional: "No slang or filler"
+        case .friendly: "Warm and conversational"
+        case .concise: "Fewer words, same meaning"
+        case .direct: "No hedging or filler"
+        }
+    }
+    /// The tooltip and VoiceOver hint: what the mode does to the selection.
+    public var help: String {
+        switch self {
+        case .fix: "Grammar, spelling and punctuation only. Your wording is kept."
+        case .professional: "Rewrites in professional English: slang and filler removed, meaning kept."
+        case .friendly: "Rewrites in a friendly, conversational tone, meaning kept."
+        case .concise: "Shortens the text by removing unnecessary words, all information kept."
+        case .direct: "Removes hedging and filler so it gets to the point, meaning kept."
+        }
+    }
+}
+
+/// What the check card says when a finished check found nothing to change. `status` is an engine warning (for example context refinement being unavailable).
+public struct EmptyCheck: Equatable, Sendable {
+    public let title: String, detail: String, hint: String
+    public let warning: Bool
+    public init(mode: RewriteMode, status: String? = nil) {
+        warning = status != nil
+        title = mode == .fix ? (status == nil ? "Looks good" : "No changes found") : "Already reads well in \(mode.title)"
+        detail = status ?? (mode == .fix ? "No grammar or spelling changes in this selection." : "No changes suggested.")
+        hint = mode == .fix ? "Want it reworded? Pick a tone above." : "Try another tone above."
+    }
 }
 public struct TextSpan: Codable, Sendable, Equatable {
     public var start_utf16: Int

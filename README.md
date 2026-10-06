@@ -85,7 +85,7 @@ From keystroke to underline in about 46 ms for a chat message and 83 ms for a 4 
 <td valign="top">
 
 **Five writing modes**<br>
-Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again.
+Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliberately, then grammar runs again. Every mode is labelled on the card, with a tooltip saying what it does, and a check that finds nothing says so for that mode instead of leaving a blank card.
 
 </td>
 <td valign="top">

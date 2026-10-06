@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var statusPopover: NSPopover?
     private var statusSourceApp: NSRunningApplication?
     private var panel: FloatingPanel?
+    private var panelFit: AnyCancellable?
     private var marker: NSPanel?
     private var studio: NSWindow?
     private var onboarding: NSWindow?
@@ -346,12 +347,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false; panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let host = NSHostingView(rootView: RewritePanel(model: panelModel)); host.wantsLayer = true; host.layer?.cornerRadius = 10; host.layer?.masksToBounds = true; panel.contentView = host
             self.panel = panel
+            // An empty or failed check shrinks the card to its content; a result or a running check restores the full size. The top-left corner stays put.
+            panelFit = panelModel.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in DispatchQueue.main.async { self?.fitPanel() } }
         }
         guard let panel else { return }
         let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor?.origin ?? NSEvent.mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
         let anchor = anchor ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
-        let size = panelModel.selectionHint ? RewritePanel.hintSize : RewritePanel.size
+        let size = fittedPanelSize()
         panel.setContentSize(size)
         panel.setFrameOrigin(CorrectionPlacement.origin(anchor: anchor, size: size, visible: visible))
         panel.makeKeyAndOrderFront(nil)
@@ -370,6 +373,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return handled ? nil : event
         }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in MainActor.assumeIsolated { self?.closePanel() } }
+    }
+    private func fittedPanelSize() -> CGSize {
+        guard let host = panel?.contentView as? NSHostingView<RewritePanel> else { return RewritePanel.size }
+        host.layoutSubtreeIfNeeded()
+        return CGSize(width: RewritePanel.size.width, height: min(RewritePanel.size.height, ceil(host.fittingSize.height)))
+    }
+    private func fitPanel() {
+        guard let panel, panel.isVisible else { return }
+        let size = fittedPanelSize()
+        guard abs(panel.contentLayoutRect.height - size.height) > 0.5 else { return }
+        var frame = panel.frame
+        let height = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size)).height
+        frame.origin.y += frame.height - height; frame.size.height = height
+        if let visible = panel.screen?.visibleFrame { frame.origin.y = max(frame.origin.y, visible.minY) }
+        panel.setFrame(frame, display: true)
     }
     private func closePanel() {
         panel?.orderOut(nil)
@@ -396,6 +414,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard x + size.width <= screen.visibleFrame.maxX else { return }
         marker?.setContentSize(size); marker?.setFrameOrigin(NSPoint(x: x, y: bounds.minY)); marker?.orderFrontRegardless()
     }
+    /// The explicit check card in every state, dark (`card-<state>.png`) and light (`-light`). Results are built by hand, so no engine is needed.
+    private func cardSnapshots(to directory: URL) throws {
+        let text = "i hope your doing well. can you chek this once?"
+        let long = "I recieved your mesage about the quarterly planning review and wanted to follow up before the team meets on Thursday. The draft covers the budget, the hiring plan, the product roadmap and the open risks, and I think it would help if everyone read it first, so that we can spend the meeting deciding things instead of explaining them. If you have any thoughts on the timeline, please send them to me by Wednesday evening and I will fold them in."
+        func edits(_ source: String, _ pairs: [(String, String)]) -> [WritingEdit] {
+            pairs.compactMap { pair in
+                let range = (source as NSString).range(of: pair.0)
+                return range.location == NSNotFound ? nil : WritingEdit(start: range.location, end: range.location + range.length, replacement: pair.1, original: pair.0, category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling.")
+            }
+        }
+        func result(_ source: String, _ edits: [WritingEdit]) throws -> RewriteResult {
+            let object: [String: Any] = ["version": "", "text": source, "edits": try JSONSerialization.jsonObject(with: JSONEncoder().encode(edits)), "source_map": [], "elapsed_ms": 0, "protected_count": 0]
+            return try JSONDecoder().decode(RewriteResult.self, from: JSONSerialization.data(withJSONObject: object))
+        }
+        let found = edits(text, [("i", "I"), ("your", "you're"), ("chek", "check")]), longFound = edits(long, [("recieved", "received"), ("mesage", "message")])
+        // (name, mode, source, edits or nil for none, busy, error, hint, status)
+        typealias Card = (String, RewriteMode, String, [WritingEdit]?, Bool, String?, Bool, String?)
+        var cards: [Card] = RewriteMode.allCases.map { ("mode-\($0.rawValue)", $0, text, found, false, nil, false, nil) }
+        cards += [("empty-fix", .fix, text, [], false, nil, false, nil), ("empty-professional", .professional, text, [], false, nil, false, nil), ("empty-direct", .direct, text, [], false, nil, false, nil),
+                  ("empty-warning", .fix, text, [], false, nil, false, "Context refinement is unavailable."),
+                  ("busy-fix", .fix, text, nil, true, nil, false, nil), ("busy-concise", .concise, text, nil, true, nil, false, nil),
+                  ("error", .fix, text, nil, false, "The writing engine did not answer. Try again in a moment.", false, nil), ("hint", .fix, "", nil, false, "Select text to check.", true, nil),
+                  ("long", .fix, long, longFound, false, nil, false, nil), ("copied", .fix, text, found, false, nil, false, "Copied to clipboard")]
+        let saved = Preferences.shared.appearance
+        defer { Preferences.shared.appearance = saved }
+        for (name, mode, source, found, busy, error, hint, status) in cards {
+            let model = AppModel()
+            model.mode = mode; model.source = source; model.busy = busy; model.error = error; model.selectionHint = hint; model.status = status
+            if let found { let r = try result(source, found); model.result = r; model.selectedEdits = Set(r.edits.map(\.id)); model.focusedEditID = r.edits.first?.id }
+            let view = RewritePanel(model: model)
+            let size = view.isCompact ? NSHostingView(rootView: view).fittingSize : RewritePanel.size
+            for (suffix, look) in [("", "graphite"), ("-light", "paper")] {
+                Preferences.shared.appearance = look
+                try render(view, size: size, to: directory.appendingPathComponent("card-\(name)\(suffix).png"))
+            }
+        }
+    }
     private func snapshot(to directory: String) {
         Task { @MainActor in
             do {
@@ -415,6 +470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 guard !panelModel.busy, !panelModel.chosenEdits.isEmpty else { throw ParzrError.message("The snapshot's real passage check did not complete.") }
                 try render(RewritePanel(model: panelModel), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("rewrite.png"))
                 try render(RewritePanel(model: panelModel, showsModes: false), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("inline.png"))
+                try cardSnapshots(to: URL(fileURLWithPath: directory))
                 for route in [StudioRoute.general, .writing, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
