@@ -8,7 +8,7 @@ import ServiceManagement
 final class Preferences: ObservableObject {
     static let shared = Preferences(defaults: selfTestDefaults ?? .standard)
     /// Self tests and snapshots apply a fix and undo it, which teaches learning: they run on a throwaway suite, never the owner's preferences.
-    nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--docs-test", "--editor-typing-test", "--snapshot"]
+    nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--snapshot"]
     nonisolated static var isSelfTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: selfTestFlags) }
     nonisolated static let selfTestSuite = "app.parzr.desktop.selftest"
     static let selfTestDefaults: UserDefaults? = {

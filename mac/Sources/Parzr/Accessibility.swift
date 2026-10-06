@@ -165,13 +165,15 @@ struct SelectionSnapshot {
     let canPatch: Bool
     /// Google Docs through its hidden text area: replacements are typed, and range geometry comes from `DocsGeometry` rather than AX bounds.
     let docs: Bool
+    /// The Studio writing space: the card is a key window of this same app, so the app's focus is then the card, not the editor.
+    var own: Bool { app.processIdentifier == ProcessInfo.processInfo.processIdentifier }
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
     /// How far a mark's re-measured position may drift before it is dropped: Docs positions are rebuilt from the caret, so they move a point or two with it.
     var markDrift: CGFloat { docs ? 4 : 1.5 }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
-        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
-              let element = AX.focusedText(app) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
+        guard let app = NSWorkspace.shared.frontmostApplication, let element = AX.focusedText(app),
+              Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element), !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
@@ -231,7 +233,7 @@ struct SelectionSnapshot {
             return
         }
         guard !app.isTerminated, !IsSecureEventInputEnabled(), !AX.isSecure(element),
-              let focused = AX.focusedText(app), CFEqual(focused, element),
+              own || AX.focusedText(app).map({ CFEqual($0, element) }) == true,
               let current = AX.selection(element), current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }

@@ -72,6 +72,16 @@ final class CompatTests: XCTestCase {
         XCTAssertEqual(spans.map { ns.substring(with: NSRange(location: $0.start_utf16, length: $0.end_utf16 - $0.start_utf16)) }, ["let a = ", " x"], "adjacent code runs merge; strings, comments and docs stay checkable")
         XCTAssertTrue(Compat.isCheckable(semanticType: "AXCodeSemanticType.Comment")); XCTAssertFalse(Compat.isCheckable(semanticType: "AXCodeSemanticType.DocumentationKeyword")); XCTAssertFalse(Compat.isCheckable(semanticType: nil))
     }
+    func testOwnProcessIsReadableOnlyThroughTheWritingSpace() {
+        let own: pid_t = 100, other: pid_t = 200, id = Compat.draftEditorIdentifier
+        XCTAssertTrue(Compat.allowsCapture(appPID: own, ownPID: own, identifier: id), "Parzr's writing space")
+        XCTAssertFalse(Compat.allowsCapture(appPID: own, ownPID: own, identifier: nil), "card, settings fields, popovers have no identifier")
+        XCTAssertFalse(Compat.allowsCapture(appPID: own, ownPID: own, identifier: ""))
+        XCTAssertFalse(Compat.allowsCapture(appPID: own, ownPID: own, identifier: "parzr.draftEditor.extra"), "exact match only")
+        XCTAssertFalse(Compat.allowsCapture(appPID: own, ownPID: own, identifier: "Writing space"), "a label is not the identifier")
+        XCTAssertTrue(Compat.allowsCapture(appPID: other, ownPID: own, identifier: nil), "other apps are never filtered by identifier")
+        XCTAssertTrue(Compat.allowsCapture(appPID: other, ownPID: own, identifier: id))
+    }
     func testFirefoxHintConditions() {
         let n = Compat.firefoxHintKeystrokes
         func hint(_ bundle: String? = "org.mozilla.firefox", role: String? = "AXWebArea", text: Bool = false, keys: Int = Compat.firefoxHintKeystrokes, dismissed: Bool = false) -> Bool {

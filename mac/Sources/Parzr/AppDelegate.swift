@@ -10,15 +10,15 @@ final class FloatingPanel: NSPanel {
 }
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
-    private let panelModel = AppModel()
-    private let studioModel = AppModel()
+    let panelModel = AppModel()
+    let studioModel = AppModel()
     private var statusItem: NSStatusItem?
     private var statusPopover: NSPopover?
     private var statusSourceApp: NSRunningApplication?
-    private var panel: FloatingPanel?
+    private(set) var panel: FloatingPanel?
     private var panelFit: AnyCancellable?
     private var marker: NSPanel?
-    private var studio: NSWindow?
+    private(set) var studio: NSWindow?
     private var onboarding: NSWindow?
     private var onboardingModel: OnboardingModel?
     private var hotkey: GlobalHotkey?
@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var subscriptions: Set<AnyCancellable> = []
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
+    private var ownClickMonitor: Any?
     private var updates: UpdateController?
     private var updatePresenter: UpdatePresenter?
     private var updateDot: NSView?
@@ -101,6 +102,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     try await Task.sleep(for: .milliseconds(300))
                     try await runEditorTypingTest(model: studioModel, host: host, window: studio, directory: CommandLine.arguments[index + 1]); print("Editor typing regression passed."); NSApp.terminate(nil)
                 } catch { fputs("Editor typing regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--own-editor-test"), CommandLine.arguments.indices.contains(index + 1) {
+            Task { @MainActor in
+                do {
+                    panelModel.dismiss = { [weak self] in self?.closePanel() }
+                    studioModel.engineReady = true; showStudio(route: .playground)
+                    guard let studio, let host = studio.contentView else { throw ParzrError.message("The editor window did not open.") }
+                    try await Task.sleep(for: .milliseconds(300))
+                    try await runOwnEditorTest(app: self, host: host, window: studio, directory: CommandLine.arguments[index + 1]); print("Own editor shortcut regression passed."); NSApp.terminate(nil)
+                } catch { fputs("Own editor shortcut regression failed: \(error.localizedDescription)\n", stderr); exit(1) }
             }
             return
         }
@@ -325,7 +338,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); studio?.makeKeyAndOrderFront(nil); studio?.orderFrontRegardless()
     }
     private var capturing = false
-    private func openSelection() {
+    func openSelection() {
         passive?.suspend(); inline.dismiss()
         if panel?.isVisible == true { closePanel(); return }
         // A copy-based capture owns the clipboard for up to half a second; ignore repeat presses meanwhile.
@@ -384,6 +397,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return handled ? nil : event
         }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in MainActor.assumeIsolated { self?.closePanel() } }
+        // The global monitor never sees clicks in Parzr's own windows (the writing space the card was opened from).
+        ownClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            MainActor.assumeIsolated { if let self, event.window != self.panel { self.closePanel() } }
+            return event
+        }
     }
     private func fittedPanelSize() -> CGSize {
         guard let host = panel?.contentView as? NSHostingView<RewritePanel> else { return RewritePanel.size }
@@ -404,6 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         panel?.orderOut(nil)
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }
+        if let ownClickMonitor { NSEvent.removeMonitor(ownClickMonitor); self.ownClickMonitor = nil }
         panelModel.clearSession()
     }
     private func showMarker(snapshot: SelectionSnapshot, result: RewriteResult) {

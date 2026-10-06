@@ -18,6 +18,9 @@ enum Compat {
     static func shouldPrepare(bundle: String?, vscodeEnabled: Bool) -> Bool { !isVSCode(bundle) || vscodeEnabled }
     /// Firefox 121+ and Chromium start their accessibility engines when a client reads the application role.
     static func readsAppRole(_ bundle: String?) -> Bool { isFirefox(bundle) || isChromium(bundle) }
+    /// Parzr never reads its own windows (card, settings, popovers) except the Studio writing space, which carries this accessibility identifier.
+    static let draftEditorIdentifier = "parzr.draftEditor"
+    static func allowsCapture(appPID: pid_t, ownPID: pid_t, identifier: String?) -> Bool { appPID != ownPID || identifier == draftEditorIdentifier }
     /// First focus queries after activation can miss the editor while Firefox or VS Code switch accessibility on.
     static func needsFocusRetry(bundle: String?, vscodeEnabled: Bool) -> Bool { isFirefox(bundle) || (isVSCode(bundle) && vscodeEnabled) }
     /// The system-wide focused element is accepted only when it belongs to the app being checked.

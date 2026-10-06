@@ -27,7 +27,7 @@ struct DraftEditor: NSViewRepresentable {
         editor.isContinuousSpellCheckingEnabled = false; editor.isGrammarCheckingEnabled = false
         editor.isAutomaticSpellingCorrectionEnabled = false; editor.isAutomaticQuoteSubstitutionEnabled = false
         editor.delegate = context.coordinator; editor.string = text
-        editor.setAccessibilityLabel("Writing space")
+        editor.setAccessibilityLabel("Writing space"); editor.setAccessibilityIdentifier(Compat.draftEditorIdentifier)
         scroll.documentView = editor
         return scroll
     }

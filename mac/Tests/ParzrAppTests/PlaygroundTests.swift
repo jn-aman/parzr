@@ -284,7 +284,7 @@ final class NameHandlingTests: XCTestCase {
         XCTAssertEqual(prefs.learnedNames, ["Aman", "Priya"])
     }
     func testSelfTestsUseAThrowawaySuiteNotTheOwnersDefaults() {
-        for flag in ["--integration-test", "--typing-test", "--grammar-typing-test", "--paste-test", "--ui-test", "--docs-test", "--snapshot"] { XCTAssertTrue(Preferences.selfTestFlags.contains(flag), flag) }
+        for flag in ["--integration-test", "--typing-test", "--grammar-typing-test", "--paste-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--snapshot"] { XCTAssertTrue(Preferences.selfTestFlags.contains(flag), flag) }
         XCTAssertNotEqual(Preferences.selfTestSuite, Bundle.main.bundleIdentifier)
         XCTAssertNotEqual(Preferences.selfTestSuite, "app.parzr.desktop")
         XCTAssertFalse(Preferences.isSelfTest, "an ordinary launch keeps the real preferences")
