@@ -11,6 +11,8 @@ func runGoogleDocsTest(reportDirectory: String) async throws {
     guard AXIsProcessTrusted(), !IsSecureEventInputEnabled() else { throw ParzrError.message("Docs QA needs Accessibility with secure input off.") }
     let directory = URL(fileURLWithPath: reportDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    // Chromium builds its accessibility tree only while an assistive client asks; the running app does this, the test must too.
+    if let front = NSWorkspace.shared.frontmostApplication, Compat.isChromium(front.bundleIdentifier) { AX.prepare(front, force: true); try await Task.sleep(for: .milliseconds(1200)) }
     guard let app = NSWorkspace.shared.frontmostApplication, Compat.isChromium(app.bundleIdentifier), let element = AX.focusedText(app), AX.isDocsText(element) else {
         throw ParzrError.message("Bring the authored Google Docs test document to the front of a Chromium browser first.")
     }
