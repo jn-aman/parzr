@@ -282,7 +282,9 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
     defer { observer.stop(); inline.stop() }
     var checked: RewriteResult?; var snapshot: SelectionSnapshot?; var marked = false
     observer.onDismiss = { inline.dismissIfStale() }
+    var seen: [String] = []
     observer.onSuggestion = { captured, result in
+        seen.append("\(captured.app.localizedName ?? "?") \(captured.text.debugDescription) edits \(result.edits.count)")
         guard captured.app.processIdentifier == target.processIdentifier, captured.text == phrase else { return }
         guard !inline.isPresenting else { return }
         checked = result; snapshot = captured
@@ -296,7 +298,7 @@ func runAutomaticPasteTest(reportDirectory: String) async throws {
     try ClipboardTransaction.paste(to: target.processIdentifier)
     for _ in 0..<60 { try await Task.sleep(for: .milliseconds(50)); if marked { break } }
     guard marked, let checked, let snapshot, checked.text == "This is not how it is supposed to be done.\n", checked.edits.count >= 2,
-          AX.string(element, kAXValueAttribute) == prefix + phrase else { throw ParzrError.message("Paste did not return automatic lowercase corrections and visible marks.") }
+          AX.string(element, kAXValueAttribute) == prefix + phrase else { throw ParzrError.message("Paste did not return automatic lowercase corrections and visible marks (marked \(marked), checked \(checked?.text.debugDescription ?? "none"), field \(AX.string(element, kAXValueAttribute).debugDescription), captures: \(seen.joined(separator: " | "))).") }
     let elapsed = start.duration(to: .now)
     guard let edit = checked.edits.first(where: { $0.original == "Done" }),
           let bounds = AX.bounds(element, NSRange(location: prefix.utf16.count + edit.start_utf16, length: edit.range.length)) else { throw ParzrError.message("The pasted word has no visible range.") }
