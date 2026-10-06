@@ -760,6 +760,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         guard studio.isVisible else { throw ParzrError.message("Reopening did not restore the closed window.") }
         let reviewStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        reviewStatusItem.autosaveName = "parzr.selftest"   // removing it forgets its own spot, never the real icon's ("Item-0" lives in the app's real defaults)
         reviewStatusItem.button?.image = ParzrMark.menuImage()
         statusItem = reviewStatusItem
         defer { statusPopover?.close(); NSStatusBar.system.removeStatusItem(reviewStatusItem); statusItem = nil }
