@@ -128,6 +128,6 @@ Google Docs draws its page on a canvas, so by default macOS Accessibility sees n
 - Line spacing, zoom (100 and 150 percent measured) and font sizes (11 and 16 point measured) are handled; a caret on a blank line has no hidden text to anchor on, so no marks appear until it moves.
 - Replacements are typed, so Docs' own auto-substitutions (smart quotes, auto-capitalization) can alter a replacement; Parzr reads the text back and reports a mismatch instead of continuing.
 - Docs pages other than documents (Sheets, Slides) are not handled.
-- Safari is not covered: it does not host Docs' screen reader text area the same way.
+- Chrome is the browser this was measured in. Edge, Brave and Arc share its engine and the same detection (the text area, not the browser, is matched), but were not run here. Safari was not tested.
 
 Without the setup, or in any other canvas editor, the explicit check shortcut falls back to copying the selection: Parzr sends Cmd+C, reads the text, and restores the previous clipboard. Applying re-copies to confirm the selection is unchanged, then pastes the corrected text over it and restores the clipboard again. Automatic underlines are not available there.
