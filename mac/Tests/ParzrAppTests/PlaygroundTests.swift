@@ -100,7 +100,6 @@ final class PlaygroundTests: XCTestCase {
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: RewritePanel.size), styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host
         defer { window.close() }
-        window.orderFront(nil)
         window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
         let next = try XCTUnwrap(NativeControls.find(label: "Next correction", in: host))
