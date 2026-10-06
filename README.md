@@ -100,7 +100,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; no model d
 <p align="center">
   <img src="docs/media/see-it-work.png" width="600" alt="Parzr's onboarding: a live field with red underlines under recieved, mesage and chek, and the Option+Space shortcut">
   &nbsp;
-  <img src="docs/media/card.png" width="340" alt="The correction card: 4 fixes in this sentence, the corrected sentence with struck-through typos and mint fixes, and Fix sentence">
+  <img src="docs/media/card.png" width="360" alt="The correction card: 4 fixes in this sentence, the corrected sentence with struck-through typos and mint fixes, and the labelled actions Fix sentence, This word, More and Ignore">
 </p>
 
 ## Install

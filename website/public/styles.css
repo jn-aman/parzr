@@ -454,7 +454,7 @@ kbd{font:600 15px var(--sans)}
 /* explicit ratios (same as the width and height attributes) so lazy-loaded shots reserve their space and Chrome stops flagging them */
 .s-writing img{aspect-ratio:1400/1035}
 .s-rewrite img{aspect-ratio:720/464}
-.s-inline img{aspect-ratio:680/400}
+.s-inline img{aspect-ratio:720/400}
 .s-writing{grid-row:1/3;transform:rotateY(calc((.5 - var(--p,.5))*26deg)) translate3d(0,calc((.5 - var(--p,.5))*70px),0)}
 .s-rewrite{transform:rotateY(calc((.5 - var(--p,.5))*-18deg)) translate3d(0,calc((.5 - var(--p,.5))*-30px),40px)}
 .s-inline{transform:rotateY(calc((.5 - var(--p,.5))*-18deg)) translate3d(0,calc((.5 - var(--p,.5))*-60px),70px)}

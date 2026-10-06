@@ -429,6 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return try JSONDecoder().decode(RewriteResult.self, from: JSONSerialization.data(withJSONObject: object))
         }
         let found = edits(text, [("i", "I"), ("your", "you're"), ("chek", "check")]), longFound = edits(long, [("recieved", "received"), ("mesage", "message")])
+        let grammar = [WritingEdit(start: 7, end: 11, replacement: "you're", original: "your", category: "Grammar", ruleID: "grammar", explanation: "Use the contraction.")]
         // (name, mode, source, edits or nil for none, busy, error, hint, status)
         typealias Card = (String, RewriteMode, String, [WritingEdit]?, Bool, String?, Bool, String?)
         var cards: [Card] = RewriteMode.allCases.map { ("mode-\($0.rawValue)", $0, text, found, false, nil, false, nil) }
@@ -436,7 +437,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                   ("empty-warning", .fix, text, [], false, nil, false, "Context refinement is unavailable."),
                   ("busy-fix", .fix, text, nil, true, nil, false, nil), ("busy-concise", .concise, text, nil, true, nil, false, nil),
                   ("error", .fix, text, nil, false, "The writing engine did not answer. Try again in a moment.", false, nil), ("hint", .fix, "", nil, false, "Select text to check.", true, nil),
-                  ("long", .fix, long, longFound, false, nil, false, nil), ("copied", .fix, text, found, false, nil, false, "Copied to clipboard")]
+                  ("long", .fix, long, longFound, false, nil, false, nil), ("copy-labelled", .fix, text, grammar, false, nil, false, nil), ("copied", .fix, text, found, false, nil, false, "Copied to clipboard")]
         let saved = Preferences.shared.appearance
         defer { Preferences.shared.appearance = saved }
         for (name, mode, source, found, busy, error, hint, status) in cards {
@@ -455,7 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-                // Widest footer: Fix sentence, This word, the name button and Ignore must all fit the 340 pt card. Needs no engine.
+                // Widest footer: Fix sentence, This word, the name button and Ignore must all fit the 360 pt card. Needs no engine.
                 let nameSource = "i met Aman Jain yestarday."
                 let nameEdits = [WritingEdit(start: 6, end: 10, replacement: "Amen", original: "Aman", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling."), WritingEdit(start: 16, end: 25, replacement: "yesterday", original: "yestarday", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling.")]
                 try render(InlineCorrection(edit: nameEdits[0], source: nameSource, edits: nameEdits, canApply: true, apply: {}, applySentence: {}, ignore: {}, close: {}), size: InlineCorrection.size, to: URL(fileURLWithPath: directory).appendingPathComponent("name-card.png"))

@@ -26,9 +26,9 @@ struct RewritePanel: View {
                 }
                 Spacer(minLength: 2)
                 if model.chosenEdits.count > 1 {
-                    NativeButton(title: "", kind: .utility, symbol: "chevron.left", label: "Previous correction", action: { model.navigate(-1) }).frame(width: 18, height: 22)
+                    NativeButton(title: "", kind: .utility, symbol: "chevron.left", label: "Previous correction", action: { model.navigate(-1) }).frame(width: 18, height: 22).help("Previous correction · Left arrow")
                     Text("\(position)/\(model.chosenEdits.count)").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.textSecondary)
-                    NativeButton(title: "", kind: .utility, symbol: "chevron.right", label: "Next correction", action: { model.navigate(1) }).frame(width: 18, height: 22)
+                    NativeButton(title: "", kind: .utility, symbol: "chevron.right", label: "Next correction", action: { model.navigate(1) }).frame(width: 18, height: 22).help("Next correction · Right arrow")
                 }
                 NativeButton(title: "", kind: .utility, symbol: "xmark", label: "Close corrections", key: "\u{1b}", action: { model.dismiss?() }).frame(width: 20, height: 22).help("Close · Esc")
             }.frame(height: 22)
@@ -57,15 +57,18 @@ struct RewritePanel: View {
                 }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.bottom, 4)
             }
             if model.error == nil, !isCompact {
-                // The labelled Copy when the row has room, the icon alone (still labelled for VoiceOver and the tooltip) when the actions fill it.
-                ViewThatFits(in: .horizontal) { footer(copyTitle: true); footer(copyTitle: false) }.frame(maxWidth: .infinity).frame(height: 28)
+                // Every action shows text. Copy sits in the row when no word action competes for it; otherwise "More" holds both, as labelled menu items.
+                let hasWordAction = !model.busy && model.focusedEdit.map { $0.nameCandidate != nil || $0.canAddToDictionary } == true
+                ViewThatFits(in: .horizontal) { if !hasWordAction { footer(more: false) }; footer(more: true) }.frame(maxWidth: .infinity).frame(height: 28)
             }
         }.padding(12).frame(width: Self.size.width, height: isCompact ? nil : Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.hairline, lineWidth: 0.5))
     }
-    private func footer(copyTitle: Bool) -> some View {
-        HStack(spacing: 6) {
-            if let edit = model.focusedEdit, !model.busy {
+    private func footer(more: Bool) -> some View {
+        let focused = model.busy ? nil : model.focusedEdit
+        let moreMenu = CardMore(edit: focused, done: { if let edit = focused { if let ignore { ignore(edit) } else { model.toggle(edit) } } }, copy: showsModes ? { model.copy() } : nil, copied: copied, copyEnabled: !model.busy && model.result != nil)
+        return HStack(spacing: 6) {
+            if let edit = focused {
                 if (model.snapshot?.expectedSelection.length ?? 0) > 0, !model.chosenEdits.isEmpty {
                     NativeButton(title: "Fix all  ⌘⏎", kind: .primary, label: "Fix all corrections", enabled: model.canApply, action: { model.apply() }).fixedSize().help("Fix every correction in this selection · Command+Return")
                     NativeButton(title: edit.actionTitle, kind: .secondary, label: "Apply correction: \(edit.replacementLabel)", enabled: model.canApply, action: { model.applyCurrent() }).help("Apply only this correction")
@@ -76,18 +79,44 @@ struct RewritePanel: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: model.canApply, action: { model.applyCurrent() }).help("Apply this correction · Return")
                 }
                 Spacer(minLength: 0)
-                if let name = edit.nameCandidate { NativeButton(title: "", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); if let ignore { ignore(edit) } else { model.toggle(edit) } }).frame(width: 24, height: 24).help("This is a name: never correct \(name)") }
-                else if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); if let ignore { ignore(edit) } else { model.toggle(edit) } }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
+                if more { moreMenu }
                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); if let ignore { ignore(edit) } else { model.toggle(edit) } }).fixedSize()
-            } else { Spacer(minLength: 0) }
-            if showsModes { copyButton(title: copyTitle) }
+            } else { Spacer(minLength: 0); if more { moreMenu } }
+            if !more, showsModes { copyButton }
             if model.snapshot?.canPatch == false && model.snapshot?.copied != true && preferences.clipboardFallback {
                 NativeButton(title: "Paste", enabled: !model.busy && !model.chosenEdits.isEmpty, action: model.pasteFallback).fixedSize()
             }
         }
     }
-    private func copyButton(title: Bool) -> some View {
-        NativeButton(title: title ? (copied ? "Copied" : "Copy") : "", kind: .utility, symbol: copied ? "checkmark" : "doc.on.doc", label: "Copy corrected passage", enabled: !model.busy && model.result != nil, action: model.copy).frame(width: title ? nil : 24, height: 24).fixedSize().help("Copy the corrected passage · Command+C")
+    private var copyButton: some View {
+        NativeButton(title: copied ? "Copied" : "Copy", kind: .utility, symbol: copied ? "checkmark" : "doc.on.doc", label: "Copy corrected passage", enabled: !model.busy && model.result != nil, action: model.copy).fixedSize().help("Copy the corrected passage · Command+C")
+    }
+}
+
+/// "More": the secondary card actions as a menu whose items all carry text (a bare icon says nothing). Empty when there is nothing to offer.
+struct CardMore: View {
+    var edit: WritingEdit?
+    var done: () -> Void
+    var copy: (() -> Void)? = nil
+    var copied = false
+    var copyEnabled = true
+    @ObservedObject var preferences = Preferences.shared
+    @State private var hover = false
+    var body: some View {
+        let name = edit?.nameCandidate, word = edit.flatMap { $0.canAddToDictionary ? $0.original : nil }
+        if name != nil || word != nil || copy != nil {
+            Menu {
+                if let name { Button("This is a name: \(name)") { preferences.learnName(name); done() } }
+                else if let word { Button("Add “\(word)” to dictionary") { preferences.saveWord(word); done() } }
+                if let copy { Button(copied ? "Copied" : "Copy corrected passage", action: copy).disabled(!copyEnabled) }
+            } label: {
+                (Text("More ").font(.system(size: 12, weight: .medium)) + Text(Image(systemName: "chevron.down")).font(.system(size: 8, weight: .bold)))
+                    .foregroundStyle(Color.textPrimary).padding(.horizontal, 8).frame(height: 24)
+                    .background(hover ? Color.textPrimary.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 6)).contentShape(RoundedRectangle(cornerRadius: 6))
+            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize().onHover { hover = $0 }
+                .help([name.map { "This is a name: never correct \($0)" }, word.map { "Add \($0) to your personal dictionary" }, copy == nil ? nil : "Copy the corrected passage"].compactMap { $0 }.joined(separator: " · "))
+                .accessibilityLabel("More actions")
+        }
     }
 }
 

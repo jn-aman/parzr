@@ -241,7 +241,7 @@ final class InlineSuggestions {
 
 /// The draft uses the same compact visual grammar with its own native Undo transaction.
 struct InlineCorrection: View {
-    static let size = CGSize(width: 340, height: 200)
+    static let size = CGSize(width: 360, height: 200)
     let edit: WritingEdit
     var source: String = ""
     var edits: [WritingEdit] = []
@@ -259,7 +259,7 @@ struct InlineCorrection: View {
                 Circle().fill(Color.correctionInk).frame(width: 6, height: 6).accessibilityHidden(true)
                 Text(count > 1 ? "\(count) fixes in this sentence" : edit.category).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.textPrimary).lineLimit(1)
                 Spacer(minLength: 2)
-                NativeButton(title: "", kind: .utility, symbol: "xmark", label: "Close correction", key: "\u{1b}", action: close).frame(width: 20, height: 22)
+                NativeButton(title: "", kind: .utility, symbol: "xmark", label: "Close correction", key: "\u{1b}", action: close).frame(width: 20, height: 22).help("Close · Esc")
             }.frame(height: 22)
             if !source.isEmpty { SentenceDiffView(source: source, edits: edits, focused: edit, note: edit.explanation).frame(minHeight: 48) }
             else { Text(edit.explanation).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(2).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).help(edit.explanation) }
@@ -271,8 +271,7 @@ struct InlineCorrection: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: canApply, action: apply)
                 }
                 Spacer(minLength: 0)
-                if let name = edit.nameCandidate { NativeButton(title: "", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); ignore() }).frame(width: 24, height: 24).help("This is a name: never correct \(name)") }
-                else if edit.canAddToDictionary { NativeButton(title: "", kind: .utility, symbol: "character.book.closed", label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore() }).frame(width: 24, height: 24).help("Add \(edit.original) to your personal dictionary") }
+                CardMore(edit: edit, done: ignore)
                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore() }).fixedSize()
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
