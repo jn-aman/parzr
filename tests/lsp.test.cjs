@@ -26,3 +26,7 @@ test('LSP merges the app known-words.json from HOME',()=>{
   assert.ok(starts(run([{id:1,method:'initialize',params:{}},open('I read the projet today.')],{HOME:home})).includes(11));
  }finally{fs.rmSync(home,{recursive:true,force:true});}
 });
+test('LSP serverInfo.version is the engine crate version',()=>{
+ const version=/^version\s*=\s*"([^"]+)"/m.exec(fs.readFileSync('engine/Cargo.toml','utf8'))[1];
+ assert.equal(run([{id:1,method:'initialize',params:{}}])[0].result.serverInfo.version,version);
+});

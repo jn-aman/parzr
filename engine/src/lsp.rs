@@ -220,7 +220,7 @@ fn main() {
             "initialize" => {
                 options = params["initializationOptions"].clone();
                 Some(
-                    json!({"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1},"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}},"serverInfo":{"name":"parzr","version":"0.1.0"}}),
+                    json!({"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1},"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}},"serverInfo":{"name":"parzr","version":env!("CARGO_PKG_VERSION")}}),
                 )
             }
             "shutdown" => {
