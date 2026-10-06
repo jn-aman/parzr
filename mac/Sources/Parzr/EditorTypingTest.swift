@@ -1,6 +1,7 @@
 import AppKit
 import ParzrCore
 
+/// Not part of the local release routine (it shows a real window and takes focus): the same checks run headless in `swift test` as EditorTypingWindowTests, and this stays for a VM or a spare Mac.
 /// `--editor-typing-test <dir>`: types into the Studio writing space through the NSTextView (no HID events) faster than the checking delay,
 /// samples the view every few ms, and fails if marks before the caret vanish, the UI shows a busy state, or the text view is rewritten.
 @MainActor

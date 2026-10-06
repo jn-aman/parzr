@@ -209,7 +209,7 @@ npm ci && npx playwright install chromium
 npm run test:editors && npm run test:browser
 ```
 
-Interactive native QA opens only authored fixtures and needs a desktop session with Accessibility; see [QA evidence](docs/qa/README.md).
+`swift test` also checks Parzr's own windows (typing, the shortcut inside the writing space, clicks on marks, the controls) headless: nothing is shown on screen and nothing takes focus. Interactive native QA of other apps opens only authored fixtures and needs a desktop session with Accessibility; see [QA evidence](docs/qa/README.md).
 
 </details>
 

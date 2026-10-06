@@ -108,7 +108,9 @@ final class CorrectionTextView: NSTextView {
     private var correction: NSPopover?
     private var correctionEdit: WritingEdit?
     /// The edit whose card is on screen, and that card's view (read by the click self test).
-    var shownCorrection: WritingEdit? { correction?.isShown == true ? correctionEdit : nil }
+    var shownCorrection: WritingEdit? { correction != nil && (!presentsPopover || correction?.isShown == true) ? correctionEdit : nil }
+    /// Headless tests turn this off: the card is built (see `correctionView`) but never shown, because an NSPopover is a real on-screen window.
+    var presentsPopover = true
     var correctionView: NSView? { correction?.contentViewController?.view }
 
     func dismissCorrection() { correction?.close(); correction = nil }
@@ -140,7 +142,7 @@ final class CorrectionTextView: NSTextView {
         popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }))
         popover.contentSize = InlineCorrection.size
         correction = popover; correctionEdit = edit
-        popover.show(relativeTo: rect, of: self, preferredEdge: .maxY)
+        if presentsPopover { popover.show(relativeTo: rect, of: self, preferredEdge: .maxY) }
     }
 
     func accept(_ edit: WritingEdit) {

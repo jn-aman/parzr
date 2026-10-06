@@ -26,6 +26,8 @@ final class InlineSuggestions {
     private var revision: IgnoreRevision?
     private var ignored: Set<String> = []
     private var stopped = false
+    /// Headless tests never watch global events or order the invisible warm-up card on screen.
+    private let headless: Bool
     private var shown: (snapshot: SelectionSnapshot, result: RewriteResult, probe: (range: NSRange, rect: CGRect)?)?
     private(set) var overflow = 0
     private var relayout: Task<Void, Never>?
@@ -41,14 +43,15 @@ final class InlineSuggestions {
         let paragraph: Int
         let textHash: Int
     }
-    init() {
+    init(headless: Bool = false) {
+        self.headless = headless
         model.dismiss = { [weak self] in self?.closeCard(); self?.dismissIfStale() }
         model.didAnalyze = { [weak self] in
             guard let self else { return }
             self.model.selectedEdits.subtract(self.ignored)
         }
         installMonitor()
-        Task { @MainActor [weak self] in try? await Task.sleep(for: .milliseconds(1500)); self?.prewarm() }
+        if !headless { Task { @MainActor [weak self] in try? await Task.sleep(for: .milliseconds(1500)); self?.prewarm() } }
         // A global monitor made before Accessibility was granted never delivers; make a new one on grant.
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitor() } }
@@ -58,7 +61,7 @@ final class InlineSuggestions {
     private var subscriptions: Set<AnyCancellable> = []
     private(set) var monitorInstalls = 0
     func installMonitor() {
-        guard !stopped else { return }
+        guard !stopped, !headless else { return }
         if let scrollMonitor { NSEvent.removeMonitor(scrollMonitor) }
         scrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .rightMouseDown]) { [weak self] event in
             let scrolled = event.type == .scrollWheel

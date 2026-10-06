@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
     var showOnboarding: (() -> Void)?
     var didAnalyze: (() -> Void)?
     var clearDraftUndo: (() -> Void)?
+    /// Where Copy puts the corrected text; tests give it a private pasteboard so a run never touches the owner's clipboard.
+    var pasteboard = NSPasteboard.general
     private var analysisTask: Task<Void, Never>?
     private var generation = 0
     private var clipboard: ClipboardTransaction?
@@ -121,7 +123,7 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
-    func copy() { guard !busy, !provisional, result != nil else { return }; NSPasteboard.general.clearContents(); NSPasteboard.general.setString(preview, forType: .string); status = "Copied to clipboard" }
+    func copy() { guard !busy, !provisional, result != nil else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
     func applyBest() { if fixesSentence { applySentence() } else { applyCurrent() } }
@@ -131,7 +133,7 @@ final class AppModel: ObservableObject {
         guard !edits.isEmpty, edits.allSatisfy({ chosenEdits.contains($0) }) else { return }
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
         busy = true
-        SelfTestTarget.bringForward(snapshot.app)
+        if !snapshot.own { SelfTestTarget.bringForward(snapshot.app) }   // Parzr's own writing space is already in front
         if snapshot.copied { applyCopied(snapshot, edits); return }
         Task { @MainActor in
             do {

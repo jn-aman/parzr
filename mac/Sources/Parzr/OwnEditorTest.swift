@@ -1,6 +1,7 @@
 import AppKit
 import ParzrCore
 
+/// Not part of the local release routine (it shows a real window and takes focus): the same checks run headless in `swift test` as OwnEditorWindowTests, and this stays for a VM or a spare Mac.
 /// `--own-editor-test <dir>`: the shortcut inside Parzr's own writing space. Selects text in the Studio editor, runs the hotkey's handler (no HID events),
 /// and checks the card shows the selection next to it, Return applies through Accessibility, Undo reverts, and the Studio's marks refresh each time.
 /// Also checks the exception stays narrow: no selection gives the usual hint, and a focus outside the editor is still refused.

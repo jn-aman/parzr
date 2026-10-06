@@ -165,6 +165,8 @@ struct SelectionSnapshot {
     let canPatch: Bool
     /// Google Docs through its hidden text area: replacements are typed, and range geometry comes from `DocsGeometry` rather than AX bounds.
     let docs: Bool
+    /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
+    var headlessEditor: NSTextView?
     /// The Studio writing space: the card is a key window of this same app, so the app's focus is then the card, not the editor.
     var own: Bool { app.processIdentifier == ProcessInfo.processInfo.processIdentifier }
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
@@ -228,6 +230,10 @@ struct SelectionSnapshot {
     }
 
     func validate() throws {
+        if let editor = headlessEditor {
+            guard editor.string == fullText, editor.selectedRange() == expectedSelection else { throw ParzrError.message("Your selection changed. Select the text again.") }
+            return
+        }
         if copied {
             guard !app.isTerminated, app == SelfTestTarget.watched, !IsSecureEventInputEnabled() else { throw ParzrError.message("Your selection changed. Select the text again.") }
             return
@@ -267,6 +273,12 @@ struct SelectionSnapshot {
     }
     func apply(_ edits: [WritingEdit]) async throws {
         try validate(); try EditPlan.validate(edits, in: text)
+        if let editor = headlessEditor {
+            editor.undoManager?.beginUndoGrouping()
+            for edit in edits.reversed() { editor.insertText(edit.replacement, replacementRange: NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)) }
+            editor.undoManager?.endUndoGrouping(); editor.undoManager?.setActionName("Apply Parzr corrections")
+            return
+        }
         // A passive caret may have moved since the snapshot; restore it from where it is now.
         let caretStart = expectedSelection.length == 0 ? (AX.selection(element)?.location ?? expectedSelection.location) : expectedSelection.location
         guard canPatch, let fullText else { throw ParzrError.message("This editor needs paste replacement. Review the formatting notice before using Paste instead.") }
@@ -313,6 +325,7 @@ struct SelectionSnapshot {
         }
     }
     func metadata() -> String {
+        if headlessEditor != nil { return "Headless writing space.\nText is excluded from this report." }
         var attributes: CFArray?; var parameters: CFArray?
         AXUIElementCopyAttributeNames(element, &attributes)
         AXUIElementCopyParameterizedAttributeNames(element, &parameters)

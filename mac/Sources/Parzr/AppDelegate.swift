@@ -15,15 +15,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var statusItem: NSStatusItem?
     private var statusPopover: NSPopover?
     private var statusSourceApp: NSRunningApplication?
+    /// Tests set this to false: windows are built, laid out and sent events, but never ordered on screen, and the app is never activated or given a Dock policy (`policy` records what would apply).
+    var showsWindows = true
+    private(set) var policy = NSApplication.ActivationPolicy.accessory
+    /// Headless tests only: what a run would have on screen (an unshown window is never `isVisible`).
+    private var headlessShown: Set<ObjectIdentifier> = []
+    /// Tests replace the whole capture (Accessibility, then the copy fallback, which sends Cmd+C to the frontmost app) with a read of the writing space.
+    var capture: (() async throws -> SelectionSnapshot)?
     private(set) var panel: FloatingPanel?
     private var panelFit: AnyCancellable?
     private var marker: NSPanel?
     private(set) var studio: NSWindow?
-    private var onboarding: NSWindow?
-    private var onboardingModel: OnboardingModel?
+    private(set) var onboarding: NSWindow?
+    private(set) var onboardingModel: OnboardingModel?
     private var hotkey: GlobalHotkey?
     private var passive: PassiveObserver?
-    private let inline = InlineSuggestions()
+    private lazy var inline = InlineSuggestions(headless: !showsWindows)
     private var subscriptions: Set<AnyCancellable> = []
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
@@ -88,6 +95,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        // The Parzr-window flags (--ui-test, --editor-typing-test, --own-editor-test, --click-test) put real windows on the screen and take focus, so they are no longer part of the local release routine: their checks run headless in `swift test` (UIControlsWindowTests, EditorTypingWindowTests, OwnEditorWindowTests, CardClickWindowTests).
+        // They stay for a VM or a spare Mac, where the end-to-end parts only a real screen can show still apply: menu-bar ownership, the real activation policy, a minimized window returning, the card as the key window and Accessibility reading and writing the editor.
         if let index = CommandLine.arguments.firstIndex(of: "--ui-test"), CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
                 do { try await runUIControlsTest(directory: CommandLine.arguments[index + 1]); print("Native UI controls passed."); NSApp.terminate(nil) }
@@ -198,7 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self?.marker?.orderOut(nil); self?.marker?.contentView = nil
         }
         passive.onSuggestion = { [weak self] snapshot, result in
-            guard let self, self.panel?.isVisible != true, !self.inline.isPresenting else { return }
+            guard let self, !self.isShown(self.panel), !self.inline.isPresenting else { return }
             if Preferences.shared.selectedTextPopover, snapshot.expectedSelection.length > 0, let anchor = snapshot.bounds {
                 _ = self.inline.present(snapshot: snapshot, result: result, anchor: anchor, activate: false)
                 return
@@ -244,15 +253,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         dot.autoresizingMask = [.minXMargin, .maxYMargin]; dot.setAccessibilityElement(false)
         button.addSubview(dot); updateDot = dot
     }
-    @objc private func toggleStatusPopover() {
-        guard let button = statusItem?.button else { return }
-        if statusPopover?.isShown == true { statusPopover?.close(); return }
-        Preferences.shared.refreshPermission()
-        let frontmost = NSWorkspace.shared.frontmostApplication
-        if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier { statusSourceApp = frontmost }
-        let popover = NSPopover(); popover.behavior = .transient
-        popover.animates = !Preferences.shared.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        popover.contentViewController = NSHostingController(rootView: StatusPopover(engineReady: studioModel.engineReady, sourceApp: statusSourceApp,
+    func isShown(_ window: NSWindow?) -> Bool { window.map { showsWindows ? $0.isVisible : headlessShown.contains(ObjectIdentifier($0)) } ?? false }
+    private func isOpen(_ window: NSWindow?) -> Bool { isShown(window) || (showsWindows && window?.isMiniaturized == true) }
+    private func setPolicy(_ policy: NSApplication.ActivationPolicy) { self.policy = policy; if showsWindows { NSApp.setActivationPolicy(policy) } }
+    /// The menu-bar popover's content, wired to the app; its buttons close the popover, then act.
+    func statusPopoverView() -> StatusPopover {
+        StatusPopover(engineReady: studioModel.engineReady, sourceApp: statusSourceApp,
             check: { [weak self] in
                 self?.statusPopover?.close()
                 self?.statusSourceApp?.activate(options: [])
@@ -261,12 +267,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             settings: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .general) },
             about: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .about) },
             welcome: { [weak self] in self?.statusPopover?.close(); self?.showOnboarding() },
-            quit: { NSApp.terminate(nil) }))
+            quit: { NSApp.terminate(nil) })
+    }
+    @objc private func toggleStatusPopover() {
+        guard let button = statusItem?.button else { return }
+        if statusPopover?.isShown == true { statusPopover?.close(); return }
+        Preferences.shared.refreshPermission()
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier { statusSourceApp = frontmost }
+        let popover = NSPopover(); popover.behavior = .transient
+        popover.animates = !Preferences.shared.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.contentViewController = NSHostingController(rootView: statusPopoverView())
         statusPopover = popover
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.layoutSubtreeIfNeeded()
     }
-    private func makeMenu() -> NSMenu {
+    func makeMenu() -> NSMenu {
         let main = NSMenu(); let app = NSMenu(); let appItem = NSMenuItem(); appItem.submenu = app; main.addItem(appItem)
         let about = app.addItem(withTitle: "About Parzr", action: #selector(openAbout), keyEquivalent: ""); about.target = self
         let check = app.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""); check.target = self
@@ -326,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// The guided setup. Opens at the Accessibility step when that is still missing for a returning user; closing it by any route marks it completed.
     func showOnboarding(step: OnboardingStep? = nil) {
         closePanel()
-        if let window = onboarding, window.isVisible { if let step { onboardingModel?.step = step }; NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); return }
+        if let window = onboarding, isShown(window) { if let step { onboardingModel?.step = step }; if showsWindows { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }; return }
         Preferences.shared.refreshPermission()
         let model = OnboardingModel(step: step); onboardingModel = model
         let view = OnboardingView(model: model, settings: { [weak self] in self?.showStudio(route: .general) },
@@ -336,23 +352,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         window.title = "Welcome to Parzr"; window.titlebarAppearsTransparent = true; window.isReleasedWhenClosed = false; window.delegate = self
         window.contentView = NSHostingView(rootView: view); window.collectionBehavior = [.moveToActiveSpace]
         window.center(); onboarding = window
-        NSApp.setActivationPolicy(.regular)
+        setPolicy(.regular)
+        guard showsWindows else { headlessShown.insert(ObjectIdentifier(window)); return }
         NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); window.orderFrontRegardless()
     }
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
+        headlessShown.remove(ObjectIdentifier(window))
         if window === onboarding { onboardingModel?.complete(); onboarding = nil; onboardingModel = nil }
         updateActivationPolicy(closing: window)
     }
     /// An accessory app never owns the menu bar, so a Parzr window the user works in (the editor, the welcome guide) makes the app regular whatever Show in Dock says; with it off, the last one closing goes back to menu-bar-only. A minimized window counts as open.
     private func updateActivationPolicy(closing: NSWindow? = nil) {
-        let open = [studio, onboarding].contains { $0 !== closing && ($0?.isVisible == true || $0?.isMiniaturized == true) }
-        NSApp.setActivationPolicy(Preferences.shared.showInDock || open ? .regular : .accessory)
+        setPolicy(ActivationPolicy.decide(showInDock: Preferences.shared.showInDock, windowOpen: [studio, onboarding].contains { $0 !== closing && isOpen($0) }))
     }
     func showStudio(route: StudioRoute? = nil) {
         studioModel.clearDraftUndo = { [weak self] in self?.studio?.undoManager?.removeAllActions() }
         if let route { studioModel.studioRoute = route }
-        NSApp.setActivationPolicy(.regular)
+        setPolicy(.regular)
         closePanel()
         if studio == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 920, height: 680), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
@@ -362,13 +379,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             window.collectionBehavior = [.moveToActiveSpace]; window.delegate = self
             window.center(); studio = window
         }
+        guard showsWindows else { studio.map { _ = headlessShown.insert(ObjectIdentifier($0)) }; return }
         if studio?.isMiniaturized == true { studio?.deminiaturize(nil) }
         NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); studio?.makeKeyAndOrderFront(nil); studio?.orderFrontRegardless()
     }
     private var capturing = false
     func openSelection() {
         passive?.suspend(); inline.dismiss()
-        if panel?.isVisible == true { closePanel(); return }
+        if isShown(panel) { closePanel(); return }
         // A copy-based capture owns the clipboard for up to half a second; ignore repeat presses meanwhile.
         guard !capturing else { return }
         capturing = true
@@ -376,13 +394,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             defer { capturing = false }
             do {
                 let snapshot: SelectionSnapshot
-                do { snapshot = try SelectionSnapshot.capture() }
+                if let capture { snapshot = try await capture() }
+                else { do { snapshot = try SelectionSnapshot.capture() }
                 catch {
                     // AX cannot read canvas editors such as Google Docs; fall back to copying the selection.
                     let message = error.localizedDescription
                     guard message.hasPrefix("Select ") || message.hasPrefix("This editor hides"), let copied = try? await SelectionSnapshot.captureByCopy() else { throw error }
                     snapshot = copied
-                }
+                } }
                 panelModel.select(snapshot); studioModel.inspector = snapshot.metadata()
                 showPanel(anchor: snapshot.bounds)
             } catch {
@@ -409,10 +428,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let size = fittedPanelSize()
         panel.setContentSize(size)
         panel.setFrameOrigin(CorrectionPlacement.origin(anchor: anchor, size: size, visible: visible))
-        panel.makeKeyAndOrderFront(nil)
+        if showsWindows { panel.makeKeyAndOrderFront(nil) } else { headlessShown.insert(ObjectIdentifier(panel)) }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let handled = MainActor.assumeIsolated { () -> Bool in
-                guard let self, self.panel?.isVisible == true, event.window == self.panel else { return false }
+                guard let self, self.isShown(self.panel), event.window == self.panel else { return false }
                 if event.keyCode == 53 || (event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command && event.charactersIgnoringModifiers == "w") { self.closePanel(); return true }
                 if event.keyCode == 36 && event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty { self.panelModel.applyBest(); return true }
                 if event.keyCode == 36 && event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command { self.panelModel.apply(); return true }
@@ -424,7 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return handled ? nil : event
         }
-        outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in MainActor.assumeIsolated { self?.closePanel() } }
+        if showsWindows { outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in MainActor.assumeIsolated { self?.closePanel() } } }
         // The global monitor never sees clicks in Parzr's own windows (the writing space the card was opened from).
         ownClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             MainActor.assumeIsolated { if let self, event.window != self.panel { self.closePanel() } }
@@ -437,7 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return CGSize(width: RewritePanel.size.width, height: min(RewritePanel.size.height, ceil(host.fittingSize.height)))
     }
     private func fitPanel() {
-        guard let panel, panel.isVisible else { return }
+        guard let panel, isShown(panel) else { return }
         let size = fittedPanelSize()
         guard abs(panel.contentLayoutRect.height - size.height) > 0.5 else { return }
         var frame = panel.frame
@@ -446,15 +465,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let visible = panel.screen?.visibleFrame { frame.origin.y = max(frame.origin.y, visible.minY) }
         panel.setFrame(frame, display: true)
     }
-    private func closePanel() {
-        panel?.orderOut(nil)
+    func closePanel() {
+        panel?.orderOut(nil); panel.map { _ = headlessShown.remove(ObjectIdentifier($0)) }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }
         if let ownClickMonitor { NSEvent.removeMonitor(ownClickMonitor); self.ownClickMonitor = nil }
         panelModel.clearSession()
     }
     private func showMarker(snapshot: SelectionSnapshot, result: RewriteResult) {
-        guard panel?.isVisible != true, let bounds = snapshot.bounds, let screen = NSScreen.screens.first(where: { $0.frame.intersects(bounds) }) else { return }
+        guard !isShown(panel), let bounds = snapshot.bounds, let screen = NSScreen.screens.first(where: { $0.frame.intersects(bounds) }) else { return }
         let more = inline.overflow
         let size = more > 0 ? NSSize(width: 40, height: 22) : NSSize(width: 26, height: 26)
         if marker == nil {
@@ -709,6 +728,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
     #endif
+    /// `--ui-test`. Not part of the local release routine (it opens and activates real windows); the same controls are checked headless by UIControlsWindowTests, and this stays for the parts that need a real screen.
     private func runUIControlsTest(directory: String) async throws {
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message("UI QA stopped while secure input is active.") }
         let target = URL(fileURLWithPath: directory)
@@ -815,4 +835,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let png = bitmap.representation(using: .png, properties: [:]) else { throw ParzrError.message("Could not encode the UI snapshot.") }
         try png.write(to: url); window.close()
     }
+}
+
+/// Which Dock policy the app needs: an accessory app never owns the menu bar, so an open Parzr window makes it regular whatever Show in Dock says. Pure so tests can check it without activating anything.
+enum ActivationPolicy {
+    static func decide(showInDock: Bool, windowOpen: Bool) -> NSApplication.ActivationPolicy { showInDock || windowOpen ? .regular : .accessory }
 }

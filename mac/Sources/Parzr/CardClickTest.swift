@@ -1,6 +1,7 @@
 import AppKit
 import ParzrCore
 
+/// Not part of the local release routine (it shows a real window and takes focus): the same checks run headless in `swift test` as CardClickWindowTests, and this stays for a VM or a spare Mac.
 /// `--click-test <dir>`: delivers real mouse clicks (down and up through the window's own event path, never HID) to the marked words of a CorrectionTextView
 /// and fails when the correction card does not open for the clicked word. Run for both the onboarding "Try it" field and the Studio editor.
 @MainActor

@@ -269,6 +269,7 @@ final class NameHandlingTests: XCTestCase {
         XCTAssertTrue(prefs.learnName("Jean-Luc Picard")); XCTAssertEqual(prefs.learnedNames.count, 2)
     }
     func testKnownMisspellingsAreNeverLearnedAndOldOnesArePurged() throws {
+        guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library: the misspelling list lives in the engine.") }
         let (prefs, cleanup) = try prefs(); defer { cleanup() }
         for typo in ["teh", "Recieved", "alot", "sentense"] { XCTAssertFalse(prefs.learnName(typo), typo) }
         // An undone fix of a typo, a repeated Ignore and the repetition ledger all route through learnName.
@@ -283,10 +284,11 @@ final class NameHandlingTests: XCTestCase {
         XCTAssertEqual(prefs.learnedNames, ["Aman", "Priya"])
     }
     func testSelfTestsUseAThrowawaySuiteNotTheOwnersDefaults() {
-        for flag in ["--integration-test", "--typing-test", "--grammar-typing-test", "--paste-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--snapshot"] { XCTAssertTrue(Preferences.selfTestFlags.contains(flag), flag) }
+        for flag in ["--integration-test", "--typing-test", "--grammar-typing-test", "--paste-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--click-test", "--snapshot"] { XCTAssertTrue(Preferences.selfTestFlags.contains(flag), flag) }
         XCTAssertNotEqual(Preferences.selfTestSuite, Bundle.main.bundleIdentifier)
         XCTAssertNotEqual(Preferences.selfTestSuite, "app.parzr.desktop")
         XCTAssertFalse(Preferences.isSelfTest, "an ordinary launch keeps the real preferences")
+        XCTAssertTrue(Preferences.underXCTest); XCTAssertNotNil(Preferences.selfTestDefaults, "swift test runs on the throwaway suite too, never the xctest or app domain")
     }
     func testFixtureEditorTestsAreSelfTestsAndProductBehaviourIsUnchanged() {
         XCTAssertTrue(Set(Preferences.fixtureTestFlags).isSubset(of: Preferences.selfTestFlags))
