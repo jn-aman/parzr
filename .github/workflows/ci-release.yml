@@ -7,6 +7,15 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      critical:
+        description: Mark the update critical (installed promptly, cannot be skipped, no phased rollout)
+        type: boolean
+        default: false
+      notes:
+        description: 'Optional update notes shown in the app (separate bullets with " | "); defaults to the commit subjects since the last tag'
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -76,6 +85,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
       - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
         with:
           toolchain: '1.91.0'
@@ -102,12 +113,62 @@ jobs:
         run: |
           cd dist
           shasum -a 256 Parzr-*.dmg > SHA256SUMS
+      - name: Fetch previous update zips for delta updates
+        # Up to 3 earlier releases that carry an update zip; releases without one (0.2.x) are skipped.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist/prev-zips
+          n=0
+          for t in $(gh release list --limit 15 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName'); do
+            [ "$t" = "$PARZR_RELEASE_TAG" ] && continue
+            if gh release download "$t" --pattern 'Parzr-*.zip' --dir dist/prev-zips; then n=$((n + 1)); else echo "$t has no update zip, skipping"; fi
+            [ "$n" -ge 3 ] && break
+          done
+          echo "Fetched $n previous update zip(s)"
+      - name: Build, sign and verify the update feed
+        # Writes dist/update/{Parzr-X.Y.Z.zip,*.delta,appcast.xml} and fails unless every signature,
+        # length and delta checks out. The EdDSA key reaches the script on stdin, never a file or a log.
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+          PARZR_CRITICAL: ${{ inputs.critical }}
+          PARZR_NOTES: ${{ inputs.notes }}
+        run: |
+          args=(--app dist/Parzr.app --version "${PARZR_RELEASE_TAG#v}" --out dist/update --prev-dir dist/prev-zips --notes "$PARZR_NOTES")
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${PARZR_RELEASE_TAG}^" 2>/dev/null || true)
+          [ -n "$prev" ] && args+=(--git-range "$prev..$PARZR_RELEASE_TAG")
+          [ "$PARZR_CRITICAL" = "true" ] && args+=(--critical)
+          python3 scripts/make-appcast.py build "${args[@]}"
       - name: Publish immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
           PARZR_RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes dist/Parzr-*.dmg dist/SHA256SUMS LICENSE THIRD_PARTY_NOTICES
+          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes dist/Parzr-*.dmg dist/SHA256SUMS LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/*.delta dist/update/appcast.xml
+      - name: Verify the published update feed
+        # The feed is live the moment the release is. Re-check what users will download; if it is bad,
+        # draft the release so the feed (releases/latest) falls back to the previous release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases"
+          verify() {
+            python3 scripts/make-appcast.py verify --appcast "$base/download/$PARZR_RELEASE_TAG/appcast.xml" --version "${PARZR_RELEASE_TAG#v}" || return 1
+            curl -fsSL "$base/download/$PARZR_RELEASE_TAG/appcast.xml" -o "$RUNNER_TEMP/tag-appcast.xml" || return 1
+            for _ in 1 2 3 4 5 6; do
+              curl -fsSL "$base/latest/download/appcast.xml" -o "$RUNNER_TEMP/latest-appcast.xml" && cmp "$RUNNER_TEMP/tag-appcast.xml" "$RUNNER_TEMP/latest-appcast.xml" && return 0
+              sleep 10
+            done
+            return 1
+          }
+          if ! verify; then
+            echo "::error::Published update feed failed verification; drafting the release so updates fall back to the previous release."
+            gh release edit "$PARZR_RELEASE_TAG" --draft
+            exit 1
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -117,6 +178,7 @@ jobs:
             dist/package-report.json
             dist/app-notarization.json
             dist/dmg-notarization.json
+            dist/update/appcast.xml
       - name: Remove ephemeral signing credentials
         if: always()
         run: |

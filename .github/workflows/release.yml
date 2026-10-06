@@ -11,6 +11,14 @@ on:
         description: Optional exact version X.Y.Z (overrides bump)
         type: string
         required: false
+      critical:
+        description: Mark the update critical (installed promptly, cannot be skipped, no phased rollout)
+        type: boolean
+        default: false
+      notes:
+        description: 'Optional update notes shown in the app (separate bullets with " | "); defaults to the commit subjects since the last tag'
+        type: string
+        required: false
 permissions:
   contents: write
   actions: write
@@ -72,9 +80,11 @@ jobs:
       - name: Start the signed build
         env:
           VERSION: ${{ steps.bump.outputs.version }}
+          INPUT_CRITICAL: ${{ inputs.critical }}
+          INPUT_NOTES: ${{ inputs.notes }}
         run: |
           # Pushes made with GITHUB_TOKEN do not trigger workflows, but workflow_dispatch is allowed.
-          gh workflow run ci-release.yml --ref "v$VERSION"
+          gh workflow run ci-release.yml --ref "v$VERSION" -f "critical=${INPUT_CRITICAL:-false}" -f "notes=$INPUT_NOTES"
           url=""
           for _ in $(seq 1 12); do
             sleep 5
