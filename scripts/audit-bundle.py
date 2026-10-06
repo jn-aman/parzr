@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Verify required runtime contents and reject embedded build-machine home paths."""
 import argparse
+import base64
 import hashlib
 import json
 import pathlib
@@ -26,6 +27,26 @@ for name in ['Contents/MacOS/parzr','Contents/MacOS/parzr-engine','Contents/MacO
     if subprocess.check_output(['lipo','-archs',str(app/name)],text=True).strip() != 'arm64':
         sys.exit('Parzr requires Apple Silicon only: '+name)
 info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
+# Sparkle: the framework is complete, arm64-only, free of sandbox-only XPC services, and its installer helpers are hardened.
+sparkle = app/'Contents/Frameworks/Sparkle.framework'
+for name in ['Versions/B/Sparkle', 'Versions/B/Autoupdate', 'Versions/B/Updater.app/Contents/MacOS/Updater']:
+    if not (sparkle/name).is_file(): sys.exit('Missing Sparkle component: '+name)
+    if subprocess.check_output(['lipo','-archs',str(sparkle/name)],text=True).strip() != 'arm64': sys.exit('Sparkle must be arm64 only: '+name)
+if list(sparkle.rglob('*.xpc')) or (sparkle/'XPCServices').exists(): sys.exit('Sparkle XPC services must not ship in a non-sandboxed app.')
+for name in ['Versions/B/Autoupdate', 'Versions/B/Updater.app']:
+    if 'runtime' not in subprocess.run(['codesign','-dvv',str(sparkle/name)],capture_output=True,text=True).stderr.split('flags=')[-1].split('\n')[0]:
+        sys.exit('Sparkle helper is not signed with the hardened runtime: '+name)
+if '@executable_path/../Frameworks' not in subprocess.check_output(['otool','-l',str(app/'Contents/MacOS/parzr')],text=True): sys.exit('The app executable cannot find Contents/Frameworks (missing rpath).')
+# Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, a daily check.
+feed, key = info.get('SUFeedURL', ''), info.get('SUPublicEDKey', '')
+if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) != 32: sys.exit('Info.plist needs an https SUFeedURL and a 32-byte SUPublicEDKey.')
+if info.get('SUEnableSystemProfiling') is not False or info.get('SUEnableAutomaticChecks') is not True or info.get('SUScheduledCheckInterval') != 86400: sys.exit('Update settings in Info.plist differ from the privacy decisions (no profile, daily automatic checks).')
+# Every Mach-O in the bundle must carry a valid signature of its own (a deep verify alone would not name an unsigned helper).
+for path in sorted(app.rglob('*')):
+    if path.is_symlink() or not path.is_file() or path.stat().st_size < 4: continue
+    with path.open('rb') as stream: magic = stream.read(4)
+    if magic in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe') and subprocess.run(['codesign','--verify','--strict',str(path)],capture_output=True).returncode != 0:
+        sys.exit('Unsigned or invalidly signed nested code: '+str(path.relative_to(app)))
 model_info = json.loads((app/'Contents/Resources/Model/manifest.json').read_text())
 model_path = app/'Contents/Resources/Model'/model_info['file']
 with model_path.open('rb') as stream:

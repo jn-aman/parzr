@@ -46,6 +46,13 @@ bin_path = pathlib.Path(subprocess.check_output(command,cwd=ROOT,text=True).stri
 shutil.copy2(bin_path/'parzr', stage/'Contents/MacOS/parzr')
 for bundle in bin_path.glob('*.bundle'):
     shutil.copytree(bundle, stage/'Contents/Resources'/bundle.name)
+# Sparkle (auto-update). Parzr is not sandboxed, so Sparkle's XPC services are dropped (https://sparkle-project.org/documentation/sandboxing/ "Removing XPC Services"); the binaries are thinned to arm64 like the rest of the app and re-signed below.
+sparkle = stage/'Contents/Frameworks/Sparkle.framework'
+shutil.copytree(bin_path/'Sparkle.framework', sparkle, symlinks=True)
+shutil.rmtree(sparkle/'Versions/B/XPCServices'); (sparkle/'XPCServices').unlink()
+for name in ['Versions/B/Sparkle', 'Versions/B/Autoupdate', 'Versions/B/Updater.app/Contents/MacOS/Updater']:
+    run(['lipo', sparkle/name, '-thin', 'arm64', '-output', sparkle/name])
+shutil.rmtree(sparkle/'Versions/B/_CodeSignature')
 shutil.copytree(ROOT/'resources/Brand', stage/'Contents/Resources/Brand')
 model_cache = dist/'model'
 model_info = json.loads((model_cache/'manifest.json').read_text())
@@ -59,6 +66,7 @@ for name, destination in [('libparzr_engine.dylib','Contents/Frameworks'),('parz
     files = [ROOT/'engine/target'/target/'release'/name if target else ROOT/'engine/target/release'/name for target in architectures]
     shutil.copy2(files[0],stage/destination/name)
 run(['install_name_tool','-id','@rpath/libparzr_engine.dylib',stage/'Contents/Frameworks/libparzr_engine.dylib'])
+run(['install_name_tool','-add_rpath','@executable_path/../Frameworks',stage/'Contents/MacOS/parzr'])
 for binary in ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Frameworks/libparzr_model.dylib']:
     run(['strip', '-S', stage/binary])
 info = plistlib.loads((ROOT/'resources/Info.plist').read_bytes()); info['CFBundleIdentifier']=args.bundle_id
@@ -82,6 +90,9 @@ identity = args.identity if args.sign else '-'
 options = ['--options','runtime','--timestamp'] if args.sign else []
 for binary in ['Contents/Frameworks/libparzr_model.dylib','Contents/Frameworks/libparzr_engine.dylib','Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp']:
     run(['codesign','--force','--sign',identity,*options,stage/binary])
+# Sparkle inside out, always hardened (its Autoupdate and Updater.app run the install): helpers, then the framework, then the app. Never --deep.
+for nested in ['Versions/B/Autoupdate', 'Versions/B/Updater.app', '']:
+    run(['codesign','--force','--sign',identity,'--options','runtime',*(['--timestamp'] if args.sign else []),sparkle/nested if nested else sparkle])
 run(['codesign','--force','--sign',identity,*options,'--entitlements',ROOT/'resources/Parzr.entitlements',stage])
 run(['codesign','--verify','--deep','--strict',stage])
 run([sys.executable, ROOT/'scripts/audit-bundle.py', stage])
