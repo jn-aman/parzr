@@ -1,6 +1,6 @@
 {
   "name": "parzr", "displayName": "Parzr", "description": "Offline writing assistance with minimal edits and deliberate tones.",
-  "version": "0.3.3", "publisher": "parzr", "license": "Apache-2.0", "engines": {"vscode": "^1.85.0"},
+  "version": "0.3.4", "publisher": "parzr", "license": "Apache-2.0", "engines": {"vscode": "^1.85.0"},
   "categories": ["Linters"], "main": "./extension.cjs", "activationEvents": ["onCommand:parzr.rewrite", "onLanguage:plaintext", "onLanguage:markdown", "onLanguage:mdx", "onLanguage:git-commit"],
   "capabilities": {"untrustedWorkspaces": {"supported": true}, "virtualWorkspaces": {"supported": false}},
   "contributes": {
