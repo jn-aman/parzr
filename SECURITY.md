@@ -10,7 +10,7 @@ Include the Parzr version, macOS version, Mac model, and steps to reproduce. Do 
 
 ## Scope
 
-In scope: the macOS app, the Rust engine, the browser and VS Code extensions, the language server, the release pipeline, and parzr.app. Parzr makes no network requests while checking text, so reports of any unexpected network traffic, text persistence, or edits outside the selected range are especially welcome.
+In scope: the macOS app, the Rust engine, the browser and VS Code extensions, the language server, the release pipeline, and parzr.app. Parzr makes no network requests while checking text (its only request is the daily, optional update check to GitHub), so reports of any unexpected network traffic, text persistence, or edits outside the selected range are especially welcome.
 
 ## Supported versions
 

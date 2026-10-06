@@ -16,7 +16,7 @@ Option+Space opens a 340 × 218 point correction popover with one correction at 
 
 Revalidate focus, selection and source before applying minimal UTF-16 range edits. Preserve surviving formatting and host Undo where the editor supports them. Protect code, links, numbers, names, dictionary entries, attachments, quoted replies and signatures. Exclude secure fields and terminal/code contexts from passive observation.
 
-Writing remains transient in memory. Both models and the native runtime ship in the app and DMG. No runtime download, account, HTTP service, telemetry or writing logs. Clipboard fallback is explicit and disabled by default. Unsupported hosts offer Copy or the playground rather than unsafe replacement.
+Writing remains transient in memory. Both models and the native runtime ship in the app and DMG. No runtime model download, account, HTTP service, telemetry or writing logs. The only network request is the optional daily update check, which carries nothing about the user or their writing. Clipboard fallback is explicit and disabled by default. Unsupported hosts offer Copy or the playground rather than unsafe replacement.
 
 ## Interface
 

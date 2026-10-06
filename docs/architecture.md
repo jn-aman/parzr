@@ -18,7 +18,7 @@ How to read it, left to right:
 6. **Optional adapters** (dashed, bottom left). The VS Code extension spawns `parzr-engine` over stdio, the browser extension talks to `parzr-native-host` through native messaging, and other editors can run `parzr-lsp`. They reuse the same engine and model runtime, each in its own process. They do not set the `gec` request flag, so they get the rules (and Qwen where they ask for it), not Smart grammar.
 7. **The wire** (bottom strip). A real request and response from `parzr-engine`, shortened. The response is the contract: `start_utf16` and `end_utf16` ranges into your original text, the `replacement`, a `category` that decides the underline colour (Style and Tone are blue, everything else red) and a `rule_id` that says who wrote the edit.
 
-The dashed green border is the privacy boundary: the app, the engine and the model runtime make no network requests while checking text.
+The dashed green border is the privacy boundary: the app, the engine and the model runtime make no network requests while checking text. The one request the app makes is the daily update check (Sparkle fetches `appcast.xml` from the latest GitHub release and verifies EdDSA signatures); it carries no writing and can be turned off in Settings. See [releases](releases.md).
 
 ## The typing path
 

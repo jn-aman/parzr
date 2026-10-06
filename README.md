@@ -32,7 +32,7 @@
 
 Parzr underlines mistakes as you write, in the apps you already use. Click the flagged word and the card shows the **whole corrected sentence**; press Return and every error in it is fixed. Select any passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct.
 
-Everything runs on your Mac. No account, no cloud, no telemetry, no extension.
+Everything runs on your Mac. No account, no cloud, no telemetry, no extension. Your writing never leaves it; the app's only network request is a daily check for a new version, which you can turn off.
 
 > **Public beta.** Signed and notarized by Apple. English coverage is growing and Parzr will not catch every error. Please [tell us what you find](https://github.com/jn-aman/parzr/issues).
 
@@ -109,6 +109,8 @@ Writing stays in memory on your Mac. Both models ship inside the app; nothing do
 2. Drag **Parzr** to **Applications** and open it.
 3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
 
+Parzr updates itself from 0.3 on; if you have 0.2.x, download 0.3 once.
+
 Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, or hide it from the Dock in Settings.
 
 Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device model)"). Once setup is finished Parzr prepares the model in the background for the Neural Engine, which takes a few seconds the first time, so it is ready before you need it.
@@ -128,12 +130,12 @@ Details and evidence: [integrations](docs/integrations.md). Browser, VS Code and
 
 ## How it works
 
-<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, then asks the GECToR grammar model (gec.rs) about sentences it has not seen, and gets back minimal UTF-16 edits. A native runtime runs GECToR through Core ML on the Apple Neural Engine, always loaded, about 2 ms per sentence, and Qwen3.5-0.8B through llama.cpp on Metal only for Option+Space and tones. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Everything stays inside the Mac, with no network."></p>
+<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, then asks the GECToR grammar model (gec.rs) about sentences it has not seen, and gets back minimal UTF-16 edits. A native runtime runs GECToR through Core ML on the Apple Neural Engine, always loaded, about 2 ms per sentence, and Qwen3.5-0.8B through llama.cpp on Metal only for Option+Space and tones. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Everything stays inside the Mac while checking text, with no network."></p>
 
 - **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. The rules answer first, in well under a millisecond for a chat message.
 - **Smart grammar:** the engine then asks GECToR, a RoBERTa-base grammar tagger (method by Grammarly, Omelianchuk et al. 2020), about each sentence it has not seen before. The model tags words (keep, replace, append, verb form, plural) instead of rewriting, runs as Core ML int8 on the Apple Neural Engine in about 2 ms per sentence, uses about 18 MB of memory, stays loaded and is prewarmed in the background after launch. Answers are cached per sentence, so typing only pays for the sentence you are editing. Its edits pass Parzr's own guards: names, links and code are never touched, case is never changed, an unknown word is never respelled, code-mixed and Hinglish sentences are left alone, edits that belong together stand or fall together, and your choices (one or many, which article, "thanks for") are not second-guessed. A rule's edit always wins over the model's.
 - **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
-- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; nothing downloads at runtime.
+- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; nothing downloads at runtime. The app's only network request is a daily check for a new version (a plain request to GitHub for a small signed update file); it sends nothing about you or your writing, GitHub sees what any download shows (your IP address and the app version), and Settings can turn it off.
 - See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 
 ## Measured, in the open
