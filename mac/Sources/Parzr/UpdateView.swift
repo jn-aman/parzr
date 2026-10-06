@@ -23,7 +23,7 @@ struct UpdatePanelView: View {
         case .checking:
             header("arrow.triangle.2.circlepath", "Checking for updates", "Asking GitHub for the latest Parzr.")
             UpdateProgressBar(fraction: nil, animate: animate, label: "Checking for updates")
-            actions { Spacer(minLength: 4); NativeButton(title: "Cancel", kind: .secondary, key: "\u{1b}", action: { model.perform(.cancel) }) }
+            actions { hideButton(); Spacer(minLength: 4); NativeButton(title: "Cancel", kind: .secondary, key: "\u{1b}", action: { model.perform(.cancel) }) }
         case .found(let info):
             HStack(spacing: 12) {
                 tile("sparkle")
@@ -41,12 +41,13 @@ struct UpdatePanelView: View {
                 NativeButton(title: "Install and Relaunch", kind: .primary, key: "\r", action: { model.perform(.install) })
             }
         case .downloading(let info, let received, let total):
-            header("arrow.down.circle", "Downloading Parzr \(info.version)", UpdateText.progress(received: received, total: total))
+            header("arrow.down.circle", info.fullInstead ? "Downloading the full update" : "Downloading Parzr \(info.version)", (info.fullInstead ? "The quick update did not fit this copy, so Parzr is downloading the full version.\n" : "") + UpdateText.progress(received: received, total: total))
             UpdateProgressBar(fraction: total > 0 ? min(1, Double(received) / Double(total)) : nil, animate: animate, label: "Download progress")
-            actions { Spacer(minLength: 4); NativeButton(title: "Cancel", kind: .secondary, key: "\u{1b}", action: { model.perform(.cancel) }) }
+            actions { hideButton(); Spacer(minLength: 4); NativeButton(title: "Cancel", kind: .secondary, key: "\u{1b}", action: { model.perform(.cancel) }) }
         case .extracting(let info, let progress):
             header("shippingbox", "Preparing Parzr \(info.version)", "Checking the download and unpacking it.")
-            UpdateProgressBar(fraction: progress > 0 ? progress : nil, animate: animate, label: "Preparing the update")
+            UpdateProgressBar(fraction: progress > 0.02 ? progress : nil, animate: animate, label: "Preparing the update")
+            actions { Spacer(minLength: 4); hideButton(escape: true) }
         case .ready(let info):
             header("checkmark.circle", "Restart Parzr to finish", "Parzr \(info.version) is ready. Parzr reopens in a moment.")
             actions {
@@ -57,6 +58,7 @@ struct UpdatePanelView: View {
         case .installing(let info):
             header("arrow.triangle.2.circlepath", "Installing Parzr \(info.version)", "Parzr reopens on its own.")
             UpdateProgressBar(fraction: nil, animate: animate, label: "Installing")
+            actions { Spacer(minLength: 4); hideButton(escape: true) }
         case .countdown(let info, let seconds):
             header("moon.zzz", "Updating Parzr in \(seconds)s", "Parzr \(info.version) is ready, and you have been away a while.")
             actions {
@@ -93,6 +95,8 @@ struct UpdatePanelView: View {
             }
         }.accessibilityElement(children: .combine)
     }
+    /// Hides the panel only: the update carries on and About keeps the status line. Sparkle cannot cancel an extraction, so this is the way out there.
+    private func hideButton(escape: Bool = false) -> some View { NativeButton(title: "Hide", kind: escape ? .secondary : .utility, label: "Hide the update panel", key: escape ? "\u{1b}" : "", action: { model.perform(.dismiss) }) }
     private func actions<Content: View>(@ViewBuilder _ content: () -> Content) -> some View { HStack(spacing: 8, content: content) }
     /// Markdown only when the appcast says so; anything else is shown as plain text, never as HTML.
     private func rich(_ text: String, _ format: String?) -> AttributedString { format == "markdown" ? ReleaseNotes.inline(text) : AttributedString(text) }
@@ -184,6 +188,7 @@ final class UpdatePresenter {
     private var subscriptions: Set<AnyCancellable> = []
     private var announced: UpdatePhase?
     #if DEBUG
+    var debugPanel: NSPanel? { panel }
     /// Off only for the debug update test, which must never take the keyboard from someone working.
     var allowsFocus = true
     #else
@@ -208,7 +213,7 @@ final class UpdatePresenter {
     }
     private func makePanel() -> UpdatePanel {
         let panel = UpdatePanel(contentRect: NSRect(x: 0, y: 0, width: UpdatePanelView.width, height: 120), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false
+        panel.level = .floating; panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true; panel.isReleasedWhenClosed = false; panel.hidesOnDeactivate = false; panel.isMovableByWindowBackground = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]; panel.setAccessibilityLabel("Parzr update")
         panel.onCancel = { [weak self] in
             switch self?.model.phase {
@@ -222,7 +227,7 @@ final class UpdatePresenter {
         panel.contentView = host; self.panel = panel; self.host = host
         return panel
     }
-    /// Fit to the content, anchored by the top-right corner under the menu-bar icon (or the screen's top right when there is none).
+    /// Fit to the content. Hidden, it opens under the menu-bar icon (or at the screen's top right when there is none); once shown it keeps its top-left corner, so a panel the user dragged stays where they put it.
     private func resize(_ panel: UpdatePanel) {
         guard let host else { return }
         host.layoutSubtreeIfNeeded()
@@ -231,9 +236,9 @@ final class UpdatePresenter {
         let visible = screen.visibleFrame
         // A status item the menu bar has hidden (too many icons, the notch) reports a frame near the left edge: ignore it.
         let icon = anchor().flatMap { $0.minX > screen.frame.midX ? $0 : nil }
-        let top = panel.isVisible ? panel.frame.maxY : visible.maxY - 8
-        let right = panel.isVisible ? panel.frame.maxX : min(visible.maxX - 12, (icon?.maxX ?? visible.maxX) - 4)
-        panel.setFrame(NSRect(x: max(visible.minX + 8, right - size.width), y: max(visible.minY + 8, top - size.height), width: size.width, height: size.height), display: true)
+        let right = min(visible.maxX - 12, (icon?.maxX ?? visible.maxX) - 4)
+        let origin = panel.isVisible ? NSPoint(x: panel.frame.minX, y: panel.frame.maxY - size.height) : NSPoint(x: max(visible.minX + 8, right - size.width), y: max(visible.minY + 8, visible.maxY - 8 - size.height))
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
     private func hide() {
         guard let panel, panel.isVisible else { return }

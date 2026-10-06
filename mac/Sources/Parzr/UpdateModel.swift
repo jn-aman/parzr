@@ -13,6 +13,8 @@ struct UpdateInfo: Equatable {
     var notesFormat: String?
     var critical = false
     var delta = false
+    /// The quick update could not be applied to this copy, so Sparkle is downloading the whole version instead.
+    var fullInstead = false
     /// Where "What's new" goes.
     var releasePage: URL { URL(string: "https://github.com/jn-aman/parzr/releases/tag/v\(version)")! }
     var sizeText: String? { bytes > 0 ? ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) : nil }
@@ -38,6 +40,17 @@ enum UpdatePhase: Equatable {
     case upToDate(String)
     case failed(String)
     case updated(String)
+}
+
+extension UpdatePhase {
+    /// Sparkle starts a download: from the offer, or again when the quick update did not fit this copy and it fetches the whole version (it was already extracting). The size follows from the new response.
+    var afterDownloadStarted: UpdatePhase {
+        switch self {
+        case .found(let info): return .downloading(info, received: 0, total: info.bytes)
+        case .extracting(var info, _), .installing(var info): info.fullInstead = true; return .downloading(info, received: 0, total: 0)
+        default: return self
+        }
+    }
 }
 
 enum UpdateAction: Equatable { case check, install, later, skip, cancel, restartNow, cancelCountdown, dismiss, whatsNew, view }
@@ -79,6 +92,7 @@ final class UpdateModel: ObservableObject {
         case .checking: return "Checking for updates…"
         case .downloading(let info, _, _): return "Downloading Parzr \(info.version)…"
         case .extracting(let info, _): return "Preparing Parzr \(info.version)…"
+        case .installing(let info): return "Installing Parzr \(info.version)…"
         default: break
         }
         if let pending { return "Parzr \(pending.version) is ready to install." }

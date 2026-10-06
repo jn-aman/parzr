@@ -568,7 +568,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let model = UpdateModel.shared, target = URL(fileURLWithPath: directory), start = Date()
         try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
         var timeline: [[String: Any]] = [], seen = Set<String>(), last = ""
-        func name(_ phase: UpdatePhase) -> String { String(describing: phase).split(separator: "(").first.map(String.init) ?? "idle" }
+        // A download or extraction after the quick update failed to apply carries "-full".
+        func name(_ phase: UpdatePhase) -> String {
+            let kind = String(describing: phase).split(separator: "(").first.map(String.init) ?? "idle"
+            switch phase { case .downloading(let info, _, _), .extracting(let info, _): return info.fullInstead ? kind + "-full" : kind; default: return kind }
+        }
+        // Every phase change as it happens (the polled timeline can miss quick ones), with the panel's frame. Written as it goes: an install ends with Sparkle quitting this process.
+        var trace: [[String: Any]] = [], traced = "", subscriptions = Set<AnyCancellable>()
+        func record(_ phase: UpdatePhase, shown: Bool) {
+            let kind = name(phase), panel = updatePresenter?.debugPanel
+            var detail: [String: Any] = ["shown": shown, "panel": panel.map { $0.isVisible ? NSStringFromRect($0.frame) : "hidden" } ?? "none"]
+            switch phase {
+            case .downloading(_, let received, let total): detail["received"] = received; detail["total"] = total; traced = "\(kind) \(total > 0 ? received * 10 / total : 99) \(shown)"
+            case .extracting(_, let progress): detail["progress"] = progress; traced = "\(kind) \(Int(progress * 10)) \(shown)"
+            default: traced = "\(kind) \(shown)"
+            }
+            if trace.last?["key"] as? String == traced { return }
+            trace.append(["key": traced, "t": (Date().timeIntervalSince(start) * 10).rounded() / 10, "phase": kind].merging(detail) { $1 })
+            try? JSONSerialization.data(withJSONObject: trace, options: [.prettyPrinted, .sortedKeys]).write(to: target.appendingPathComponent("update-trace-\(scenario).json"))
+        }
+        Publishers.CombineLatest(model.$phase, model.$shown).receive(on: RunLoop.main).sink { record($0, shown: $1) }.store(in: &subscriptions)
+        defer { subscriptions.removeAll() }
         func note() throws {
             let kind = name(model.phase)
             if kind != last { last = kind; timeline.append(["t": (Date().timeIntervalSince(start) * 10).rounded() / 10, "phase": kind, "shown": model.shown, "pending": model.pending?.version ?? "", "available": model.available?.version ?? ""]) }
@@ -585,6 +605,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             try JSONSerialization.data(withJSONObject: ["scenario": scenario, "version": Support.version, "timeline": timeline, "result": result], options: [.prettyPrinted, .sortedKeys]).write(to: target.appendingPathComponent("update-test-\(scenario).json"))
         }
         func foundVersion() -> String? { if case .found(let info) = model.phase { info.version } else { nil } }
+        let panel = { [self] in updatePresenter?.debugPanel }
+        func visible() -> Bool { panel()?.isVisible == true && model.shown }
+        func fullDownload(minPercent: UInt64) -> Bool { if case .downloading(let info, let received, let total) = model.phase, info.fullInstead, total > 0 { received * 100 / total >= minPercent } else { false } }
+        // A real click: the mouse events go through the panel's own event path while it is not the key window (an update test never takes focus).
+        func click(_ label: String) -> Bool {
+            guard let panel = panel(), let button = panel.contentView.flatMap({ NativeControls.find(label: label, in: $0) }) as? NSView, button.window === panel else { return false }
+            let point = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            func event(_ type: NSEvent.EventType) -> NSEvent { NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)! }
+            NSApp.postEvent(event(.leftMouseUp), atStart: false); panel.sendEvent(event(.leftMouseDown))
+            return true
+        }
+        // A drag by the background (the padding right of the title), as events: reports whether the window moved by itself.
+        func drag(by delta: NSPoint) -> Bool {
+            guard let panel = panel() else { return false }
+            let origin = panel.frame.origin, grab = NSPoint(x: panel.frame.width - 6, y: panel.frame.height - 8)
+            func event(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent { NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)! }
+            NSApp.postEvent(event(.leftMouseUp, NSPoint(x: grab.x + delta.x, y: grab.y + delta.y)), atStart: false)
+            panel.sendEvent(event(.leftMouseDown, grab))
+            return panel.frame.origin != origin
+        }
         switch scenario {
         case "relaunched":
             let shown = try await wait(20) { if case .updated = model.phase { true } else { false } }
@@ -602,6 +642,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             guard outcome else { throw ParzrError.message("The update never finished downloading.") }
             // One click: the download goes straight to installing and Sparkle relaunches the new version.
             try finish(["outcome": name(model.phase)])
+            try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
+        case "hide", "cancel", "move":
+            // The delta cannot apply to this copy, so Sparkle falls back to the full download: Hide in the extraction, Cancel in the fallback download, a dragged panel through every phase.
+            var result: [String: Any] = [:]
+            guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }
+            try await Task.sleep(for: .milliseconds(800)); try note()
+            result["key_window_at_found"] = panel()?.isKeyWindow ?? false
+            if scenario == "move" {
+                let home = panel()?.frame ?? .zero
+                result["drag_by_events_moved"] = drag(by: NSPoint(x: -200, y: -120))
+                if panel()?.frame.origin == home.origin { panel()?.setFrameOrigin(NSPoint(x: home.minX - 200, y: home.minY - 120)) }   // the window server does the move for a real drag
+                result["home"] = NSStringFromRect(home); result["dragged"] = panel().map { NSStringFromRect($0.frame) } ?? ""
+                if let panel = panel(), let host = panel.contentView { result["background_can_move_window"] = host.hitTest(NSPoint(x: panel.frame.width - 6, y: panel.frame.height - 8)).map { $0.mouseDownCanMoveWindow } ?? false }
+            }
+            model.perform(.install)
+            if scenario == "cancel" {
+                guard try await wait(120, until: { fullDownload(minPercent: 15) }) else { throw ParzrError.message("The fallback download never progressed.") }
+                result["key_window_before_click"] = panel()?.isKeyWindow ?? false; result["cancel_clicked"] = click("Cancel")
+                result["idle_after_cancel"] = try await wait(5) { model.phase == .idle && !visible() }
+                try await Task.sleep(for: .seconds(4)); result["still_idle_4s_later"] = model.phase == .idle && !visible()
+                model.perform(.check); result["offered_again_after_cancel"] = try await wait(40) { foundVersion() != nil }
+                model.perform(.later); try finish(result); NSApp.terminate(nil); return
+            }
+            if scenario == "move" {
+                guard try await wait(120, until: { fullDownload(minPercent: 10) }) else { throw ParzrError.message("The fallback download never progressed.") }
+                result["frame_in_full_download"] = panel().map { NSStringFromRect($0.frame) } ?? ""
+                result["hide_clicked_in_download"] = click("Hide the update panel")
+                result["hidden_in_download"] = try await wait(3) { !visible() }
+                let before = model.phase; try await Task.sleep(for: .seconds(2))
+                if case .downloading(_, let a, _) = before, case .downloading(_, let b, _) = model.phase { result["download_continued_while_hidden"] = b > a } else { result["download_continued_while_hidden"] = "\(name(before)) to \(name(model.phase))" }
+                result["still_hidden_after_progress"] = !visible()
+                model.perform(.check); _ = try await wait(3) { visible() }
+                result["reshown_frame"] = panel().map { NSStringFromRect($0.frame) } ?? ""
+                try finish(result)
+                _ = try await wait(120) { if case .installing = model.phase { true } else { false } }
+                try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
+            }
+            // hide: wait for the full download's extraction and hide there.
+            guard try await wait(150, until: { if case .extracting(let info, _) = model.phase { info.fullInstead } else { false } }) else { throw ParzrError.message("No extraction after the full download.") }
+            result["key_window_before_click"] = panel()?.isKeyWindow ?? false; result["hide_clicked_in_extraction"] = click("Hide the update panel")
+            result["hidden_in_extraction"] = try await wait(3) { !visible() }
+            try finish(result)
+            _ = try await wait(120) { if case .installing = model.phase { true } else { false } }
+            result["panel_visible_while_installing"] = visible(); try finish(result)
             try await Task.sleep(for: .seconds(20)); throw ParzrError.message("The app did not relaunch.")
         case "skip":
             guard try await wait(150, until: { foundVersion() != nil }) else { throw ParzrError.message("No update was offered.") }

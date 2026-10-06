@@ -26,6 +26,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     private var countdownRemaining = 0
     private var notBefore = Date.distantPast
     private var dismissal: DispatchWorkItem?
+    /// The user hid the panel while an update was working: it stays hidden (the status line keeps the progress) unless something needs an answer.
+    private var hiddenWhileBusy = false
 
     /// `nil` when this build has no feed (a bare `swift run`), so development never touches the network.
     init?(model: UpdateModel = .shared, defaults: UserDefaults = .standard, isBusy: @escaping () -> Bool) {
@@ -73,11 +75,11 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         else if let installNow { stopClock(); if let info = model.pending { model.phase = .installing(info); present(focus: false) }; installNow() }
         else { restartRequested = true; updater.checkForUpdates() }   // Sparkle resumes the downloaded update and installs it at once
     }
-    private func present(focus: Bool) { model.shown = true; model.focus = focus }
-    private func hide() { dismissal?.cancel(); model.shown = false; model.focus = false; if !model.inProgress { model.phase = .idle } }
+    private func present(focus: Bool) { if hiddenWhileBusy && !focus { return }; hiddenWhileBusy = false; model.shown = true; model.focus = focus }
+    private func hide() { dismissal?.cancel(); hiddenWhileBusy = model.inProgress; model.shown = false; model.focus = false; if !model.inProgress { model.phase = .idle } }
     /// A toast that fades on its own.
     private func toast(_ phase: UpdatePhase, focus: Bool = false, after seconds: TimeInterval) {
-        model.phase = phase; present(focus: focus)
+        model.phase = phase; hiddenWhileBusy = false; present(focus: focus)
         dismissal?.cancel()
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { if self?.model.phase == phase { self?.hide() } } }
         dismissal = work; DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
@@ -161,7 +163,8 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     }
     func showDownloadInitiated(cancellation: @escaping @Sendable () -> Void) {
         self.cancellation = cancellation
-        if case .found(let info) = model.phase { model.phase = .downloading(info, received: 0, total: info.bytes); present(focus: model.focus) }
+        let next = model.phase.afterDownloadStarted
+        if next != model.phase { model.phase = next; present(focus: model.focus) }
     }
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {
         if case .downloading(let info, let received, _) = model.phase { model.phase = .downloading(info, received: received, total: expectedContentLength) }
@@ -191,7 +194,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping @Sendable () -> Void) { acknowledgement() }
     func showUpdateInFocus() { if model.phase != .idle { present(focus: true) } else if model.pending != nil { restartRequested = false; present(focus: true) } else { updater.checkForUpdates() } }
     func dismissUpdateInstallation() {
-        foundReply = nil; readyReply = nil; cancellation = nil; restartRequested = false; confirmedInstall = false; userInitiated = false
+        foundReply = nil; readyReply = nil; cancellation = nil; restartRequested = false; confirmedInstall = false; userInitiated = false; hiddenWhileBusy = false
         // Toasts and the pending dot outlive the session; an unfinished panel does not.
         switch model.phase {
         case .upToDate, .failed, .updated, .countdown: break

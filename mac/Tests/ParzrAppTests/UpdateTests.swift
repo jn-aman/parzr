@@ -85,6 +85,23 @@ final class UpdateTests: XCTestCase {
         model.automaticChecks = true
         XCTAssertEqual(calls, [[true, true]])
     }
+    func testADownloadAfterTheQuickUpdateFailedBecomesAFullDownloadWithItsOwnProgress() {
+        let info = UpdateInfo(version: "0.3.4", bytes: 3_000_000)
+        XCTAssertEqual(UpdatePhase.found(info).afterDownloadStarted, .downloading(info, received: 0, total: 3_000_000), "the first download starts from the offer")
+        var full = info; full.fullInstead = true
+        for stuck in [UpdatePhase.extracting(info, progress: 0.14), .installing(info)] {
+            XCTAssertEqual(stuck.afterDownloadStarted, .downloading(full, received: 0, total: 0), "the size follows from the new response")
+        }
+        XCTAssertEqual(UpdatePhase.idle.afterDownloadStarted, .idle, "a background download with no panel stays quiet")
+        XCTAssertEqual(UpdatePhase.checking.afterDownloadStarted, .checking)
+        XCTAssertEqual(UpdatePhase.ready(info).afterDownloadStarted, .ready(info))
+    }
+    func testTheStatusLineFollowsEveryWorkingPhase() {
+        let model = UpdateModel(), info = UpdateInfo(version: "0.3.4")
+        for (phase, line) in [(UpdatePhase.downloading(info, received: 0, total: 0), "Downloading Parzr 0.3.4…"), (.extracting(info, progress: 0), "Preparing Parzr 0.3.4…"), (.installing(info), "Installing Parzr 0.3.4…")] {
+            model.phase = phase; XCTAssertEqual(model.statusLine, line)
+        }
+    }
     func testInstallingAndCheckingBlockAnotherCheck() {
         let model = UpdateModel()
         for phase in [UpdatePhase.checking, .downloading(UpdateInfo(version: "1"), received: 0, total: 0), .installing(UpdateInfo(version: "1"))] { model.phase = phase; XCTAssertTrue(model.inProgress) }
