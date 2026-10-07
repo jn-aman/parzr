@@ -1,0 +1,286 @@
+# clean/email_doc_general
+e|Thanks for sending the contract over. I'll review it this afternoon.
+e|The client approved the budget, so we can start hiring next month.
+e|I won't be at standup tomorrow because I have a doctor's appointment.
+e|Please find the revised proposal attached.
+e|I've attached the invoice for March.
+e|Could you send me the slides from yesterday's meeting?
+e|Do you have time for a quick call this afternoon?
+e|I'm out of the office until Monday, October 13, with limited access to email.
+e|For urgent issues, please contact Dana Kim at dana@example.com.
+e|Let me know if Tuesday or Wednesday works better for you.
+e|Thanks again for your help with the launch.
+e|I'm happy to accept the offer.
+e|Unfortunately, the item you ordered is out of stock.
+e|We've decided to go with the second vendor because their pricing was more flexible.
+e|As discussed, the deadline has moved to May 5.
+e|The meeting has been moved to Thursday at 10 a.m.
+e|Could you double-check the numbers on page 4?
+e|I hope you had a restful weekend.
+e|I'm writing to follow up on the proposal I sent last week.
+e|We look forward to hearing from you.
+e|Please confirm your attendance by Friday.
+e|Your order has shipped and should arrive within three business days.
+e|We received your application and will be in touch shortly.
+e|I've cc'd Mike, who's leading the integration.
+e|Just a reminder that timesheets are due today.
+e|Sorry for the late reply. Things have been hectic since the launch.
+e|Attached are the slides from today's meeting.
+e|Would 3 p.m. work for you instead?
+e|The parking garage closes at 8 tonight.
+e|Congratulations on the new role!
+e|Welcome to the team, Priya!
+e|Here's the link to the recording: https://example.com/rec/8841.
+e|The office will be closed on December 26.
+e|Feel free to forward this to anyone who might be interested.
+e|I'd appreciate your feedback by end of day Thursday.
+e|We're moving to a new office in May, and the address will be shared soon.
+e|I've updated the spreadsheet, and the new numbers are in column F.
+e|Maria is out until Thursday, so Ken is covering her accounts.
+e|My laptop died during the demo. Luckily, Sam had a backup copy.
+e|It was great meeting you at the conference.
+e|We missed the deadline by two days, and I take full responsibility.
+e|Please submit your expenses by the 25th.
+e|Your feedback is greatly appreciated.
+e|I'd love to help; however, I'm fully booked this week.
+e|The quote is valid for 30 days.
+e|I'm not sure what time the meeting starts.
+e|Can you resend the link? The old one expired.
+e|Hope you're doing well!
+e|Thank you for your patience while we sort this out.
+e|Have a great weekend!
+d|All visitors must sign in at the front desk.
+d|The server migration finished on Tuesday.
+d|Revenue grew 12% last quarter, mostly from new customers.
+d|The feature is behind a flag and won't be visible to customers yet.
+d|Tickets are triaged every morning by the on-call engineer.
+d|Most users never open the settings page.
+d|The survey closes on Friday, and results will be shared the following week.
+d|The pilot ran for six weeks with 40 participants.
+d|Version 2.0 drops support for Python 3.8.
+d|Each employee receives a laptop on day one.
+d|The main goal of these changes is to reduce churn.
+d|Access to the files is restricted to admins.
+d|The members of the board have approved the budget.
+d|Feedback from customers and partners has been positive.
+d|Customers can cancel their plan at any time.
+d|The old dashboard is deprecated.
+d|Several issues were reported, such as slow loading and broken links.
+d|The office will close at 3 so that everyone can get home before the storm.
+d|Staff must wear badges at all times.
+d|The data was collected over six months and covers more than 4,000 households.
+d|Our biggest market is Germany.
+d|The project was led by Maria Gonzalez.
+d|This affects all users on Android.
+d|Users whose accounts are inactive will be deleted after 90 days.
+d|The list of requirements is below.
+d|It's important to back up your data.
+d|In addition, the report includes a summary.
+d|Applications close on June 30.
+d|Refunds take 5 to 7 business days.
+d|The maintenance window is Sunday at 2 a.m.
+d|We recommend updating to version 3.
+d|The system automatically saves your work.
+d|The quarterly report is due at the end of the month.
+d|The kit includes a charger, a cable, and a case.
+d|The team consists of two engineers and a designer.
+d|Q1 ends on March 31.
+d|The policy takes effect in February.
+d|Payroll runs on the last Friday of each month.
+d|The course starts in the fall semester.
+d|The conference is in Lisbon, Portugal, this year.
+d|One of the main reasons for the delay was staffing.
+d|There are fewer bugs than last quarter.
+d|The effect of the change was minimal.
+d|These results show a clear trend.
+d|Neither option is ideal.
+d|The environment variables are set in the dashboard.
+d|Although the results were good, more testing is needed.
+d|The criteria for selection are listed below.
+d|This feature allows users to export reports.
+d|We have received over 200 applications.
+d|The results of the survey were published in April.
+# clean/social_posts
+s|Just finished my first marathon and I can't feel my legs 😅
+s|So proud of my sister! She just graduated from nursing school.
+s|It's official: we're moving to Denver!
+s|Best pizza I've ever had, honestly.
+s|Can't believe it's been five years since we graduated!
+s|Who's watching the game tonight?
+s|We finally got the keys to our new apartment!
+s|Feeling grateful for a lot of things today.
+s|It's too early for Christmas music.
+s|So excited to announce that I'm joining Stripe!
+s|We were lucky to catch the northern lights last night!
+s|This restaurant never disappoints.
+s|Our bakery opens at 7 tomorrow!
+s|Can't believe it's already December!
+s|So proud of our team for winning the regional final!
+s|There's nothing better than a Sunday morning walk.
+s|We're hiring! DM me if you're interested.
+s|My dog has its own Instagram now 🐶
+s|Who's ready for the long weekend?
+s|Can't wait to see you all tomorrow!
+s|Thank you all for the birthday wishes. Feeling loved ❤️
+s|New blog post is up! Link in bio.
+s|Throwback to the best trip of my life 🌴
+s|Happy anniversary to my favorite person.
+s|Ten years at this company today. Wild.
+s|Our first marathon as a family! #running
+s|Shout-out to the nurses at St. Mary's. You're heroes.
+s|Rainy days call for soup and a good book.
+s|Brunch with the girls ☕️
+s|Not me crying at a dog food commercial.
+s|Officially a homeowner! 🏡
+s|Big news coming Monday. Stay tuned!
+s|If you know, you know.
+s|We did it! Fully funded in 48 hours.
+s|Grateful for this crew. #teamwork
+s|Five stars for the tacos at La Cocina.
+s|Twenty years of friendship and counting.
+s|Me, every Monday: coffee first.
+s|Our little guy turns one today 🎂
+s|Huge thanks to everyone who came out tonight!
+s|Spring has finally sprung in Boston 🌸
+s|Starting a new chapter in Seattle!
+s|Can someone tell me where I can buy these shoes?
+s|In front of the Eiffel Tower with my favorite people 💛
+s|Hot take: pineapple belongs on pizza.
+s|Day 30 of learning to code. Still alive.
+s|We raised $12,000 for the shelter. Thank you!
+s|New personal record: 5K in 24 minutes.
+s|Life update: I adopted a cat.
+s|Weekend plans: absolutely nothing.
+# clean/en_gb
+c@gb|What's your favourite colour?
+c@gb|We need to organise the party.
+e@gb|I'm travelling to Leeds on Tuesday.
+e@gb|The meeting has been cancelled.
+d@gb|The centre opens at 9am.
+d@gb|Please bring your driving licence.
+c@gb|I need to practise my presentation.
+d@gb|The programme runs for twelve weeks.
+c@gb|It's a grey day in London.
+c@gb|See you at the weekend!
+d@gb|The team are meeting on Thursday.
+e@gb|We apologise for any inconvenience.
+d@gb|The theatre is just round the corner.
+c@gb|I've realised I left my keys at home.
+d@gb|We analysed the results in detail.
+e@gb|Please don't hesitate to get in touch.
+c@gb|Fancy a cuppa?
+c@gb|I'm knackered after that run.
+d@gb|The neighbourhood has changed a lot.
+e@gb|I'll send the cheque on Monday.
+d@gb|The aluminium frame is very light.
+c@gb|My mum's making a roast.
+c@gb|Shall we get a takeaway tonight?
+d@gb|Pupils must wear school uniform.
+e@gb|Our labour costs went up this year.
+d@gb|The catalogue is available online.
+c@gb|The lift is out of order again.
+c@gb|I queued for an hour at the post office.
+d@gb|Behaviour like this won't be tolerated.
+d@gb|The defence rests its case.
+e@gb|The report was submitted in good time.
+c@gb|My flat is on the fourth floor.
+d@gb|Each candidate has a dedicated tutor.
+c@gb|I've got a dentist appointment at half four.
+d@gb|We've modelled three scenarios.
+e@gb|I've enrolled on the course.
+c@gb|The kids are on holiday next week.
+d@gb|The car's tyres need replacing.
+c@gb|Pop round whenever you like.
+d@gb|Our honours board lists every winner.
+e@gb|Please fill in the form and return it by Friday.
+c@gb|The motorway was jammed.
+d@gb|The jewellery was insured.
+c@gb|Who's up for a pint after work?
+d@gb|The council has approved the plans.
+e@gb|We're keen to get started.
+c@gb|I'll ring you later.
+d@gb|The equipment was fitted in a fortnight.
+c@gb|I've just got back from Spain.
+e@gb|Many thanks for your help.
+# clean/chat_general
+c|I'm heading to the gym after work.
+c|Do you want pizza or tacos tonight?
+c|My flight got delayed again.
+c|We should get dinner next week.
+c|Can you pick up some milk on the way home?
+c|Traffic is awful, so I'll be 20 minutes late.
+c|I left my charger at your place.
+c|Did you see the game last night?
+c|She's on PTO this week.
+c|The Wi-Fi at this café is terrible.
+c|I can't find my keys anywhere.
+c|We got a puppy!
+c|My mom says hi.
+c|Are we still on for Saturday?
+c|Let me know when you get home.
+c|I'm so full right now.
+c|Do you need anything from the store?
+c|I just sent you the address.
+c|The kids are finally asleep.
+c|Text me when you're outside.
+c|I'm sorry I missed your call.
+c|What did you think of the movie?
+c|I'm running about ten minutes behind.
+c|That restaurant was really good.
+c|Want to split an Uber?
+c|My phone is at 3%.
+c|Can you send me that recipe?
+c|I'll bring the chips and salsa.
+c|I'm working from home today.
+c|Happy birthday, Alex! 🎉
+c|The landlord finally fixed the heater.
+c|I got the job!
+c|We're out of coffee again.
+c|Are you awake?
+c|I made a reservation for 7:30.
+c|The cat knocked my coffee off the desk.
+c|Can I call you in ten?
+c|I think I left the stove on.
+c|Let's watch something funny tonight.
+c|Grandma loved the flowers.
+c|I owe you one.
+c|My car won't start. Can you pick me up?
+c|I'm at the store. Do you need anything?
+c|It's freezing outside, so wear a coat.
+c|Dinner's ready.
+c|I'm hungry. Let's get pizza.
+c|The traffic is insane today.
+c|I lost my phone. Can you call it?
+c|I'll be late tonight, so don't wait up.
+c|The meeting got pushed to 4.
+c|Thanks for dinner last night!
+c|I'm almost done with the book.
+c|We won! It was so close.
+c|Is it supposed to rain tomorrow?
+c|I need coffee before I can function.
+c|Who's bringing dessert?
+c|I'm on the train, so I'll call you later.
+c|Ok, I'm leaving now.
+c|Can you believe it's already October?
+c|Should I bring anything?
+# clean/chat_no_period
+c|Sounds good to me
+c|On my way
+c|See you at 7
+c|Thanks so much
+c|I'm outside
+c|Running 5 min late
+c|Lol, that's amazing
+c|Yeah, I saw that
+c|Just got home
+c|Love you too
+c|Call me when you can
+c|Ok, see you soon
+c|Haha, no way
+c|Omw
+c|Be right there
+c|Good night
+c|Miss you
+c|Same here
+c|Sure, that works
+c|Thank you!! 🙏

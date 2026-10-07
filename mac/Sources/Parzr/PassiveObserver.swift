@@ -46,7 +46,7 @@ final class PassiveObserver {
         activationToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { if SelfTestTarget.app == nil { self?.attach() } }
         }
-        Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps)
+        Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps, Preferences.shared.$onboardingCompleted)
             .sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitors() } }
@@ -62,7 +62,7 @@ final class PassiveObserver {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
         observer = nil; observed = []; attachedPID = nil
-        guard Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
+        guard Preferences.shared.setupFinished, Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
               let app = SelfTestTarget.watched, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, Preferences.shared.enabled(for: bundle),
               !isExcluded(bundle) else { return }
@@ -175,8 +175,10 @@ final class PassiveObserver {
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
                                             dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar)
-                // Automatic checks (typing and plain selection) never load the GPU model;
-                // it runs only for explicit checks and tone changes.
+                // Automatic checks (typing and plain selection) never wait for the GPU model. With Smart grammar on,
+                // the engine scores short-word swaps with it only when it is already loaded and free, within a small
+                // budget; a cold model starts loading in the background and stays loaded while the person keeps typing.
+                // Rewrites run only for explicit checks and tone changes.
                 let engine = WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: request.text)
                 try Task.checkCancellation(); try snapshot.validate()

@@ -13,6 +13,18 @@ type Free = unsafe extern "C" fn(*mut c_char);
 type Cancel = unsafe extern "C" fn();
 type Hints = unsafe extern "C" fn(*const c_char) -> *mut c_char;
 type NameLogOdds = unsafe extern "C" fn(*const c_char, *const c_char, u32, u32) -> f64;
+type SwapScores = unsafe extern "C" fn(
+    *const c_char,
+    *const c_char,
+    u32,
+    *const u32,
+    *const *const c_char,
+    f64,
+    u32,
+    u32,
+    *mut f64,
+    *mut f64,
+) -> i32;
 struct Runtime {
     generate: Generate,
     free: Free,
@@ -20,6 +32,8 @@ struct Runtime {
     hints: Hints,
     /// Absent in a runtime built before the name judge existed: the explicit path then skips it.
     name_log_odds: Option<NameLogOdds>,
+    /// Absent in a runtime built before sentence swaps existed: the swap checker then stays off.
+    swap_scores: Option<SwapScores>,
     model: PathBuf,
 }
 static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
@@ -70,6 +84,7 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
         let cancel = dlsym(handle, c"parzr_model_cancel".as_ptr());
         let hints = dlsym(handle, c"parzr_model_token_hints".as_ptr());
         let judge = dlsym(handle, c"parzr_model_name_log_odds".as_ptr());
+        let swaps = dlsym(handle, c"parzr_model_swap_scores".as_ptr());
         if generate.is_null() || free.is_null() || cancel.is_null() || hints.is_null() {
             return Err("The bundled model runtime is incompatible.".into());
         }
@@ -80,6 +95,8 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
             hints: std::mem::transmute::<*mut c_void, Hints>(hints),
             name_log_odds: (!judge.is_null())
                 .then(|| std::mem::transmute::<*mut c_void, NameLogOdds>(judge)),
+            swap_scores: (!swaps.is_null())
+                .then(|| std::mem::transmute::<*mut c_void, SwapScores>(swaps)),
             model,
         })
     }
@@ -109,6 +126,69 @@ pub fn name_log_odds(text: &str, start_utf16: usize, end_utf16: usize) -> Option
     // SAFETY: both strings are NUL-terminated and live through this synchronous call.
     let value = unsafe { judge(file.as_ptr(), input.as_ptr(), start, end) };
     value.is_finite().then_some(value as f32)
+}
+/// Full-sentence log-probability gains of one-word swaps in `sentence` (None for a swap the left-context
+/// screen rejected). A typing check never loads or waits for the model: a cold model starts loading in
+/// the background and the check is unavailable, as it is when the runtime is busy.
+pub fn swap_scores(
+    sentence: &str,
+    swaps: &[crate::confusion::Swap],
+    screen: f64,
+    how: crate::confusion::Use,
+) -> Result<crate::confusion::Scored, crate::confusion::Unscored> {
+    use crate::confusion::{Scored, Unscored, Use};
+    let unavailable = |_| Unscored::Unavailable;
+    let r = runtime().map_err(unavailable)?;
+    let score = r.swap_scores.ok_or(Unscored::Unavailable)?;
+    let file =
+        CString::new(r.model.to_string_lossy().as_bytes()).map_err(|_| Unscored::Unavailable)?;
+    let input = CString::new(sentence).map_err(|_| Unscored::Unavailable)?;
+    let candidates: Vec<CString> = swaps
+        .iter()
+        .map(|s| CString::new(s.candidate.as_str()))
+        .collect::<Result<_, _>>()
+        .map_err(|_| Unscored::Unavailable)?;
+    let pointers: Vec<*const c_char> = candidates.iter().map(|c| c.as_ptr()).collect();
+    let mut spans = Vec::with_capacity(swaps.len() * 2);
+    for s in swaps {
+        spans.push(u32::try_from(s.start).map_err(|_| Unscored::Unavailable)?);
+        spans.push(u32::try_from(s.end).map_err(|_| Unscored::Unavailable)?);
+    }
+    let count = u32::try_from(swaps.len()).map_err(|_| Unscored::Unavailable)?;
+    // Flags: 1 load when cold, 2 warm in the background when cold, 4 wait when busy, 8 typing (keep warm
+    // longer, score only the most promising swaps in one variant decode).
+    let (flags, budget) = match how {
+        Use::Typing { budget_ms } => (2 | 8, budget_ms),
+        Use::Explicit { budget_ms } => (1 | 4, budget_ms),
+    };
+    let mut left = vec![f64::NAN; swaps.len()];
+    let mut full = vec![f64::NAN; swaps.len()];
+    // SAFETY: every pointer is valid for this synchronous call; the output buffers hold `count` values.
+    let status = unsafe {
+        score(
+            file.as_ptr(),
+            input.as_ptr(),
+            count,
+            spans.as_ptr(),
+            pointers.as_ptr(),
+            screen,
+            budget,
+            flags,
+            left.as_mut_ptr(),
+            full.as_mut_ptr(),
+        )
+    };
+    match status {
+        0 | 5 => Ok(Scored {
+            gains: full
+                .into_iter()
+                .map(|g| g.is_finite().then_some(g))
+                .collect(),
+            complete: status == 0,
+        }),
+        4 => Err(Unscored::OutOfTime),
+        _ => Err(Unscored::Unavailable),
+    }
 }
 #[cfg(not(target_os = "macos"))]
 fn load(_: &Path, _: PathBuf) -> Result<Runtime, String> {

@@ -1,0 +1,126 @@
+# clean/tricky_real_word
+c|I love you. I don't think this is working out, but it'll be fine.
+c|Don't worry, it all turned out fine in the end.
+c|The tickets sold out, which is fine by me.
+c|Everything is working out fine so far.
+c|It turned out better than I expected.
+c|We figured it out in the end.
+c|They sold out in ten minutes!
+c|I'm heading out now.
+c|Can you print out the agenda?
+c|She stepped out for lunch.
+c|Check out this video 😂
+e|Please fill out the form by Friday.
+d|The form must be signed by a manager.
+d|Submit the form from your company account.
+c|I got a postcard from Lisbon.
+c|This is the first of many trips.
+c|If you're free, let's grab coffee.
+c|Most of us are remote on Fridays.
+c|I'm on the train right now.
+c|We met in Chicago in 2019.
+c|It's colder than it was yesterday.
+c|Finish your coffee, and then we'll go.
+c|I'd rather walk than drive.
+c|Back then, we didn't have smartphones.
+c|Don't lose your keys again!
+c|The screw on my glasses is loose.
+c|It's quite cold today.
+c|The library is so quiet.
+c|The new rules will affect everyone.
+d|The policy had a big effect on retention.
+d|The new director hopes to effect real change.
+d|Patients with flat affect may seem uninterested.
+c|I accept your apology.
+c|Everyone except Sam is coming.
+c|Can you give me some advice?
+c|I'd advise against it.
+c|We're almost there.
+c|Where were you last night?
+c|Were you able to fix it?
+c|Take a deep breath.
+c|Just breathe. You'll be fine.
+c|I chose the blue one last time.
+c|You can choose whichever you like.
+c|The dessert was amazing.
+c|They got lost in the desert.
+c|I read through the whole thing.
+c|Thanks for being so thorough.
+c|Even though it rained, we had fun.
+c|I thought you were coming.
+c|I'll do it later.
+d|Of the two drafts, the latter is stronger.
+c|We lost the game, but it was close.
+d|The loss was smaller than expected.
+c|Turn off the lights, please.
+c|It's one of those days.
+d|She led the team through two launches.
+d|Lead is no longer used in household paint.
+c|I need to fold my clothes.
+c|We'll adapt to whatever happens.
+c|They adopted a puppy last week!
+c|I haven't seen her since March.
+c|That makes sense.
+c|Our meeting got moved to 3.
+c|What time are you leaving?
+c|I'm sure it'll be fine.
+c|Coffee with Sam at 3?
+c|Thanks for the quick turnaround!
+c|I think they already shipped it.
+c|There's no way we finish by noon.
+c|I'm not sure that's going to work.
+c|No way, that's hilarious 😂
+c|My bad, I forgot to attach it.
+c|I'll call you back in five.
+c|Feel free to reach out.
+c|That was the best ramen I've ever had.
+c|The fin on the surfboard snapped.
+c|Mist rolled in off the bay this morning.
+c|I hope the ferry is running today.
+c|The bunny hopped across the lawn.
+c|I'm fond of that old café.
+c|We ran out of milk.
+c|The tide is out, so the beach is huge.
+c|I have one more slot on Thursday.
+c|I'll be in the office tomorrow.
+c|The cat is on the roof again.
+c|Two coffees, please.
+c|I'm too tired to cook.
+c|I want to go too.
+c|The whole team is out Friday.
+c|There's a hole in my sock.
+c|I've been sick all week.
+c|The signal is weak in the basement.
+c|Can you hear me now?
+c|Let me know what you think.
+c|I knew you'd say that.
+c|It's a piece of cake.
+c|The bus fare went up again.
+c|That's not fair!
+c|We sat on the porch and watched the sea.
+c|I'll buy the tickets tonight.
+c|The construction site is noisy.
+c|The principal called a staff meeting.
+d|Our guiding principle is simplicity.
+e|Thanks for the compliment!
+d|The red sauce complements the pasta nicely.
+c|I bought new stationery for school.
+c|The car was stationary at the light.
+c|Whose jacket is this?
+c|Who's coming tonight?
+c|We drove past your house.
+c|I passed the exam!
+c|I can't bear to watch.
+c|Bear with me for a second.
+c|It's due on Friday.
+c|I heard they're hiring.
+c|The plane landed early.
+c|We went back and forth on it.
+c|It's the fourth time this week.
+c|I'm so bored.
+d|The board approved the budget.
+c|He threw the ball over the fence.
+c|We got through it.
+c|There was a real wit to her speech.
+c|It's a moot point now.
+c|The bands performed well last night.

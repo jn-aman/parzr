@@ -43,6 +43,27 @@ final class UIControlsWindowTests: OwnWindowCase {
         app.showStudio(route: .playground); close(app.studio)
         XCTAssertEqual(app.policy, .regular, "Show in Dock keeps the Dock icon")
     }
+    /// Setup is mandatory: before Start writing, the Dock, menus, popover and shortcut lead to the welcome guide, closing it is refused and does not count as finishing, and nothing checks text.
+    func testSetupIsMandatoryUntilStartWriting() throws {
+        let prefs = Preferences.shared
+        prefs.onboardingCompleted = false; defer { prefs.onboardingCompleted = true }
+        XCTAssertFalse(prefs.setupFinished)
+        XCTAssertTrue(app.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false))
+        let welcome = try XCTUnwrap(app.onboarding, "reopening before setup did not open the welcome guide")
+        XCTAssertNil(app.studio, "the Studio opened before setup was finished")
+        app.openSelection(); XCTAssertNil(app.panel, "the shortcut opened the card before setup was finished")
+        let menu = NSMenu(); app.menuNeedsUpdate(menu)
+        XCTAssertEqual(menu.items.filter { !$0.isSeparatorItem }.map(\.title), ["Finish setting up Parzr…", "Quit Parzr"])
+        XCTAssertFalse(app.windowShouldClose(welcome), "the close button closed the welcome guide before setup was finished")
+        close(welcome)
+        XCTAssertFalse(prefs.onboardingCompleted, "closing the welcome guide marked setup finished")
+        app.showOnboarding(step: .done)
+        let model = try XCTUnwrap(app.onboardingModel); model.complete()
+        XCTAssertTrue(prefs.setupFinished)
+        XCTAssertTrue(app.windowShouldClose(try XCTUnwrap(app.onboarding)), "a finished setup could not close the welcome guide")
+        close(app.onboarding)
+        XCTAssertTrue(app.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)); XCTAssertNotNil(app.studio)
+    }
     func testMenuSettingsActionAndReopenShowTheWindow() throws {
         app.showStudio(route: .playground)
         let menu = NSMenu(); app.menuNeedsUpdate(menu)
@@ -64,9 +85,7 @@ final class UIControlsWindowTests: OwnWindowCase {
             XCTAssertEqual(app.studioModel.studioRoute, route, "the menu-panel \(label) button did not open its destination")
         }
         XCTAssertNotNil(NativeControls.find(label: "Quit Parzr", in: host), "the menu panel has no Quit button")   // found, never pressed
-        XCTAssertNotNil(NativeControls.find(label: "Welcome and permissions", in: host))
-        try press("Welcome and permissions", in: host)
-        XCTAssertNotNil(app.onboarding, "the Welcome button did not open the welcome window")
+        XCTAssertNil(NativeControls.find(label: "Welcome and permissions", in: host), "setup is mandatory; the menu panel no longer reopens it")
     }
     /// Sample, Apply all, native Undo, Copy, Settings, Done and Clear session on the Studio's own window.
     func testStudioControlsWork() async throws {

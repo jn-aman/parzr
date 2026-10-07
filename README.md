@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jn-aman/parzr/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg"><b>Download for Mac</b></a> ·
   <a href="https://parzr.app">parzr.app</a> ·
   <a href="https://github.com/jn-aman/parzr/issues">Report a bug</a>
 </p>
@@ -105,7 +105,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; no model d
 
 ## Install
 
-1. Download **Parzr-x.y.z.dmg** from the [latest release](https://github.com/jn-aman/parzr/releases/latest) (checksums in `SHA256SUMS`).
+1. [Download **Parzr.dmg**](https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg), the newest release (each [release](https://github.com/jn-aman/parzr/releases/latest) also has it as `Parzr-x.y.z.dmg`, with checksums in `SHA256SUMS`).
 2. Drag **Parzr** to **Applications** and open it.
 3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
 
@@ -134,8 +134,8 @@ Parzr needs no extension anywhere. Three optional adapters exist for the cases w
 
 | You want | Install | Steps |
 | --- | --- | --- |
-| Real squiggles, the Problems panel and quick fixes in VS Code or Cursor | `parzr-vscode-X.Y.Z.vsix` from the [latest release](https://github.com/jn-aman/parzr/releases/latest) | In VS Code: Extensions, "...", **Install from VSIX**, pick the file |
-| Cards and fixes inside web editors that Accessibility cannot read or edit (Chrome, Edge, Brave, Chromium, Firefox 140+) | `parzr-browser-extension-X.Y.Z.zip` from the release, or the copy inside the app (Settings, Integrations, **Open integrations**) | Load it unpacked, then register it once with `connect-browser.py` |
+| Real squiggles, the Problems panel and quick fixes in VS Code or Cursor | [`parzr-vscode.vsix`](https://github.com/jn-aman/parzr/releases/latest/download/parzr-vscode.vsix) from the latest release | In VS Code: Extensions, "...", **Install from VSIX**, pick the file |
+| Cards and fixes inside web editors that Accessibility cannot read or edit (Chrome, Edge, Brave, Chromium, Firefox 140+) | [`parzr-browser-extension.zip`](https://github.com/jn-aman/parzr/releases/latest/download/parzr-browser-extension.zip) from the latest release, or the copy inside the app (Settings, Integrations, **Open integrations**) | Load it unpacked, then register it once with `connect-browser.py` |
 | Neovim, Helix, Emacs, Zed or Sublime (editors Parzr cannot see) | Nothing to download | Point the editor's LSP client at `/Applications/Parzr.app/Contents/MacOS/parzr-lsp` |
 
 Step by step instructions, what was tested and the from-source routes are in [integrations](docs/integrations.md#install-the-optional-extensions).
@@ -146,7 +146,7 @@ Step by step instructions, what was tested and the from-source routes are in [in
 
 - **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, keyboard slips that land on a real word ("this os bad" to "this is bad", only when the words on both sides clearly agree), minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. The rules answer first, in well under a millisecond for a chat message.
 - **Smart grammar:** the engine then asks GECToR, a RoBERTa-base grammar tagger (method by Grammarly, Omelianchuk et al. 2020), about each sentence it has not seen before. The model tags words (keep, replace, append, verb form, plural) instead of rewriting, runs as Core ML int8 on the Apple Neural Engine in about 2 ms per sentence, uses about 18 MB of memory, stays loaded and is prewarmed in the background after launch. Answers are cached per sentence, so typing only pays for the sentence you are editing. Its edits pass Parzr's own guards: names, links and code are never touched, case is never changed, an unknown word is never respelled, code-mixed and Hinglish sentences are left alone, edits that belong together stand or fall together, and your choices (one or many, which article, "thanks for") are not second-guessed. A rule's edit always wins over the model's.
-- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The model loads when needed and is released after 30 seconds idle.
+- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The same model, read as a plain language model, also catches short-word slips only the whole sentence can decide ("I'll be on the office", "Got your note form Priya", "I think the already shipped it"): on explicit checks, and while you type with Smart grammar on once it is loaded (a typing check never waits more than 80 ms for it, and a cold model loads in the background). The model loads when needed and is released after 30 seconds idle, or three minutes after the last typing check.
 - **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; no model downloads at runtime. The app's only network request is a daily check for a new version (a plain request to GitHub for a small signed update file); it sends nothing about you or your writing, GitHub sees what any download shows (your IP address and the app version), and Settings can turn it off.
 - See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 

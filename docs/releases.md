@@ -36,7 +36,7 @@ From the terminal (GitHub CLI, authenticated for the repository):
 gh workflow run release.yml -f bump=patch
 ```
 
-Use `-f bump=minor` or `-f bump=major` for larger bumps, or `-f version=X.Y.Z` to set an exact version (it overrides `bump`). Two optional inputs shape the in-app update: `-f critical=true` (see [Critical updates](#critical-updates)) and `-f notes='First point | Second point'` (the short list users see; if empty, the commit subjects since the previous tag are used, so write real notes for anything users should read). From the browser: Actions, Release, Run workflow, pick `bump` (default patch) or type an exact version, then Run workflow. Run it from the default branch.
+Use `-f bump=minor` or `-f bump=major` for larger bumps, or `-f version=X.Y.Z` to set an exact version (it overrides `bump`). Two optional inputs shape the in-app update: `-f critical=true` (see [Critical updates](#critical-updates)) and `-f notes='First point | Second point'` (the short list users see in the app, and the Highlights at the top of the GitHub release; if empty, the app shows the user-facing commit subjects since the previous tag, so write real notes for anything users should read). From the browser: Actions, Release, Run workflow, pick `bump` (default patch) or type an exact version, then Run workflow. Run it from the default branch.
 
 The workflow runs on a cheap Linux runner with no signing credentials and does the following:
 
@@ -45,7 +45,9 @@ The workflow runs on a cheap Linux runner with no signing credentials and does t
 3. Commits "Release vX.Y.Z" as the person who started the workflow (no co-author or bot trailers), creates the annotated tag `vX.Y.Z`, and pushes the commit and tag together.
 4. Starts [ci-release.yml](../.github/workflows/ci-release.yml) on the new tag with `gh workflow run` (passing `critical` and `notes` through), and links the run in the job summary. The version commit carries `[skip ci]`, so the deploy key push starts no workflow of its own and this dispatch is the one signed build.
 
-On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas, `appcast.xml` and the optional extension files as one release. The extension files come from `scripts/package-extensions.py` (the same script runs on every pull request, so a packaging break shows before a tag): `parzr-vscode-X.Y.Z.vsix` is built with the pinned `@vscode/vsce` 4.0.0 on Node 22, and `parzr-browser-extension-X.Y.Z.zip` is the contents of `extensions/browser` with fixed timestamps. Both versions come from the manifests that `check-release-version.py` already tied to the tag, and both are appended to `SHA256SUMS`. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
+On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas, `appcast.xml` and the optional extension files as one release. The extension files come from `scripts/package-extensions.py` (the same script runs on every pull request, so a packaging break shows before a tag): `parzr-vscode-X.Y.Z.vsix` is built with the pinned `@vscode/vsce` 4.0.0 on Node 22, and `parzr-browser-extension-X.Y.Z.zip` is the contents of `extensions/browser` with fixed timestamps. Both versions come from the manifests that `check-release-version.py` already tied to the tag, and both are appended to `SHA256SUMS`. The DMG and both extension files are also published under fixed names (`Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip`, also in `SHA256SUMS`), so `releases/latest/download/<name>` is a direct download of the newest release: the website, README and integration guide link there. After publishing, the job fetches one byte of each through `releases/latest` and drafts the release if one is missing.
+
+**Release notes.** `scripts/release_notes.py` writes the release body (also shown in the run's summary): the `notes` input as Highlights, then What's new from the commit subjects since the previous tag, with subjects whose area is internal (CI, Tests, Self tests, Docs, README, Website and similar; `INTERNAL` in the script) folded into a collapsed Under the hood list, then a download table with sizes and requirements, install and update steps, the checksums and the compare link. Write subjects as `Area: what changed for the user`; the area becomes the bold label. `make-appcast.py` uses the same test, so the in-app notes skip internal commits too. Preview with `python3 scripts/release_notes.py --version X.Y.Z --git-range vA.B.C..HEAD`. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
 
 Preview a bump locally without writing anything:
 
@@ -73,7 +75,8 @@ From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no up
 
 | Asset | What it is |
 |---|---|
-| `Parzr-X.Y.Z.dmg`, `SHA256SUMS`, licenses | The download for new installs, unchanged. `SHA256SUMS` also lists the two extension files below |
+| `Parzr-X.Y.Z.dmg`, `SHA256SUMS`, licenses | The download for new installs, unchanged. `SHA256SUMS` also lists the extension files and fixed-name copies below |
+| `Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip` | Fixed-name copies of the DMG and extensions for direct links through `releases/latest/download/` (website, README, docs) |
 | `parzr-vscode-X.Y.Z.vsix`, `parzr-browser-extension-X.Y.Z.zip` | The optional VS Code and browser extensions, for [manual install](integrations.md#install-the-optional-extensions). Not part of the update feed; their lower-case names keep them out of the `Parzr-*.zip` update globs |
 | `Parzr-X.Y.Z.zip` | The update archive: the notarized, stapled `Parzr.app` made with `ditto -c -k --sequesterRsrc --keepParent` |
 | `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (small next to the zip, because the bundled models are identical between releases; the 0.2.2 DMG is 731 MB) |
@@ -115,7 +118,7 @@ gh release edit vX.Y.Z --draft      # or: gh release delete vX.Y.Z (keeps the ta
 
 - Users who have not updated yet stop being offered the bad version immediately. Within the 3.5 day phased window that is most of them.
 - Users who already installed it are not downgraded (Sparkle never installs an older build). They need a newer fix: ship the next version with `critical=true` if it is serious. Version numbers only go up; do not reuse the yanked one.
-- A draft keeps the assets for inspection; the DMG link on the site and README (`releases/latest`) also falls back to the previous DMG.
+- A draft keeps the assets for inspection; the download links on the site and README (`releases/latest/download/Parzr.dmg` and the extension files) also fall back to the previous release's files.
 - Check the result: `python3 scripts/make-appcast.py verify --appcast https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml` should now report the previous version.
 
 ## Update signing key

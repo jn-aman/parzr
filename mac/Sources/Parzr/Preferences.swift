@@ -47,8 +47,10 @@ final class Preferences: ObservableObject {
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
     /// Opt-in: VS Code and Cursor show a screen-reader notice when Parzr asks for accessibility, so they stay untouched until enabled.
     @Published var checkVSCode: Bool { didSet { defaults.set(checkVSCode, forKey: "checkVSCode") } }
-    /// Set when the welcome window closes. A missing Accessibility grant still reopens it at that step on every launch.
+    /// Set only by Start writing on the welcome guide's last step; closing the window earlier does not count. A missing Accessibility grant still reopens it at that step on every launch.
     @Published var onboardingCompleted: Bool { didSet { defaults.set(onboardingCompleted, forKey: "onboardingCompleted") } }
+    /// Setup is mandatory: until the welcome guide is finished nothing checks text, and Parzr's windows, menus and shortcut lead back to it. Flag self tests run on a fresh suite and skip it.
+    var setupFinished: Bool { onboardingCompleted || Self.isSelfTest }
     @Published var firefoxHintDismissed: Bool { didSet { defaults.set(firefoxHintDismissed, forKey: "firefoxHintDismissed") } }
     /// Shown in the menu-bar popover when Firefox blocks accessibility; not persisted, so it returns next launch until dismissed.
     @Published var firefoxHint = false

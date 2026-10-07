@@ -1,0 +1,558 @@
+# Proper nouns that are always capitalized, in their usual spelling: countries, states and
+# provinces, regions, major cities, languages and nationalities, holidays and religions, and
+# well-known brands and products. Compiled for Parzr from general knowledge (gazetteers), not
+# from any benchmark. A lowercase entry in text ("paris", "new york", "github") is given this
+# case. Entries whose lowercase form is also an ordinary English word ("china", "turkey",
+# "polish", "nice", "slack", "python") are left out; the engine's tests enforce that. Four are
+# kept because the proper noun is by far their usual reading: Japan, French, Thanksgiving and
+# Christian.
+# Countries
+Afghanistan
+Albania
+Algeria
+Andorra
+Angola
+Argentina
+Armenia
+Australia
+Austria
+Azerbaijan
+Bahamas
+Bahrain
+Bangladesh
+Barbados
+Belarus
+Belgium
+Belize
+Benin
+Bhutan
+Bolivia
+Bosnia
+Botswana
+Brazil
+Brunei
+Bulgaria
+Burundi
+Cambodia
+Cameroon
+Canada
+Colombia
+Congo
+Costa Rica
+Croatia
+Cuba
+Cyprus
+Czechia
+Czech Republic
+Denmark
+Djibouti
+Dominican Republic
+Ecuador
+Egypt
+El Salvador
+England
+Eritrea
+Estonia
+Eswatini
+Ethiopia
+Fiji
+Finland
+France
+Gabon
+Gambia
+Germany
+Ghana
+Great Britain
+Greece
+Grenada
+Guatemala
+Guyana
+Haiti
+Honduras
+Hong Kong
+Hungary
+Iceland
+India
+Indonesia
+Iran
+Iraq
+Ireland
+Israel
+Italy
+Jamaica
+Japan
+Kazakhstan
+Kenya
+Kosovo
+Kuwait
+Kyrgyzstan
+Laos
+Latvia
+Lebanon
+Lesotho
+Liberia
+Libya
+Liechtenstein
+Lithuania
+Luxembourg
+Madagascar
+Malawi
+Malaysia
+Maldives
+Mali
+Malta
+Mauritania
+Mauritius
+Mexico
+Moldova
+Monaco
+Mongolia
+Montenegro
+Mozambique
+Myanmar
+Namibia
+Nepal
+Netherlands
+New Zealand
+Nicaragua
+Nigeria
+North Korea
+North Macedonia
+Norway
+Oman
+Pakistan
+Palestine
+Papua New Guinea
+Paraguay
+Peru
+Philippines
+Portugal
+Puerto Rico
+Qatar
+Romania
+Russia
+Rwanda
+Saudi Arabia
+Scotland
+Senegal
+Serbia
+Seychelles
+Sierra Leone
+Singapore
+Slovakia
+Slovenia
+Somalia
+South Africa
+South Korea
+South Sudan
+Spain
+Sri Lanka
+Sudan
+Suriname
+Sweden
+Switzerland
+Syria
+Taiwan
+Tajikistan
+Tanzania
+Thailand
+Tunisia
+Turkmenistan
+Uganda
+Ukraine
+United Arab Emirates
+United Kingdom
+United States
+Uruguay
+Uzbekistan
+Venezuela
+Vietnam
+Yemen
+Zambia
+Zimbabwe
+# US states, Canadian provinces, Australian states
+Alabama
+Alaska
+Arizona
+Arkansas
+California
+Colorado
+Connecticut
+Delaware
+Florida
+Georgia
+Hawaii
+Idaho
+Illinois
+Indiana
+Iowa
+Kansas
+Kentucky
+Louisiana
+Maine
+Maryland
+Massachusetts
+Michigan
+Minnesota
+Mississippi
+Missouri
+Montana
+Nebraska
+Nevada
+New Hampshire
+New Jersey
+New Mexico
+New York
+North Carolina
+North Dakota
+Ohio
+Oklahoma
+Oregon
+Pennsylvania
+Rhode Island
+South Carolina
+South Dakota
+Tennessee
+Texas
+Utah
+Vermont
+Virginia
+Washington
+West Virginia
+Wisconsin
+Wyoming
+Alberta
+British Columbia
+Manitoba
+New Brunswick
+Newfoundland
+Nova Scotia
+Ontario
+Quebec
+Saskatchewan
+Queensland
+Tasmania
+New South Wales
+# Continents and regions
+Africa
+Antarctica
+Asia
+Europe
+North America
+South America
+Latin America
+Central America
+Middle East
+Southeast Asia
+Scandinavia
+Caribbean
+Mediterranean
+Siberia
+Balkans
+Sahara
+Himalayas
+# Cities
+Abu Dhabi
+Accra
+Addis Ababa
+Amsterdam
+Athens
+Atlanta
+Auckland
+Austin
+Baltimore
+Bangalore
+Bengaluru
+Bangkok
+Barcelona
+Beijing
+Beirut
+Belfast
+Berlin
+Bogota
+Boston
+Brisbane
+Brooklyn
+Brussels
+Bucharest
+Budapest
+Buenos Aires
+Cairo
+Calgary
+Cape Town
+Chennai
+Chicago
+Cincinnati
+Cleveland
+Copenhagen
+Dallas
+Delhi
+New Delhi
+Denver
+Detroit
+Dhaka
+Dubai
+Dublin
+Edinburgh
+Frankfurt
+Geneva
+Glasgow
+Guangzhou
+Hanoi
+Helsinki
+Honolulu
+Houston
+Hyderabad
+Istanbul
+Jakarta
+Jerusalem
+Johannesburg
+Karachi
+Kathmandu
+Kolkata
+Kuala Lumpur
+Kyiv
+Lagos
+Lahore
+Las Vegas
+Leeds
+Lima
+Lisbon
+Liverpool
+London
+Los Angeles
+Madrid
+Manchester
+Manhattan
+Melbourne
+Miami
+Milan
+Minneapolis
+Montreal
+Moscow
+Mumbai
+Munich
+Nairobi
+Nashville
+New Orleans
+Oslo
+Ottawa
+Paris
+Perth
+Philadelphia
+Pittsburgh
+Portland
+Prague
+Pune
+Rome
+Rotterdam
+San Antonio
+San Diego
+San Francisco
+San Jose
+Santiago
+Sao Paulo
+Seattle
+Seoul
+Shenzhen
+Stockholm
+Sydney
+Taipei
+Tehran
+Tel Aviv
+Tokyo
+Toronto
+Vancouver
+Venice
+Vienna
+Warsaw
+Zurich
+Florence
+Rio de Janeiro
+Mexico City
+Silicon Valley
+# Languages, nationalities and peoples
+English
+Spanish
+French
+German
+Italian
+Portuguese
+Chinese
+Cantonese
+Japanese
+Korean
+Russian
+Arabic
+Hindi
+Bengali
+Urdu
+Punjabi
+Tamil
+Telugu
+Marathi
+Gujarati
+Kannada
+Malayalam
+Persian
+Farsi
+Turkish
+Greek
+Swedish
+Norwegian
+Finnish
+Czech
+Hungarian
+Romanian
+Ukrainian
+Hebrew
+Thai
+Vietnamese
+Indonesian
+Malay
+Filipino
+Tagalog
+Swahili
+Latin
+American
+British
+Canadian
+Australian
+Mexican
+Indian
+Pakistani
+African
+European
+Asian
+Irish
+Scottish
+Brazilian
+Argentinian
+Egyptian
+Nigerian
+Kenyan
+Israeli
+Iranian
+Iraqi
+Belgian
+Swiss
+Austrian
+Colombian
+Peruvian
+Chilean
+Cuban
+Jamaican
+Haitian
+Ethiopian
+Ghanaian
+Moroccan
+Saudi
+Syrian
+Lebanese
+Bangladeshi
+Nepali
+Sri Lankan
+Taiwanese
+Singaporean
+Malaysian
+Californian
+Texan
+Latino
+Latina
+Hispanic
+# Holidays, religions and scriptures
+Christmas
+Easter
+Thanksgiving
+Halloween
+Hanukkah
+Diwali
+Ramadan
+Passover
+Kwanzaa
+Christianity
+Islam
+Judaism
+Hinduism
+Buddhism
+Sikhism
+Christian
+Muslim
+Jewish
+Hindu
+Buddhist
+Sikh
+Quran
+Koran
+Torah
+# Organizations, events and places
+European Union
+United Nations
+Super Bowl
+World Cup
+Olympics
+Wall Street
+Disneyland
+Disney World
+Hollywood
+# Brands and products
+iPhone
+iPad
+iPod
+iMac
+MacBook
+iOS
+macOS
+iCloud
+iTunes
+AirPods
+GitHub
+GitLab
+Bitbucket
+YouTube
+Facebook
+Instagram
+LinkedIn
+WhatsApp
+TikTok
+Snapchat
+Pinterest
+Reddit
+Netflix
+Spotify
+Airbnb
+Starbucks
+McDonald's
+Walmart
+Costco
+Microsoft
+PayPal
+JavaScript
+TypeScript
+MySQL
+PostgreSQL
+Postgres
+MongoDB
+Kubernetes
+Wikipedia
+Gmail
+Salesforce
+Jira
+Figma
+Duolingo
+Hilton
+Marriott
+Tesla
+Toyota
+Honda
+Samsung
+Adidas
+IKEA
+ChatGPT
+OpenAI
+PowerPoint
+WordPress
+Shopify
+Venmo
+Zillow
+Lyft

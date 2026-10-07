@@ -1,0 +1,253 @@
+# clean/apostrophes_quotes
+c|I don’t think so.
+c|We’re almost done, and they’re on their way.
+c|She’s been there since 9 o’clock.
+c|You’ll love it, I promise.
+c|I can’t believe it’s October already.
+c|Y’all are the best.
+c|I’ve got a lot of rock ’n’ roll records.
+c|My dad loves ’80s music.
+c|It was the summer of ’99.
+c|That’s my sister’s car.
+c|The kids’ toys are everywhere.
+c|We’re going to the Smiths’ for dinner.
+c|James’s new apartment is huge.
+c|I’ll take two weeks’ vacation in August.
+d|The children’s library opens at 10.
+c|He said, “I’ll be there by six.”
+c|She asked, “Are you coming?”
+c|“Where are you?” he texted.
+d|The error message reads “File not found.”
+d|Click “Save” to keep your changes.
+c|My mom calls it “the good couch.”
+c|He said "fine" and walked off.
+c|The sign says "Back in 10 minutes."
+t|Set `"strict": true` in tsconfig.json.
+c|Mind your p’s and q’s.
+c|I got all A’s this semester!
+c|Dot your i’s and cross your t’s.
+c|It's my parents' anniversary.
+c|We're meeting at Joe's at 7.
+c|Who's the guy in the blue shirt?
+c|They've been dating for a year.
+c|I'd've called if I'd known.
+c|It isn't what I expected.
+c|Aren't you cold?
+c|Shouldn't we wait for her?
+c|You wouldn't believe the traffic.
+c|There's a new café on Elm Street.
+c|Let's not.
+c|It’s fine, isn’t it?
+c|Ma’am, you dropped your scarf.
+# clean/punctuation_correct
+d|We visited three cities: Rome, Florence, and Venice.
+d|We visited three cities: Rome, Florence and Venice.
+d|The results were clear; the new design performed better.
+d|The plan has two phases. The first starts in May.
+e|I went to the store and bought some milk.
+e|She finished the report and sent it to the client.
+d|The script reads the config file and validates every field.
+e|We reviewed the logs but couldn't find anything unusual.
+c|I tried, but it didn't work.
+c|It's late and I'm tired.
+c|I'm tired but happy.
+d|In 2023 the company opened two new offices.
+c|After lunch we can go over the slides.
+c|On Monday I'll send the invoice.
+d|She's a well-known author.
+d|The author is well known in the UX world.
+c|My 5-year-old just learned to ride a bike.
+c|My son is five years old.
+d|We need a long-term solution.
+d|In the long term, this will save money.
+e|Can we schedule a follow-up meeting?
+e|I'll follow up with legal tomorrow.
+t|Please log in with your company email.
+t|The login page is down.
+t|We need to set up the staging server.
+t|The setup takes about ten minutes.
+c|Let's catch up next week!
+d|The report covers real-time analytics.
+d|Data is processed in real time.
+d|This is a highly efficient process.
+e|We offer a 30-day free trial.
+c|It's a two-hour drive.
+c|The drive takes two hours.
+d|Note: the office is closed on Monday.
+d|Warning: this action cannot be undone.
+e|Here's what we need: a venue, a caterer, and a DJ.
+d|There are two options: refund or replace.
+d|Our values include honesty, curiosity, and teamwork.
+c|Wait—what time is it?
+d|The results (see Table 2) were mixed.
+c|I'll be there around 6 (maybe 6:30).
+d|Some fruits, e.g., apples and pears, ripen after picking.
+d|Use the default port, i.e., 8080.
+c|Hmm... let me think.
+c|Well, that's that.
+c|Yes, that works for me.
+c|No, I haven't seen it.
+e|Hi Sarah,
+e|Dear Mr. Patel,
+e|Best regards,
+e|Thanks for your patience. We'll be in touch soon.
+d|The meeting is on Tuesday, March 3, in Room 4B.
+e|I moved here from Austin, Texas, last year.
+d|The event runs from 9 a.m. to 5 p.m.
+d|Prices start at $49. All plans include support.
+d|The total is $1,200.
+d|Revenue grew 12% in Q3.
+c|It's 3:30 p.m. here.
+c|I'll call you at 10.
+c|See you at 7!
+c|Wow!!
+c|Wait, what?!
+c|Did you really say that?
+d|I wonder whether the offer is still open.
+e|I was wondering if you had time to chat.
+e|Let me know what you think of the draft.
+c|I asked him where he was going.
+d|The well-being of our staff comes first.
+d|The co-founders met at a hackathon.
+d|We re-signed the lease for two more years.
+d|Please re-enter your password.
+e|The decision-making process is too slow.
+d|She's an up-and-coming designer.
+c|It was a once-in-a-lifetime trip.
+d|Fifty-three people attended the workshop.
+d|About two-thirds of respondents agreed.
+d|The deadline is 11:59 p.m. on June 30.
+# clean/grammar_tricky
+c|If I were you, I'd take the job.
+d|The committee recommends that he be reappointed.
+d|It's important that she attend the meeting.
+c|The team is meeting at 3.
+d|The data show a clear trend.
+d|The data shows a clear trend.
+d|None of the options is perfect.
+d|None of the options are perfect.
+c|Neither of us knows the answer.
+d|Neither the manager nor the interns were informed.
+d|Either the director or her assistants are going to call you.
+d|A number of customers have reported the issue.
+d|The number of open tickets has doubled.
+d|Each of the drafts has its own problems.
+d|Everyone on the third floor has the day off.
+c|Somebody left their umbrella in the lobby.
+e|If a customer calls, ask them for their order number.
+c|Who did you invite?
+d|To whom should I address the letter?
+c|Who are you going with?
+c|Between you and me, I think he's leaving.
+c|Mike and I are going to the game.
+c|Can you send it to Mike and me?
+c|It's me.
+c|She's taller than me.
+c|She's taller than I am.
+c|What are you looking for?
+c|Who did you talk to?
+c|That's the guy I was telling you about.
+c|And that's how we met.
+c|But honestly, I don't mind.
+c|To boldly go where no one has gone before.
+d|We aim to more than double our revenue.
+c|I'm going to lie down for a bit.
+c|I laid the papers on your desk.
+c|She lay on the couch all afternoon.
+c|I'll lend you my umbrella.
+c|Can I borrow your charger?
+c|I feel bad about what happened.
+c|I'm doing well, thanks.
+c|I did well on the test.
+c|We have fewer meetings this week.
+d|The new model uses less energy.
+c|Ten items or less.
+d|Less than 5% of users opened the email.
+c|There are fewer than ten people here.
+c|It's an honor to be here.
+c|She works for an NGO.
+c|He's a university student.
+c|It's a one-time thing.
+c|I need a new phone.
+c|I'll be there in an hour.
+d|It was a historic moment for the city.
+c|I have a few minutes if you want to chat.
+c|I have a little money left.
+c|There's little hope of finishing today.
+c|There are few options left.
+c|Much of the work is done.
+c|Many people asked about it.
+c|How many people are coming?
+c|How much does it cost?
+c|There is a pen and two notebooks on the desk.
+c|Here's the thing.
+c|There's a lot of traffic today.
+d|There are a lot of reasons to switch.
+c|I'm looking forward to seeing you.
+c|We stopped to get gas.
+c|We stopped getting the newspaper.
+c|I remember locking the door.
+c|Remember to lock the door.
+c|I used to live in Chicago.
+c|I'm used to waking up early.
+c|I'm supposed to be there at 9.
+c|You should have told me!
+c|We could've won that game.
+c|It must have been the wind.
+c|I've already eaten.
+c|Have you seen my charger?
+c|She's gone home for the day.
+c|I saw her at the store yesterday.
+c|We've known each other for ten years.
+c|I've lived here since 2018.
+c|By the time we arrived, the movie had started.
+c|I'll call you when I land.
+c|Did you go to the concert?
+c|Why didn't you tell me?
+c|Do you know where the bathroom is?
+c|Can you tell me what the problem is?
+c|Does she know about the party?
+c|He doesn't like mushrooms.
+c|I always go to the gym on Mondays.
+c|I've never been to Japan.
+c|She hasn't replied yet.
+c|I still can't believe it.
+c|It's big enough for all of us.
+c|We have a big old red truck.
+c|She's a really good cook.
+c|He's the guy who fixed my car.
+d|The report, which was due Friday, is late.
+d|The report that was due Friday is late.
+c|I want to go home.
+c|I enjoy working with her.
+c|She suggested going to the beach.
+c|We decided to go with the blue one.
+c|It's worth trying.
+c|Thanks for helping me out!
+c|My boss let me leave early.
+c|I'd rather stay home tonight.
+c|I agree with you.
+c|She knows the answer.
+c|I'm having a great time.
+c|We're having dinner at 7.
+c|I'm thinking about quitting.
+c|What are you thinking?
+c|The news is pretty bad today.
+c|My glasses are somewhere in this room.
+c|The scissors are in the top drawer.
+c|Mathematics was her best subject.
+c|Physics is hard.
+c|One of my friends lives near there.
+c|The list of approved vendors is on the shared drive.
+c|Where are my keys?
+c|Here are the photos!
+c|There were like fifty people at the party.
+c|Whatever you decide is fine by me.
+c|The more, the merrier.
+c|Long story short, we missed the flight.
+c|Better late than never.
+c|Easier said than done.
+c|So far, so good.
+c|First come, first served.
+c|Out of sight, out of mind.
+c|The sooner, the better.

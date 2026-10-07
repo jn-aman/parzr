@@ -45,7 +45,6 @@ struct OnboardingView: View {
         HStack(spacing: 8) {
             if model.step != .welcome { NativeButton(title: "Back", kind: .utility, symbol: "chevron.left", action: { go(model.back) }).fixedSize() }
             Spacer()
-            if model.step == .accessibility && !granted { NativeButton(title: "Skip for now", kind: .utility, action: { go(model.skip) }).fixedSize() }
             if model.step == .done { NativeButton(title: "Start writing", kind: .primary, key: "\r", action: finish).fixedSize() }
             else { NativeButton(title: model.step == .welcome ? "Get started" : "Continue", kind: .primary, key: "\r", enabled: model.canAdvance, action: { go(model.next) }).fixedSize() }
         }.padding(.horizontal, 40).frame(height: 62)
@@ -125,7 +124,7 @@ struct OnboardingView: View {
                         Text("No restart needed.").font(.system(size: 11)).foregroundStyle(Color.textSecondary)
                     }.padding(.horizontal, 16).frame(height: 46)
                 }.graphiteSurface()
-                if !granted { warning("You can skip for now, but Parzr cannot check text in other apps until this is on.") }
+                if !granted { warning("Parzr cannot check your writing without this. Continue unlocks as soon as it is on.") }
             }
         }
     }

@@ -16,7 +16,7 @@ enum OnboardingFlow {
     static func shouldShow(completed: Bool, granted: Bool) -> Bool { !completed || !granted }
     /// A returning user who still lacks Accessibility lands straight on that step; everyone else starts at the welcome.
     static func firstStep(completed: Bool, granted: Bool) -> OnboardingStep { completed && !granted ? .accessibility : .welcome }
-    /// Accessibility is the only required step: Next stays off until macOS reports the grant. Skip for now is separate.
+    /// Accessibility is the one step that waits: Next stays off until macOS reports the grant. There is no skip; setup is mandatory.
     static func canAdvance(from step: OnboardingStep, granted: Bool) -> Bool { step.next != nil && (step != .accessibility || granted) }
     static func contactsState(_ status: CNAuthorizationStatus) -> ContactsState { status == .authorized ? .allowed : status == .denied || status == .restricted ? .denied : .notAsked }
 }
@@ -37,8 +37,7 @@ final class OnboardingModel: ObservableObject {
         self.step = step ?? OnboardingFlow.firstStep(completed: preferences.onboardingCompleted, granted: preferences.permissionGranted)
     }
     func next() { if canAdvance, let next = step.next { step = next } }
-    /// "Skip for now" on the Accessibility step: moves on without the grant (the warning stays on the Done step).
-    func skip() { if let next = step.next { step = next } }
     func back() { if let previous = step.previous { step = previous } }
+    /// Start writing on the last step. Closing the window any other way leaves setup unfinished.
     func complete() { preferences.onboardingCompleted = true }
 }

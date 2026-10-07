@@ -41,7 +41,7 @@ final class OnboardingTests: XCTestCase {
         XCTAssertTrue(model.canAdvance); model.next(); XCTAssertEqual(model.step, .contacts)
         model.back(); XCTAssertEqual(model.step, .accessibility)
         prefs.permissionGranted = false
-        model.skip(); XCTAssertEqual(model.step, .contacts, "Skip for now moves on without the grant")
+        model.step = .accessibility; model.next(); XCTAssertEqual(model.step, .accessibility, "a revoked grant blocks Next again; there is no skip")
         model.step = .done; model.next(); XCTAssertEqual(model.step, .done)
         model.step = .welcome; model.back(); XCTAssertEqual(model.step, .welcome)
     }

@@ -499,6 +499,17 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     } else {
         (text, source_map, edits)
     };
+    // Short-word swaps the whole sentence decides (explicit checks, and typing with Smart grammar on).
+    #[cfg(feature = "local-model")]
+    let (text, source_map, edits) = if req.mode == Mode::Fix && (req.gec || req.deep) {
+        let merged = crate::confusion::combine(req, &protected, edits.clone());
+        match apply_edits(&req.text, &merged) {
+            Ok((text, source_map)) => (text, source_map, merged),
+            Err(_) => (text, source_map, edits),
+        }
+    } else {
+        (text, source_map, edits)
+    };
     Ok(RewriteResult {
         version: if cfg!(feature = "local-model") {
             concat!(

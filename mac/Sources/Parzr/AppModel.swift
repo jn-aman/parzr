@@ -22,7 +22,6 @@ final class AppModel: ObservableObject {
     @Published var selectionHint = false
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
-    var showOnboarding: (() -> Void)?
     var didAnalyze: (() -> Void)?
     var clearDraftUndo: (() -> Void)?
     /// Where Copy puts the corrected text; tests give it a private pasteboard so a run never touches the owner's clipboard.

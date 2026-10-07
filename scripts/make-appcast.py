@@ -14,6 +14,7 @@ signature against the pinned PUBLIC key, using a stdlib Ed25519 verifier (no Spa
 import argparse, base64, datetime, email.utils, hashlib, os, pathlib, plistlib, re, shutil, subprocess, sys, tempfile, time
 import urllib.request, xml.etree.ElementTree as ET
 from xml.sax.saxutils import quoteattr
+from release_notes import is_internal  # scripts/ is on sys.path when this script runs
 
 REPO = 'jn-aman/parzr'
 PUBLIC_KEY = 'j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0='  # SUPublicEDKey in Info.plist
@@ -183,7 +184,8 @@ def bullets(notes, git_range):
     items = [s for s in items if s]
     if not items and git_range:
         r = subprocess.run(['git', 'log', '--no-merges', '--format=%s', git_range], capture_output=True, text=True)
-        items = [s for s in r.stdout.splitlines() if s and not s.startswith('Release v')]
+        # Internal areas (CI, Tests, Docs...) are left out, the same test as the GitHub release notes.
+        items = [s for s in r.stdout.splitlines() if s and not s.startswith('Release v') and not is_internal(s)]
     items = [s if len(s) <= 160 else s[:157].rstrip() + '...' for s in items[:6]]
     return items or ['Bug fixes and improvements.']
 

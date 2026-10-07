@@ -75,6 +75,14 @@ jobs:
           cargo build --release --locked --manifest-path engine/Cargo.toml
           PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
           PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
+      - name: Everyday-error quality gate
+        # The held-out test split (benchmarks/heldout, never used for tuning) through the app's own path. Fails when
+        # what runs while typing fixes less, or changes more correct text, than the last measured build allows.
+        run: |
+          swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift scripts/heldout-native.swift -o dist/qa/heldout-native
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
+            --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
       - name: Browser and editor integration checks
         run: |
           npm ci
@@ -97,6 +105,8 @@ jobs:
           if-no-files-found: error
           path: |
             dist/qa/browser-results.json
+            dist/qa/heldout/summary.md
+            dist/qa/heldout/summary.json
             dist/build-report.json
             dist/package-report.json
             dist/extensions/parzr-*
@@ -151,6 +161,15 @@ jobs:
         run: |
           python3 scripts/package-extensions.py
           (cd dist/extensions && shasum -a 256 parzr-* >> ../SHA256SUMS)
+      - name: Fixed-name copies for direct download links
+        # releases/latest/download/<name> always serves the newest release, so the website, README and docs link
+        # straight to the file. dist/latest stays outside the Parzr-*.dmg and parzr-* globs; cp -c clones on APFS.
+        run: |
+          mkdir -p dist/latest
+          cp -c dist/Parzr-*.dmg dist/latest/Parzr.dmg
+          cp -c dist/extensions/parzr-vscode-*.vsix dist/latest/parzr-vscode.vsix
+          cp -c dist/extensions/parzr-browser-extension-*.zip dist/latest/parzr-browser-extension.zip
+          (cd dist/latest && shasum -a 256 Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip >> ../SHA256SUMS)
       - name: Fetch previous update zips for delta updates
         # Up to 3 earlier releases that carry an update zip; releases without one (0.2.x) are skipped.
         env:
@@ -179,6 +198,20 @@ jobs:
           [ -n "$prev" ] && args+=(--git-range "$prev..$PARZR_RELEASE_TAG")
           [ "$PARZR_CRITICAL" = "true" ] && args+=(--critical)
           python3 scripts/make-appcast.py build "${args[@]}"
+      - name: Write release notes
+        # What's new from the commit subjects (internal areas such as CI and Tests folded away), the Highlights
+        # from the notes input, then downloads, install and update steps and the checksums.
+        env:
+          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+          PARZR_CRITICAL: ${{ inputs.critical }}
+          PARZR_NOTES: ${{ inputs.notes }}
+        run: |
+          args=(--version "${PARZR_RELEASE_TAG#v}" --notes "$PARZR_NOTES" --dist dist --out dist/release-notes.md)
+          prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${PARZR_RELEASE_TAG}^" 2>/dev/null || true)
+          [ -n "$prev" ] && args+=(--git-range "$prev..$PARZR_RELEASE_TAG")
+          [ "$PARZR_CRITICAL" = "true" ] && args+=(--critical)
+          python3 scripts/release_notes.py "${args[@]}"
+          cat dist/release-notes.md >> "$GITHUB_STEP_SUMMARY"
       - name: Publish immutable release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -186,14 +219,14 @@ jobs:
         run: |
           # Required assets must exist; deltas are optional (the first updater release has none to diff against).
           shopt -s nullglob
-          required=(dist/Parzr-*.dmg dist/SHA256SUMS dist/extensions/parzr-* LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/appcast.xml)
-          for pattern in 'dist/Parzr-*.dmg' 'dist/extensions/parzr-*.vsix' 'dist/extensions/parzr-*.zip' 'dist/update/Parzr-*.zip' 'dist/update/appcast.xml'; do
+          required=(dist/Parzr-*.dmg dist/latest/* dist/SHA256SUMS dist/extensions/parzr-* LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/appcast.xml)
+          for pattern in 'dist/Parzr-*.dmg' 'dist/latest/Parzr.dmg' 'dist/latest/parzr-vscode.vsix' 'dist/latest/parzr-browser-extension.zip' 'dist/extensions/parzr-*.vsix' 'dist/extensions/parzr-*.zip' 'dist/update/Parzr-*.zip' 'dist/update/appcast.xml'; do
             matches=($pattern)
             if [ ${#matches[@]} -eq 0 ]; then echo "::error::missing release asset $pattern"; exit 1; fi
           done
           deltas=(dist/update/*.delta)
           echo "Publishing ${#required[@]} assets and ${#deltas[@]} deltas"
-          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --generate-notes "${required[@]}" "${deltas[@]}"
+          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --notes-file dist/release-notes.md "${required[@]}" "${deltas[@]}"
       - name: Verify the published update feed
         # The feed is live the moment the release is. Re-check what users will download; if it is bad,
         # draft the release so the feed (releases/latest) falls back to the previous release.
@@ -206,10 +239,14 @@ jobs:
             python3 scripts/make-appcast.py verify --appcast "$base/download/$PARZR_RELEASE_TAG/appcast.xml" --version "${PARZR_RELEASE_TAG#v}" || return 1
             curl -fsSL "$base/download/$PARZR_RELEASE_TAG/appcast.xml" -o "$RUNNER_TEMP/tag-appcast.xml" || return 1
             for _ in 1 2 3 4 5 6; do
-              curl -fsSL "$base/latest/download/appcast.xml" -o "$RUNNER_TEMP/latest-appcast.xml" && cmp "$RUNNER_TEMP/tag-appcast.xml" "$RUNNER_TEMP/latest-appcast.xml" && return 0
+              curl -fsSL "$base/latest/download/appcast.xml" -o "$RUNNER_TEMP/latest-appcast.xml" && cmp "$RUNNER_TEMP/tag-appcast.xml" "$RUNNER_TEMP/latest-appcast.xml" && break
               sleep 10
             done
-            return 1
+            cmp -s "$RUNNER_TEMP/tag-appcast.xml" "$RUNNER_TEMP/latest-appcast.xml" || return 1
+            # The website's Download buttons: one byte of each fixed-name file through releases/latest.
+            for f in Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip; do
+              curl -fsSL -r 0-0 -o /dev/null "$base/latest/download/$f" || { echo "::error::$f is not reachable through releases/latest"; return 1; }
+            done
           }
           if ! verify; then
             echo "::error::Published update feed failed verification; drafting the release so updates fall back to the previous release."
@@ -228,6 +265,7 @@ jobs:
             dist/app-notarization.json
             dist/dmg-notarization.json
             dist/update/appcast.xml
+            dist/release-notes.md
       - name: Remove ephemeral signing credentials
         if: always()
         run: |

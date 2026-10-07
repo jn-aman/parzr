@@ -49,6 +49,8 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     }
     sentence_boundaries(req, edits);
     clause_commas(req, edits);
+    crate::marks::check(req, edits);
+    crate::clauses::check(req, edits);
 }
 
 fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
@@ -73,7 +75,18 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             edits.push(edit);
         }
-        if i == 0 || !["but", "so"].contains(&token.normalized.as_str()) || !tokens[i - 1].is_word {
+        if i > 0
+            && tokens[i - 1].is_word
+            && ["and", "or", "yet"].contains(&token.normalized.as_str())
+        {
+            crate::clauses::coordinated(req, &tokens, i, edits);
+            continue;
+        }
+        if i == 0
+            || !["but", "so"].contains(&token.normalized.as_str())
+            || !tokens[i - 1].is_word
+            || crate::marks::inside_open_quote(&req.text, token.start_byte)
+        {
             continue;
         }
         if token.normalized == "so"
@@ -82,6 +95,7 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
                     "i", "we", "you", "he", "she", "they", "it", "the", "our", "my", "this", "that",
                 ]
                 .contains(&t.normalized.as_str())
+                    || crate::clauses::subject_contraction(&t.normalized)
                     || t.proper_name
             })
         {
@@ -140,8 +154,16 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
                     || ["but", "so"].contains(&tokens[n].normalized.as_str())
             })
             .unwrap_or(tokens.len());
-        if clause(&tokens[start..i])
+        // A contracted subject ("so I'm") or a clause the plain check misses ("I'd love to")
+        // counts only after a long first clause: short pairs read fine without the comma.
+        let plain = clause(&tokens[start..i])
             && clause(&tokens[i + 1..end])
+            && !crate::clauses::subject_contraction(&tokens[subject_at].normalized);
+        let long = tokens[start..i].iter().filter(|t| t.is_word).count() >= 6;
+        if (plain
+            || long
+                && crate::clauses::clause_at(&tokens, start, i).is_some()
+                && crate::clauses::clause_at(&tokens, subject_at, end).is_some())
             && let Some(edit) = make_edit(
                 &req.text,
                 tokens[i - 1].end_utf16,
@@ -161,9 +183,10 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
 /// A verb right after "but" means the clause shares its subject with the first ("He came but
 /// left early"), so there are no two independent clauses to separate.
 fn shares_subject(t: &Token<'_>) -> bool {
-    finite(t)
-        || morphology::verb(&t.normalized).is_some_and(|v| v.base == t.normalized)
-            && crate::spelling::flags(&t.normalized) & 2 == 0
+    !crate::clauses::subject_contraction(&t.normalized)
+        && (finite(t)
+            || morphology::verb(&t.normalized).is_some_and(|v| v.base == t.normalized)
+                && crate::spelling::flags(&t.normalized) & 2 == 0)
 }
 pub fn finite(t: &Token<'_>) -> bool {
     [

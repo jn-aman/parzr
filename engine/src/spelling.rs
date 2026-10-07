@@ -755,6 +755,11 @@ pub(crate) fn swaps_to_common(word: &str) -> bool {
         })
 }
 pub(crate) fn typo_shaped(word: &str) -> bool {
+    edit_shaped(word) || glued_shaped(word)
+}
+/// One adjacent swap of a frequent word, or one letter from a frequent word of 6+ letters (one
+/// wrong letter needs 7+): the typo shapes of `typo_shaped` without the run-together words.
+pub(crate) fn edit_shaped(word: &str) -> bool {
     // Frequency prior 400 is Zipf 4.0, about the 6,000 most frequent words.
     let frequent = |w: &str| known(w) && frequency(w) >= 400;
     if !word.is_ascii() || word.len() < 4 {
@@ -799,6 +804,14 @@ pub(crate) fn typo_shaped(word: &str) -> bool {
                 }
             }
         }
+    }
+    false
+}
+/// Two frequent words run together ("farhad" is "far had").
+fn glued_shaped(word: &str) -> bool {
+    let frequent = |w: &str| known(w) && frequency(w) >= 400;
+    if !word.is_ascii() || word.len() < 4 {
+        return false;
     }
     (2..word.len() - 1).any(|i| {
         let (a, b) = word.split_at(i);
@@ -1056,6 +1069,13 @@ fn protected(word: &str) -> bool {
         || [
             "al", "avant", "bona", "capita", "etc", "facto", "fide", "garde", "hoc", "inter",
             "ipso", "naive", "priori", "sic", "vitro", "vivo",
+        ]
+        .contains(&word)
+        // Everyday technical words the dictionary lacks ("cron" is not "corn").
+        || [
+            "cron", "crontab", "env", "fullstack", "hotfix", "kpi", "kpis", "kubectl", "navbar",
+            "nginx", "okr", "okrs", "pytest", "signup", "signups", "stderr", "stdin", "stdout",
+            "sudo", "todos", "uat", "wifi",
         ]
         .contains(&word)
 }
@@ -1434,6 +1454,99 @@ fn variant_spelling(word: &str, candidate: &str) -> bool {
                 word.replacen(a, b, 1) == candidate || word.replacen(b, a, 1) == candidate
             }))
 }
+/// The frequent word an unknown word sounds like under one English sound-spelling swap ("nefew"
+/// is "nephew", "enuf" is "enough", "nite" is "night", "shud" is "should"). Only a single
+/// clear winner of 4+ letters is returned.
+fn sounds_like(word: &str) -> Option<String> {
+    // Single-letter swaps (k/c, s/c, z/s) are one edit and ranked in context by `suggest`.
+    const SOUNDS: [(&str, &str); 7] = [
+        ("f", "ph"),
+        ("ph", "f"),
+        ("uf", "ough"),
+        ("ud", "ould"),
+        ("ite", "ight"),
+        ("kw", "qu"),
+        ("shun", "tion"),
+    ];
+    if word.len() < 4 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+        return None;
+    }
+    let mut found: Vec<String> = vec![];
+    for (from, to) in SOUNDS {
+        for (at, _) in word.match_indices(from) {
+            let candidate = format!("{}{to}{}", &word[..at], &word[at + from.len()..]);
+            if ordinary(&candidate)
+                && frequency(&candidate) >= 380
+                && !distance_one(word, &candidate)
+                && !found.contains(&candidate)
+            {
+                found.push(candidate);
+            }
+        }
+    }
+    found.sort_by_key(|c| std::cmp::Reverse(frequency(c)));
+    match found.as_slice() {
+        [one] => Some(one.clone()),
+        [a, b, ..] if frequency(a) >= frequency(b).saturating_add(100) => Some(a.clone()),
+        _ => None,
+    }
+}
+/// A word that is clearly a damaged common word, not a name, when capitalized at a sentence
+/// start: a listed misspelling, or one edit from a frequent word (`edit_shaped`).
+pub fn opening_typo(word: &str) -> bool {
+    !known(word)
+        && !names::is_bundled_name(word)
+        && (names::is_name_typo(word) || names::is_known_misspelling(word) || edit_shaped(word))
+}
+/// A misspelled word that opens a sentence ("Waht time is it?", "Hopefuly not"). Its capital is
+/// the sentence's, not a name's, so it is respelled like the lowercase word, but only to a
+/// frequent word one edit away and only with clear typo evidence: a listed misspelling, one
+/// adjacent swap of a frequent word, or one letter from a frequent word of six or more letters.
+/// Names the lexicon, the bundled list or the system tagger know keep their spelling.
+pub fn suggest_capitalized(
+    token: &Token<'_>,
+    dialect: &str,
+    previous: Option<&Token<'_>>,
+    next: Option<&Token<'_>>,
+    history: &[Token<'_>],
+    following_context: &[Token<'_>],
+) -> Option<String> {
+    let word = token.normalized.as_str();
+    let mut letters = token.surface.chars();
+    if token.proper_name
+        || token.system_known
+        || word.len() < 4
+        || word.len() > 24
+        || !letters.next().is_some_and(|c| c.is_ascii_uppercase())
+        || !letters.all(|c| c.is_ascii_lowercase())
+        || !line_start(history, token)
+        || namey(word)
+        || protected(word)
+        || !opening_typo(word)
+    {
+        return None;
+    }
+    let mut lowered = token.clone();
+    lowered.surface = word;
+    let candidate = suggest(
+        &lowered,
+        dialect,
+        previous,
+        next,
+        history,
+        following_context,
+    )?;
+    (!candidate.contains(' ')
+        && distance_one(word, &candidate)
+        && (names::is_name_typo(word) || frequency(&candidate) >= 400))
+        .then(|| {
+            let mut chars = candidate.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default()
+        })
+}
 pub fn suggest(
     token: &Token<'_>,
     dialect: &str,
@@ -1544,7 +1657,11 @@ pub fn suggest(
     if let Some(s) = short {
         return Some(s.into());
     }
-    if lexicon().lowercase.contains(word) || names::is_shorthand(word) {
+    // A proper noun typed in lowercase ("lyft", "duolingo") is capitalized, never respelled.
+    if lexicon().lowercase.contains(word)
+        || names::is_shorthand(word)
+        || crate::capitalization::proper_noun(names::base(word)).is_some()
+    {
         return None;
     }
     // "dont" is "don't", whatever else it is one letter from ("done").
@@ -1977,6 +2094,16 @@ pub fn suggest(
     {
         return Some(split.clone());
     }
+    // A spelling by sound ("nefew", "enuf", "shud") is no single edit from its word; it is
+    // respelled only to a frequent word far more common than any one-edit neighbour.
+    if !accepted
+        && let Some(sounded) = sounds_like(word)
+        && candidates
+            .first()
+            .is_none_or(|c| frequency(&sounded) >= frequency(c).saturating_add(60))
+    {
+        return Some(sounded);
+    }
     // A word one edit from a rare candidate ("chinese" and "chines") is not a typo, and one the
     // system checker accepts is respelled only to a very common word ("statin" and "station").
     let best = candidates
@@ -2110,6 +2237,42 @@ mod tests {
             Some("newspapers")
         );
         assert_eq!(suggest_at("I donnot know.", "donnot", false), None);
+    }
+    #[test]
+    fn spellings_by_sound_and_technical_words() {
+        for (text, word, fixed) in [
+            ("My nefew came over.", "nefew", "nephew"),
+            ("That is enuf for now.", "enuf", "enough"),
+            ("See you tonite then.", "tonite", "tonight"),
+            ("I shud call her.", "shud", "should"),
+        ] {
+            assert_eq!(
+                suggest_at(text, word, false).as_deref(),
+                Some(fixed),
+                "{word}"
+            );
+        }
+        assert_eq!(suggest_at("The cron job failed.", "cron", false), None);
+        assert_eq!(suggest_at("Turn the wifi off.", "wifi", false), None);
+    }
+    #[test]
+    fn misspellings_that_open_a_sentence_are_respelled() {
+        let at_start = |text: &str| {
+            let tokens = crate::tokenizer::tokenize(text, &[]);
+            suggest_capitalized(&tokens[0], "", None, tokens.get(1), &[], &tokens[1..])
+        };
+        assert_eq!(at_start("Waht time is it?").as_deref(), Some("What"));
+        assert_eq!(at_start("Becuase it rained.").as_deref(), Some("Because"));
+        assert_eq!(at_start("Probaly not.").as_deref(), Some("Probably"));
+        // Names, known words and words with no clear typo shape keep their capital and spelling.
+        for text in [
+            "Anoop called.",
+            "Priya said yes.",
+            "Zorblat is here.",
+            "Paris is big.",
+        ] {
+            assert_eq!(at_start(text), None, "{text}");
+        }
     }
     #[test]
     fn dictionary_assets() {

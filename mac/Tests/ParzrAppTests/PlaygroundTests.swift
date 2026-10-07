@@ -75,8 +75,9 @@ final class PlaygroundTests: XCTestCase {
     func testNativeMenuActionsAndCheckStates() throws {
         _ = NSApplication.shared
         let delegate = AppDelegate(); let menu = NSMenu()
-        let paused = Preferences.shared.paused; let automatic = Preferences.shared.passive
-        defer { Preferences.shared.paused = paused; Preferences.shared.passive = automatic }
+        let paused = Preferences.shared.paused; let automatic = Preferences.shared.passive, completed = Preferences.shared.onboardingCompleted
+        defer { Preferences.shared.paused = paused; Preferences.shared.passive = automatic; Preferences.shared.onboardingCompleted = completed }
+        Preferences.shared.onboardingCompleted = true
         delegate.menuNeedsUpdate(menu)
         for item in menu.items where item.action != nil {
             XCTAssertTrue((item.target as? NSObject)?.responds(to: item.action!) == true, item.title)
