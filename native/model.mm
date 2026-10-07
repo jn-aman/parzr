@@ -12,6 +12,7 @@
 #include <thread>
 #include <vector>
 #include <malloc/malloc.h>
+#include <Accelerate/Accelerate.h>
 #import <Foundation/Foundation.h>
 #import <NaturalLanguage/NaturalLanguage.h>
 #import <AppKit/AppKit.h>
@@ -45,6 +46,14 @@ struct Runtime {
                 if (model && Clock::now() >= until()) release();
             }
         }).detach();
+        // Under memory pressure an idle model goes at once, whatever keep-alive typing asked for; a call in
+        // progress keeps it (the timer releases it later).
+        auto *pressure = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+        dispatch_source_set_event_handler(pressure, ^{
+            std::unique_lock lock(mutex, std::try_to_lock);
+            if (lock.owns_lock() && model) { release(); keep = Clock::now(); }
+        });
+        dispatch_resume(pressure);
     }
     void release() {
         if (context) llama_free(context);
@@ -63,7 +72,9 @@ struct Runtime {
         if (!model) return false;
         auto cp = llama_context_default_params();
         cp.n_ctx = 4096; cp.n_batch = 512; cp.n_ubatch = 128;
-        cp.n_seq_max = 1; cp.n_threads = 2; cp.n_threads_batch = 2;
+        // Four sequences share one 4096-token cache: sentence-swap variants are scored side by side (about 20 MB of
+        // recurrent state each); generation uses sequence 0 alone.
+        cp.n_seq_max = 4; cp.kv_unified = true; cp.n_threads = 2; cp.n_threads_batch = 2;
         cp.no_perf = true;
         context = llama_init_from_model(model, cp);
         if (!context) { release(); return false; }
@@ -348,7 +359,16 @@ void startWarm(const std::string &path) {
         auto &rt = runtime();
         {
             std::lock_guard guard(rt.mutex);
-            try { rt.load(path.c_str()); } catch (...) {}
+            try {
+                // One small decode after loading prepares the GPU pipelines, so the first typing check fits its budget.
+                if (rt.load(path.c_str())) {
+                    llama_token tokens[8];
+                    const char *probe = "\nThanks, see you soon.";
+                    int n = llama_tokenize(llama_model_get_vocab(rt.model), probe, int(std::strlen(probe)), tokens, 8, false, false);
+                    if (n > 0) llama_decode(rt.context, llama_batch_get_one(tokens, n));
+                    llama_memory_clear(llama_get_memory(rt.context), true);
+                }
+            } catch (...) {}
             rt.last = Clock::now();
             rt.keep = std::max(rt.keep, rt.last + kTypingKeep);
         }
@@ -357,12 +377,17 @@ void startWarm(const std::string &path) {
     }).detach();
 }
 // Log-softmax normalizer of one row of logits.
+// Vectorized (Accelerate): a 248k-entry row takes well under a millisecond.
 double logNormalizer(const float *row, int n) {
-    float top = row[0];
-    for (int i = 1; i < n; i++) top = std::max(top, row[i]);
-    double sum = 0;
-    for (int i = 0; i < n; i++) sum += std::exp(double(row[i] - top));
-    return double(top) + std::log(sum);
+    thread_local std::vector<float> scratch;
+    scratch.resize(size_t(n));
+    float top = 0, sum = 0, shift;
+    vDSP_maxv(row, 1, &top, vDSP_Length(n));
+    shift = -top;
+    vDSP_vsadd(row, 1, &shift, scratch.data(), 1, vDSP_Length(n));
+    vvexpf(scratch.data(), scratch.data(), &n);
+    vDSP_sve(scratch.data(), 1, &sum, vDSP_Length(n));
+    return double(top) + std::log(double(sum));
 }
 // Byte offset where each token starts in the tokenized string (plus the total); empty when the pieces do not rebuild it.
 std::vector<size_t> tokenOffsets(const llama_vocab *vocab, const std::vector<llama_token> &tokens, const std::string &text) {
@@ -385,28 +410,6 @@ std::vector<llama_token> tokenizePlain(const llama_vocab *vocab, const std::stri
     if (n < 0) return {};
     tokens.resize(n);
     return tokens;
-}
-// One decode of a single sequence `tokens[0, n)` with logits at positions [from, n - 1); the log-prob of each token t in
-// (from, n) given everything before it is written to out[t]. False on failure or abort.
-bool sequenceLogProbs(Runtime &r, const Abort &abort, const std::vector<llama_token> &tokens, int n, int from, std::vector<double> &out) {
-    out.assign(n, 0.0);
-    llama_memory_clear(llama_get_memory(r.context), true);
-    if (abort.stopped()) return false;
-    llama_batch batch = llama_batch_init(n, 0, 1);
-    struct FreeBatch { llama_batch &b; ~FreeBatch() { llama_batch_free(b); } } freeBatch{batch};
-    for (int i = 0; i < n; i++) {
-        batch.token[i] = tokens[i]; batch.pos[i] = i; batch.n_seq_id[i] = 1; batch.seq_id[i][0] = 0;
-        batch.logits[i] = i >= from && i < n - 1;
-    }
-    batch.n_tokens = n;
-    if (llama_decode(r.context, batch) != 0) return false;
-    const int vocabSize = llama_vocab_n_tokens(llama_model_get_vocab(r.model));
-    for (int i = std::max(from, 0); i < n - 1; i++) {
-        const float *row = llama_get_logits_ith(r.context, i);
-        if (!row) return false;
-        out[i + 1] = double(row[tokens[i + 1]]) - logNormalizer(row, vocabSize);
-    }
-    return true;
 }
 }
 extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, uint32_t count, const uint32_t *spans,
@@ -510,19 +513,50 @@ extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, u
         std::vector<uint32_t> order;
         for (uint32_t k = 0; k < count; k++) if (swaps[k].first > 0 && std::isfinite(left[k]) && left[k] >= screen) order.push_back(k);
         std::sort(order.begin(), order.end(), [&](uint32_t x, uint32_t y) { return left[x] > left[y]; });
-        std::vector<double> lp;
-        for (auto k : order) {
-            const auto &s = swaps[k];
-            const int m = int(s.tokens.size());
-            const int keep = std::min(kRight, s.suffix);
-            const int variantEnd = m - s.suffix + keep, originalEnd = n - s.suffix + keep;
-            if (variantEnd - s.first > kMaxOutputs) continue;
+        // Variants run side by side as separate sequences (the recurrent layers cannot share a prefix), up to
+        // kSeqs per decode and kMaxOutputs logits rows, and each stops kRight tokens after its change.
+        const int seqs = int(llama_n_seq_max(r.context));
+        size_t next = 0;
+        while (next < order.size()) {
             if (abort.stopped()) return 4;
-            if (!sequenceLogProbs(r, abort, s.tokens, variantEnd, s.first - 1, lp)) return abort.stopped() ? 4 : 3;
-            double gain = 0;
-            for (int t = s.first; t < variantEnd; t++) gain += lp[t];
-            for (int t = s.first; t < originalEnd; t++) gain -= base[t];
-            full[k] = gain;
+            std::vector<uint32_t> group;
+            int tokensIn = 0, outputs = 0;
+            for (; next < order.size() && int(group.size()) < seqs; next++) {
+                const auto &s = swaps[order[next]];
+                const int end = int(s.tokens.size()) - s.suffix + std::min(kRight, s.suffix);
+                if (!group.empty() && (outputs + end - s.first + 1 > kMaxOutputs || tokensIn + end > 512)) break;
+                group.push_back(order[next]); tokensIn += end; outputs += end - s.first + 1;
+            }
+            llama_batch batch = llama_batch_init(tokensIn, 0, 1);
+            struct FreeBatch { llama_batch &b; ~FreeBatch() { llama_batch_free(b); } } freeBatch{batch};
+            std::vector<int> at;  // batch index of each group member's first token
+            int b = 0;
+            for (size_t j = 0; j < group.size(); j++) {
+                const auto &s = swaps[group[j]];
+                const int end = int(s.tokens.size()) - s.suffix + std::min(kRight, s.suffix);
+                at.push_back(b);
+                for (int i = 0; i < end; i++, b++) {
+                    batch.token[b] = s.tokens[i]; batch.pos[b] = i; batch.n_seq_id[b] = 1; batch.seq_id[b][0] = int(j);
+                    batch.logits[b] = i >= s.first - 1 && i < end - 1;
+                }
+            }
+            batch.n_tokens = b;
+            llama_memory_clear(llama_get_memory(r.context), true);
+            if (llama_decode(r.context, batch) != 0) return abort.stopped() ? 4 : 3;
+            for (size_t j = 0; j < group.size(); j++) {
+                const auto k = group[j];
+                const auto &s = swaps[k];
+                const int keep = std::min(kRight, s.suffix);
+                const int end = int(s.tokens.size()) - s.suffix + keep, originalEnd = n - s.suffix + keep;
+                double gain = 0;
+                for (int i = s.first - 1; i < end - 1; i++) {
+                    const float *row = llama_get_logits_ith(r.context, at[j] + i);
+                    if (!row) return 3;
+                    gain += double(row[s.tokens[i + 1]]) - logNormalizer(row, vocabSize);
+                }
+                for (int t = s.first; t < originalEnd; t++) gain -= base[t];
+                full[k] = gain;
+            }
         }
     } catch (...) { return 3; }
     return 0;

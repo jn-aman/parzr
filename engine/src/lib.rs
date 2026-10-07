@@ -2,6 +2,8 @@
 mod capitalization;
 mod clauses;
 mod compounds;
+#[cfg(feature = "local-model")]
+mod confusion;
 mod context;
 mod contractions;
 #[cfg(feature = "local-model")]

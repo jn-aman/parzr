@@ -12,7 +12,7 @@ fn key(c: char) -> Option<(usize, f32)> {
         .enumerate()
         .find_map(|(row, (keys, shift))| keys.find(c).map(|i| (row, i as f32 + shift)))
 }
-fn adjacent(a: char, b: char) -> bool {
+pub(crate) fn adjacent(a: char, b: char) -> bool {
     match (key(a), key(b)) {
         (Some((r1, x1)), Some((r2, x2))) => {
             a != b && r1.abs_diff(r2) <= 1 && (x1 - x2).abs() <= 1.0
