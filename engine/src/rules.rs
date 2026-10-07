@@ -62,6 +62,11 @@ fn pack() -> &'static Pack {
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/tone.json"))
                 .expect("valid embedded rule pack"),
         );
+        // Real-word confusions and word-choice usage ("their is", "could care less").
+        grammar.extend(
+            serde_json::from_str::<Vec<Rule>>(include_str!("../rules/usage.json"))
+                .expect("valid embedded rule pack"),
+        );
         let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
         for (i, rule) in grammar.iter().enumerate() {
             assert!(!rule.provenance.is_empty(), "rule provenance");
@@ -160,12 +165,57 @@ pub fn phrases() -> &'static PhrasePack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The text after the checker's own fixes, applied until nothing changes (rules only).
+    fn fix(text: &str) -> String {
+        let mut req = crate::Request {
+            text: text.into(),
+            ..crate::Request::default()
+        };
+        for _ in 0..6 {
+            let pass = crate::rewrite_once(&req, false).unwrap();
+            if pass.edits.is_empty() {
+                break;
+            }
+            req.text = pass.text;
+        }
+        req.text
+    }
+    #[test]
+    fn usage_confusions_are_fixed_and_correct_text_never_changes() {
+        let data: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/usage.json")).unwrap();
+        let pairs = data["positives"].as_array().unwrap();
+        let (mut fixed, mut wrong) = (0, vec![]);
+        for p in pairs {
+            let (input, expected) = (p[0].as_str().unwrap(), p[1].as_str().unwrap());
+            match fix(input) {
+                out if out == expected => fixed += 1,
+                out if out == input => {}
+                out => wrong.push(format!("{input} => {out}")),
+            }
+        }
+        let touched: Vec<_> = data["negatives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_str().unwrap())
+            .filter(|n| fix(n) != *n)
+            .collect();
+        eprintln!("usage confusions fixed: {fixed}/{}", pairs.len());
+        assert!(touched.is_empty(), "changed correct text: {touched:?}");
+        assert!(wrong.is_empty(), "wrong rewrites: {wrong:?}");
+        assert!(
+            fixed * 10 >= pairs.len() * 9,
+            "only {fixed} confusions fixed"
+        );
+    }
     #[test]
     fn every_rule_has_provenance_and_fixtures() {
         let grammar: Vec<Rule> =
             serde_json::from_str(include_str!("../rules/grammar.json")).unwrap();
         let tone: Vec<Rule> = serde_json::from_str(include_str!("../rules/tone.json")).unwrap();
-        assert_eq!(grammar.len() + tone.len(), contextual().len());
+        let usage: Vec<Rule> = serde_json::from_str(include_str!("../rules/usage.json")).unwrap();
+        assert_eq!(grammar.len() + tone.len() + usage.len(), contextual().len());
         for c in contextual() {
             assert!(!c.rule.provenance.is_empty());
             assert!(
