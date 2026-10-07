@@ -274,7 +274,9 @@ pub(crate) fn clause_at(tokens: &[Token<'_>], j: usize, end: usize) -> Option<us
         && (!finite_at(tokens, j) || noun_subject)
         && !AUXILIARIES.contains(&w)
         && !SUBORDINATORS.contains(&w)
-        && !PREPOSITIONS.contains(&w)
+        && !preposition(w)
+        // "out of options", "short of time", "kind of tired": a phrase, not a subject.
+        && word(tokens, j + 1) != "of"
         && !PHRASE_BREAKS.contains(&w)
         && !MID_ADVERBS.contains(&w)
         && ![
@@ -306,7 +308,7 @@ pub(crate) fn clause_at(tokens: &[Token<'_>], j: usize, end: usize) -> Option<us
         }
         if MID_ADVERBS.contains(&xw)
             || DETERMINERS.contains(&before)
-            || PREPOSITIONS.contains(&before)
+            || preposition(before)
             || spelling::flags(before) & (4 | 8) == 8 && spelling::flags(xw) & 2 != 0
         {
             continue;
@@ -320,10 +322,34 @@ pub(crate) fn clause_at(tokens: &[Token<'_>], j: usize, end: usize) -> Option<us
         let plural =
             spelling::flags(noun) & 16 != 0 || noun.ends_with('s') && !noun.ends_with("ss");
         if let Some(v) = verb_after(k, plural) {
-            return Some(v);
+            // "a little annoyed": the verb needs a noun before it to be a clause.
+            return has_noun(tokens, j, v).then_some(v);
         }
     }
     None
+}
+/// A preposition, including those `PREPOSITIONS` leaves out because they rarely open a sentence.
+fn preposition(w: &str) -> bool {
+    PREPOSITIONS.contains(&w)
+        || [
+            "of", "to", "into", "onto", "about", "like", "than", "as", "out", "off", "per", "via",
+            "toward", "towards", "across", "between", "among", "against", "despite", "near",
+        ]
+        .contains(&w)
+}
+/// Degree words that make "a little annoyed" or "a bit late" a predicative phrase, not a subject.
+const DEGREE: [&str; 9] = [
+    "little", "bit", "tad", "lot", "kind", "sort", "few", "much", "while",
+];
+/// The words `a..b` hold a noun for a subject: "the old cluster", "urgent ones", "Sam".
+fn has_noun(tokens: &[Token<'_>], a: usize, b: usize) -> bool {
+    tokens[a..b].iter().any(|t| {
+        t.is_word
+            && !DEGREE.contains(&t.normalized.as_str())
+            && (spelling::flags(&t.normalized) & (2 | 16) != 0
+                || t.pos == "Noun"
+                || t.surface.starts_with(char::is_uppercase))
+    })
 }
 /// "can you", "is the slot", "did Maya": an auxiliary before its subject opens a question.
 pub(crate) fn inverted_question(tokens: &[Token<'_>], j: usize, end: usize) -> bool {
@@ -1431,6 +1457,10 @@ mod tests {
                 "The new hire starts on Monday. Let me know when her laptop is ready.",
             ),
             (
+                "The game ran late, the fans went home tired.",
+                "The game ran late. The fans went home tired.",
+            ),
+            (
                 "The library was closed, however, the café next door was open.",
                 "The library was closed. However, the café next door was open.",
             ),
@@ -1451,6 +1481,16 @@ mod tests {
             "The problem is, we don't have time.",
             "Revenue grew last quarter, mostly from new customers.",
             "Long story short, we missed the flight.",
+            "He walked home, a bit disappointed.",
+            "She signed the lease, honestly a little nervous.",
+            "We finished the hike, kind of sore but proud.",
+            "I gave up on the puzzle, out of ideas by midnight.",
+            "The team kept going, short of players all season.",
+            "The kids came back, full of stories about the trip.",
+            "She stayed home, tired but happy.",
+            "He walked into the meeting, coffee in hand.",
+            "We sold the old car, no regrets at all.",
+            "They cancelled the picnic, because of storms in the forecast.",
         ] {
             assert_eq!(fix(text), text);
         }
