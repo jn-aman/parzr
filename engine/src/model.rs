@@ -135,8 +135,8 @@ pub fn swap_scores(
     swaps: &[crate::confusion::Swap],
     screen: f64,
     how: crate::confusion::Use,
-) -> Result<Vec<Option<f64>>, crate::confusion::Unscored> {
-    use crate::confusion::{Unscored, Use};
+) -> Result<crate::confusion::Scored, crate::confusion::Unscored> {
+    use crate::confusion::{Scored, Unscored, Use};
     let unavailable = |_| Unscored::Unavailable;
     let r = runtime().map_err(unavailable)?;
     let score = r.swap_scores.ok_or(Unscored::Unavailable)?;
@@ -155,7 +155,8 @@ pub fn swap_scores(
         spans.push(u32::try_from(s.end).map_err(|_| Unscored::Unavailable)?);
     }
     let count = u32::try_from(swaps.len()).map_err(|_| Unscored::Unavailable)?;
-    // Flags: 1 load when cold, 2 warm in the background when cold, 4 wait when busy, 8 keep warm for typing.
+    // Flags: 1 load when cold, 2 warm in the background when cold, 4 wait when busy, 8 typing (keep warm
+    // longer, score only the most promising swaps in one variant decode).
     let (flags, budget) = match how {
         Use::Typing { budget_ms } => (2 | 8, budget_ms),
         Use::Explicit { budget_ms } => (1 | 4, budget_ms),
@@ -178,10 +179,13 @@ pub fn swap_scores(
         )
     };
     match status {
-        0 => Ok(full
-            .into_iter()
-            .map(|g| g.is_finite().then_some(g))
-            .collect()),
+        0 | 5 => Ok(Scored {
+            gains: full
+                .into_iter()
+                .map(|g| g.is_finite().then_some(g))
+                .collect(),
+            complete: status == 0,
+        }),
         4 => Err(Unscored::OutOfTime),
         _ => Err(Unscored::Unavailable),
     }

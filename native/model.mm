@@ -72,8 +72,8 @@ struct Runtime {
         if (!model) return false;
         auto cp = llama_context_default_params();
         cp.n_ctx = 4096; cp.n_batch = 512; cp.n_ubatch = 128;
-        // Four sequences share one 4096-token cache: sentence-swap variants are scored side by side (about 20 MB of
-        // recurrent state each); generation uses sequence 0 alone.
+        // Four sequences share one 4096-token cache: sentence-swap variants are scored side by side (about 30 MB of
+        // recurrent state and buffers per sequence); generation uses sequence 0 alone.
         cp.n_seq_max = 4; cp.kv_unified = true; cp.n_threads = 2; cp.n_threads_batch = 2;
         cp.no_perf = true;
         context = llama_init_from_model(model, cp);
@@ -87,7 +87,12 @@ struct Runtime {
     }
 };
 // Retained until process exit, so the sleeping timer never references a destroyed mutex.
-Runtime &runtime() { static auto *value = new Runtime; return *value; }
+// Set once the runtime exists: its first construction initializes Metal, which can take seconds.
+std::atomic<bool> constructed{false};
+Runtime &runtime() {
+    static auto *value = [] { auto *r = new Runtime; constructed.store(true); return r; }();
+    return *value;
+}
 void shutdown() {
     auto &r = runtime();
     r.epoch.fetch_add(1);
@@ -347,9 +352,13 @@ extern "C" double parzr_model_name_log_odds(const char *file, const char *text, 
 // Flags: 1 load the model if it is not resident (explicit checks); otherwise a cold model returns 1 at once and, with flag 2, starts
 // loading in the background so a later check finds it warm. Flag 4 waits for a busy runtime; otherwise a busy runtime returns 2.
 // Flag 8 keeps the model resident for kTypingKeep after this call (typing), instead of the usual 30 s.
-// Returns 0 when every swap was scored, 4 when the budget ran out first (later swaps stay NaN), 1 cold, 2 busy, 3 failure.
+// Flag 8 also limits the call to one variant decode (the swaps with the best left scores); when others passed the screen
+// it returns 5, and they stay NaN.
+// Returns 0 when every swap was scored, 4 when the budget ran out first (later swaps stay NaN), 5 when typing scored only
+// the most promising swaps, 1 cold, 2 busy, 3 failure.
 namespace {
-constexpr int kRight = 6, kMaxTokens = 160, kMaxOutputs = 48;
+// A variant decode stays within one 128-token micro-batch: one more costs about as much again.
+constexpr int kRight = 6, kMaxTokens = 160, kMaxOutputs = 48, kGroupTokens = 128;
 constexpr auto kTypingKeep = std::chrono::seconds(180);
 std::atomic<bool> warming{false};
 // One background load at a time; it holds the runtime lock while loading, so checks skip (busy) rather than wait.
@@ -365,7 +374,7 @@ void startWarm(const std::string &path) {
                     llama_token tokens[8];
                     const char *probe = "\nThanks, see you soon.";
                     int n = llama_tokenize(llama_model_get_vocab(rt.model), probe, int(std::strlen(probe)), tokens, 8, false, false);
-                    if (n > 0) llama_decode(rt.context, llama_batch_get_one(tokens, n));
+                    if (n > 0 && llama_decode(rt.context, llama_batch_get_one(tokens, n)) == 0) llama_synchronize(rt.context);
                     llama_memory_clear(llama_get_memory(rt.context), true);
                 }
             } catch (...) {}
@@ -419,6 +428,11 @@ extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, u
     if (!file || !text || !left || !full || (count && (!spans || !candidates))) return 3;
     for (uint32_t i = 0; i < count; i++) left[i] = full[i] = nan;
     const std::string window = std::string("\n") + text;  // a line start: the first word is predicted too
+    // A check that may not load never pays for initializing the runtime either: that happens in the background.
+    if (!(flags & 1) && !constructed.load()) {
+        if (flags & 2) startWarm(file);
+        return 1;
+    }
     auto &r = runtime();
     const auto epoch = r.epoch.load();
     const auto started = Clock::now();
@@ -501,18 +515,26 @@ extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, u
                 for (int i = chunk; i < end - 1; i++) {
                     const float *row = llama_get_logits_ith(r.context, i);
                     if (!row) return 3;
-                    base[i + 1] = double(row[original[i + 1]]) - logNormalizer(row, vocabSize);
+                    // A left score is a difference of two logits (no normalizer). The original's log-prob of a token is
+                    // needed only where a swap that passed the screen is compared (its change and the tokens after it).
+                    bool needed = false;
                     for (uint32_t k = 0; k < count; k++) {
                         const auto &s = swaps[k];
                         if (s.first == i + 1) left[k] = double(row[s.tokens[s.first]]) - double(row[original[s.first]]);
+                        needed = needed || (s.first > 0 && s.first <= i + 1 && i + 1 < n - s.suffix + std::min(kRight, s.suffix) && left[k] >= screen);
+                        needed = needed || (s.first > 0 && s.suffix > 0 && i + 1 == n - s.suffix);
                     }
+                    if (needed) base[i + 1] = double(row[original[i + 1]]) - logNormalizer(row, vocabSize);
                 }
             }
         }
         // Full-context variant passes, most promising first, until the budget runs out.
         std::vector<uint32_t> order;
         for (uint32_t k = 0; k < count; k++) if (swaps[k].first > 0 && std::isfinite(left[k]) && left[k] >= screen) order.push_back(k);
-        std::sort(order.begin(), order.end(), [&](uint32_t x, uint32_t y) { return left[x] > left[y]; });
+        // Most promising first: a high left score, and a typed word that makes the next token improbable (a slip
+        // shows in what follows it: "I think the already").
+        auto priority = [&](uint32_t k) { return left[k] - (swaps[k].suffix > 0 ? base[n - swaps[k].suffix] : 0.0); };
+        std::sort(order.begin(), order.end(), [&](uint32_t x, uint32_t y) { return priority(x) > priority(y); });
         // Variants run side by side as separate sequences (the recurrent layers cannot share a prefix), up to
         // kSeqs per decode and kMaxOutputs logits rows, and each stops kRight tokens after its change.
         const int seqs = int(llama_n_seq_max(r.context));
@@ -524,7 +546,7 @@ extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, u
             for (; next < order.size() && int(group.size()) < seqs; next++) {
                 const auto &s = swaps[order[next]];
                 const int end = int(s.tokens.size()) - s.suffix + std::min(kRight, s.suffix);
-                if (!group.empty() && (outputs + end - s.first + 1 > kMaxOutputs || tokensIn + end > 512)) break;
+                if (!group.empty() && (outputs + end - s.first + 1 > kMaxOutputs || tokensIn + end > kGroupTokens)) break;
                 group.push_back(order[next]); tokensIn += end; outputs += end - s.first + 1;
             }
             llama_batch batch = llama_batch_init(tokensIn, 0, 1);
@@ -557,6 +579,7 @@ extern "C" int32_t parzr_model_swap_scores(const char *file, const char *text, u
                 for (int t = s.first; t < originalEnd; t++) gain -= base[t];
                 full[k] = gain;
             }
+            if ((flags & 8) && next < order.size()) return 5;
         }
     } catch (...) { return 3; }
     return 0;

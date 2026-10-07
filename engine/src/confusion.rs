@@ -14,8 +14,12 @@
 use crate::{Edit, Request, TextRange, real_word, spelling, tokenizer};
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Mutex, OnceLock},
-    time::Instant,
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    time::{Duration, Instant},
 };
 
 /// A candidate must be at least this frequent (Zipf x 100): about the 2,000 most frequent words.
@@ -44,8 +48,11 @@ const FOREIGN: &[&str] = &[
 /// A candidate whose first token is this much less likely than the typed one from the left context
 /// alone is not worth a full-sentence pass.
 pub const SCREEN: f64 = -4.0;
-/// Model time per check while typing; a check that runs out leaves the rest for the next one.
+/// The longest a typing check waits for the model. Scoring runs in one background job; a sentence it
+/// has not finished by then is ready, from the cache, on a later check.
 const TYPING_BUDGET_MS: u32 = 80;
+/// The background job's own model budget (one original and one variant decode take ~60-110 ms).
+const TYPING_JOB_MS: u32 = 600;
 const EXPLICIT_BUDGET_MS: u32 = 4000;
 /// Sentences longer than this are not scored (the window is one sentence).
 const MAX_PIECE_BYTES: usize = 400;
@@ -263,8 +270,15 @@ pub enum Unscored {
     /// The budget ran out before every swap was scored.
     OutOfTime,
 }
-/// The full-sentence gain of each swap (None: screened out by its left context).
-pub type Scorer<'a> = dyn Fn(&str, &[Swap], Use) -> Result<Vec<Option<f64>>, Unscored> + 'a;
+/// The full-sentence gain of each swap (None: not scored, as when its left context screened it out).
+/// A typing check scores only the most promising swaps in one variant decode; `complete` says whether
+/// every swap that passed the screen was scored.
+pub struct Scored {
+    pub gains: Vec<Option<f64>>,
+    pub complete: bool,
+}
+/// A plain function, so a typing check can hand it to the background job.
+pub type Scorer = fn(&str, &[Swap], Use) -> Result<Scored, Unscored>;
 
 /// The swaps a sentence's words could take. `skip` holds sentence-relative byte ranges that must stay.
 pub fn sentence_swaps(sentence: &str, skip: &[(usize, usize)]) -> Vec<Swap> {
@@ -350,19 +364,26 @@ pub fn choose(swaps: &[Swap], gains: &[Option<f64>]) -> Option<(Swap, f64)> {
     best
 }
 
+/// A sentence's verdict, and whether every swap that passed the screen was scored (a typing verdict
+/// may not be; an explicit check then scores the sentence again).
+type Verdict = (Option<(Swap, f64)>, bool);
 #[derive(Default)]
 struct Cache {
-    map: HashMap<String, Option<(Swap, f64)>>,
+    map: HashMap<String, Verdict>,
     order: VecDeque<String>,
 }
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
-fn cached(sentence: &str) -> Option<Option<(Swap, f64)>> {
+fn cached(sentence: &str) -> Option<Verdict> {
     CACHE.lock().ok()?.as_ref()?.map.get(sentence).cloned()
 }
-fn remember(sentence: &str, verdict: Option<(Swap, f64)>) {
+fn remember(sentence: &str, verdict: Option<(Swap, f64)>, complete: bool) {
     if let Ok(mut guard) = CACHE.lock() {
         let cache = guard.get_or_insert_with(Cache::default);
-        if cache.map.insert(sentence.to_owned(), verdict).is_none() {
+        if cache
+            .map
+            .insert(sentence.to_owned(), (verdict, complete))
+            .is_none()
+        {
             cache.order.push_back(sentence.to_owned());
             if cache.order.len() > CACHE_ENTRIES
                 && let Some(old) = cache.order.pop_front()
@@ -376,16 +397,55 @@ fn remember(sentence: &str, verdict: Option<(Swap, f64)>) {
 /// The rules' (and grammar model's) plan plus the language model's swaps, which never touch an edit
 /// of theirs, a protected range, a name or a user dictionary word.
 pub fn combine(req: &Request, protected: &[TextRange], plan: Vec<Edit>) -> Vec<Edit> {
-    combine_with(req, protected, plan, &native)
+    combine_with(req, protected, plan, native)
 }
-fn native(sentence: &str, swaps: &[Swap], how: Use) -> Result<Vec<Option<f64>>, Unscored> {
+/// Scores a sentence and caches its verdict. Explicit checks call it directly; typing runs it in
+/// the background job. A cold or busy model leaves the sentence for a later check; a typing job that
+/// runs out of time marks the sentence done for typing (explicit checks score it again).
+fn score_sentence(piece: &str, swaps: &[Swap], how: Use, scorer: Scorer) -> Option<Verdict> {
+    let verdict = match scorer(piece, swaps, how) {
+        Ok(scored) if scored.gains.len() == swaps.len() => {
+            (choose(swaps, &scored.gains), scored.complete)
+        }
+        Err(Unscored::OutOfTime) if matches!(how, Use::Typing { .. }) => (None, false),
+        _ => return None,
+    };
+    remember(piece, verdict.0.clone(), verdict.1);
+    Some(verdict)
+}
+/// True while the typing job runs: at most one, so typing never queues work on the model.
+static JOB: AtomicBool = AtomicBool::new(false);
+/// Starts the typing job for one sentence and waits for it at most `wait`.
+fn typing_job(piece: &str, swaps: Vec<Swap>, scorer: Scorer, wait: Duration) -> Option<Verdict> {
+    if JOB.swap(true, Ordering::AcqRel) {
+        return None;
+    }
+    let (send, receive) = mpsc::channel();
+    let piece = piece.to_owned();
+    let spawned = std::thread::Builder::new()
+        .name("parzr-sentence-swaps".into())
+        .spawn(move || {
+            let how = Use::Typing {
+                budget_ms: TYPING_JOB_MS,
+            };
+            let verdict = score_sentence(&piece, &swaps, how, scorer);
+            JOB.store(false, Ordering::Release);
+            let _ = send.send(verdict);
+        });
+    if spawned.is_err() {
+        JOB.store(false, Ordering::Release);
+        return None;
+    }
+    receive.recv_timeout(wait).ok().flatten()
+}
+fn native(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
     crate::model::swap_scores(sentence, swaps, SCREEN, how)
 }
 pub fn combine_with(
     req: &Request,
     protected: &[TextRange],
     plan: Vec<Edit>,
-    scorer: &Scorer,
+    scorer: Scorer,
 ) -> Vec<Edit> {
     let text = req.text.as_str();
     let started = Instant::now();
@@ -411,39 +471,29 @@ pub fn combine_with(
             continue;
         }
         let verdict = match cached(piece) {
-            Some(hit) => hit,
-            None => {
+            Some((hit, complete)) if complete || !req.deep => hit,
+            _ => {
                 let spent = started.elapsed().as_millis() as u32;
                 if spent >= total {
                     continue;
                 }
                 let swaps = sentence_swaps(piece, &[]);
                 if swaps.is_empty() {
-                    remember(piece, None);
+                    remember(piece, None, true);
                     continue;
                 }
-                let how = if req.deep {
-                    Use::Explicit {
+                let verdict = if req.deep {
+                    let how = Use::Explicit {
                         budget_ms: total - spent,
-                    }
+                    };
+                    score_sentence(piece, &swaps, how, scorer)
                 } else {
-                    Use::Typing {
-                        budget_ms: total - spent,
-                    }
+                    let wait = Duration::from_millis(u64::from(total - spent));
+                    typing_job(piece, swaps, scorer, wait)
                 };
-                // A cold or busy model leaves the sentence for the next check. While typing, a sentence
-                // that cannot be scored within the whole budget is left to explicit checks, so it never
-                // holds up the sentences after it.
-                let gains = match scorer(piece, &swaps, how) {
-                    Ok(gains) if gains.len() == swaps.len() => gains,
-                    Err(Unscored::OutOfTime) if !req.deep && spent == 0 => {
-                        remember(piece, None);
-                        continue;
-                    }
-                    _ => continue,
+                let Some((verdict, _)) = verdict else {
+                    continue;
                 };
-                let verdict = choose(&swaps, &gains);
-                remember(piece, verdict.clone());
                 verdict
             }
         };
@@ -597,15 +647,19 @@ mod tests {
         assert!(choose(&swaps[..1], &[Some(THRESHOLD - 0.1)]).is_none());
         assert!(choose(&swaps[..1], &[None]).is_none());
     }
-    fn fake(sentence: &str, swaps: &[Swap], _: Use) -> Result<Vec<Option<f64>>, Unscored> {
+    fn fake(sentence: &str, swaps: &[Swap], _: Use) -> Result<Scored, Unscored> {
         let good = [("on", "in"), ("form", "from")];
-        Ok(swaps
+        let gains = swaps
             .iter()
             .map(|s| {
                 let pair = (&sentence[s.start..s.end], s.candidate.as_str());
                 Some(if good.contains(&pair) { 12.0 } else { -5.0 })
             })
-            .collect())
+            .collect();
+        Ok(Scored {
+            gains,
+            complete: true,
+        })
     }
     fn run(text: &str, dictionary: &[&str], protected: &[TextRange]) -> Vec<(String, String)> {
         let req = Request {
@@ -614,7 +668,7 @@ mod tests {
             deep: true,
             ..Request::default()
         };
-        combine_with(&req, protected, vec![], &fake)
+        combine_with(&req, protected, vec![], fake)
             .into_iter()
             .map(|e| (e.original, e.replacement))
             .collect()
@@ -637,8 +691,34 @@ mod tests {
             deep: true,
             ..Request::default()
         };
-        let cold = |_: &str, _: &[Swap], _: Use| Err(Unscored::Unavailable);
-        assert!(combine_with(&req, &[], vec![], &cold).is_empty());
+        fn cold(_: &str, _: &[Swap], _: Use) -> Result<Scored, Unscored> {
+            Err(Unscored::Unavailable)
+        }
+        assert!(combine_with(&req, &[], vec![], cold).is_empty());
+    }
+    #[test]
+    fn typing_never_waits_past_its_budget_and_the_answer_comes_from_the_cache() {
+        fn slow(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
+            std::thread::sleep(Duration::from_millis(300));
+            fake(sentence, swaps, how)
+        }
+        let req = Request {
+            text: "We'll be on the platform at noon.".into(),
+            gec: true,
+            ..Request::default()
+        };
+        let started = Instant::now();
+        assert!(combine_with(&req, &[], vec![], slow).is_empty());
+        assert!(started.elapsed() < Duration::from_millis(250));
+        // The job finishes in the background; a later check reads its verdict.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut edits = vec![];
+        while edits.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+            edits = combine_with(&req, &[], vec![], slow);
+        }
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].replacement, "in");
     }
     /// Latency harness: PARZR_LATENCY=in.jsonl:out.jsonl:typing|explicit times `combine` (the time this
     /// checker adds to a check) on each line's text, back to back, as the app would call it.
@@ -653,8 +733,23 @@ mod tests {
             parts.next().unwrap(),
             parts.next().unwrap(),
         );
+        // PARZR_LATENCY_GAP_MS: a pause before each check, as between bursts of typing.
+        let gap = std::env::var("PARZR_LATENCY_GAP_MS")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0);
+        // PARZR_LATENCY_WARMUP_MS: a pause after the first check, so the model is resident (warm numbers).
+        let warmup = std::env::var("PARZR_LATENCY_WARMUP_MS")
+            .ok()
+            .and_then(|g| g.parse().ok())
+            .unwrap_or(0);
         let mut out = std::fs::File::create(output).unwrap();
-        for line in std::fs::read_to_string(input).unwrap().lines() {
+        for (i, line) in std::fs::read_to_string(input).unwrap().lines().enumerate() {
+            std::thread::sleep(std::time::Duration::from_millis(if i == 1 {
+                warmup
+            } else {
+                gap
+            }));
             let item: serde_json::Value = serde_json::from_str(line).unwrap();
             let text = item["text"].as_str().or(item["input"].as_str()).unwrap();
             let req = Request {
@@ -666,7 +761,11 @@ mod tests {
             let started = Instant::now();
             let edits = combine(&req, &[], vec![]);
             let ms = started.elapsed().as_secs_f64() * 1000.0;
-            let record = serde_json::json!({"id": item["id"], "ms": ms, "edits": edits.len()});
+            let fixes: Vec<_> = edits
+                .iter()
+                .map(|e| serde_json::json!([e.start_utf16, e.end_utf16, e.replacement]))
+                .collect();
+            let record = serde_json::json!({"id": item["id"], "ms": ms, "edits": edits.len(), "fixes": fixes});
             writeln!(out, "{record}").unwrap();
         }
     }
@@ -695,7 +794,7 @@ mod tests {
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
                 let scored: Vec<_> = swaps
                     .iter()
-                    .zip(gains.unwrap_or_else(|_| vec![None; swaps.len()]))
+                    .zip(gains.map_or_else(|_| vec![None; swaps.len()], |s| s.gains))
                     .filter_map(|(s, g)| {
                         Some(serde_json::json!([
                             a + s.start,
