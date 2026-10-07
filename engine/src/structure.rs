@@ -906,7 +906,12 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         if let Some(boundary) = edits
             .iter()
             .filter(|e| {
-                e.rule_id == "punctuation.missing_sentence_boundary"
+                [
+                    "punctuation.missing_sentence_boundary",
+                    "punctuation.comma_splice",
+                    "punctuation.run_on",
+                ]
+                .contains(&e.rule_id.as_str())
                     && e.start_utf16 <= t.start_utf16
             })
             .map(|e| e.start_utf16)
@@ -930,6 +935,12 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         // The time word governs its own clause: not one before a semicolon, and not a clause
         // already written in the present ("... yesterday ...; it is only now that it has been").
         let frame = clause_prefix.rsplit([';', ':']).next().unwrap_or("");
+        // Nor one before ", yet" or ", but": "last month, yet nothing has happened".
+        let frame = [", yet ", ", but "]
+            .iter()
+            .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
+            .max()
+            .map_or(frame, |at| &frame[at..]);
         let markers = ["yesterday", "last week", "last month", "last night"];
         let present_frame = markers
             .iter()

@@ -1,9 +1,11 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
+mod clauses;
 mod context;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
+mod marks;
 #[cfg(feature = "local-model")]
 mod model;
 mod morphology;
@@ -445,6 +447,13 @@ fn starts_sentence(text: &str, byte: usize, req: &Request) -> bool {
         && !(before.ends_with('.')
             && tokenizer::abbreviation_continues(text, before.len() - 1)
             && !text[byte..].starts_with(char::is_uppercase))
+        // "Hmm... let me think": a lowercase word after an ellipsis goes on with the sentence.
+        && !((before.ends_with("..") || before.ends_with('…'))
+            && text[byte..].starts_with(char::is_lowercase))
+        // "“Where are you? she asked": the mark ends the quotation, not the sentence.
+        && !(before.ends_with(['!', '?'])
+            && text[byte..].starts_with(char::is_lowercase)
+            && marks::inside_open_quote(text, before.len() - 1))
 }
 fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String> {
     let started = Instant::now();
@@ -851,22 +860,30 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .zip(e.replacement.chars())
                 .all(|(a, b)| a == b || a.is_lowercase() && b.to_lowercase().eq([a]))
     };
+    // "Sarahs laptop" to "Sarah's laptop": an apostrophe added to or dropped from a name keeps
+    // every letter of it.
+    let apostrophe_only = |e: &Edit| {
+        e.rule_id == "punctuation.apostrophe"
+            && e.original.replace(['\'', '’'], "") == e.replacement.replace(['\'', '’'], "")
+    };
     let blocked = |e: &Edit| {
-        protected
-            .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !(raises_case(e) && tagged(r)))
-            || !case_only(e)
-                && if e.start_utf16 != e.end_utf16 {
-                    guard
+        protected.iter().any(|r| {
+            overlaps(e.start_utf16, e.end_utf16, r)
+                && !(raises_case(e) && tagged(r))
+                && !(apostrophe_only(e) && tagged(r))
+        }) || !case_only(e)
+            && !apostrophe_only(e)
+            && if e.start_utf16 != e.end_utf16 {
+                guard
+                    .iter()
+                    .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+            } else {
+                // An insertion may not split a name ("Aman. Jain"); a possessive space may.
+                e.rule_id != "spelling.possessive_boundary"
+                    && guard
                         .iter()
-                        .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
-                } else {
-                    // An insertion may not split a name ("Aman. Jain"); a possessive space may.
-                    e.rule_id != "spelling.possessive_boundary"
-                        && guard
-                            .iter()
-                            .any(|r| e.start_utf16 > r.start_utf16 && e.start_utf16 < r.end_utf16)
-                }
+                        .any(|r| e.start_utf16 > r.start_utf16 && e.start_utf16 < r.end_utf16)
+            }
     };
     let blocked_groups: std::collections::HashSet<_> = edits
         .iter()
