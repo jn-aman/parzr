@@ -31,7 +31,8 @@ const CODE_MIXED: usize = 2;
 const TYPING_BUDGET: usize = 24;
 const EXPLICIT_BUDGET: usize = 512;
 
-/// Extra holds on the model's tags, tuned on BEA dev (see the commit log); `Gates::NONE` is the reference decoder.
+/// Extra holds on the model's tags, tuned on BEA dev and then per class on the held-out dev set
+/// (see the commit log); `Gates::NONE` is the reference decoder.
 #[derive(Clone, Copy)]
 pub struct Gates {
     /// A tag needs at least this detection probability of "incorrect" at its word.
@@ -40,6 +41,14 @@ pub struct Gates {
     pub replace: f32,
     /// So does appending a comma, which published prose uses freely.
     pub comma: f32,
+    /// A swap that only changes number ("is" and "are", "this" and "these", a verb with or without
+    /// its "-s"): the model is reliable here, so it needs less than MIN_PROBABILITY.
+    pub number: f32,
+    /// "a" and "an", "much" and "many", "less" and "fewer".
+    pub quantity: f32,
+    /// An added word other than a preposition ("been", "will", "the"): the model often adds a tense
+    /// or an article the writer did not need.
+    pub append_word: f32,
     /// A held-back tag also holds the verb-form and agreement tags this many words around it
     /// ("Did you eat" to "Have you eaten" must not become "Did you eaten").
     pub verb_window: usize,
@@ -50,15 +59,99 @@ impl Gates {
         detection: 0.0,
         replace: 0.0,
         comma: 0.0,
+        number: 0.0,
+        quantity: 0.0,
+        append_word: 0.0,
         verb_window: 0,
     };
     pub const PRODUCTION: Gates = Gates {
         detection: 0.3,
         replace: 0.83,
         comma: 0.82,
+        number: 0.6,
+        quantity: 0.7,
+        append_word: 0.8,
         verb_window: 2,
     };
+    /// The probability a tag on `token` needs; MIN_PROBABILITY unless its class has its own floor.
+    fn floor(&self, label: &str, token: &str) -> f32 {
+        let gate = match TagClass::of(label, token) {
+            TagClass::Number => self.number,
+            TagClass::Quantity => self.quantity,
+            TagClass::Replace => self.replace,
+            TagClass::Comma => self.comma,
+            TagClass::AppendWord => self.append_word,
+            TagClass::Other => 0.0,
+        };
+        if gate > 0.0 { gate } else { MIN_PROBABILITY }
+    }
 }
+#[derive(Debug, PartialEq)]
+enum TagClass {
+    Number,
+    Quantity,
+    Replace,
+    Comma,
+    AppendWord,
+    Other,
+}
+impl TagClass {
+    fn of(label: &str, token: &str) -> Self {
+        let pair = |list: &[(&str, &str)], to: &str| {
+            let (a, b) = (token.to_lowercase().replace('’', "'"), to.to_lowercase());
+            list.iter()
+                .any(|(x, y)| (a == *x && b == *y) || (a == *y && b == *x))
+        };
+        if ["$TRANSFORM_VERB_VB_VBZ", "$TRANSFORM_VERB_VBZ_VB"].contains(&label) {
+            return Self::Number;
+        }
+        if let Some(to) = label.strip_prefix("$REPLACE_") {
+            if pair(&NUMBER_PAIRS, to) {
+                return Self::Number;
+            }
+            if pair(&QUANTITY_PAIRS, to) {
+                return Self::Quantity;
+            }
+            return Self::Replace;
+        }
+        match label.strip_prefix("$APPEND_") {
+            Some(",") => Self::Comma,
+            Some(w)
+                if w.chars().any(char::is_alphanumeric)
+                    && !PREPOSITIONS.contains(&w.to_lowercase().as_str()) =>
+            {
+                Self::AppendWord
+            }
+            _ => Self::Other,
+        }
+    }
+}
+const NUMBER_PAIRS: [(&str, &str); 15] = [
+    ("is", "are"),
+    ("was", "were"),
+    ("has", "have"),
+    ("do", "does"),
+    ("doesn't", "don't"),
+    ("isn't", "aren't"),
+    ("wasn't", "weren't"),
+    ("hasn't", "haven't"),
+    ("this", "these"),
+    ("that", "those"),
+    ("'s", "are"),
+    ("'s", "were"),
+    ("am", "is"),
+    ("am", "are"),
+    ("does", "don't"),
+];
+const QUANTITY_PAIRS: [(&str, &str); 4] = [
+    ("much", "many"),
+    ("less", "fewer"),
+    ("little", "few"),
+    ("a", "an"),
+];
+const PREPOSITIONS: [&str; 11] = [
+    "to", "of", "in", "on", "at", "for", "about", "with", "from", "by", "into",
+];
 
 type Logits = (Vec<f32>, Vec<f32>);
 pub type Forward<'a> = dyn Fn(&[i32]) -> Option<Logits> + 'a;
@@ -76,6 +169,8 @@ pub struct Gec {
 pub struct Corrected {
     pub text: String,
     pub confidence: f32,
+    /// Words written by a verb-form tag.
+    pub verbs: Vec<String>,
 }
 impl Gec {
     pub fn load(dir: &Path) -> Result<Self, String> {
@@ -138,51 +233,39 @@ impl Gec {
         let mut worst = 0f32;
         let mut tags = vec![];
         let mut held: Vec<usize> = vec![];
-        for &p in &firsts {
+        let g = self.gates;
+        for (word, &p) in firsts.iter().enumerate() {
             let row = &labels[p * LABELS..(p + 1) * LABELS];
-            let (mut top, mut at) = (f32::MIN, 0);
+            let top = row.iter().copied().fold(f32::MIN, f32::max);
+            let sum: f32 = row.iter().map(|x| (x - top).exp()).sum();
+            // Softmax; the best correction must beat $KEEP with its bonus (a tie keeps the word).
+            let keep_p = (row[self.keep] - top).exp() / sum;
+            let (mut best, mut at) = (f32::MIN, 0);
             for (i, x) in row.iter().enumerate() {
-                if *x > top {
-                    (top, at) = (*x, i);
+                if i != self.keep && i != 0 && *x > best {
+                    (best, at) = (*x, i);
                 }
             }
-            let sum: f32 = row.iter().map(|x| (x - top).exp()).sum();
-            // Softmax, then the bonus on $KEEP; the first index wins a tie, as argmax does.
-            let keep_p = (row[self.keep] - top).exp() / sum + KEEP_CONFIDENCE;
-            let top_p = 1.0 / sum
-                + if at == self.keep {
-                    KEEP_CONFIDENCE
-                } else {
-                    0.0
-                };
-            let (best, best_p) =
-                if at != self.keep && (keep_p > top_p || (keep_p == top_p && self.keep < at)) {
-                    (self.keep, keep_p)
-                } else {
-                    (at, top_p)
-                };
+            let best_p = (best - top).exp() / sum;
             let (a, b) = (detect[p * 2], detect[p * 2 + 1]);
             let incorrect = 1.0 / (1.0 + (a - b).exp());
             worst = worst.max(incorrect);
-            let label = self.labels.get(best).map_or("", String::as_str);
-            let g = self.gates;
-            if best != self.keep
-                && (incorrect < g.detection
-                    || (label.starts_with("$REPLACE_") && best_p < g.replace)
-                    || (label == "$APPEND_," && best_p < g.comma)
-                    || best_p < MIN_PROBABILITY)
-            {
+            if best_p <= keep_p + KEEP_CONFIDENCE {
+                tags.push((self.keep, 1.0));
+                continue;
+            }
+            let label = self.labels.get(at).map_or("", String::as_str);
+            let token = tokens.get(word).map_or("", String::as_str);
+            if incorrect < g.detection || best_p < g.floor(label, token) {
                 held.push(tags.len());
                 tags.push((self.keep, 1.0));
                 continue;
             }
-            tags.push((best, best_p));
+            tags.push((at, best_p));
         }
         // Corrections lean on their neighbours: a held-back tag takes the verb-form tags near it along.
         for h in held {
-            for i in h.saturating_sub(self.gates.verb_window)
-                ..(h + self.gates.verb_window + 1).min(tags.len())
-            {
+            for i in h.saturating_sub(g.verb_window)..(h + g.verb_window + 1).min(tags.len()) {
                 let label = self.labels.get(tags[i].0).map_or("", String::as_str);
                 if label.starts_with("$TRANSFORM_VERB_")
                     || label.starts_with("$TRANSFORM_AGREEMENT_")
@@ -191,11 +274,9 @@ impl Gec {
                 }
             }
         }
-        // A sentence the detector finds clean, and any tag the model is unsure of, stay as they are.
-        for tag in &mut tags {
-            if worst < MIN_PROBABILITY || tag.1 < MIN_PROBABILITY {
-                *tag = (self.keep, 1.0);
-            }
+        // A sentence the detector finds clean stays as it is.
+        if worst < MIN_PROBABILITY {
+            tags.fill((self.keep, 1.0));
         }
         Some(tags)
     }
@@ -260,11 +341,7 @@ impl Gec {
                 }
             }
             "AGREEMENT_PLURAL" => format!("{token}s"),
-            "AGREEMENT_SINGULAR" => {
-                let mut s = token.to_owned();
-                s.pop();
-                s
-            }
+            "AGREEMENT_SINGULAR" => singular_of(token),
             "SPLIT_HYPHEN" => token.split('-').collect::<Vec<_>>().join(" "),
             verb => self
                 .decode
@@ -280,18 +357,26 @@ impl Gec {
             return Some(Corrected {
                 text: piece.to_owned(),
                 confidence: 1.0,
+                verbs: vec![],
             });
         }
         let mut tokens = vec!["$START".to_owned()];
         tokens.extend(words.iter().map(|w| w.text.clone()));
         let mut confidence = 1f32;
+        let mut verbs = vec![];
         for _ in 0..ITERATIONS {
             let tags = self.predict(&tokens, forward)?;
             let mut changed = false;
-            for (id, p) in &tags {
+            for (token, (id, p)) in tokens.iter().zip(&tags) {
                 if *id != self.keep && *id != 0 {
                     changed = true;
                     confidence = confidence.min(*p);
+                    let label = self.labels.get(*id).map_or("", String::as_str);
+                    if label.starts_with("$TRANSFORM_VERB_")
+                        && let Some(word) = self.process(token, label)
+                    {
+                        verbs.push(word);
+                    }
                 }
             }
             if !changed {
@@ -304,11 +389,24 @@ impl Gec {
             return None;
         }
         let new: Vec<String> = joined.split(' ').map(str::to_owned).collect();
+        let text = reattach(piece, &words, &new);
         Some(Corrected {
-            text: reattach(piece, &words, &new),
+            text,
             confidence,
+            verbs,
         })
     }
+}
+
+/// $TRANSFORM_AGREEMENT_SINGULAR drops the final "s". "Its so good" is read as "It is", and the
+/// word meant there is "it's", not "it".
+fn singular_of(token: &str) -> String {
+    if token.eq_ignore_ascii_case("its") {
+        return format!("{}'s", &token[..2]);
+    }
+    let mut s = token.to_owned();
+    s.pop();
+    s
 }
 
 // Python difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes(), so token diffs match the reference.
@@ -455,12 +553,14 @@ pub fn reattach(piece: &str, words: &[Word], new: &[String]) -> String {
 }
 
 /// A correction inside one sentence (byte offsets relative to it).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Raw {
     pub start: usize,
     pub end: usize,
     pub replacement: String,
     pub confidence: f32,
+    /// The new words came from a verb-form tag: a verb inflected, never a noun made plural.
+    pub verb: bool,
 }
 fn diff_tokens() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -485,20 +585,35 @@ pub fn diff_edits(orig: &str, new: &str, confidence: f32) -> Vec<Raw> {
         if op == 'e' {
             continue;
         }
-        let (start, end, replacement) = if i1 < i2 {
-            let rep = if j1 < j2 {
-                &new[b[j1].0..b[j2 - 1].1]
+        // The space between two old tokens, and whether two new tokens touch.
+        let gap = |i: usize| &orig[a[i - 1].1..a[i].0];
+        let glued = |j: usize| b[j - 1].1 == b[j].0;
+        let (start, end, replacement) = if i1 < i2 && j1 < j2 {
+            if i1 > 0 && j1 > 0 && !gap(i1).is_empty() && glued(j1) {
+                // "payment please" to "payment. Please": the new first token joins the word before.
+                (a[i1 - 1].1, a[i2 - 1].1, &new[b[j1 - 1].1..b[j2 - 1].1])
             } else {
-                ""
-            };
-            (a[i1].0, a[i2 - 1].1, rep)
+                (a[i1].0, a[i2 - 1].1, &new[b[j1].0..b[j2 - 1].1])
+            }
+        } else if i1 < i2 {
+            // A deleted word takes one of its spaces along, so no double space is left behind.
+            if i1 > 0 && !gap(i1).is_empty() {
+                (a[i1 - 1].1, a[i2 - 1].1, "")
+            } else if i1 == 0 && i2 < a.len() && !gap(i2).is_empty() {
+                (a[i1].0, a[i2].0, "")
+            } else {
+                (a[i1].0, a[i2 - 1].1, "")
+            }
         } else if j1 > 0
             && i1 > 0
-            && !new[..b[j1].0]
+            && (!new[..b[j1].0]
                 .chars()
                 .next_back()
                 .is_some_and(char::is_whitespace)
+                || i1 < a.len() && gap(i1).is_empty())
         {
+            // Inserted after the word before: right after it ("entrance."), or before a token
+            // glued to it ("worried" + " about" + "?").
             (a[i1 - 1].1, a[i1 - 1].1, &new[b[j1 - 1].1..b[j2 - 1].1])
         } else if i1 < a.len() && j2 < b.len() {
             (a[i1].0, a[i1].0, &new[b[j1].0..b[j2].0])
@@ -512,6 +627,7 @@ pub fn diff_edits(orig: &str, new: &str, confidence: f32) -> Vec<Raw> {
             end,
             replacement: replacement.to_owned(),
             confidence,
+            verb: false,
         });
     }
     edits
@@ -711,18 +827,118 @@ fn invents_a_word(text: &str, replacement: &str) -> bool {
         .map(|w| w.strip_suffix("'s").or(w.strip_suffix("’s")).unwrap_or(w))
         .any(|w| !spelling::known(w) && !lower.contains(&w.to_lowercase()))
 }
-/// "the" swapped for "a" or "an" or back: the choice of article is the writer's.
-/// "thanks for the fix" is gratitude, "thanks to the fix" a cause: after thanks the "for" is the writer's.
+/// "thanks for the fix" is gratitude, "thanks to the fix" a cause: after thanks the "for" is the
+/// writer's, and so is it after "grateful" or "thankful". American English waits "on" a build as
+/// well as "for" it.
 fn thanks_for(text: &str, start: usize, original: &str) -> bool {
     let before = text[..start].trim_end().to_lowercase();
-    original.trim().eq_ignore_ascii_case("for")
-        && (before.ends_with("thanks") || before.ends_with("thank you"))
+    let last = before
+        .rsplit(|c: char| !c.is_alphabetic())
+        .next()
+        .unwrap_or("");
+    let o = original.trim().to_lowercase();
+    o == "for"
+        && (["thanks", "grateful", "thankful"].contains(&last) || before.ends_with("thank you"))
+        || o == "on" && ["wait", "waits", "waiting", "waited"].contains(&last)
 }
-fn swaps_article(original: &str, replacement: &str) -> bool {
-    let art = |w: &str| ["the", "a", "an"].contains(&w.to_lowercase().as_str());
-    art(original.trim())
-        && art(replacement.trim())
-        && original.trim().to_lowercase() != replacement.trim().to_lowercase()
+/// "the" for "a" (or back) is the writer's choice. "a" for "an" (or back) is a matter of sound, kept
+/// when the next word's spelling agrees with it.
+fn swaps_article(text: &str, end: usize, original: &str, replacement: &str) -> bool {
+    let (o, r) = (
+        original.trim().to_lowercase(),
+        replacement.trim().to_lowercase(),
+    );
+    let art = |w: &str| ["the", "a", "an"].contains(&w);
+    if !art(&o) || !art(&r) || o == r {
+        return false;
+    }
+    if o == "the" || r == "the" {
+        return true;
+    }
+    let next = text[end..].split_whitespace().next().unwrap_or("");
+    crate::determiners::an_fits(next).is_none_or(|an| an != (r == "an"))
+}
+/// Words the model may delete outright: articles, prepositions, auxiliaries and other function words.
+/// A contracted auxiliary ("'ve", "'s") is not among them: without it the tense changes.
+/// Deleting any other word ("always", "new", "never") loses what the writer said; when it sits in
+/// the wrong place the fix is to move it, which a deletion alone is not.
+const DELETABLE: [&str; 70] = [
+    "a", "an", "the", "to", "of", "for", "in", "on", "at", "about", "into", "onto", "with", "by",
+    "from", "up", "back", "out", "over", "so", "and", "but", "or", "that", "then", "than", "as",
+    "is", "are", "was", "were", "be", "been", "being", "am", "has", "have", "had", "do", "does",
+    "did", "will", "would", "can", "could", "should", "shall", "may", "might", "must", "more",
+    "most", "very", "too", "much", "it", "there", "if", "just", "i", "you", "he", "she", "we",
+    "they", "me", "him", "her", "us", "them",
+];
+fn drops_meaning(text: &str, edit: Span, original: &str, replacement: &str) -> bool {
+    let o = original.trim().to_lowercase().replace('’', "'");
+    if let Some(rest) = o.strip_prefix(&replacement.trim().to_lowercase())
+        && ["'ve", "'re", "'d", "'ll", "'s", "'m"].contains(&rest)
+    {
+        return true;
+    }
+    if !replacement.trim().is_empty() {
+        return false;
+    }
+    let lower = original.trim().to_lowercase();
+    let word = lower.trim_start_matches(['\'', '’']);
+    let before = text[..edit.0].split_whitespace().next_back().unwrap_or("");
+    let after = text[edit.1..].split_whitespace().next().unwrap_or("");
+    // "in here" and "out there" are plain English.
+    if ["in", "out"].contains(&word) && ["here", "there"].contains(&letters(after).as_str()) {
+        return true;
+    }
+    if !word.chars().any(char::is_alphabetic) || word.contains(' ') || DELETABLE.contains(&word) {
+        return false;
+    }
+    let same = |w: &str| letters(w) == letters(word);
+    !(same(before) || same(after))
+}
+/// "The schedules were" made "was": a clause that opens with a determiner and a noun has that noun
+/// for its subject, and a helping verb rewritten against the noun's number is wrong.
+fn against_head_noun(tokens: &[crate::tokenizer::Token<'_>], at: usize, replacement: &str) -> bool {
+    let singular = match replacement.trim().to_lowercase().as_str() {
+        "is" | "was" | "has" | "does" | "doesn't" | "isn't" | "wasn't" | "hasn't" => true,
+        "are" | "were" | "have" | "do" | "don't" | "aren't" | "weren't" | "haven't" => false,
+        _ => return false,
+    };
+    let Some(k) = tokens.iter().position(|t| t.start_byte == at) else {
+        return false;
+    };
+    if k < 2 {
+        return false;
+    }
+    let (det, noun) = (&tokens[k - 2], &tokens[k - 1]);
+    let opens = k == 2
+        || tokens[k - 3].sentence != det.sentence
+        || [",", ";", ":"].contains(&tokens[k - 3].surface);
+    opens
+        && det.sentence == noun.sentence
+        && ["the", "my", "your", "his", "her", "our", "their"].contains(&det.normalized.as_str())
+        && match crate::structure::plural(noun) {
+            Some(many) => many == singular,
+            // A misspelled noun ("schedles") has no number the model can read, and "data" or "staff"
+            // take either: the writer's verb stands.
+            None => true,
+        }
+}
+/// A word the model adds or deletes right beside a rule's grammar edit: the two were made for
+/// different readings of the phrase ("I had went": the rule writes "gone", the model drops "had";
+/// "the the": each removes a different copy), so together they break it.
+fn beside_a_rule(
+    text: &str,
+    edit: Span,
+    original: &str,
+    replacement: &str,
+    grammar: &[Span],
+) -> bool {
+    if original.split_whitespace().count() == replacement.split_whitespace().count() {
+        return false;
+    }
+    grammar.iter().any(|&(a, b)| {
+        let gap = |x: usize, y: usize| x <= y && text[x..y].chars().all(char::is_whitespace);
+        gap(b, edit.0) || gap(edit.1, a)
+    })
 }
 fn words() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -819,7 +1035,11 @@ pub fn combine_with(
                 let Some(done) = model.correct(piece, forward) else {
                     continue;
                 };
-                let edits = Arc::new(diff_edits(piece, &done.text, done.confidence));
+                let mut edits = diff_edits(piece, &done.text, done.confidence);
+                for e in &mut edits {
+                    e.verb = done.verbs.iter().any(|v| v == e.replacement.trim());
+                }
+                let edits = Arc::new(edits);
                 remember(piece, edits.clone());
                 edits
             }
@@ -858,6 +1078,11 @@ fn merge(
         .iter()
         .filter_map(|e| span(e.start_utf16, e.end_utf16))
         .collect();
+    let grammar: Vec<Span> = parzr
+        .iter()
+        .filter(|e| ["Grammar", "Repetition"].contains(&e.category.as_str()))
+        .filter_map(|e| span(e.start_utf16, e.end_utf16))
+        .collect();
     let mut shielded: Vec<Span> = protected
         .iter()
         .filter_map(|r| span(r.start_utf16, r.end_utf16))
@@ -867,6 +1092,7 @@ fn merge(
             .iter()
             .filter_map(|r| span(r.start_utf16, r.end_utf16)),
     );
+    let tokens = crate::tokenizer::tokenize(text, &req.tokens);
     let mut capitalized: Vec<Span> = vec![];
     let mut unknown: Vec<Span> = vec![];
     // Lowercase words that are also given names ("will", "mark"): written lowercase they may be names.
@@ -915,21 +1141,37 @@ fn merge(
             .filter(|u| u.0 >= offset && u.1 <= end)
             .count();
         // The writer's choices, not errors: one or many after a determiner, which article, the part of speech.
-        let writers_choice = pluralizes_after_determiner(text, edit.0, original, &e.replacement)
+        // A verb-form tag inflects a verb ("This app crash" to "crashes"): no noun was made plural.
+        // Right after a determiner the word is a noun whatever the tag ("reading the document").
+        let as_verb = e.verb
+            && spelling::flags(original.trim()) & 4 != 0
+            && !DETERMINERS.contains(
+                &text[..edit.0]
+                    .split_whitespace()
+                    .next_back()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .as_str(),
+            );
+        let writers_choice = !as_verb
+            && pluralizes_after_determiner(text, edit.0, original, &e.replacement)
             || verb_form_after_determiner(text, edit.0, original, &e.replacement);
         let dropped = strange >= CODE_MIXED
             || rules.iter().any(|r| overlaps(text, edit, *r))
+            || beside_a_rule(text, edit, original, &e.replacement, &grammar)
             || touches(edit, &shielded)
             || touches(edit, &capitalized)
             || (original != e.replacement
                 && original.to_lowercase() == e.replacement.to_lowercase()
                 && !sentence_initial(text, edit.0))
-            || (harmful(original, &e.replacement)
-                && (touches(edit, &unknown) || touches(edit, &nameish)))
+            || harmful(original, &e.replacement)
+                && (touches(edit, &unknown) || touches(edit, &nameish))
             || writers_choice
-            || swaps_article(original, &e.replacement)
+            || swaps_article(text, edit.1, original, &e.replacement)
             || thanks_for(text, edit.0, original)
-            || invents_a_word(text, &e.replacement);
+            || invents_a_word(text, &e.replacement)
+            || drops_meaning(text, edit, original, &e.replacement)
+            || against_head_noun(&tokens, edit.0, &e.replacement);
         number.push(writers_choice);
         verdicts.push(if dropped {
             Verdict::Drop
@@ -1103,6 +1345,34 @@ mod tests {
         assert_eq!(d("I go", "I go home"), [(4, 4, " home".to_owned())]);
         assert_eq!(d("He go home", "He goes home"), [(3, 5, "goes".to_owned())]);
         assert!(d("a  b", "a b").is_empty());
+        // A deleted word takes one space along: no double space is left behind, and a comma or a
+        // word at the start goes with the space after it only when nothing precedes it.
+        let fixed = |a: &str, b: &str| {
+            let mut out = a.to_owned();
+            for e in diff_edits(a, b, 0.9).into_iter().rev() {
+                out.replace_range(e.start..e.end, &e.replacement);
+            }
+            out
+        };
+        for (a, b) in [
+            ("Thanks for your the help!", "Thanks for your help!"),
+            ("We need more the chairs.", "We need more chairs."),
+            ("So I stayed home.", "I stayed home."),
+            (
+                "Everyone who came, got a gift.",
+                "Everyone who came got a gift.",
+            ),
+            ("I went home; and slept.", "I went home and slept."),
+            // An inserted word before a closing mark keeps its space; a new mark joins the word before.
+            ("What are you worried?", "What are you worried about?"),
+            ("Who did you talk?", "Who did you talk to?"),
+            (
+                "Process the payment please update it.",
+                "Process the payment. Please update it.",
+            ),
+        ] {
+            assert_eq!(fixed(a, b), b, "{a}");
+        }
     }
     #[test]
     fn sentences_split_like_the_reference() {
@@ -1139,6 +1409,7 @@ mod tests {
                         end: start + from.len(),
                         replacement: (*to).into(),
                         confidence: 0.9,
+                        verb: false,
                     },
                 )
             })
@@ -1179,6 +1450,7 @@ mod tests {
                 end: start + 2,
                 replacement: "goes".into(),
                 confidence: 0.8,
+                verb: false,
             },
         )];
         let kept = merge(&req, &[], vec![], raw);
@@ -1286,6 +1558,108 @@ mod tests {
             ),
             ["proposal>proposals"]
         );
+    }
+    #[test]
+    fn tags_are_gated_by_class() {
+        let g = Gates::PRODUCTION;
+        assert_eq!(TagClass::of("$REPLACE_these", "this"), TagClass::Number);
+        assert_eq!(TagClass::of("$REPLACE_are", "’s"), TagClass::Number);
+        assert_eq!(
+            TagClass::of("$TRANSFORM_VERB_VB_VBZ", "bark"),
+            TagClass::Number
+        );
+        assert_eq!(TagClass::of("$REPLACE_an", "a"), TagClass::Quantity);
+        assert_eq!(TagClass::of("$REPLACE_these", "the"), TagClass::Replace);
+        assert_eq!(TagClass::of("$APPEND_been", "has"), TagClass::AppendWord);
+        assert_eq!(TagClass::of("$APPEND_the", "to"), TagClass::AppendWord);
+        assert_eq!(TagClass::of("$APPEND_to", "listen"), TagClass::Other);
+        assert_eq!(TagClass::of("$APPEND_,", "so"), TagClass::Comma);
+        assert_eq!(g.floor("$REPLACE_are", "is"), 0.6);
+        assert_eq!(g.floor("$REPLACE_in", "on"), 0.83);
+        assert_eq!(g.floor("$DELETE", "the"), MIN_PROBABILITY);
+        assert_eq!(Gates::NONE.floor("$REPLACE_are", "is"), MIN_PROBABILITY);
+    }
+    #[test]
+    fn guards_keep_meaning_number_and_the_rules_intact() {
+        // A verb-form tag inflects the verb after a noun; right after a determiner it is a noun.
+        let verb = |text: &str, from: &str, to: &str| {
+            let req = Request {
+                text: text.into(),
+                ..Request::default()
+            };
+            let start = text.find(from).unwrap();
+            let raw = Raw {
+                start,
+                end: start + from.len(),
+                replacement: to.into(),
+                confidence: 0.9,
+                verb: true,
+            };
+            merge(&req, &[], vec![], vec![(0, text.len(), raw)]).len()
+        };
+        assert_eq!(verb("This app crash often.", "crash", "crashes"), 1);
+        assert_eq!(
+            verb("She read the document today.", "document", "documents"),
+            0
+        );
+        // "a" and "an" follow the next word's sound; "the" and "a" stay the writer's choice.
+        assert_eq!(
+            guarded("Sue got a awful cold.", &[("a", "an")], vec![], &[]),
+            ["a>an"]
+        );
+        assert_eq!(
+            guarded("Sue got an useful tip.", &[("an", "a")], vec![], &[]),
+            ["an>a"]
+        );
+        assert!(guarded("Tom got a unique key.", &[("a", "an")], vec![], &[]).is_empty());
+        // Deleting a content word loses it; deleting a function word or a repeated word does not.
+        assert!(guarded("I check always the mail.", &[(" always", "")], vec![], &[]).is_empty());
+        assert!(guarded("We need chairs in here.", &[(" in", "")], vec![], &[]).is_empty());
+        assert!(guarded("We’ve tried it.", &[("We’ve", "We")], vec![], &[]).is_empty());
+        assert_eq!(
+            guarded("Please send the the file.", &[(" the", "")], vec![], &[]).len(),
+            1
+        );
+        assert_eq!(
+            guarded("My sister she works late.", &[(" she", "")], vec![], &[]).len(),
+            1
+        );
+        // A helping verb kept against the number of the noun that opens its clause.
+        assert!(guarded("The files were sent.", &[("were", "was")], vec![], &[]).is_empty());
+        assert!(guarded("The data were sent.", &[("were", "was")], vec![], &[]).is_empty());
+        assert_eq!(
+            guarded(
+                "The list of files were sent.",
+                &[("were", "was")],
+                vec![],
+                &[]
+            ),
+            ["were>was"]
+        );
+        // Prepositions the writer may choose.
+        for (text, from, to) in [
+            ("I'm grateful for this team.", "for", "to"),
+            ("I'm waiting on the build.", "on", "for"),
+        ] {
+            assert!(
+                guarded(text, &[(from, to)], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        // A word added or removed right beside a rule's edit belongs to another reading.
+        let text = "I had went home.";
+        assert_eq!(
+            guarded(
+                text,
+                &[("had ", "")],
+                vec![rule_edit(text, "went", "gone")],
+                &[]
+            ),
+            ["went>gone"]
+        );
+        // "Its" read as "It is" becomes "it's", never "it".
+        assert_eq!(singular_of("Its"), "It's");
+        assert_eq!(singular_of("cats"), "cat");
     }
     #[test]
     fn guards_use_the_rules_names_and_case() {
