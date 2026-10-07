@@ -615,7 +615,11 @@ fn touches(edit: Span, spans: &[Span]) -> bool {
 }
 fn sentence_initial(text: &str, at: usize) -> bool {
     let before = text[..at].trim_end_matches([' ', '\t', '"', '\'', '(', '“', '‘']);
-    before.is_empty() || before.ends_with(['.', '!', '?', '\n', ':'])
+    // "Hmm... let me think": an ellipsis pauses the sentence, it does not end it.
+    before.is_empty()
+        || before.ends_with(['.', '!', '?', '\n', ':'])
+            && !before.ends_with("..")
+            && !before.ends_with('…')
 }
 fn overlaps(text: &str, a: Span, b: Span) -> bool {
     // The same gap written either side of a space is one position.

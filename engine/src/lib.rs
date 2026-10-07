@@ -1,5 +1,6 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
 mod capitalization;
+mod clauses;
 mod compounds;
 mod context;
 mod contractions;
@@ -7,6 +8,7 @@ mod contractions;
 mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
+mod marks;
 #[cfg(feature = "local-model")]
 mod model;
 mod morphology;
@@ -448,6 +450,13 @@ fn starts_sentence(text: &str, byte: usize, req: &Request) -> bool {
         && !(before.ends_with('.')
             && tokenizer::abbreviation_continues(text, before.len() - 1)
             && !text[byte..].starts_with(char::is_uppercase))
+        // "Hmm... let me think": a lowercase word after an ellipsis goes on with the sentence.
+        && !((before.ends_with("..") || before.ends_with('…'))
+            && text[byte..].starts_with(char::is_lowercase))
+        // "“Where are you? she asked": the mark ends the quotation, not the sentence.
+        && !(before.ends_with(['!', '?'])
+            && text[byte..].starts_with(char::is_lowercase)
+            && marks::inside_open_quote(text, before.len() - 1))
 }
 fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String> {
     let started = Instant::now();
@@ -897,12 +906,19 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .chain(&req.names)
                 .any(|w| w.eq_ignore_ascii_case(&e.original))
     };
+    // "Sarahs laptop" to "Sarah's laptop": an apostrophe added to or dropped from a name keeps
+    // every letter of it.
+    let apostrophe_only = |e: &Edit| {
+        e.rule_id == "punctuation.apostrophe"
+            && e.original.replace(['\'', '’'], "") == e.replacement.replace(['\'', '’'], "")
+    };
     let blocked = |e: &Edit| {
         protected.iter().any(|r| {
             overlaps(e.start_utf16, e.end_utf16, r)
-                && !((raises_case(e) || contraction(e)) && tagged(r))
+                && !((raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r))
         }) || !case_only(e)
             && !contraction(e)
+            && !apostrophe_only(e)
             && if e.start_utf16 != e.end_utf16 {
                 guard
                     .iter()
