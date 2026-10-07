@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/jn-aman/parzr/releases/latest"><b>Download for Mac</b></a> ·
+  <a href="https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg"><b>Download for Mac</b></a> ·
   <a href="https://parzr.app">parzr.app</a> ·
   <a href="https://github.com/jn-aman/parzr/issues">Report a bug</a>
 </p>
@@ -105,7 +105,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; no model d
 
 ## Install
 
-1. Download **Parzr-x.y.z.dmg** from the [latest release](https://github.com/jn-aman/parzr/releases/latest) (checksums in `SHA256SUMS`).
+1. [Download **Parzr.dmg**](https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg), the newest release (each [release](https://github.com/jn-aman/parzr/releases/latest) also has it as `Parzr-x.y.z.dmg`, with checksums in `SHA256SUMS`).
 2. Drag **Parzr** to **Applications** and open it.
 3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
 
@@ -134,8 +134,8 @@ Parzr needs no extension anywhere. Three optional adapters exist for the cases w
 
 | You want | Install | Steps |
 | --- | --- | --- |
-| Real squiggles, the Problems panel and quick fixes in VS Code or Cursor | `parzr-vscode-X.Y.Z.vsix` from the [latest release](https://github.com/jn-aman/parzr/releases/latest) | In VS Code: Extensions, "...", **Install from VSIX**, pick the file |
-| Cards and fixes inside web editors that Accessibility cannot read or edit (Chrome, Edge, Brave, Chromium, Firefox 140+) | `parzr-browser-extension-X.Y.Z.zip` from the release, or the copy inside the app (Settings, Integrations, **Open integrations**) | Load it unpacked, then register it once with `connect-browser.py` |
+| Real squiggles, the Problems panel and quick fixes in VS Code or Cursor | [`parzr-vscode.vsix`](https://github.com/jn-aman/parzr/releases/latest/download/parzr-vscode.vsix) from the latest release | In VS Code: Extensions, "...", **Install from VSIX**, pick the file |
+| Cards and fixes inside web editors that Accessibility cannot read or edit (Chrome, Edge, Brave, Chromium, Firefox 140+) | [`parzr-browser-extension.zip`](https://github.com/jn-aman/parzr/releases/latest/download/parzr-browser-extension.zip) from the latest release, or the copy inside the app (Settings, Integrations, **Open integrations**) | Load it unpacked, then register it once with `connect-browser.py` |
 | Neovim, Helix, Emacs, Zed or Sublime (editors Parzr cannot see) | Nothing to download | Point the editor's LSP client at `/Applications/Parzr.app/Contents/MacOS/parzr-lsp` |
 
 Step by step instructions, what was tested and the from-source routes are in [integrations](docs/integrations.md#install-the-optional-extensions).
