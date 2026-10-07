@@ -1,0 +1,905 @@
+{"id": "heldout-c-0001", "category": "clean", "subcategory": "tricky_real_word", "input": "I love you. I don't think this is working out, but it'll be fine.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0002", "category": "clean", "subcategory": "tricky_real_word", "input": "Don't worry, it all turned out fine in the end.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0003", "category": "clean", "subcategory": "tricky_real_word", "input": "The tickets sold out, which is fine by me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0004", "category": "clean", "subcategory": "tricky_real_word", "input": "Everything is working out fine so far.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0005", "category": "clean", "subcategory": "tricky_real_word", "input": "It turned out better than I expected.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0006", "category": "clean", "subcategory": "tricky_real_word", "input": "We figured it out in the end.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0007", "category": "clean", "subcategory": "tricky_real_word", "input": "They sold out in ten minutes!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0008", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm heading out now.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0009", "category": "clean", "subcategory": "tricky_real_word", "input": "Can you print out the agenda?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0010", "category": "clean", "subcategory": "tricky_real_word", "input": "She stepped out for lunch.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0011", "category": "clean", "subcategory": "tricky_real_word", "input": "Check out this video 😂", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0012", "category": "clean", "subcategory": "tricky_real_word", "input": "Please fill out the form by Friday.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0013", "category": "clean", "subcategory": "tricky_real_word", "input": "The form must be signed by a manager.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0014", "category": "clean", "subcategory": "tricky_real_word", "input": "Submit the form from your company account.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0015", "category": "clean", "subcategory": "tricky_real_word", "input": "I got a postcard from Lisbon.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0016", "category": "clean", "subcategory": "tricky_real_word", "input": "This is the first of many trips.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0017", "category": "clean", "subcategory": "tricky_real_word", "input": "If you're free, let's grab coffee.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0018", "category": "clean", "subcategory": "tricky_real_word", "input": "Most of us are remote on Fridays.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0019", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm on the train right now.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0020", "category": "clean", "subcategory": "tricky_real_word", "input": "We met in Chicago in 2019.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0021", "category": "clean", "subcategory": "tricky_real_word", "input": "It's colder than it was yesterday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0022", "category": "clean", "subcategory": "tricky_real_word", "input": "Finish your coffee, and then we'll go.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0023", "category": "clean", "subcategory": "tricky_real_word", "input": "I'd rather walk than drive.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0024", "category": "clean", "subcategory": "tricky_real_word", "input": "Back then, we didn't have smartphones.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0025", "category": "clean", "subcategory": "tricky_real_word", "input": "Don't lose your keys again!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0026", "category": "clean", "subcategory": "tricky_real_word", "input": "The screw on my glasses is loose.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0027", "category": "clean", "subcategory": "tricky_real_word", "input": "It's quite cold today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0028", "category": "clean", "subcategory": "tricky_real_word", "input": "The library is so quiet.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0029", "category": "clean", "subcategory": "tricky_real_word", "input": "The new rules will affect everyone.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0030", "category": "clean", "subcategory": "tricky_real_word", "input": "The policy had a big effect on retention.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0031", "category": "clean", "subcategory": "tricky_real_word", "input": "The new director hopes to effect real change.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0032", "category": "clean", "subcategory": "tricky_real_word", "input": "Patients with flat affect may seem uninterested.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0033", "category": "clean", "subcategory": "tricky_real_word", "input": "I accept your apology.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0034", "category": "clean", "subcategory": "tricky_real_word", "input": "Everyone except Sam is coming.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0035", "category": "clean", "subcategory": "tricky_real_word", "input": "Can you give me some advice?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0036", "category": "clean", "subcategory": "tricky_real_word", "input": "I'd advise against it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0037", "category": "clean", "subcategory": "tricky_real_word", "input": "We're almost there.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0038", "category": "clean", "subcategory": "tricky_real_word", "input": "Where were you last night?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0039", "category": "clean", "subcategory": "tricky_real_word", "input": "Were you able to fix it?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0040", "category": "clean", "subcategory": "tricky_real_word", "input": "Take a deep breath.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0041", "category": "clean", "subcategory": "tricky_real_word", "input": "Just breathe. You'll be fine.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0042", "category": "clean", "subcategory": "tricky_real_word", "input": "I chose the blue one last time.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0043", "category": "clean", "subcategory": "tricky_real_word", "input": "You can choose whichever you like.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0044", "category": "clean", "subcategory": "tricky_real_word", "input": "The dessert was amazing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0045", "category": "clean", "subcategory": "tricky_real_word", "input": "They got lost in the desert.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0046", "category": "clean", "subcategory": "tricky_real_word", "input": "I read through the whole thing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0047", "category": "clean", "subcategory": "tricky_real_word", "input": "Thanks for being so thorough.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0048", "category": "clean", "subcategory": "tricky_real_word", "input": "Even though it rained, we had fun.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0049", "category": "clean", "subcategory": "tricky_real_word", "input": "I thought you were coming.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0050", "category": "clean", "subcategory": "tricky_real_word", "input": "I'll do it later.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0051", "category": "clean", "subcategory": "tricky_real_word", "input": "Of the two drafts, the latter is stronger.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0052", "category": "clean", "subcategory": "tricky_real_word", "input": "We lost the game, but it was close.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0053", "category": "clean", "subcategory": "tricky_real_word", "input": "The loss was smaller than expected.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0054", "category": "clean", "subcategory": "tricky_real_word", "input": "Turn off the lights, please.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0055", "category": "clean", "subcategory": "tricky_real_word", "input": "It's one of those days.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0056", "category": "clean", "subcategory": "tricky_real_word", "input": "She led the team through two launches.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0057", "category": "clean", "subcategory": "tricky_real_word", "input": "Lead is no longer used in household paint.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0058", "category": "clean", "subcategory": "tricky_real_word", "input": "I need to fold my clothes.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0059", "category": "clean", "subcategory": "tricky_real_word", "input": "We'll adapt to whatever happens.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0060", "category": "clean", "subcategory": "tricky_real_word", "input": "They adopted a puppy last week!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0061", "category": "clean", "subcategory": "tricky_real_word", "input": "I haven't seen her since March.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0062", "category": "clean", "subcategory": "tricky_real_word", "input": "That makes sense.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0063", "category": "clean", "subcategory": "tricky_real_word", "input": "Our meeting got moved to 3.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0064", "category": "clean", "subcategory": "tricky_real_word", "input": "What time are you leaving?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0065", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm sure it'll be fine.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0066", "category": "clean", "subcategory": "tricky_real_word", "input": "Coffee with Sam at 3?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0067", "category": "clean", "subcategory": "tricky_real_word", "input": "Thanks for the quick turnaround!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0068", "category": "clean", "subcategory": "tricky_real_word", "input": "I think they already shipped it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0069", "category": "clean", "subcategory": "tricky_real_word", "input": "There's no way we finish by noon.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0070", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm not sure that's going to work.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0071", "category": "clean", "subcategory": "tricky_real_word", "input": "No way, that's hilarious 😂", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0072", "category": "clean", "subcategory": "tricky_real_word", "input": "My bad, I forgot to attach it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0073", "category": "clean", "subcategory": "tricky_real_word", "input": "I'll call you back in five.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0074", "category": "clean", "subcategory": "tricky_real_word", "input": "Feel free to reach out.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0075", "category": "clean", "subcategory": "tricky_real_word", "input": "That was the best ramen I've ever had.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0076", "category": "clean", "subcategory": "tricky_real_word", "input": "The fin on the surfboard snapped.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0077", "category": "clean", "subcategory": "tricky_real_word", "input": "Mist rolled in off the bay this morning.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0078", "category": "clean", "subcategory": "tricky_real_word", "input": "I hope the ferry is running today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0079", "category": "clean", "subcategory": "tricky_real_word", "input": "The bunny hopped across the lawn.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0080", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm fond of that old café.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0081", "category": "clean", "subcategory": "tricky_real_word", "input": "We ran out of milk.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0082", "category": "clean", "subcategory": "tricky_real_word", "input": "The tide is out, so the beach is huge.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0083", "category": "clean", "subcategory": "tricky_real_word", "input": "I have one more slot on Thursday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0084", "category": "clean", "subcategory": "tricky_real_word", "input": "I'll be in the office tomorrow.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0085", "category": "clean", "subcategory": "tricky_real_word", "input": "The cat is on the roof again.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0086", "category": "clean", "subcategory": "tricky_real_word", "input": "Two coffees, please.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0087", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm too tired to cook.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0088", "category": "clean", "subcategory": "tricky_real_word", "input": "I want to go too.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0089", "category": "clean", "subcategory": "tricky_real_word", "input": "The whole team is out Friday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0090", "category": "clean", "subcategory": "tricky_real_word", "input": "There's a hole in my sock.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0091", "category": "clean", "subcategory": "tricky_real_word", "input": "I've been sick all week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0092", "category": "clean", "subcategory": "tricky_real_word", "input": "The signal is weak in the basement.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0093", "category": "clean", "subcategory": "tricky_real_word", "input": "Can you hear me now?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0094", "category": "clean", "subcategory": "tricky_real_word", "input": "Let me know what you think.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0095", "category": "clean", "subcategory": "tricky_real_word", "input": "I knew you'd say that.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0096", "category": "clean", "subcategory": "tricky_real_word", "input": "It's a piece of cake.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0097", "category": "clean", "subcategory": "tricky_real_word", "input": "The bus fare went up again.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0098", "category": "clean", "subcategory": "tricky_real_word", "input": "That's not fair!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0099", "category": "clean", "subcategory": "tricky_real_word", "input": "We sat on the porch and watched the sea.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0100", "category": "clean", "subcategory": "tricky_real_word", "input": "I'll buy the tickets tonight.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0101", "category": "clean", "subcategory": "tricky_real_word", "input": "The construction site is noisy.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0102", "category": "clean", "subcategory": "tricky_real_word", "input": "The principal called a staff meeting.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0103", "category": "clean", "subcategory": "tricky_real_word", "input": "Our guiding principle is simplicity.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0104", "category": "clean", "subcategory": "tricky_real_word", "input": "Thanks for the compliment!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0105", "category": "clean", "subcategory": "tricky_real_word", "input": "The red sauce complements the pasta nicely.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0106", "category": "clean", "subcategory": "tricky_real_word", "input": "I bought new stationery for school.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0107", "category": "clean", "subcategory": "tricky_real_word", "input": "The car was stationary at the light.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0108", "category": "clean", "subcategory": "tricky_real_word", "input": "Whose jacket is this?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0109", "category": "clean", "subcategory": "tricky_real_word", "input": "Who's coming tonight?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0110", "category": "clean", "subcategory": "tricky_real_word", "input": "We drove past your house.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0111", "category": "clean", "subcategory": "tricky_real_word", "input": "I passed the exam!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0112", "category": "clean", "subcategory": "tricky_real_word", "input": "I can't bear to watch.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0113", "category": "clean", "subcategory": "tricky_real_word", "input": "Bear with me for a second.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0114", "category": "clean", "subcategory": "tricky_real_word", "input": "It's due on Friday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0115", "category": "clean", "subcategory": "tricky_real_word", "input": "I heard they're hiring.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0116", "category": "clean", "subcategory": "tricky_real_word", "input": "The plane landed early.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0117", "category": "clean", "subcategory": "tricky_real_word", "input": "We went back and forth on it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0118", "category": "clean", "subcategory": "tricky_real_word", "input": "It's the fourth time this week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0119", "category": "clean", "subcategory": "tricky_real_word", "input": "I'm so bored.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0120", "category": "clean", "subcategory": "tricky_real_word", "input": "The board approved the budget.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0121", "category": "clean", "subcategory": "tricky_real_word", "input": "He threw the ball over the fence.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0122", "category": "clean", "subcategory": "tricky_real_word", "input": "We got through it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0123", "category": "clean", "subcategory": "tricky_real_word", "input": "There was a real wit to her speech.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0124", "category": "clean", "subcategory": "tricky_real_word", "input": "It's a moot point now.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0125", "category": "clean", "subcategory": "tricky_real_word", "input": "The bands performed well last night.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0126", "category": "clean", "subcategory": "its_their_your", "input": "The dog hurt its paw.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0127", "category": "clean", "subcategory": "its_their_your", "input": "It's been a long week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0128", "category": "clean", "subcategory": "its_their_your", "input": "It's raining again, and the app lost its connection.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0129", "category": "clean", "subcategory": "its_their_your", "input": "The company updated its privacy policy in May.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0130", "category": "clean", "subcategory": "its_their_your", "input": "Each team sets its own goals.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0131", "category": "clean", "subcategory": "its_their_your", "input": "The tree lost its leaves early this year.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0132", "category": "clean", "subcategory": "its_their_your", "input": "It's not the end of the world.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0133", "category": "clean", "subcategory": "its_their_your", "input": "It's got a great view.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0134", "category": "clean", "subcategory": "its_their_your", "input": "The function returns early if its argument is null.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0135", "category": "clean", "subcategory": "its_their_your", "input": "It's safe to delete the cache folder.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0136", "category": "clean", "subcategory": "its_their_your", "input": "Their house is on the corner.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0137", "category": "clean", "subcategory": "its_their_your", "input": "They're running late.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0138", "category": "clean", "subcategory": "its_their_your", "input": "There's a typo on slide 4.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0139", "category": "clean", "subcategory": "its_their_your", "input": "I left my bag over there.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0140", "category": "clean", "subcategory": "its_their_your", "input": "They're bringing their kids.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0141", "category": "clean", "subcategory": "its_their_your", "input": "There are three of them.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0142", "category": "clean", "subcategory": "its_their_your", "input": "Your order is ready.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0143", "category": "clean", "subcategory": "its_their_your", "input": "You're going to love this.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0144", "category": "clean", "subcategory": "its_their_your", "input": "Is this your jacket or mine?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0145", "category": "clean", "subcategory": "its_their_your", "input": "You're welcome to join us.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0146", "category": "clean", "subcategory": "its_their_your", "input": "Who's driving tonight?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0147", "category": "clean", "subcategory": "its_their_your", "input": "Whose turn is it?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0148", "category": "clean", "subcategory": "its_their_your", "input": "We're out of coffee.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0149", "category": "clean", "subcategory": "its_their_your", "input": "Where's the nearest pharmacy?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0150", "category": "clean", "subcategory": "its_their_your", "input": "They'll be here at noon.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0151", "category": "clean", "subcategory": "its_their_your", "input": "It'll take a minute.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0152", "category": "clean", "subcategory": "its_their_your", "input": "Let's grab lunch.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0153", "category": "clean", "subcategory": "its_their_your", "input": "Let me check.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0154", "category": "clean", "subcategory": "its_their_your", "input": "The software lets users export reports.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0155", "category": "clean", "subcategory": "its_their_your", "input": "We'll see.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0156", "category": "clean", "subcategory": "its_their_your", "input": "Well, that was unexpected.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0157", "category": "clean", "subcategory": "its_their_your", "input": "I'd say yes.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0158", "category": "clean", "subcategory": "its_their_your", "input": "He'll call you back.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0159", "category": "clean", "subcategory": "its_their_your", "input": "She'd already left.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0160", "category": "clean", "subcategory": "its_their_your", "input": "Hell yes, I'm in!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0161", "category": "clean", "subcategory": "its_their_your", "input": "We'd love to come.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0162", "category": "clean", "subcategory": "its_their_your", "input": "Were you there?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0163", "category": "clean", "subcategory": "its_their_your", "input": "We're here!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0164", "category": "clean", "subcategory": "its_their_your", "input": "Its battery lasts all day.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0165", "category": "clean", "subcategory": "its_their_your", "input": "It's its own thing, honestly.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0166", "category": "clean", "subcategory": "its_their_your", "input": "Their team will join us on Thursday.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0167", "category": "clean", "subcategory": "its_their_your", "input": "There will be a short break at 11.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0168", "category": "clean", "subcategory": "its_their_your", "input": "You're invited to our annual party.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0169", "category": "clean", "subcategory": "its_their_your", "input": "Your feedback is important to us.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0170", "category": "clean", "subcategory": "its_their_your", "input": "Whose responsibility is this?", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0171", "category": "clean", "subcategory": "its_their_your", "input": "Who's responsible for the rollout?", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0172", "category": "clean", "subcategory": "its_their_your", "input": "Is it yours or theirs?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0173", "category": "clean", "subcategory": "its_their_your", "input": "The blue one is ours.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0174", "category": "clean", "subcategory": "its_their_your", "input": "That one's hers.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0175", "category": "clean", "subcategory": "informal_fragments", "input": "Sounds good.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0176", "category": "clean", "subcategory": "informal_fragments", "input": "On my way!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0177", "category": "clean", "subcategory": "informal_fragments", "input": "Not bad. You?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0178", "category": "clean", "subcategory": "informal_fragments", "input": "Same here.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0179", "category": "clean", "subcategory": "informal_fragments", "input": "Back in 5.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0180", "category": "clean", "subcategory": "informal_fragments", "input": "Running late, sorry!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0181", "category": "clean", "subcategory": "informal_fragments", "input": "Almost there.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0182", "category": "clean", "subcategory": "informal_fragments", "input": "Thanks, you too!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0183", "category": "clean", "subcategory": "informal_fragments", "input": "Got it, thanks.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0184", "category": "clean", "subcategory": "informal_fragments", "input": "No worries at all.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0185", "category": "clean", "subcategory": "informal_fragments", "input": "Lol, same.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0186", "category": "clean", "subcategory": "informal_fragments", "input": "Ugh, Mondays.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0187", "category": "clean", "subcategory": "informal_fragments", "input": "Happy Friday!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0188", "category": "clean", "subcategory": "informal_fragments", "input": "Good luck today!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0189", "category": "clean", "subcategory": "informal_fragments", "input": "Congrats! So well deserved.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0190", "category": "clean", "subcategory": "informal_fragments", "input": "Totally agree.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0191", "category": "clean", "subcategory": "informal_fragments", "input": "Fair enough.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0192", "category": "clean", "subcategory": "informal_fragments", "input": "Maybe next time.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0193", "category": "clean", "subcategory": "informal_fragments", "input": "Yep, all good.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0194", "category": "clean", "subcategory": "informal_fragments", "input": "Nope, not yet.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0195", "category": "clean", "subcategory": "informal_fragments", "input": "Done and done.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0196", "category": "clean", "subcategory": "informal_fragments", "input": "Coffee later?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0197", "category": "clean", "subcategory": "informal_fragments", "input": "Lunch at 12:30?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0198", "category": "clean", "subcategory": "informal_fragments", "input": "Sure thing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0199", "category": "clean", "subcategory": "informal_fragments", "input": "Oh nice!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0200", "category": "clean", "subcategory": "informal_fragments", "input": "Wait, really?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0201", "category": "clean", "subcategory": "informal_fragments", "input": "Haha, love it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0202", "category": "clean", "subcategory": "informal_fragments", "input": "Ok, cool.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0203", "category": "clean", "subcategory": "informal_fragments", "input": "See you soon!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0204", "category": "clean", "subcategory": "informal_fragments", "input": "Miss you guys.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0205", "category": "clean", "subcategory": "informal_fragments", "input": "Long day.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0206", "category": "clean", "subcategory": "informal_fragments", "input": "So tired.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0207", "category": "clean", "subcategory": "informal_fragments", "input": "Just landed!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0208", "category": "clean", "subcategory": "informal_fragments", "input": "Home safe.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0209", "category": "clean", "subcategory": "informal_fragments", "input": "Same time next week?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0210", "category": "clean", "subcategory": "informal_fragments", "input": "Any updates?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0211", "category": "clean", "subcategory": "informal_fragments", "input": "Quick question: is the meeting still on?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0212", "category": "clean", "subcategory": "informal_fragments", "input": "Great news!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0213", "category": "clean", "subcategory": "informal_fragments", "input": "Ha, classic.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0214", "category": "clean", "subcategory": "informal_fragments", "input": "Brb.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0215", "category": "clean", "subcategory": "informal_fragments", "input": "Love this 😍", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0216", "category": "clean", "subcategory": "informal_fragments", "input": "Too funny.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0217", "category": "clean", "subcategory": "informal_fragments", "input": "Can't wait!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0218", "category": "clean", "subcategory": "informal_fragments", "input": "Hope you feel better soon.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0219", "category": "clean", "subcategory": "informal_fragments", "input": "Drive safe!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0220", "category": "clean", "subcategory": "informal_fragments", "input": "Talk tomorrow.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0221", "category": "clean", "subcategory": "informal_fragments", "input": "All set.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0222", "category": "clean", "subcategory": "informal_fragments", "input": "No rush.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0223", "category": "clean", "subcategory": "informal_fragments", "input": "Good call.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0224", "category": "clean", "subcategory": "informal_fragments", "input": "Works for me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0225", "category": "clean", "subcategory": "informal_fragments", "input": "Thanks again for tonight!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0226", "category": "clean", "subcategory": "informal_fragments", "input": "Ready when you are.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0227", "category": "clean", "subcategory": "informal_fragments", "input": "Not today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0228", "category": "clean", "subcategory": "informal_fragments", "input": "Best. Weekend. Ever.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0229", "category": "clean", "subcategory": "informal_fragments", "input": "Big if true.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0230", "category": "clean", "subcategory": "informal_fragments", "input": "Oops, wrong chat.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0231", "category": "clean", "subcategory": "informal_fragments", "input": "Will do.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0232", "category": "clean", "subcategory": "informal_fragments", "input": "Agreed.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0233", "category": "clean", "subcategory": "informal_fragments", "input": "One sec.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0234", "category": "clean", "subcategory": "informal_fragments", "input": "Just checking in.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0235", "category": "clean", "subcategory": "informal_fragments", "input": "Thanks in advance.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0236", "category": "clean", "subcategory": "informal_fragments", "input": "Hope this helps.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0237", "category": "clean", "subcategory": "informal_fragments", "input": "Looking forward to it.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0238", "category": "clean", "subcategory": "informal_fragments", "input": "Happy to help.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0239", "category": "clean", "subcategory": "informal_fragments", "input": "Talk soon.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0240", "category": "clean", "subcategory": "informal_fragments", "input": "Best,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0241", "category": "clean", "subcategory": "informal_fragments", "input": "Cheers,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0242", "category": "clean", "subcategory": "informal_fragments", "input": "Thanks,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0243", "category": "clean", "subcategory": "informal_fragments", "input": "More soon.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0244", "category": "clean", "subcategory": "informal_fragments", "input": "Apologies for the delay.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0245", "category": "clean", "subcategory": "names_brands", "input": "Thom said he'd bring the speakers.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0246", "category": "clean", "subcategory": "names_brands", "input": "Siobhan is out until Monday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0247", "category": "clean", "subcategory": "names_brands", "input": "Niamh and Aoife are flying in from Dublin.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0248", "category": "clean", "subcategory": "names_brands", "input": "Kaitlyn's birthday dinner is on Saturday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0249", "category": "clean", "subcategory": "names_brands", "input": "Ask Jaxon if he wants to carpool.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0250", "category": "clean", "subcategory": "names_brands", "input": "Jakob fixed the printer, finally.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0251", "category": "clean", "subcategory": "names_brands", "input": "Can you loop in Ximena from finance?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0252", "category": "clean", "subcategory": "names_brands", "input": "Brynn is our new office manager.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0253", "category": "clean", "subcategory": "names_brands", "input": "Hi Saoirse, thanks for the quick reply.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0254", "category": "clean", "subcategory": "names_brands", "input": "I've copied Tadhg on this thread.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0255", "category": "clean", "subcategory": "names_brands", "input": "Please welcome Oluwaseun to the design team!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0256", "category": "clean", "subcategory": "names_brands", "input": "Nguyen will cover support while I'm out.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0257", "category": "clean", "subcategory": "names_brands", "input": "Thanks, Siddharth. I'll take a look today.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0258", "category": "clean", "subcategory": "names_brands", "input": "Mikaela and Rhys are engaged!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0259", "category": "clean", "subcategory": "names_brands", "input": "Jordyn just got into Stanford.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0260", "category": "clean", "subcategory": "names_brands", "input": "Aiden and Ayden are both on the soccer team, which is confusing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0261", "category": "clean", "subcategory": "names_brands", "input": "Is Zoë coming tonight?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0262", "category": "clean", "subcategory": "names_brands", "input": "Renée sent the photos from the wedding.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0263", "category": "clean", "subcategory": "names_brands", "input": "José made his famous paella.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0264", "category": "clean", "subcategory": "names_brands", "input": "Bjørn is visiting from Oslo next week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0265", "category": "clean", "subcategory": "names_brands", "input": "Ingrid's flight lands at 4.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0266", "category": "clean", "subcategory": "names_brands", "input": "Gwyneth and Bryony are running the bake sale.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0267", "category": "clean", "subcategory": "names_brands", "input": "We should invite Darnell and Keisha.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0268", "category": "clean", "subcategory": "names_brands", "input": "Priyanka is the best manager I've had.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0269", "category": "clean", "subcategory": "names_brands", "input": "Tell Xiaoming I said hi.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0270", "category": "clean", "subcategory": "names_brands", "input": "I ordered it on Etsy.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0271", "category": "clean", "subcategory": "names_brands", "input": "I'll Venmo you for dinner.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0272", "category": "clean", "subcategory": "names_brands", "input": "Let's just Zoom instead.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0273", "category": "clean", "subcategory": "names_brands", "input": "I found a great deal on eBay.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0274", "category": "clean", "subcategory": "names_brands", "input": "My iPad is almost dead.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0275", "category": "clean", "subcategory": "names_brands", "input": "I'm taking a Lyft to the airport.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0276", "category": "clean", "subcategory": "names_brands", "input": "We binged the whole season on Hulu.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0277", "category": "clean", "subcategory": "names_brands", "input": "My Duolingo streak is at 200 days.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0278", "category": "clean", "subcategory": "names_brands", "input": "Did you see the listing on Zillow?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0279", "category": "clean", "subcategory": "names_brands", "input": "I posted the photos on Flickr.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0280", "category": "clean", "subcategory": "names_brands", "input": "There's a whole subreddit about it on Reddit.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0281", "category": "clean", "subcategory": "names_brands", "input": "I'll share the board on Trello.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0282", "category": "clean", "subcategory": "names_brands", "input": "The designs are in Figma.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0283", "category": "clean", "subcategory": "names_brands", "input": "I filed a Jira ticket for it.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0284", "category": "clean", "subcategory": "names_brands", "input": "The docs live in Confluence.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0285", "category": "clean", "subcategory": "names_brands", "input": "We're deploying to Vercel tonight.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0286", "category": "clean", "subcategory": "names_brands", "input": "Our Postgres instance is on RDS.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0287", "category": "clean", "subcategory": "names_brands", "input": "I'll ping the channel on Slack.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0288", "category": "clean", "subcategory": "names_brands", "input": "The repo is on GitHub, and CI runs on CircleCI.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0289", "category": "clean", "subcategory": "names_brands", "input": "We switched from npm to pnpm last month.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0290", "category": "clean", "subcategory": "names_brands", "input": "Kubernetes keeps restarting the pod.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0291", "category": "clean", "subcategory": "names_brands", "input": "The Grafana dashboard shows a spike at 2am.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0292", "category": "clean", "subcategory": "names_brands", "input": "Our new office is in Shoreditch.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0293", "category": "clean", "subcategory": "names_brands", "input": "We're road-tripping through Albuquerque and Tucson.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0294", "category": "clean", "subcategory": "names_brands", "input": "My grandparents live in Worcester.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0295", "category": "clean", "subcategory": "names_brands", "input": "Have you ever been to Reykjavík?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0296", "category": "clean", "subcategory": "names_brands", "input": "We stayed in Llandudno for a week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0297", "category": "clean", "subcategory": "names_brands", "input": "Sunset in Saint-Tropez never gets old 🌅", "register": "social", "source": "authored"}
+{"id": "heldout-c-0298", "category": "clean", "subcategory": "names_brands", "input": "Huge congrats to the Sacramento Kings!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0299", "category": "clean", "subcategory": "names_brands", "input": "I'm reading Kazuo Ishiguro's new book.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0300", "category": "clean", "subcategory": "names_brands", "input": "We watched Oppenheimer last night.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0301", "category": "clean", "subcategory": "names_brands", "input": "I'm obsessed with Wordle.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0302", "category": "clean", "subcategory": "names_brands", "input": "Let's meet at Chipotle.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0303", "category": "clean", "subcategory": "names_brands", "input": "I bought it at IKEA.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0304", "category": "clean", "subcategory": "names_brands", "input": "Grab me a LaCroix if you're going.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0305", "category": "clean", "subcategory": "names_brands", "input": "My Fitbit says I walked 15,000 steps.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0306", "category": "clean", "subcategory": "names_brands", "input": "PlayStation or Xbox?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0307", "category": "clean", "subcategory": "names_brands", "input": "Ask ChatGPT if you're stuck.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0308", "category": "clean", "subcategory": "names_brands", "input": "The invoice is from Acme Corp.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0309", "category": "clean", "subcategory": "names_brands", "input": "Please send the files via WeTransfer.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0310", "category": "clean", "subcategory": "names_brands", "input": "LinkedIn and Glassdoor reviews were mostly positive.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0311", "category": "clean", "subcategory": "names_brands", "input": "We compared Asana, Monday.com, and ClickUp.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0312", "category": "clean", "subcategory": "names_brands", "input": "The Wi-Fi password is on the fridge.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0313", "category": "clean", "subcategory": "names_brands", "input": "I'll AirDrop you the photos.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0314", "category": "clean", "subcategory": "names_brands", "input": "My Spotify Wrapped is embarrassing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0315", "category": "clean", "subcategory": "code_identifiers", "input": "The `useEffect` hook runs after every render.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0316", "category": "clean", "subcategory": "code_identifiers", "input": "Set `MAX_RETRIES` to 3 in the config.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0317", "category": "clean", "subcategory": "code_identifiers", "input": "Call `get_user_by_id()` instead of querying directly.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0318", "category": "clean", "subcategory": "code_identifiers", "input": "The bug is in `src/utils/parseDate.ts`.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0319", "category": "clean", "subcategory": "code_identifiers", "input": "Run `npm run build` before pushing.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0320", "category": "clean", "subcategory": "code_identifiers", "input": "Use `git rebase -i` to squash the commits.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0321", "category": "clean", "subcategory": "code_identifiers", "input": "The `--dry-run` flag shows what would change.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0322", "category": "clean", "subcategory": "code_identifiers", "input": "Check `/var/log/nginx/error.log` for details.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0323", "category": "clean", "subcategory": "code_identifiers", "input": "The endpoint `/api/v2/users` returns a paginated list.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0324", "category": "clean", "subcategory": "code_identifiers", "input": "Bump the version to 2.4.1 and tag the release.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0325", "category": "clean", "subcategory": "code_identifiers", "input": "We're on Python 3.12 and Node 20.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0326", "category": "clean", "subcategory": "code_identifiers", "input": "The `isLoggedIn` prop is undefined on first load.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0327", "category": "clean", "subcategory": "code_identifiers", "input": "Rename `tmp_df` to something descriptive.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0328", "category": "clean", "subcategory": "code_identifiers", "input": "`kubectl get pods -n staging` shows two crash loops.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0329", "category": "clean", "subcategory": "code_identifiers", "input": "The PR is at https://github.com/acme/web/pull/1423.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0330", "category": "clean", "subcategory": "code_identifiers", "input": "The docs are at docs.example.com/setup.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0331", "category": "clean", "subcategory": "code_identifiers", "input": "Email support@example.com if you get locked out.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0332", "category": "clean", "subcategory": "code_identifiers", "input": "The SHA is 9f3c2ab, if you want to cherry-pick it.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0333", "category": "clean", "subcategory": "code_identifiers", "input": "The test `test_handles_empty_input` is flaky.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0334", "category": "clean", "subcategory": "code_identifiers", "input": "We pin `requests==2.31.0` in requirements.txt.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0335", "category": "clean", "subcategory": "code_identifiers", "input": "Add `.DS_Store` to `.gitignore`.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0336", "category": "clean", "subcategory": "code_identifiers", "input": "The env var `DATABASE_URL` isn't set in staging.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0337", "category": "clean", "subcategory": "code_identifiers", "input": "`useState` returns a pair: the value and a setter.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0338", "category": "clean", "subcategory": "code_identifiers", "input": "Change `const` to `let` if you need to reassign it.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0339", "category": "clean", "subcategory": "code_identifiers", "input": "The response has a `200 OK` status but an empty body.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0340", "category": "clean", "subcategory": "code_identifiers", "input": "Set `retries: 0` in the YAML.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0341", "category": "clean", "subcategory": "code_identifiers", "input": "I'm seeing `ECONNRESET` errors from the proxy.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0342", "category": "clean", "subcategory": "code_identifiers", "input": "The cron expression `0 2 * * *` runs at 2am daily.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0343", "category": "clean", "subcategory": "code_identifiers", "input": "SELECT queries are fine, but the UPDATE is slow.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0344", "category": "clean", "subcategory": "code_identifiers", "input": "Our p95 latency dropped from 800ms to 240ms.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0345", "category": "clean", "subcategory": "code_identifiers", "input": "The JSON payload is about 2 MB.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0346", "category": "clean", "subcategory": "code_identifiers", "input": "The cache TTL is 300 seconds.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0347", "category": "clean", "subcategory": "code_identifiers", "input": "We use snake_case in Python and camelCase in JS.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0348", "category": "clean", "subcategory": "code_identifiers", "input": "Merge `feature/login-v2` into `main` after review.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0349", "category": "clean", "subcategory": "code_identifiers", "input": "The regex `^\\d{3}-\\d{4}$` matches local numbers.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0350", "category": "clean", "subcategory": "code_identifiers", "input": "The CSV has 14,000 rows and 23 columns.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0351", "category": "clean", "subcategory": "code_identifiers", "input": "Run `make test` and `make lint` before you open a PR.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0352", "category": "clean", "subcategory": "code_identifiers", "input": "The OAuth token expires after 3600 seconds.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0353", "category": "clean", "subcategory": "code_identifiers", "input": "`df.groupby(\"region\").sum()` gives the totals.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0354", "category": "clean", "subcategory": "code_identifiers", "input": "The Dockerfile uses `python:3.12-slim` as the base image.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0355", "category": "clean", "subcategory": "code_identifiers", "input": "Port 8080 is already in use.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0356", "category": "clean", "subcategory": "code_identifiers", "input": "The `onClick` handler fires twice in StrictMode.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0357", "category": "clean", "subcategory": "code_identifiers", "input": "The README links to CONTRIBUTING.md.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0358", "category": "clean", "subcategory": "code_identifiers", "input": "`ls -la` shows the hidden files too.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0359", "category": "clean", "subcategory": "code_identifiers", "input": "The API key is stored in 1Password.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0360", "category": "clean", "subcategory": "code_identifiers", "input": "I added a TODO in `billing.py` to clean this up.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0361", "category": "clean", "subcategory": "code_identifiers", "input": "`null` and `undefined` aren't the same thing.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0362", "category": "clean", "subcategory": "code_identifiers", "input": "The staging URL is staging.acme.dev.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0363", "category": "clean", "subcategory": "code_identifiers", "input": "Use `async`/`await` instead of chaining `.then()` calls.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0364", "category": "clean", "subcategory": "code_identifiers", "input": "Version 3.0.0-beta.2 is out.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0365", "category": "clean", "subcategory": "code_identifiers", "input": "iOS 17 broke the date picker.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0366", "category": "clean", "subcategory": "code_identifiers", "input": "The build takes 4m 32s on CI.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0367", "category": "clean", "subcategory": "code_identifiers", "input": "Run it with `--verbose` to see the full trace.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0368", "category": "clean", "subcategory": "code_identifiers", "input": "We're migrating from MySQL 5.7 to Postgres 16.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0369", "category": "clean", "subcategory": "code_identifiers", "input": "The HTTP 429 means we're being rate-limited.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0370", "category": "clean", "subcategory": "code_identifiers", "input": "Our SLA is 99.9% uptime.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0371", "category": "clean", "subcategory": "code_identifiers", "input": "The `.env.example` file lists every variable you need.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0372", "category": "clean", "subcategory": "code_identifiers", "input": "Line 42 throws a TypeError.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0373", "category": "clean", "subcategory": "code_identifiers", "input": "The `user_id` column should be indexed.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0374", "category": "clean", "subcategory": "code_identifiers", "input": "I reverted commit a1b2c3d.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0375", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I don’t think so.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0376", "category": "clean", "subcategory": "apostrophes_quotes", "input": "We’re almost done, and they’re on their way.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0377", "category": "clean", "subcategory": "apostrophes_quotes", "input": "She’s been there since 9 o’clock.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0378", "category": "clean", "subcategory": "apostrophes_quotes", "input": "You’ll love it, I promise.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0379", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I can’t believe it’s October already.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0380", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Y’all are the best.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0381", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I’ve got a lot of rock ’n’ roll records.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0382", "category": "clean", "subcategory": "apostrophes_quotes", "input": "My dad loves ’80s music.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0383", "category": "clean", "subcategory": "apostrophes_quotes", "input": "It was the summer of ’99.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0384", "category": "clean", "subcategory": "apostrophes_quotes", "input": "That’s my sister’s car.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0385", "category": "clean", "subcategory": "apostrophes_quotes", "input": "The kids’ toys are everywhere.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0386", "category": "clean", "subcategory": "apostrophes_quotes", "input": "We’re going to the Smiths’ for dinner.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0387", "category": "clean", "subcategory": "apostrophes_quotes", "input": "James’s new apartment is huge.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0388", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I’ll take two weeks’ vacation in August.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0389", "category": "clean", "subcategory": "apostrophes_quotes", "input": "The children’s library opens at 10.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0390", "category": "clean", "subcategory": "apostrophes_quotes", "input": "He said, “I’ll be there by six.”", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0391", "category": "clean", "subcategory": "apostrophes_quotes", "input": "She asked, “Are you coming?”", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0392", "category": "clean", "subcategory": "apostrophes_quotes", "input": "“Where are you?” he texted.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0393", "category": "clean", "subcategory": "apostrophes_quotes", "input": "The error message reads “File not found.”", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0394", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Click “Save” to keep your changes.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0395", "category": "clean", "subcategory": "apostrophes_quotes", "input": "My mom calls it “the good couch.”", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0396", "category": "clean", "subcategory": "apostrophes_quotes", "input": "He said \"fine\" and walked off.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0397", "category": "clean", "subcategory": "apostrophes_quotes", "input": "The sign says \"Back in 10 minutes.\"", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0398", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Set `\"strict\": true` in tsconfig.json.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0399", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Mind your p’s and q’s.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0400", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I got all A’s this semester!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0401", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Dot your i’s and cross your t’s.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0402", "category": "clean", "subcategory": "apostrophes_quotes", "input": "It's my parents' anniversary.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0403", "category": "clean", "subcategory": "apostrophes_quotes", "input": "We're meeting at Joe's at 7.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0404", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Who's the guy in the blue shirt?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0405", "category": "clean", "subcategory": "apostrophes_quotes", "input": "They've been dating for a year.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0406", "category": "clean", "subcategory": "apostrophes_quotes", "input": "I'd've called if I'd known.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0407", "category": "clean", "subcategory": "apostrophes_quotes", "input": "It isn't what I expected.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0408", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Aren't you cold?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0409", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Shouldn't we wait for her?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0410", "category": "clean", "subcategory": "apostrophes_quotes", "input": "You wouldn't believe the traffic.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0411", "category": "clean", "subcategory": "apostrophes_quotes", "input": "There's a new café on Elm Street.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0412", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Let's not.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0413", "category": "clean", "subcategory": "apostrophes_quotes", "input": "It’s fine, isn’t it?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0414", "category": "clean", "subcategory": "apostrophes_quotes", "input": "Ma’am, you dropped your scarf.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0415", "category": "clean", "subcategory": "punctuation_correct", "input": "We visited three cities: Rome, Florence, and Venice.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0416", "category": "clean", "subcategory": "punctuation_correct", "input": "We visited three cities: Rome, Florence and Venice.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0417", "category": "clean", "subcategory": "punctuation_correct", "input": "The results were clear; the new design performed better.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0418", "category": "clean", "subcategory": "punctuation_correct", "input": "The plan has two phases. The first starts in May.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0419", "category": "clean", "subcategory": "punctuation_correct", "input": "I went to the store and bought some milk.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0420", "category": "clean", "subcategory": "punctuation_correct", "input": "She finished the report and sent it to the client.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0421", "category": "clean", "subcategory": "punctuation_correct", "input": "The script reads the config file and validates every field.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0422", "category": "clean", "subcategory": "punctuation_correct", "input": "We reviewed the logs but couldn't find anything unusual.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0423", "category": "clean", "subcategory": "punctuation_correct", "input": "I tried, but it didn't work.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0424", "category": "clean", "subcategory": "punctuation_correct", "input": "It's late and I'm tired.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0425", "category": "clean", "subcategory": "punctuation_correct", "input": "I'm tired but happy.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0426", "category": "clean", "subcategory": "punctuation_correct", "input": "In 2023 the company opened two new offices.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0427", "category": "clean", "subcategory": "punctuation_correct", "input": "After lunch we can go over the slides.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0428", "category": "clean", "subcategory": "punctuation_correct", "input": "On Monday I'll send the invoice.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0429", "category": "clean", "subcategory": "punctuation_correct", "input": "She's a well-known author.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0430", "category": "clean", "subcategory": "punctuation_correct", "input": "The author is well known in the UX world.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0431", "category": "clean", "subcategory": "punctuation_correct", "input": "My 5-year-old just learned to ride a bike.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0432", "category": "clean", "subcategory": "punctuation_correct", "input": "My son is five years old.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0433", "category": "clean", "subcategory": "punctuation_correct", "input": "We need a long-term solution.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0434", "category": "clean", "subcategory": "punctuation_correct", "input": "In the long term, this will save money.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0435", "category": "clean", "subcategory": "punctuation_correct", "input": "Can we schedule a follow-up meeting?", "register": "email", "source": "authored"}
+{"id": "heldout-c-0436", "category": "clean", "subcategory": "punctuation_correct", "input": "I'll follow up with legal tomorrow.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0437", "category": "clean", "subcategory": "punctuation_correct", "input": "Please log in with your company email.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0438", "category": "clean", "subcategory": "punctuation_correct", "input": "The login page is down.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0439", "category": "clean", "subcategory": "punctuation_correct", "input": "We need to set up the staging server.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0440", "category": "clean", "subcategory": "punctuation_correct", "input": "The setup takes about ten minutes.", "register": "technical", "source": "authored"}
+{"id": "heldout-c-0441", "category": "clean", "subcategory": "punctuation_correct", "input": "Let's catch up next week!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0442", "category": "clean", "subcategory": "punctuation_correct", "input": "The report covers real-time analytics.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0443", "category": "clean", "subcategory": "punctuation_correct", "input": "Data is processed in real time.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0444", "category": "clean", "subcategory": "punctuation_correct", "input": "This is a highly efficient process.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0445", "category": "clean", "subcategory": "punctuation_correct", "input": "We offer a 30-day free trial.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0446", "category": "clean", "subcategory": "punctuation_correct", "input": "It's a two-hour drive.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0447", "category": "clean", "subcategory": "punctuation_correct", "input": "The drive takes two hours.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0448", "category": "clean", "subcategory": "punctuation_correct", "input": "Note: the office is closed on Monday.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0449", "category": "clean", "subcategory": "punctuation_correct", "input": "Warning: this action cannot be undone.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0450", "category": "clean", "subcategory": "punctuation_correct", "input": "Here's what we need: a venue, a caterer, and a DJ.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0451", "category": "clean", "subcategory": "punctuation_correct", "input": "There are two options: refund or replace.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0452", "category": "clean", "subcategory": "punctuation_correct", "input": "Our values include honesty, curiosity, and teamwork.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0453", "category": "clean", "subcategory": "punctuation_correct", "input": "Wait—what time is it?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0454", "category": "clean", "subcategory": "punctuation_correct", "input": "The results (see Table 2) were mixed.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0455", "category": "clean", "subcategory": "punctuation_correct", "input": "I'll be there around 6 (maybe 6:30).", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0456", "category": "clean", "subcategory": "punctuation_correct", "input": "Some fruits, e.g., apples and pears, ripen after picking.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0457", "category": "clean", "subcategory": "punctuation_correct", "input": "Use the default port, i.e., 8080.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0458", "category": "clean", "subcategory": "punctuation_correct", "input": "Hmm... let me think.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0459", "category": "clean", "subcategory": "punctuation_correct", "input": "Well, that's that.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0460", "category": "clean", "subcategory": "punctuation_correct", "input": "Yes, that works for me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0461", "category": "clean", "subcategory": "punctuation_correct", "input": "No, I haven't seen it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0462", "category": "clean", "subcategory": "punctuation_correct", "input": "Hi Sarah,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0463", "category": "clean", "subcategory": "punctuation_correct", "input": "Dear Mr. Patel,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0464", "category": "clean", "subcategory": "punctuation_correct", "input": "Best regards,", "register": "email", "source": "authored"}
+{"id": "heldout-c-0465", "category": "clean", "subcategory": "punctuation_correct", "input": "Thanks for your patience. We'll be in touch soon.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0466", "category": "clean", "subcategory": "punctuation_correct", "input": "The meeting is on Tuesday, March 3, in Room 4B.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0467", "category": "clean", "subcategory": "punctuation_correct", "input": "I moved here from Austin, Texas, last year.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0468", "category": "clean", "subcategory": "punctuation_correct", "input": "The event runs from 9 a.m. to 5 p.m.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0469", "category": "clean", "subcategory": "punctuation_correct", "input": "Prices start at $49. All plans include support.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0470", "category": "clean", "subcategory": "punctuation_correct", "input": "The total is $1,200.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0471", "category": "clean", "subcategory": "punctuation_correct", "input": "Revenue grew 12% in Q3.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0472", "category": "clean", "subcategory": "punctuation_correct", "input": "It's 3:30 p.m. here.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0473", "category": "clean", "subcategory": "punctuation_correct", "input": "I'll call you at 10.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0474", "category": "clean", "subcategory": "punctuation_correct", "input": "See you at 7!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0475", "category": "clean", "subcategory": "punctuation_correct", "input": "Wow!!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0476", "category": "clean", "subcategory": "punctuation_correct", "input": "Wait, what?!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0477", "category": "clean", "subcategory": "punctuation_correct", "input": "Did you really say that?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0478", "category": "clean", "subcategory": "punctuation_correct", "input": "I wonder whether the offer is still open.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0479", "category": "clean", "subcategory": "punctuation_correct", "input": "I was wondering if you had time to chat.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0480", "category": "clean", "subcategory": "punctuation_correct", "input": "Let me know what you think of the draft.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0481", "category": "clean", "subcategory": "punctuation_correct", "input": "I asked him where he was going.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0482", "category": "clean", "subcategory": "punctuation_correct", "input": "The well-being of our staff comes first.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0483", "category": "clean", "subcategory": "punctuation_correct", "input": "The co-founders met at a hackathon.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0484", "category": "clean", "subcategory": "punctuation_correct", "input": "We re-signed the lease for two more years.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0485", "category": "clean", "subcategory": "punctuation_correct", "input": "Please re-enter your password.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0486", "category": "clean", "subcategory": "punctuation_correct", "input": "The decision-making process is too slow.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0487", "category": "clean", "subcategory": "punctuation_correct", "input": "She's an up-and-coming designer.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0488", "category": "clean", "subcategory": "punctuation_correct", "input": "It was a once-in-a-lifetime trip.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0489", "category": "clean", "subcategory": "punctuation_correct", "input": "Fifty-three people attended the workshop.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0490", "category": "clean", "subcategory": "punctuation_correct", "input": "About two-thirds of respondents agreed.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0491", "category": "clean", "subcategory": "punctuation_correct", "input": "The deadline is 11:59 p.m. on June 30.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0492", "category": "clean", "subcategory": "grammar_tricky", "input": "If I were you, I'd take the job.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0493", "category": "clean", "subcategory": "grammar_tricky", "input": "The committee recommends that he be reappointed.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0494", "category": "clean", "subcategory": "grammar_tricky", "input": "It's important that she attend the meeting.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0495", "category": "clean", "subcategory": "grammar_tricky", "input": "The team is meeting at 3.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0496", "category": "clean", "subcategory": "grammar_tricky", "input": "The data show a clear trend.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0497", "category": "clean", "subcategory": "grammar_tricky", "input": "The data shows a clear trend.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0498", "category": "clean", "subcategory": "grammar_tricky", "input": "None of the options is perfect.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0499", "category": "clean", "subcategory": "grammar_tricky", "input": "None of the options are perfect.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0500", "category": "clean", "subcategory": "grammar_tricky", "input": "Neither of us knows the answer.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0501", "category": "clean", "subcategory": "grammar_tricky", "input": "Neither the manager nor the interns were informed.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0502", "category": "clean", "subcategory": "grammar_tricky", "input": "Either the director or her assistants are going to call you.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0503", "category": "clean", "subcategory": "grammar_tricky", "input": "A number of customers have reported the issue.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0504", "category": "clean", "subcategory": "grammar_tricky", "input": "The number of open tickets has doubled.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0505", "category": "clean", "subcategory": "grammar_tricky", "input": "Each of the drafts has its own problems.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0506", "category": "clean", "subcategory": "grammar_tricky", "input": "Everyone on the third floor has the day off.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0507", "category": "clean", "subcategory": "grammar_tricky", "input": "Somebody left their umbrella in the lobby.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0508", "category": "clean", "subcategory": "grammar_tricky", "input": "If a customer calls, ask them for their order number.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0509", "category": "clean", "subcategory": "grammar_tricky", "input": "Who did you invite?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0510", "category": "clean", "subcategory": "grammar_tricky", "input": "To whom should I address the letter?", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0511", "category": "clean", "subcategory": "grammar_tricky", "input": "Who are you going with?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0512", "category": "clean", "subcategory": "grammar_tricky", "input": "Between you and me, I think he's leaving.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0513", "category": "clean", "subcategory": "grammar_tricky", "input": "Mike and I are going to the game.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0514", "category": "clean", "subcategory": "grammar_tricky", "input": "Can you send it to Mike and me?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0515", "category": "clean", "subcategory": "grammar_tricky", "input": "It's me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0516", "category": "clean", "subcategory": "grammar_tricky", "input": "She's taller than me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0517", "category": "clean", "subcategory": "grammar_tricky", "input": "She's taller than I am.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0518", "category": "clean", "subcategory": "grammar_tricky", "input": "What are you looking for?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0519", "category": "clean", "subcategory": "grammar_tricky", "input": "Who did you talk to?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0520", "category": "clean", "subcategory": "grammar_tricky", "input": "That's the guy I was telling you about.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0521", "category": "clean", "subcategory": "grammar_tricky", "input": "And that's how we met.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0522", "category": "clean", "subcategory": "grammar_tricky", "input": "But honestly, I don't mind.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0523", "category": "clean", "subcategory": "grammar_tricky", "input": "To boldly go where no one has gone before.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0524", "category": "clean", "subcategory": "grammar_tricky", "input": "We aim to more than double our revenue.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0525", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm going to lie down for a bit.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0526", "category": "clean", "subcategory": "grammar_tricky", "input": "I laid the papers on your desk.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0527", "category": "clean", "subcategory": "grammar_tricky", "input": "She lay on the couch all afternoon.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0528", "category": "clean", "subcategory": "grammar_tricky", "input": "I'll lend you my umbrella.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0529", "category": "clean", "subcategory": "grammar_tricky", "input": "Can I borrow your charger?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0530", "category": "clean", "subcategory": "grammar_tricky", "input": "I feel bad about what happened.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0531", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm doing well, thanks.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0532", "category": "clean", "subcategory": "grammar_tricky", "input": "I did well on the test.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0533", "category": "clean", "subcategory": "grammar_tricky", "input": "We have fewer meetings this week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0534", "category": "clean", "subcategory": "grammar_tricky", "input": "The new model uses less energy.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0535", "category": "clean", "subcategory": "grammar_tricky", "input": "Ten items or less.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0536", "category": "clean", "subcategory": "grammar_tricky", "input": "Less than 5% of users opened the email.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0537", "category": "clean", "subcategory": "grammar_tricky", "input": "There are fewer than ten people here.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0538", "category": "clean", "subcategory": "grammar_tricky", "input": "It's an honor to be here.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0539", "category": "clean", "subcategory": "grammar_tricky", "input": "She works for an NGO.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0540", "category": "clean", "subcategory": "grammar_tricky", "input": "He's a university student.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0541", "category": "clean", "subcategory": "grammar_tricky", "input": "It's a one-time thing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0542", "category": "clean", "subcategory": "grammar_tricky", "input": "I need a new phone.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0543", "category": "clean", "subcategory": "grammar_tricky", "input": "I'll be there in an hour.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0544", "category": "clean", "subcategory": "grammar_tricky", "input": "It was a historic moment for the city.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0545", "category": "clean", "subcategory": "grammar_tricky", "input": "I have a few minutes if you want to chat.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0546", "category": "clean", "subcategory": "grammar_tricky", "input": "I have a little money left.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0547", "category": "clean", "subcategory": "grammar_tricky", "input": "There's little hope of finishing today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0548", "category": "clean", "subcategory": "grammar_tricky", "input": "There are few options left.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0549", "category": "clean", "subcategory": "grammar_tricky", "input": "Much of the work is done.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0550", "category": "clean", "subcategory": "grammar_tricky", "input": "Many people asked about it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0551", "category": "clean", "subcategory": "grammar_tricky", "input": "How many people are coming?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0552", "category": "clean", "subcategory": "grammar_tricky", "input": "How much does it cost?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0553", "category": "clean", "subcategory": "grammar_tricky", "input": "There is a pen and two notebooks on the desk.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0554", "category": "clean", "subcategory": "grammar_tricky", "input": "Here's the thing.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0555", "category": "clean", "subcategory": "grammar_tricky", "input": "There's a lot of traffic today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0556", "category": "clean", "subcategory": "grammar_tricky", "input": "There are a lot of reasons to switch.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0557", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm looking forward to seeing you.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0558", "category": "clean", "subcategory": "grammar_tricky", "input": "We stopped to get gas.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0559", "category": "clean", "subcategory": "grammar_tricky", "input": "We stopped getting the newspaper.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0560", "category": "clean", "subcategory": "grammar_tricky", "input": "I remember locking the door.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0561", "category": "clean", "subcategory": "grammar_tricky", "input": "Remember to lock the door.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0562", "category": "clean", "subcategory": "grammar_tricky", "input": "I used to live in Chicago.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0563", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm used to waking up early.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0564", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm supposed to be there at 9.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0565", "category": "clean", "subcategory": "grammar_tricky", "input": "You should have told me!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0566", "category": "clean", "subcategory": "grammar_tricky", "input": "We could've won that game.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0567", "category": "clean", "subcategory": "grammar_tricky", "input": "It must have been the wind.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0568", "category": "clean", "subcategory": "grammar_tricky", "input": "I've already eaten.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0569", "category": "clean", "subcategory": "grammar_tricky", "input": "Have you seen my charger?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0570", "category": "clean", "subcategory": "grammar_tricky", "input": "She's gone home for the day.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0571", "category": "clean", "subcategory": "grammar_tricky", "input": "I saw her at the store yesterday.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0572", "category": "clean", "subcategory": "grammar_tricky", "input": "We've known each other for ten years.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0573", "category": "clean", "subcategory": "grammar_tricky", "input": "I've lived here since 2018.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0574", "category": "clean", "subcategory": "grammar_tricky", "input": "By the time we arrived, the movie had started.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0575", "category": "clean", "subcategory": "grammar_tricky", "input": "I'll call you when I land.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0576", "category": "clean", "subcategory": "grammar_tricky", "input": "Did you go to the concert?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0577", "category": "clean", "subcategory": "grammar_tricky", "input": "Why didn't you tell me?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0578", "category": "clean", "subcategory": "grammar_tricky", "input": "Do you know where the bathroom is?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0579", "category": "clean", "subcategory": "grammar_tricky", "input": "Can you tell me what the problem is?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0580", "category": "clean", "subcategory": "grammar_tricky", "input": "Does she know about the party?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0581", "category": "clean", "subcategory": "grammar_tricky", "input": "He doesn't like mushrooms.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0582", "category": "clean", "subcategory": "grammar_tricky", "input": "I always go to the gym on Mondays.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0583", "category": "clean", "subcategory": "grammar_tricky", "input": "I've never been to Japan.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0584", "category": "clean", "subcategory": "grammar_tricky", "input": "She hasn't replied yet.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0585", "category": "clean", "subcategory": "grammar_tricky", "input": "I still can't believe it.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0586", "category": "clean", "subcategory": "grammar_tricky", "input": "It's big enough for all of us.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0587", "category": "clean", "subcategory": "grammar_tricky", "input": "We have a big old red truck.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0588", "category": "clean", "subcategory": "grammar_tricky", "input": "She's a really good cook.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0589", "category": "clean", "subcategory": "grammar_tricky", "input": "He's the guy who fixed my car.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0590", "category": "clean", "subcategory": "grammar_tricky", "input": "The report, which was due Friday, is late.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0591", "category": "clean", "subcategory": "grammar_tricky", "input": "The report that was due Friday is late.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0592", "category": "clean", "subcategory": "grammar_tricky", "input": "I want to go home.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0593", "category": "clean", "subcategory": "grammar_tricky", "input": "I enjoy working with her.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0594", "category": "clean", "subcategory": "grammar_tricky", "input": "She suggested going to the beach.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0595", "category": "clean", "subcategory": "grammar_tricky", "input": "We decided to go with the blue one.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0596", "category": "clean", "subcategory": "grammar_tricky", "input": "It's worth trying.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0597", "category": "clean", "subcategory": "grammar_tricky", "input": "Thanks for helping me out!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0598", "category": "clean", "subcategory": "grammar_tricky", "input": "My boss let me leave early.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0599", "category": "clean", "subcategory": "grammar_tricky", "input": "I'd rather stay home tonight.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0600", "category": "clean", "subcategory": "grammar_tricky", "input": "I agree with you.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0601", "category": "clean", "subcategory": "grammar_tricky", "input": "She knows the answer.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0602", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm having a great time.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0603", "category": "clean", "subcategory": "grammar_tricky", "input": "We're having dinner at 7.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0604", "category": "clean", "subcategory": "grammar_tricky", "input": "I'm thinking about quitting.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0605", "category": "clean", "subcategory": "grammar_tricky", "input": "What are you thinking?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0606", "category": "clean", "subcategory": "grammar_tricky", "input": "The news is pretty bad today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0607", "category": "clean", "subcategory": "grammar_tricky", "input": "My glasses are somewhere in this room.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0608", "category": "clean", "subcategory": "grammar_tricky", "input": "The scissors are in the top drawer.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0609", "category": "clean", "subcategory": "grammar_tricky", "input": "Mathematics was her best subject.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0610", "category": "clean", "subcategory": "grammar_tricky", "input": "Physics is hard.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0611", "category": "clean", "subcategory": "grammar_tricky", "input": "One of my friends lives near there.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0612", "category": "clean", "subcategory": "grammar_tricky", "input": "The list of approved vendors is on the shared drive.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0613", "category": "clean", "subcategory": "grammar_tricky", "input": "Where are my keys?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0614", "category": "clean", "subcategory": "grammar_tricky", "input": "Here are the photos!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0615", "category": "clean", "subcategory": "grammar_tricky", "input": "There were like fifty people at the party.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0616", "category": "clean", "subcategory": "grammar_tricky", "input": "Whatever you decide is fine by me.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0617", "category": "clean", "subcategory": "grammar_tricky", "input": "The more, the merrier.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0618", "category": "clean", "subcategory": "grammar_tricky", "input": "Long story short, we missed the flight.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0619", "category": "clean", "subcategory": "grammar_tricky", "input": "Better late than never.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0620", "category": "clean", "subcategory": "grammar_tricky", "input": "Easier said than done.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0621", "category": "clean", "subcategory": "grammar_tricky", "input": "So far, so good.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0622", "category": "clean", "subcategory": "grammar_tricky", "input": "First come, first served.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0623", "category": "clean", "subcategory": "grammar_tricky", "input": "Out of sight, out of mind.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0624", "category": "clean", "subcategory": "grammar_tricky", "input": "The sooner, the better.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0625", "category": "clean", "subcategory": "email_doc_general", "input": "Thanks for sending the contract over. I'll review it this afternoon.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0626", "category": "clean", "subcategory": "email_doc_general", "input": "The client approved the budget, so we can start hiring next month.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0627", "category": "clean", "subcategory": "email_doc_general", "input": "I won't be at standup tomorrow because I have a doctor's appointment.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0628", "category": "clean", "subcategory": "email_doc_general", "input": "Please find the revised proposal attached.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0629", "category": "clean", "subcategory": "email_doc_general", "input": "I've attached the invoice for March.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0630", "category": "clean", "subcategory": "email_doc_general", "input": "Could you send me the slides from yesterday's meeting?", "register": "email", "source": "authored"}
+{"id": "heldout-c-0631", "category": "clean", "subcategory": "email_doc_general", "input": "Do you have time for a quick call this afternoon?", "register": "email", "source": "authored"}
+{"id": "heldout-c-0632", "category": "clean", "subcategory": "email_doc_general", "input": "I'm out of the office until Monday, October 13, with limited access to email.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0633", "category": "clean", "subcategory": "email_doc_general", "input": "For urgent issues, please contact Dana Kim at dana@example.com.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0634", "category": "clean", "subcategory": "email_doc_general", "input": "Let me know if Tuesday or Wednesday works better for you.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0635", "category": "clean", "subcategory": "email_doc_general", "input": "Thanks again for your help with the launch.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0636", "category": "clean", "subcategory": "email_doc_general", "input": "I'm happy to accept the offer.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0637", "category": "clean", "subcategory": "email_doc_general", "input": "Unfortunately, the item you ordered is out of stock.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0638", "category": "clean", "subcategory": "email_doc_general", "input": "We've decided to go with the second vendor because their pricing was more flexible.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0639", "category": "clean", "subcategory": "email_doc_general", "input": "As discussed, the deadline has moved to May 5.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0640", "category": "clean", "subcategory": "email_doc_general", "input": "The meeting has been moved to Thursday at 10 a.m.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0641", "category": "clean", "subcategory": "email_doc_general", "input": "Could you double-check the numbers on page 4?", "register": "email", "source": "authored"}
+{"id": "heldout-c-0642", "category": "clean", "subcategory": "email_doc_general", "input": "I hope you had a restful weekend.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0643", "category": "clean", "subcategory": "email_doc_general", "input": "I'm writing to follow up on the proposal I sent last week.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0644", "category": "clean", "subcategory": "email_doc_general", "input": "We look forward to hearing from you.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0645", "category": "clean", "subcategory": "email_doc_general", "input": "Please confirm your attendance by Friday.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0646", "category": "clean", "subcategory": "email_doc_general", "input": "Your order has shipped and should arrive within three business days.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0647", "category": "clean", "subcategory": "email_doc_general", "input": "We received your application and will be in touch shortly.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0648", "category": "clean", "subcategory": "email_doc_general", "input": "I've cc'd Mike, who's leading the integration.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0649", "category": "clean", "subcategory": "email_doc_general", "input": "Just a reminder that timesheets are due today.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0650", "category": "clean", "subcategory": "email_doc_general", "input": "Sorry for the late reply. Things have been hectic since the launch.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0651", "category": "clean", "subcategory": "email_doc_general", "input": "Attached are the slides from today's meeting.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0652", "category": "clean", "subcategory": "email_doc_general", "input": "Would 3 p.m. work for you instead?", "register": "email", "source": "authored"}
+{"id": "heldout-c-0653", "category": "clean", "subcategory": "email_doc_general", "input": "The parking garage closes at 8 tonight.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0654", "category": "clean", "subcategory": "email_doc_general", "input": "Congratulations on the new role!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0655", "category": "clean", "subcategory": "email_doc_general", "input": "Welcome to the team, Priya!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0656", "category": "clean", "subcategory": "email_doc_general", "input": "Here's the link to the recording: https://example.com/rec/8841.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0657", "category": "clean", "subcategory": "email_doc_general", "input": "The office will be closed on December 26.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0658", "category": "clean", "subcategory": "email_doc_general", "input": "Feel free to forward this to anyone who might be interested.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0659", "category": "clean", "subcategory": "email_doc_general", "input": "I'd appreciate your feedback by end of day Thursday.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0660", "category": "clean", "subcategory": "email_doc_general", "input": "We're moving to a new office in May, and the address will be shared soon.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0661", "category": "clean", "subcategory": "email_doc_general", "input": "I've updated the spreadsheet, and the new numbers are in column F.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0662", "category": "clean", "subcategory": "email_doc_general", "input": "Maria is out until Thursday, so Ken is covering her accounts.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0663", "category": "clean", "subcategory": "email_doc_general", "input": "My laptop died during the demo. Luckily, Sam had a backup copy.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0664", "category": "clean", "subcategory": "email_doc_general", "input": "It was great meeting you at the conference.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0665", "category": "clean", "subcategory": "email_doc_general", "input": "We missed the deadline by two days, and I take full responsibility.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0666", "category": "clean", "subcategory": "email_doc_general", "input": "Please submit your expenses by the 25th.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0667", "category": "clean", "subcategory": "email_doc_general", "input": "Your feedback is greatly appreciated.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0668", "category": "clean", "subcategory": "email_doc_general", "input": "I'd love to help; however, I'm fully booked this week.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0669", "category": "clean", "subcategory": "email_doc_general", "input": "The quote is valid for 30 days.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0670", "category": "clean", "subcategory": "email_doc_general", "input": "I'm not sure what time the meeting starts.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0671", "category": "clean", "subcategory": "email_doc_general", "input": "Can you resend the link? The old one expired.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0672", "category": "clean", "subcategory": "email_doc_general", "input": "Hope you're doing well!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0673", "category": "clean", "subcategory": "email_doc_general", "input": "Thank you for your patience while we sort this out.", "register": "email", "source": "authored"}
+{"id": "heldout-c-0674", "category": "clean", "subcategory": "email_doc_general", "input": "Have a great weekend!", "register": "email", "source": "authored"}
+{"id": "heldout-c-0675", "category": "clean", "subcategory": "email_doc_general", "input": "All visitors must sign in at the front desk.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0676", "category": "clean", "subcategory": "email_doc_general", "input": "The server migration finished on Tuesday.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0677", "category": "clean", "subcategory": "email_doc_general", "input": "Revenue grew 12% last quarter, mostly from new customers.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0678", "category": "clean", "subcategory": "email_doc_general", "input": "The feature is behind a flag and won't be visible to customers yet.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0679", "category": "clean", "subcategory": "email_doc_general", "input": "Tickets are triaged every morning by the on-call engineer.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0680", "category": "clean", "subcategory": "email_doc_general", "input": "Most users never open the settings page.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0681", "category": "clean", "subcategory": "email_doc_general", "input": "The survey closes on Friday, and results will be shared the following week.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0682", "category": "clean", "subcategory": "email_doc_general", "input": "The pilot ran for six weeks with 40 participants.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0683", "category": "clean", "subcategory": "email_doc_general", "input": "Version 2.0 drops support for Python 3.8.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0684", "category": "clean", "subcategory": "email_doc_general", "input": "Each employee receives a laptop on day one.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0685", "category": "clean", "subcategory": "email_doc_general", "input": "The main goal of these changes is to reduce churn.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0686", "category": "clean", "subcategory": "email_doc_general", "input": "Access to the files is restricted to admins.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0687", "category": "clean", "subcategory": "email_doc_general", "input": "The members of the board have approved the budget.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0688", "category": "clean", "subcategory": "email_doc_general", "input": "Feedback from customers and partners has been positive.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0689", "category": "clean", "subcategory": "email_doc_general", "input": "Customers can cancel their plan at any time.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0690", "category": "clean", "subcategory": "email_doc_general", "input": "The old dashboard is deprecated.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0691", "category": "clean", "subcategory": "email_doc_general", "input": "Several issues were reported, such as slow loading and broken links.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0692", "category": "clean", "subcategory": "email_doc_general", "input": "The office will close at 3 so that everyone can get home before the storm.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0693", "category": "clean", "subcategory": "email_doc_general", "input": "Staff must wear badges at all times.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0694", "category": "clean", "subcategory": "email_doc_general", "input": "The data was collected over six months and covers more than 4,000 households.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0695", "category": "clean", "subcategory": "email_doc_general", "input": "Our biggest market is Germany.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0696", "category": "clean", "subcategory": "email_doc_general", "input": "The project was led by Maria Gonzalez.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0697", "category": "clean", "subcategory": "email_doc_general", "input": "This affects all users on Android.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0698", "category": "clean", "subcategory": "email_doc_general", "input": "Users whose accounts are inactive will be deleted after 90 days.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0699", "category": "clean", "subcategory": "email_doc_general", "input": "The list of requirements is below.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0700", "category": "clean", "subcategory": "email_doc_general", "input": "It's important to back up your data.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0701", "category": "clean", "subcategory": "email_doc_general", "input": "In addition, the report includes a summary.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0702", "category": "clean", "subcategory": "email_doc_general", "input": "Applications close on June 30.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0703", "category": "clean", "subcategory": "email_doc_general", "input": "Refunds take 5 to 7 business days.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0704", "category": "clean", "subcategory": "email_doc_general", "input": "The maintenance window is Sunday at 2 a.m.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0705", "category": "clean", "subcategory": "email_doc_general", "input": "We recommend updating to version 3.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0706", "category": "clean", "subcategory": "email_doc_general", "input": "The system automatically saves your work.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0707", "category": "clean", "subcategory": "email_doc_general", "input": "The quarterly report is due at the end of the month.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0708", "category": "clean", "subcategory": "email_doc_general", "input": "The kit includes a charger, a cable, and a case.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0709", "category": "clean", "subcategory": "email_doc_general", "input": "The team consists of two engineers and a designer.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0710", "category": "clean", "subcategory": "email_doc_general", "input": "Q1 ends on March 31.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0711", "category": "clean", "subcategory": "email_doc_general", "input": "The policy takes effect in February.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0712", "category": "clean", "subcategory": "email_doc_general", "input": "Payroll runs on the last Friday of each month.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0713", "category": "clean", "subcategory": "email_doc_general", "input": "The course starts in the fall semester.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0714", "category": "clean", "subcategory": "email_doc_general", "input": "The conference is in Lisbon, Portugal, this year.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0715", "category": "clean", "subcategory": "email_doc_general", "input": "One of the main reasons for the delay was staffing.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0716", "category": "clean", "subcategory": "email_doc_general", "input": "There are fewer bugs than last quarter.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0717", "category": "clean", "subcategory": "email_doc_general", "input": "The effect of the change was minimal.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0718", "category": "clean", "subcategory": "email_doc_general", "input": "These results show a clear trend.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0719", "category": "clean", "subcategory": "email_doc_general", "input": "Neither option is ideal.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0720", "category": "clean", "subcategory": "email_doc_general", "input": "The environment variables are set in the dashboard.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0721", "category": "clean", "subcategory": "email_doc_general", "input": "Although the results were good, more testing is needed.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0722", "category": "clean", "subcategory": "email_doc_general", "input": "The criteria for selection are listed below.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0723", "category": "clean", "subcategory": "email_doc_general", "input": "This feature allows users to export reports.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0724", "category": "clean", "subcategory": "email_doc_general", "input": "We have received over 200 applications.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0725", "category": "clean", "subcategory": "email_doc_general", "input": "The results of the survey were published in April.", "register": "doc", "source": "authored"}
+{"id": "heldout-c-0726", "category": "clean", "subcategory": "social_posts", "input": "Just finished my first marathon and I can't feel my legs 😅", "register": "social", "source": "authored"}
+{"id": "heldout-c-0727", "category": "clean", "subcategory": "social_posts", "input": "So proud of my sister! She just graduated from nursing school.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0728", "category": "clean", "subcategory": "social_posts", "input": "It's official: we're moving to Denver!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0729", "category": "clean", "subcategory": "social_posts", "input": "Best pizza I've ever had, honestly.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0730", "category": "clean", "subcategory": "social_posts", "input": "Can't believe it's been five years since we graduated!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0731", "category": "clean", "subcategory": "social_posts", "input": "Who's watching the game tonight?", "register": "social", "source": "authored"}
+{"id": "heldout-c-0732", "category": "clean", "subcategory": "social_posts", "input": "We finally got the keys to our new apartment!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0733", "category": "clean", "subcategory": "social_posts", "input": "Feeling grateful for a lot of things today.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0734", "category": "clean", "subcategory": "social_posts", "input": "It's too early for Christmas music.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0735", "category": "clean", "subcategory": "social_posts", "input": "So excited to announce that I'm joining Stripe!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0736", "category": "clean", "subcategory": "social_posts", "input": "We were lucky to catch the northern lights last night!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0737", "category": "clean", "subcategory": "social_posts", "input": "This restaurant never disappoints.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0738", "category": "clean", "subcategory": "social_posts", "input": "Our bakery opens at 7 tomorrow!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0739", "category": "clean", "subcategory": "social_posts", "input": "Can't believe it's already December!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0740", "category": "clean", "subcategory": "social_posts", "input": "So proud of our team for winning the regional final!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0741", "category": "clean", "subcategory": "social_posts", "input": "There's nothing better than a Sunday morning walk.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0742", "category": "clean", "subcategory": "social_posts", "input": "We're hiring! DM me if you're interested.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0743", "category": "clean", "subcategory": "social_posts", "input": "My dog has its own Instagram now 🐶", "register": "social", "source": "authored"}
+{"id": "heldout-c-0744", "category": "clean", "subcategory": "social_posts", "input": "Who's ready for the long weekend?", "register": "social", "source": "authored"}
+{"id": "heldout-c-0745", "category": "clean", "subcategory": "social_posts", "input": "Can't wait to see you all tomorrow!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0746", "category": "clean", "subcategory": "social_posts", "input": "Thank you all for the birthday wishes. Feeling loved ❤️", "register": "social", "source": "authored"}
+{"id": "heldout-c-0747", "category": "clean", "subcategory": "social_posts", "input": "New blog post is up! Link in bio.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0748", "category": "clean", "subcategory": "social_posts", "input": "Throwback to the best trip of my life 🌴", "register": "social", "source": "authored"}
+{"id": "heldout-c-0749", "category": "clean", "subcategory": "social_posts", "input": "Happy anniversary to my favorite person.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0750", "category": "clean", "subcategory": "social_posts", "input": "Ten years at this company today. Wild.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0751", "category": "clean", "subcategory": "social_posts", "input": "Our first marathon as a family! #running", "register": "social", "source": "authored"}
+{"id": "heldout-c-0752", "category": "clean", "subcategory": "social_posts", "input": "Shout-out to the nurses at St. Mary's. You're heroes.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0753", "category": "clean", "subcategory": "social_posts", "input": "Rainy days call for soup and a good book.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0754", "category": "clean", "subcategory": "social_posts", "input": "Brunch with the girls ☕️", "register": "social", "source": "authored"}
+{"id": "heldout-c-0755", "category": "clean", "subcategory": "social_posts", "input": "Not me crying at a dog food commercial.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0756", "category": "clean", "subcategory": "social_posts", "input": "Officially a homeowner! 🏡", "register": "social", "source": "authored"}
+{"id": "heldout-c-0757", "category": "clean", "subcategory": "social_posts", "input": "Big news coming Monday. Stay tuned!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0758", "category": "clean", "subcategory": "social_posts", "input": "If you know, you know.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0759", "category": "clean", "subcategory": "social_posts", "input": "We did it! Fully funded in 48 hours.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0760", "category": "clean", "subcategory": "social_posts", "input": "Grateful for this crew. #teamwork", "register": "social", "source": "authored"}
+{"id": "heldout-c-0761", "category": "clean", "subcategory": "social_posts", "input": "Five stars for the tacos at La Cocina.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0762", "category": "clean", "subcategory": "social_posts", "input": "Twenty years of friendship and counting.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0763", "category": "clean", "subcategory": "social_posts", "input": "Me, every Monday: coffee first.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0764", "category": "clean", "subcategory": "social_posts", "input": "Our little guy turns one today 🎂", "register": "social", "source": "authored"}
+{"id": "heldout-c-0765", "category": "clean", "subcategory": "social_posts", "input": "Huge thanks to everyone who came out tonight!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0766", "category": "clean", "subcategory": "social_posts", "input": "Spring has finally sprung in Boston 🌸", "register": "social", "source": "authored"}
+{"id": "heldout-c-0767", "category": "clean", "subcategory": "social_posts", "input": "Starting a new chapter in Seattle!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0768", "category": "clean", "subcategory": "social_posts", "input": "Can someone tell me where I can buy these shoes?", "register": "social", "source": "authored"}
+{"id": "heldout-c-0769", "category": "clean", "subcategory": "social_posts", "input": "In front of the Eiffel Tower with my favorite people 💛", "register": "social", "source": "authored"}
+{"id": "heldout-c-0770", "category": "clean", "subcategory": "social_posts", "input": "Hot take: pineapple belongs on pizza.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0771", "category": "clean", "subcategory": "social_posts", "input": "Day 30 of learning to code. Still alive.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0772", "category": "clean", "subcategory": "social_posts", "input": "We raised $12,000 for the shelter. Thank you!", "register": "social", "source": "authored"}
+{"id": "heldout-c-0773", "category": "clean", "subcategory": "social_posts", "input": "New personal record: 5K in 24 minutes.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0774", "category": "clean", "subcategory": "social_posts", "input": "Life update: I adopted a cat.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0775", "category": "clean", "subcategory": "social_posts", "input": "Weekend plans: absolutely nothing.", "register": "social", "source": "authored"}
+{"id": "heldout-c-0776", "category": "clean", "subcategory": "en_gb", "input": "What's your favourite colour?", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0777", "category": "clean", "subcategory": "en_gb", "input": "We need to organise the party.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0778", "category": "clean", "subcategory": "en_gb", "input": "I'm travelling to Leeds on Tuesday.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0779", "category": "clean", "subcategory": "en_gb", "input": "The meeting has been cancelled.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0780", "category": "clean", "subcategory": "en_gb", "input": "The centre opens at 9am.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0781", "category": "clean", "subcategory": "en_gb", "input": "Please bring your driving licence.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0782", "category": "clean", "subcategory": "en_gb", "input": "I need to practise my presentation.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0783", "category": "clean", "subcategory": "en_gb", "input": "The programme runs for twelve weeks.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0784", "category": "clean", "subcategory": "en_gb", "input": "It's a grey day in London.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0785", "category": "clean", "subcategory": "en_gb", "input": "See you at the weekend!", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0786", "category": "clean", "subcategory": "en_gb", "input": "The team are meeting on Thursday.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0787", "category": "clean", "subcategory": "en_gb", "input": "We apologise for any inconvenience.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0788", "category": "clean", "subcategory": "en_gb", "input": "The theatre is just round the corner.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0789", "category": "clean", "subcategory": "en_gb", "input": "I've realised I left my keys at home.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0790", "category": "clean", "subcategory": "en_gb", "input": "We analysed the results in detail.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0791", "category": "clean", "subcategory": "en_gb", "input": "Please don't hesitate to get in touch.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0792", "category": "clean", "subcategory": "en_gb", "input": "Fancy a cuppa?", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0793", "category": "clean", "subcategory": "en_gb", "input": "I'm knackered after that run.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0794", "category": "clean", "subcategory": "en_gb", "input": "The neighbourhood has changed a lot.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0795", "category": "clean", "subcategory": "en_gb", "input": "I'll send the cheque on Monday.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0796", "category": "clean", "subcategory": "en_gb", "input": "The aluminium frame is very light.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0797", "category": "clean", "subcategory": "en_gb", "input": "My mum's making a roast.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0798", "category": "clean", "subcategory": "en_gb", "input": "Shall we get a takeaway tonight?", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0799", "category": "clean", "subcategory": "en_gb", "input": "Pupils must wear school uniform.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0800", "category": "clean", "subcategory": "en_gb", "input": "Our labour costs went up this year.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0801", "category": "clean", "subcategory": "en_gb", "input": "The catalogue is available online.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0802", "category": "clean", "subcategory": "en_gb", "input": "The lift is out of order again.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0803", "category": "clean", "subcategory": "en_gb", "input": "I queued for an hour at the post office.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0804", "category": "clean", "subcategory": "en_gb", "input": "Behaviour like this won't be tolerated.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0805", "category": "clean", "subcategory": "en_gb", "input": "The defence rests its case.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0806", "category": "clean", "subcategory": "en_gb", "input": "The report was submitted in good time.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0807", "category": "clean", "subcategory": "en_gb", "input": "My flat is on the fourth floor.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0808", "category": "clean", "subcategory": "en_gb", "input": "Each candidate has a dedicated tutor.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0809", "category": "clean", "subcategory": "en_gb", "input": "I've got a dentist appointment at half four.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0810", "category": "clean", "subcategory": "en_gb", "input": "We've modelled three scenarios.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0811", "category": "clean", "subcategory": "en_gb", "input": "I've enrolled on the course.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0812", "category": "clean", "subcategory": "en_gb", "input": "The kids are on holiday next week.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0813", "category": "clean", "subcategory": "en_gb", "input": "The car's tyres need replacing.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0814", "category": "clean", "subcategory": "en_gb", "input": "Pop round whenever you like.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0815", "category": "clean", "subcategory": "en_gb", "input": "Our honours board lists every winner.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0816", "category": "clean", "subcategory": "en_gb", "input": "Please fill in the form and return it by Friday.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0817", "category": "clean", "subcategory": "en_gb", "input": "The motorway was jammed.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0818", "category": "clean", "subcategory": "en_gb", "input": "The jewellery was insured.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0819", "category": "clean", "subcategory": "en_gb", "input": "Who's up for a pint after work?", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0820", "category": "clean", "subcategory": "en_gb", "input": "The council has approved the plans.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0821", "category": "clean", "subcategory": "en_gb", "input": "We're keen to get started.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0822", "category": "clean", "subcategory": "en_gb", "input": "I'll ring you later.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0823", "category": "clean", "subcategory": "en_gb", "input": "The equipment was fitted in a fortnight.", "register": "doc", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0824", "category": "clean", "subcategory": "en_gb", "input": "I've just got back from Spain.", "register": "chat", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0825", "category": "clean", "subcategory": "en_gb", "input": "Many thanks for your help.", "register": "email", "source": "authored", "dialect": "en-GB"}
+{"id": "heldout-c-0826", "category": "clean", "subcategory": "chat_general", "input": "I'm heading to the gym after work.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0827", "category": "clean", "subcategory": "chat_general", "input": "Do you want pizza or tacos tonight?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0828", "category": "clean", "subcategory": "chat_general", "input": "My flight got delayed again.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0829", "category": "clean", "subcategory": "chat_general", "input": "We should get dinner next week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0830", "category": "clean", "subcategory": "chat_general", "input": "Can you pick up some milk on the way home?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0831", "category": "clean", "subcategory": "chat_general", "input": "Traffic is awful, so I'll be 20 minutes late.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0832", "category": "clean", "subcategory": "chat_general", "input": "I left my charger at your place.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0833", "category": "clean", "subcategory": "chat_general", "input": "Did you see the game last night?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0834", "category": "clean", "subcategory": "chat_general", "input": "She's on PTO this week.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0835", "category": "clean", "subcategory": "chat_general", "input": "The Wi-Fi at this café is terrible.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0836", "category": "clean", "subcategory": "chat_general", "input": "I can't find my keys anywhere.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0837", "category": "clean", "subcategory": "chat_general", "input": "We got a puppy!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0838", "category": "clean", "subcategory": "chat_general", "input": "My mom says hi.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0839", "category": "clean", "subcategory": "chat_general", "input": "Are we still on for Saturday?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0840", "category": "clean", "subcategory": "chat_general", "input": "Let me know when you get home.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0841", "category": "clean", "subcategory": "chat_general", "input": "I'm so full right now.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0842", "category": "clean", "subcategory": "chat_general", "input": "Do you need anything from the store?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0843", "category": "clean", "subcategory": "chat_general", "input": "I just sent you the address.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0844", "category": "clean", "subcategory": "chat_general", "input": "The kids are finally asleep.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0845", "category": "clean", "subcategory": "chat_general", "input": "Text me when you're outside.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0846", "category": "clean", "subcategory": "chat_general", "input": "I'm sorry I missed your call.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0847", "category": "clean", "subcategory": "chat_general", "input": "What did you think of the movie?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0848", "category": "clean", "subcategory": "chat_general", "input": "I'm running about ten minutes behind.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0849", "category": "clean", "subcategory": "chat_general", "input": "That restaurant was really good.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0850", "category": "clean", "subcategory": "chat_general", "input": "Want to split an Uber?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0851", "category": "clean", "subcategory": "chat_general", "input": "My phone is at 3%.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0852", "category": "clean", "subcategory": "chat_general", "input": "Can you send me that recipe?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0853", "category": "clean", "subcategory": "chat_general", "input": "I'll bring the chips and salsa.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0854", "category": "clean", "subcategory": "chat_general", "input": "I'm working from home today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0855", "category": "clean", "subcategory": "chat_general", "input": "Happy birthday, Alex! 🎉", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0856", "category": "clean", "subcategory": "chat_general", "input": "The landlord finally fixed the heater.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0857", "category": "clean", "subcategory": "chat_general", "input": "I got the job!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0858", "category": "clean", "subcategory": "chat_general", "input": "We're out of coffee again.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0859", "category": "clean", "subcategory": "chat_general", "input": "Are you awake?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0860", "category": "clean", "subcategory": "chat_general", "input": "I made a reservation for 7:30.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0861", "category": "clean", "subcategory": "chat_general", "input": "The cat knocked my coffee off the desk.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0862", "category": "clean", "subcategory": "chat_general", "input": "Can I call you in ten?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0863", "category": "clean", "subcategory": "chat_general", "input": "I think I left the stove on.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0864", "category": "clean", "subcategory": "chat_general", "input": "Let's watch something funny tonight.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0865", "category": "clean", "subcategory": "chat_general", "input": "Grandma loved the flowers.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0866", "category": "clean", "subcategory": "chat_general", "input": "I owe you one.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0867", "category": "clean", "subcategory": "chat_general", "input": "My car won't start. Can you pick me up?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0868", "category": "clean", "subcategory": "chat_general", "input": "I'm at the store. Do you need anything?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0869", "category": "clean", "subcategory": "chat_general", "input": "It's freezing outside, so wear a coat.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0870", "category": "clean", "subcategory": "chat_general", "input": "Dinner's ready.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0871", "category": "clean", "subcategory": "chat_general", "input": "I'm hungry. Let's get pizza.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0872", "category": "clean", "subcategory": "chat_general", "input": "The traffic is insane today.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0873", "category": "clean", "subcategory": "chat_general", "input": "I lost my phone. Can you call it?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0874", "category": "clean", "subcategory": "chat_general", "input": "I'll be late tonight, so don't wait up.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0875", "category": "clean", "subcategory": "chat_general", "input": "The meeting got pushed to 4.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0876", "category": "clean", "subcategory": "chat_general", "input": "Thanks for dinner last night!", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0877", "category": "clean", "subcategory": "chat_general", "input": "I'm almost done with the book.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0878", "category": "clean", "subcategory": "chat_general", "input": "We won! It was so close.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0879", "category": "clean", "subcategory": "chat_general", "input": "Is it supposed to rain tomorrow?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0880", "category": "clean", "subcategory": "chat_general", "input": "I need coffee before I can function.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0881", "category": "clean", "subcategory": "chat_general", "input": "Who's bringing dessert?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0882", "category": "clean", "subcategory": "chat_general", "input": "I'm on the train, so I'll call you later.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0883", "category": "clean", "subcategory": "chat_general", "input": "Ok, I'm leaving now.", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0884", "category": "clean", "subcategory": "chat_general", "input": "Can you believe it's already October?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0885", "category": "clean", "subcategory": "chat_general", "input": "Should I bring anything?", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0886", "category": "clean", "subcategory": "chat_no_period", "input": "Sounds good to me", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0887", "category": "clean", "subcategory": "chat_no_period", "input": "On my way", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0888", "category": "clean", "subcategory": "chat_no_period", "input": "See you at 7", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0889", "category": "clean", "subcategory": "chat_no_period", "input": "Thanks so much", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0890", "category": "clean", "subcategory": "chat_no_period", "input": "I'm outside", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0891", "category": "clean", "subcategory": "chat_no_period", "input": "Running 5 min late", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0892", "category": "clean", "subcategory": "chat_no_period", "input": "Lol, that's amazing", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0893", "category": "clean", "subcategory": "chat_no_period", "input": "Yeah, I saw that", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0894", "category": "clean", "subcategory": "chat_no_period", "input": "Just got home", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0895", "category": "clean", "subcategory": "chat_no_period", "input": "Love you too", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0896", "category": "clean", "subcategory": "chat_no_period", "input": "Call me when you can", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0897", "category": "clean", "subcategory": "chat_no_period", "input": "Ok, see you soon", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0898", "category": "clean", "subcategory": "chat_no_period", "input": "Haha, no way", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0899", "category": "clean", "subcategory": "chat_no_period", "input": "Omw", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0900", "category": "clean", "subcategory": "chat_no_period", "input": "Be right there", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0901", "category": "clean", "subcategory": "chat_no_period", "input": "Good night", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0902", "category": "clean", "subcategory": "chat_no_period", "input": "Miss you", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0903", "category": "clean", "subcategory": "chat_no_period", "input": "Same here", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0904", "category": "clean", "subcategory": "chat_no_period", "input": "Sure, that works", "register": "chat", "source": "authored"}
+{"id": "heldout-c-0905", "category": "clean", "subcategory": "chat_no_period", "input": "Thank you!! 🙏", "register": "chat", "source": "authored"}

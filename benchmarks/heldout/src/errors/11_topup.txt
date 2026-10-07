@@ -1,0 +1,127 @@
+# word_choice_usage/comparative_adjective
+s|This year's festival was [[more bigger=>bigger]] than ever.
+e|The second option is [[more cheap=>cheaper]] and faster to set up.
+d|The new process is [[more simpler=>simpler]] for everyone involved.
+s|Honestly the sequel was [[more better=>better]] than the original.
+t|The Rust version is [[more faster=>faster]] than the Python one.
+e|Tuesday is [[more good=>better]] for me than Wednesday.
+c|My commute is [[more longer=>longer]] now that we moved.
+d|This is the [[most cheapest=>cheapest]] plan we offer.
+s|Best. Day. Ever. The [[most happiest=>happiest]] I've been in years.
+c|That was the [[most worst=>worst]] movie I've ever seen.
+e|We need a [[more large=>larger]] room for the workshop.
+d|The [[most fastest=>fastest]] way to reach us is through chat.
+t|The new query is [[more efficienter=>more efficient]] on big tables.
+c|It's getting [[more colder=>colder]] every day.
+s|Our [[most oldest=>oldest]] customer just turned 98!
+c|She's the [[most nicest=>nicest]] person I know.
+c|Your idea is [[gooder=>better]] than mine.
+e|The [[bestest=>best]] part of the trip was the food.
+d|Results were [[badder=>worse]] than expected in Q2.
+c|He's [[more taller=>taller]] than his dad now.
+t|This approach is [[more easier=>easier]] to test.
+c|Today was [[more busier=>busier]] than yesterday.
+# word_choice_usage/confused_usage
+e!|[[Irregardless=>Regardless]] of the budget, we need two more hires.
+s!|People who say they [[could care less=>couldn't care less]] about politics are lying.
+c|I [[seen=>saw]] that coming a mile away.
+c|I'm going to [[lay=>lie]] on the beach all day.
+t|[[Laying=>Lying]] around in the repo is an old copy of the config.
+s!|[[Anyways=>Anyway]], here are some photos from the trip!
+e!|I'll [[revert=>reply]] to you by end of day.
+d!|[[Equally as=>Equally]] important is the cost of training.
+c|I'll [[borrow=>lend]] you my umbrella.
+# word_choice_usage/pronoun_case
+e|Please send the final draft to Anna and [[I=>me]].
+s|So grateful to everyone who came out to support Jake and [[I=>me]] today!
+e|[[Myself and the team=>The team and I]] will be at the booth all day.
+t|Let [[Priya and I=>Priya and me]] know if the build breaks again.
+c|Do you want to come with [[Dan and I=>Dan and me]]?
+# articles_determiners/extra_article
+e|I'll be working from [[the home=>home]] on Friday.
+c|I usually walk to [[the work=>work]].
+c|I'm going to [[the bed=>bed]] early tonight.
+s|Spent the whole weekend at [[the home=>home]] and loved it.
+c|My son just started [[the kindergarten=>kindergarten]].
+e|We had [[the lunch=>lunch]] with the client on Tuesday.
+d|[[The nature=>Nature]] has always inspired our designs.
+c|I've been learning [[the French=>French]] for two years.
+e|Can you give me [[an information=>information|some information]] about the program?
+c|Can you give me [[a feedback=>feedback|some feedback]] on my draft?
+e|We need [[an advice=>advice|some advice]] on the contract terms.
+d|We bought [[an equipment=>equipment|some equipment]] for the new lab.
+# missing_extra_word/extra_word
+e|I'm writing to inform [[to =>]]you that the office will be closed.
+s|So happy to [[be =>]]announce that we're expecting!
+d|The results [[they =>]]were better than we expected.
+t|We need to [[to =>]]update the dependency before Friday.
+e|My manager [[he =>]]asked me to follow up with you.
+c|I [[can =>]]could not believe it.
+# missing_extra_word/missing_word
+e|Please let me [[if=>know if]] you have any questions.
+t|Make sure [[run=>to run]] the tests before merging.
+s|So excited [[announce=>to announce]] our new location!
+# articles_determiners/quantifier
+e|We have received [[less=>fewer]] applications this year.
+t|How [[much=>many]] requests per second can it handle?
+# punctuation/quotes
+e|The client said, “We’re very happy with the results[[.=>.”]]
+d|Click “Submit[[=>”]] at the bottom of the form.
+s|My kid just said “I love you, Dad[[=>”]] and I melted.
+t|The log just says “connection refused[[=>”]] over and over.
+c|She replied “sounds good[[=>”]] and then went silent.
+e|Please mark the email as “Urgent[[=>”]] if it can't wait.
+d|The setting called “Auto-save[[=>”]] is on by default.
+c|My dad texted “call me[[=>”]] at 2am, so of course I panicked.
+s|Her first word was “dog[[=>”]]!
+t|Set the header to [["application/json=>"application/json"]] and retry.
+e|The subject line read “Final notice[[=>”]] in all caps.
+d|Type “help[[=>”]] to see a list of commands.
+c|Every time I ask, he says “next week[[.=>.”|”.]]
+t|The error says “undefined is not a function[[=>”]] on line 42.
+s|The sign literally said “No dogs allowed[[=>”]] and there was a dog behind it.
+e|Your order status is now “Shipped[[.=>.”|”.]]
+c|“Are you awake?[[=>”]] she texted at midnight.
+# run_on_fragment/fragment
+e|We decided to extend the trial[[. Because=> because]] several teams asked for more time.
+d|Access was revoked[[. After=> after]] the contract ended.
+t|The job failed[[. Because=> because]] the disk was full.
+s|Finally booked our trip to Japan[[. Which=>, which]] we've been planning for years!
+e|I'll send the contract tomorrow[[. Once=> once]] legal has signed off.
+t|The build is slow[[. Since=> since]] we added the new linter.
+d|The study was paused[[. While=> while]] the team reviewed the data.
+# punctuation/intro_comma
+t|[[If the flag is set the=>If the flag is set, the]] request is retried twice.
+t|[[Before you merge please=>Before you merge, please]] rebase on main.
+e|[[As you may know our=>As you may know, our]] office is moving in June.
+# word_order/question_order
+e|Could you let me know when [[is the next meeting=>the next meeting is]]?
+t|Does anyone know why [[is the build=>the build is]] failing?
+s|Can someone tell me where [[can I=>I can]] buy these shoes?
+t|How [[I can=>can I]] run the tests locally?
+e|Do you know what time [[does the office close=>the office closes]]?
+# spelling/joined_words
+s|Thanks [[alot=>a lot]] to everyone who came out tonight!
+e|Please [[signup=>sign up]] for the workshop by Friday.
+t|Run the script [[incase=>in case]] the cron job fails.
+s|[[Infront=>In front]] of the Eiffel Tower with my favorite people 💛
+# mixed/social
+s|[[Its=>It's]] been an [[incredable=>incredible]] year for our team.
+s|Our bakery [[open=>opens]] at 7 [[tommorow=>tomorrow]]!
+s|Can't believe [[its=>it's]] already [[december=>December]]!
+s|Just [[finsihed=>finished]] my first marathon and I [[cant=>can't]] feel my legs.
+s|So proud of [[are=>our]] team [[fro=>for]] winning the regional final!
+s|[[Their=>There]] is nothing better [[then=>than]] a Sunday morning walk.
+s|We're hiring! DM me if [[your=>you're]] [[intrested=>interested]].
+s|My dog [[have=>has]] [[it's=>its]] own Instagram now 🐶
+s|[[Whose=>Who's]] ready for the long [[weekened=>weekend]]?
+s|Can't wait to [[seen=>see]] you all [[tommorow=>tomorrow]]!
+# word_choice_usage/participle_adjective
+s|I'm so [[boring=>bored]] at work today 😩
+e|We were very [[disappointing=>disappointed]] with the delivery time.
+c|Everyone was [[shocking=>shocked]] by the news.
+d|Many users found the new layout [[confused=>confusing]].
+c|I'm [[embarrassing=>embarrassed]] that I forgot your name.
+s|What an [[amazed=>amazing]] view from the top!
+c|The ending was so [[surprised=>surprising]].
+c|I'm [[satisfying=>satisfied]] with the result.

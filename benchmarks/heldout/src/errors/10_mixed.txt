@@ -1,0 +1,135 @@
+# mixed/chat
+c|[[i=>I]] think [[their=>they're]] coming at 8.
+c|Sorry [[im=>I'm]] late. The train was [[delaid=>delayed]].
+c|Can you [[sent=>send]] me the [[adress=>address]]?
+c|[[Your=>You're]] going to love it. [[Its=>It's]] so good.
+c|I [[should of=>should have|should've]] left [[earlyer=>earlier]].
+c|I [[dont=>don't]] think [[there=>they're]] open on Sundays.
+c|[[Whats=>What's]] the plan [[fro=>for]] tonight?
+c|I'm [[to=>too]] tired [[too=>to]] go out.
+c|[[Lets=>Let's]] meet at [[starbucks=>Starbucks]] at 3.
+c|My [[freind=>friend]] and [[me=>I]] are going to the game.
+c|He [[dont=>doesn't]] know [[weather=>whether]] he can make it.
+c|I've [[went=>gone]] there [[alot=>a lot]].
+c|[[Its=>It's]] been [[awhile=>a while]] since we talked!
+c|[[Their=>They're]] bringing [[desert=>dessert]], right?
+c|[[i'll=>I'll]] be there in [[a=>an]] hour.
+c|I [[recieved=>received]] your text but [[couldnt=>couldn't]] reply.
+c|We need [[to=>two]] more people [[fro=>for]] the team.
+c|[[Thats=>That's]] [[wierd=>weird]]. It worked yesterday.
+c|I [[loose=>lose]] my keys [[everyday=>every day]].
+c|Can [[i=>I]] [[barrow=>borrow]] your charger?
+c|[[Whos=>Who's]] coming to [[sarah's=>Sarah's]] party?
+c|[[Dont=>Don't]] forget [[too=>to]] bring snacks!
+c|I [[didnt=>didn't]] [[knew=>know]] that.
+c|She [[have=>has]] [[alot=>a lot]] of work this week.
+c|[[Im=>I'm]] at the [[resturant=>restaurant]] already.
+c|We [[should of=>should have|should've]] [[went=>gone]] earlier.
+c|I'll call you [[latter=>later]]. [[Im=>I'm]] driving.
+c|[[i=>I]] [[cant=>can't]] wait!!
+c|[[Were=>Where]] did you [[parked=>park]]?
+c|[[Its=>It's]] [[to=>too]] hot today.
+c|My mom [[say=>says]] hi. She [[miss=>misses]] you.
+c|I [[seen=>saw]] that movie on [[friday=>Friday]].
+c|That [[restuarant=>restaurant]] was [[quiet=>quite]] good actually.
+c|We [[was=>were]] going to call you but [[i=>I]] fell asleep.
+c|[[Hows=>How's]] your new job [[goin=>going]]?
+c|I'll [[by=>buy]] the snacks [[an=>and]] drinks.
+c|You [[was=>were]] right about the [[whether=>weather]].
+c|Did you [[here=>hear]] what [[happend=>happened]] at work?
+c|I [[cant=>can't]] [[beleive=>believe]] it's Friday already.
+# mixed/email
+e|Hi [[john=>John]], thanks for [[you're=>your]] help yesterday.
+e|Please find [[attach=>attached]] the [[revized=>revised]] proposal.
+e|I look forward to [[hear=>hearing]] from you soon[[=>.]]
+e|[[Their=>There]] [[is=>are]] two issues with the invoice.
+e|The meeting [[have=>has]] been moved to [[thursday=>Thursday]].
+e|Thank you for your [[patients=>patience]][[ ,=>,]] and have a great weekend.
+e|I've [[attacked=>attached]] the contract[[ please=>. Please]] sign it by Friday.
+e|I [[wont=>won't]] be able to attend[[ the=>. The]] flight was cancelled.
+e|Thank you [[fro=>for]] the quick [[responce=>response]].
+e|Please [[advice=>advise]] if you need [[anymore=>any more]] information.
+e|We [[discussed about=>discussed]] the budget on [[monday=>Monday]].
+e|Each of the reports [[have=>has]] a [[seperate=>separate]] appendix.
+e|We [[was=>were]] unable to process your payment[[ please=>. Please]] update your card.
+e|The new hires [[starts=>start]] on [[january=>January]] 8.
+e|Our team is [[exiting=>excited]] to [[working=>work]] with you.
+e|I'm happy to [[except=>accept]] the offer[[=>.]]
+e|The [[comittee=>committee]] will [[met=>meet]] next week.
+e|Please [[contact to=>contact]] me [[incase=>in case]] of any issues.
+e|[[Me=>Sarah]] and [[sarah=>I]] will present the results.
+e|I [[definately=>definitely]] agree with [[you're=>your]] suggestion.
+e|[[Unfortunately the=>Unfortunately, the]] shipment [[were=>was]] delayed.
+e|Let me know [[weather=>whether]] the 10am slot [[work=>works]] for you.
+e|We [[recieved=>received]] your [[applicaton=>application]] on Monday.
+e|As discussed[[ the=>, the]] deadline [[have=>has]] moved to May 5.
+e|Thanks for [[you're=>your]] patience[[ we=>. We]] will be in touch shortly.
+e|The [[accomodation=>accommodation]][[ are=> is|s are]] booked for three nights.
+e|[[Hi Lisa I=>Hi Lisa, I]] [[hop=>hope]] you had a nice weekend.
+e|We are [[looking forward=>looking forward to]] [[meet=>meeting]] you.
+e|Attached [[is=>are]] the slides [[form=>from]] today's meeting.
+e|I wanted to [[follow-up=>follow up]] on the [[proposel=>proposal]] I sent last week.
+e|[[Its=>It's]] great to hear that the project [[are=>is]] on track.
+# mixed/doc
+d|[[Their=>There]] are [[less=>fewer]] bugs than last quarter.
+d|The API [[return=>returns]] [[a=>an]] error if the token is missing.
+d|This [[effects=>affects]] all users on [[android=>Android]].
+d|The [[goverment's=>government's]] plan [[have=>has]] been approved.
+d|The list of [[requirments=>requirements]] [[are=>is]] below.
+d|[[Its=>It's]] important to [[backup=>back up]] your data.
+d|The project was [[lead=>led]] by [[maria=>Maria]].
+d|[[In addition the=>In addition, the]] report [[include=>includes]] a summary.
+d|The [[affect=>effect]] of the change [[were=>was]] minimal.
+d|The [[maintainance=>maintenance]] window is [[sunday=>Sunday]] at 2am.
+d|[[This=>These]] results [[shows=>show]] a clear trend.
+d|Neither option [[are=>is]] [[idea=>ideal]].
+d|We [[recomend=>recommend]] [[to update=>updating]] to version 3.
+d|The [[enviroment=>environment]] variables [[is=>are]] set in the dashboard.
+d|The [[sytem=>system]] [[automaticly=>automatically]] saves your work.
+d|Users [[who's=>whose]] accounts are inactive [[will deleted=>will be deleted]] after 90 days.
+d|[[Altough=>Although]] the results were good[[ more=>, more]] testing is needed.
+d|The [[companys=>company's]] revenue [[grow=>grew]] by 8% last year.
+d|Each employee [[receive=>receives]] [[a=>an]] onboarding packet.
+d|All [[employee's=>employees]] must [[completed=>complete]] the training.
+d|The office [[will closed=>will be closed]] on [[december=>December]] 25.
+d|Customers [[can able to=>can]] [[cancell=>cancel]] at any time.
+d|The [[criterias=>criteria]] for [[selecton=>selection]] are listed below.
+d|This feature [[allow=>allows]] users to [[exports=>export]] reports.
+d|The [[begining=>beginning]] of the quarter [[were=>was]] slow.
+d|Our [[principle=>principal]] concern is [[securty=>security]].
+d|[[However the=>However, the]] budget [[were=>was]] approved in March.
+d|We [[has=>have]] [[recieved=>received]] over 200 applications.
+d|The results of the survey [[was=>were]] published in [[april=>April]].
+# mixed/social
+s|[[Cant=>Can't]] [[beleive=>believe]] it's been five years since we graduated!
+s|So proud of my sister[[ she=>! She|. She]] just [[graduted=>graduated]] from nursing school.
+s|[[Its=>It's]] official[[ we=>! We|. We]]'re moving to Denver!
+s|Best pizza [[i've=>I've]] ever had[[ honestly=>, honestly]].
+s|[[Whose=>Who's]] watching the game [[tonite=>tonight]]?
+s|[[Their=>There]] [[is=>are]] no words for how beautiful this place is.
+s|We [[finaly=>finally]] got the keys to our new [[appartment=>apartment]]!
+s|Feeling [[greatful=>grateful]] for [[alot=>a lot]] of things today.
+s|[[Its=>It's]] [[to=>too]] early for Christmas music.
+s|So [[exiting=>excited]] to [[announced=>announce]] that I'm joining Stripe!
+s|[[Me and the kids=>The kids and I]] [[has=>have]] been baking all day.
+s|We [[was=>were]] lucky to catch the [[norther=>northern]] lights last night!
+s|This [[restaraunt=>restaurant]] never [[disappoint=>disappoints]].
+s|[[Their=>They're]] [[finaly=>finally]] fixing the bridge downtown.
+# mixed/technical
+t|The [[fucntion=>function]] [[return=>returns]] null if the list is empty.
+t|[[Its=>It's]] failing because the env [[var are=>var is|vars are]] missing.
+t|Run the [[migraton=>migration]] [[than=>then]] restart the server.
+t|The [[cahce=>cache]] [[get=>gets]] cleared on every deploy.
+t|This PR [[fix=>fixes]] the [[memmory=>memory]] leak in the worker.
+t|We [[should of=>should have|should've]] added a test [[fro=>for]] this.
+t|The build [[brake=>breaks]] when [[the the=>the]] cache is cold.
+t|[[Their=>There]] [[is=>are]] two failing tests on main.
+t|Please [[updated=>update]] the readme [[befor=>before]] merging.
+t|The [[sever=>server]] [[return=>returns]] a 500 on login.
+t|The [[api=>API]] [[dont=>doesn't]] support pagination yet.
+t|Each request [[need=>needs]] [[a=>an]] auth header.
+t|[[Dont=>Don't]] [[forgot=>forget]] to bump the version number.
+t|The [[timout=>timeout]] [[are=>is]] set to 30 seconds.
+t|This [[effects=>affects]] [[performence=>performance]] on large datasets.
+t|The Docker image [[take=>takes]] ten [[minuets=>minutes]] to build.
+t|[[Lets=>Let's]] revert the change and [[investgate=>investigate]] tomorrow.

@@ -39,3 +39,32 @@ The runner measures the packaged Rust executable and a native harness compiled w
 Results are written under ignored `dist/qa/english-1000/` (or the folder given by `--output`): a searchable offline HTML report, CSV and JSONL with every input/reference/actual output, readable text files, summaries by grammar family and combination, and a ZIP containing the corpus and results. Returned edit plans are checked for UTF-16 validity, nonoverlap, original-span agreement and reconstruction of the returned text. Artifact and source hashes identify the measured checker. Runtime timings include initialization in the first case; later cases run in the same process.
 
 The runner reports exact reference matches, nonexact changes needing review, unchanged erroneous inputs, execution errors, and changes to clean controls. It never counts every change as a successful correction. Generated reports belong to the particular measured build; changing rules requires a new run.
+
+## Everyday errors (held-out set)
+
+`heldout/errors.jsonl` holds **2,329** realistic messages with errors (chat, email, docs, social, technical) across 14 categories: real-word slips, spelling, agreement, verb forms, articles, prepositions, word choice, missing or extra words, word order, punctuation, capitalization, run-ons and fragments, contractions, and mixed messages with two errors. `heldout/clean.jsonl` holds **905** correct sentences, many of them deliberately tricky ("working out fine", "sold out, fine by me", effect as a verb, en-GB spellings, code identifiers, names), to measure false alarms. `heldout/TAXONOMY.md` defines every category and how items were written; the sources are `heldout/src/*.txt`, rebuilt with `heldout/src/build.py`.
+
+The set was written by hand without reading the checker's rules, lexicons or the sets above. Unlike them it is split: a fixed 30% of items, chosen by a hash of the input text, is the **test** split and is never used for fixing. The other 70% is **dev**: rules are improved by looking at dev misses only, and the test split is only scored. The gap between the two numbers shows how much a change generalizes.
+
+Score it through the app's own path (ParzrCore's `WritingEngine` with Apple NaturalLanguage hints and the default name capitalization):
+
+```sh
+swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \
+  scripts/heldout-native.swift -o dist/qa/heldout-native
+PARZR_ENGINE_PATH=$PWD/engine/target/release/libparzr_engine.dylib \
+PARZR_MODEL_RUNTIME=$PWD/dist/model/libparzr_model.dylib PARZR_MODEL_PATH=$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf \
+  python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split dev --layers rules,gec,deep
+```
+
+Layers: `rules` (rules only), `gec` (rules and Smart grammar, what runs while typing) and `deep` (Option+Space: rules, Smart grammar and the bundled language model). Each error item is **fixed** (output equals the reference or an accepted alternative), **flagged** (every error span is touched), **wrong** or **missed**; a clean item that changes is a **false alarm**. Results go to `dist/qa/heldout/` (summary.md, per-item JSONL and false alarms).
+
+Test split, v0.3.6 against the build that added this set:
+
+| Layer | v0.3.6 fixed / caught / false alarms | Now |
+|---|---|---|
+| While typing (`gec`) | 44.5% / 52.6% / 1.7% | 64.3% / 69.5% / 1.1% |
+| Option+Space (`deep`) | 59.2% / 68.4% / 4.2% | 74.5% / 80.9% / 3.5% |
+
+The `gec` layer is scored with checks back to back, so the language-model swap check, which while typing runs in the background and lands on the next check, barely shows there; `deep` shows it (real-word slips 26% to 68% fixed). CI's verify job scores the test split for `rules` and `gec` and fails below the fix rates or above the false-alarm rates in `.github/workflows/ci-release.yml`; raise those gates when a change lifts the test score, never lower them to let a regression through.
+
+`scripts/run-public-gec-benchmark.py` compares the same layers with LanguageTool on CoNLL-2014, JFLEG and the GitHub Typo Corpus (downloaded into ignored `dist/gec-data/`; ERRANT and GLEU scoring). See the script's header for setup.

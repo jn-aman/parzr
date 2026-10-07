@@ -75,6 +75,14 @@ jobs:
           cargo build --release --locked --manifest-path engine/Cargo.toml
           PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
           PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
+      - name: Everyday-error quality gate
+        # The held-out test split (benchmarks/heldout, never used for tuning) through the app's own path. Fails when
+        # what runs while typing fixes less, or changes more correct text, than the last measured build allows.
+        run: |
+          swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift scripts/heldout-native.swift -o dist/qa/heldout-native
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
+            --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
       - name: Browser and editor integration checks
         run: |
           npm ci
@@ -97,6 +105,8 @@ jobs:
           if-no-files-found: error
           path: |
             dist/qa/browser-results.json
+            dist/qa/heldout/summary.md
+            dist/qa/heldout/summary.json
             dist/build-report.json
             dist/package-report.json
             dist/extensions/parzr-*

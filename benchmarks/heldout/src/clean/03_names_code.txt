@@ -1,0 +1,132 @@
+# clean/names_brands
+c|Thom said he'd bring the speakers.
+c|Siobhan is out until Monday.
+c|Niamh and Aoife are flying in from Dublin.
+c|Kaitlyn's birthday dinner is on Saturday.
+c|Ask Jaxon if he wants to carpool.
+c|Jakob fixed the printer, finally.
+c|Can you loop in Ximena from finance?
+c|Brynn is our new office manager.
+e|Hi Saoirse, thanks for the quick reply.
+e|I've copied Tadhg on this thread.
+e|Please welcome Oluwaseun to the design team!
+e|Nguyen will cover support while I'm out.
+e|Thanks, Siddharth. I'll take a look today.
+c|Mikaela and Rhys are engaged!
+c|Jordyn just got into Stanford.
+c|Aiden and Ayden are both on the soccer team, which is confusing.
+c|Is Zoë coming tonight?
+c|Renée sent the photos from the wedding.
+c|José made his famous paella.
+c|Bjørn is visiting from Oslo next week.
+c|Ingrid's flight lands at 4.
+c|Gwyneth and Bryony are running the bake sale.
+c|We should invite Darnell and Keisha.
+c|Priyanka is the best manager I've had.
+c|Tell Xiaoming I said hi.
+c|I ordered it on Etsy.
+c|I'll Venmo you for dinner.
+c|Let's just Zoom instead.
+c|I found a great deal on eBay.
+c|My iPad is almost dead.
+c|I'm taking a Lyft to the airport.
+c|We binged the whole season on Hulu.
+c|My Duolingo streak is at 200 days.
+c|Did you see the listing on Zillow?
+c|I posted the photos on Flickr.
+c|There's a whole subreddit about it on Reddit.
+c|I'll share the board on Trello.
+t|The designs are in Figma.
+t|I filed a Jira ticket for it.
+t|The docs live in Confluence.
+t|We're deploying to Vercel tonight.
+t|Our Postgres instance is on RDS.
+t|I'll ping the channel on Slack.
+t|The repo is on GitHub, and CI runs on CircleCI.
+t|We switched from npm to pnpm last month.
+t|Kubernetes keeps restarting the pod.
+t|The Grafana dashboard shows a spike at 2am.
+e|Our new office is in Shoreditch.
+c|We're road-tripping through Albuquerque and Tucson.
+c|My grandparents live in Worcester.
+c|Have you ever been to Reykjavík?
+c|We stayed in Llandudno for a week.
+s|Sunset in Saint-Tropez never gets old 🌅
+s|Huge congrats to the Sacramento Kings!
+c|I'm reading Kazuo Ishiguro's new book.
+c|We watched Oppenheimer last night.
+c|I'm obsessed with Wordle.
+c|Let's meet at Chipotle.
+c|I bought it at IKEA.
+c|Grab me a LaCroix if you're going.
+c|My Fitbit says I walked 15,000 steps.
+c|PlayStation or Xbox?
+c|Ask ChatGPT if you're stuck.
+e|The invoice is from Acme Corp.
+e|Please send the files via WeTransfer.
+d|LinkedIn and Glassdoor reviews were mostly positive.
+d|We compared Asana, Monday.com, and ClickUp.
+t|The Wi-Fi password is on the fridge.
+c|I'll AirDrop you the photos.
+c|My Spotify Wrapped is embarrassing.
+# clean/code_identifiers
+t|The `useEffect` hook runs after every render.
+t|Set `MAX_RETRIES` to 3 in the config.
+t|Call `get_user_by_id()` instead of querying directly.
+t|The bug is in `src/utils/parseDate.ts`.
+t|Run `npm run build` before pushing.
+t|Use `git rebase -i` to squash the commits.
+t|The `--dry-run` flag shows what would change.
+t|Check `/var/log/nginx/error.log` for details.
+t|The endpoint `/api/v2/users` returns a paginated list.
+t|Bump the version to 2.4.1 and tag the release.
+t|We're on Python 3.12 and Node 20.
+t|The `isLoggedIn` prop is undefined on first load.
+t|Rename `tmp_df` to something descriptive.
+t|`kubectl get pods -n staging` shows two crash loops.
+t|The PR is at https://github.com/acme/web/pull/1423.
+t|The docs are at docs.example.com/setup.
+t|Email support@example.com if you get locked out.
+t|The SHA is 9f3c2ab, if you want to cherry-pick it.
+t|The test `test_handles_empty_input` is flaky.
+t|We pin `requests==2.31.0` in requirements.txt.
+t|Add `.DS_Store` to `.gitignore`.
+t|The env var `DATABASE_URL` isn't set in staging.
+t|`useState` returns a pair: the value and a setter.
+t|Change `const` to `let` if you need to reassign it.
+t|The response has a `200 OK` status but an empty body.
+t|Set `retries: 0` in the YAML.
+t|I'm seeing `ECONNRESET` errors from the proxy.
+t|The cron expression `0 2 * * *` runs at 2am daily.
+t|SELECT queries are fine, but the UPDATE is slow.
+t|Our p95 latency dropped from 800ms to 240ms.
+t|The JSON payload is about 2 MB.
+t|The cache TTL is 300 seconds.
+t|We use snake_case in Python and camelCase in JS.
+t|Merge `feature/login-v2` into `main` after review.
+t|The regex `^\d{3}-\d{4}$` matches local numbers.
+t|The CSV has 14,000 rows and 23 columns.
+t|Run `make test` and `make lint` before you open a PR.
+t|The OAuth token expires after 3600 seconds.
+t|`df.groupby("region").sum()` gives the totals.
+t|The Dockerfile uses `python:3.12-slim` as the base image.
+t|Port 8080 is already in use.
+t|The `onClick` handler fires twice in StrictMode.
+t|The README links to CONTRIBUTING.md.
+t|`ls -la` shows the hidden files too.
+t|The API key is stored in 1Password.
+t|I added a TODO in `billing.py` to clean this up.
+t|`null` and `undefined` aren't the same thing.
+t|The staging URL is staging.acme.dev.
+t|Use `async`/`await` instead of chaining `.then()` calls.
+t|Version 3.0.0-beta.2 is out.
+t|iOS 17 broke the date picker.
+t|The build takes 4m 32s on CI.
+t|Run it with `--verbose` to see the full trace.
+t|We're migrating from MySQL 5.7 to Postgres 16.
+t|The HTTP 429 means we're being rate-limited.
+t|Our SLA is 99.9% uptime.
+t|The `.env.example` file lists every variable you need.
+t|Line 42 throws a TypeError.
+t|The `user_id` column should be indexed.
+t|I reverted commit a1b2c3d.

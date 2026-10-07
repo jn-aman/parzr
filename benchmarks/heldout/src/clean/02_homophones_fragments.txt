@@ -1,0 +1,121 @@
+# clean/its_their_your
+c|The dog hurt its paw.
+c|It's been a long week.
+c|It's raining again, and the app lost its connection.
+d|The company updated its privacy policy in May.
+d|Each team sets its own goals.
+c|The tree lost its leaves early this year.
+c|It's not the end of the world.
+c|It's got a great view.
+t|The function returns early if its argument is null.
+t|It's safe to delete the cache folder.
+c|Their house is on the corner.
+c|They're running late.
+c|There's a typo on slide 4.
+c|I left my bag over there.
+c|They're bringing their kids.
+c|There are three of them.
+c|Your order is ready.
+c|You're going to love this.
+c|Is this your jacket or mine?
+c|You're welcome to join us.
+c|Who's driving tonight?
+c|Whose turn is it?
+c|We're out of coffee.
+c|Where's the nearest pharmacy?
+c|They'll be here at noon.
+c|It'll take a minute.
+c|Let's grab lunch.
+c|Let me check.
+d|The software lets users export reports.
+c|We'll see.
+c|Well, that was unexpected.
+c|I'd say yes.
+c|He'll call you back.
+c|She'd already left.
+c|Hell yes, I'm in!
+c|We'd love to come.
+c|Were you there?
+c|We're here!
+c|Its battery lasts all day.
+c|It's its own thing, honestly.
+e|Their team will join us on Thursday.
+e|There will be a short break at 11.
+e|You're invited to our annual party.
+e|Your feedback is important to us.
+d|Whose responsibility is this?
+d|Who's responsible for the rollout?
+c|Is it yours or theirs?
+c|The blue one is ours.
+c|That one's hers.
+# clean/informal_fragments
+c|Sounds good.
+c|On my way!
+c|Not bad. You?
+c|Same here.
+c|Back in 5.
+c|Running late, sorry!
+c|Almost there.
+c|Thanks, you too!
+c|Got it, thanks.
+c|No worries at all.
+c|Lol, same.
+c|Ugh, Mondays.
+c|Happy Friday!
+c|Good luck today!
+c|Congrats! So well deserved.
+c|Totally agree.
+c|Fair enough.
+c|Maybe next time.
+c|Yep, all good.
+c|Nope, not yet.
+c|Done and done.
+c|Coffee later?
+c|Lunch at 12:30?
+c|Sure thing.
+c|Oh nice!
+c|Wait, really?
+c|Haha, love it.
+c|Ok, cool.
+c|See you soon!
+c|Miss you guys.
+c|Long day.
+c|So tired.
+c|Just landed!
+c|Home safe.
+c|Same time next week?
+c|Any updates?
+c|Quick question: is the meeting still on?
+c|Great news!
+c|Ha, classic.
+c|Brb.
+c|Love this 😍
+c|Too funny.
+c|Can't wait!
+c|Hope you feel better soon.
+c|Drive safe!
+c|Talk tomorrow.
+c|All set.
+c|No rush.
+c|Good call.
+c|Works for me.
+c|Thanks again for tonight!
+c|Ready when you are.
+c|Not today.
+c|Best. Weekend. Ever.
+c|Big if true.
+c|Oops, wrong chat.
+c|Will do.
+c|Agreed.
+c|One sec.
+c|Just checking in.
+e|Thanks in advance.
+e|Hope this helps.
+e|Looking forward to it.
+e|Happy to help.
+e|Talk soon.
+e|Best,
+e|Cheers,
+e|Thanks,
+e|More soon.
+e|Apologies for the delay.
