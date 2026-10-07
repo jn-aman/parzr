@@ -62,6 +62,11 @@ fn pack() -> &'static Pack {
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/tone.json"))
                 .expect("valid embedded rule pack"),
         );
+        // Real-word confusions and word-choice usage ("their is", "could care less").
+        grammar.extend(
+            serde_json::from_str::<Vec<Rule>>(include_str!("../rules/usage.json"))
+                .expect("valid embedded rule pack"),
+        );
         let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
         for (i, rule) in grammar.iter().enumerate() {
             assert!(!rule.provenance.is_empty(), "rule provenance");
@@ -109,6 +114,13 @@ pub fn candidates(text: &str) -> Vec<bool> {
     }
     hit
 }
+/// The reviewed list of common misspellings: (misspelling, correction) pairs.
+pub fn misspellings() -> impl Iterator<Item = (&'static str, &'static str)> {
+    include_str!("../rules/misspellings.txt")
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split_once(' '))
+}
 #[derive(Deserialize)]
 pub struct PhraseRule {
     pub id: String,
@@ -127,8 +139,18 @@ pub struct PhrasePack {
 pub fn phrases() -> &'static PhrasePack {
     static PACK: OnceLock<PhrasePack> = OnceLock::new();
     PACK.get_or_init(|| {
-        let rules: Vec<PhraseRule> = serde_json::from_str(include_str!("../rules/phrases.json"))
-            .expect("valid embedded rule pack");
+        let mut rules: Vec<PhraseRule> =
+            serde_json::from_str(include_str!("../rules/phrases.json"))
+                .expect("valid embedded rule pack");
+        rules.extend(misspellings().map(|(source, replacement)| PhraseRule {
+            id: "spelling.common_misspelling".into(),
+            source: source.into(),
+            replacement: replacement.into(),
+            category: "Spelling".into(),
+            confidence: 0.97,
+            explanation: "This is a common misspelling.".into(),
+            provenance: "Parzr common misspellings list (rules/misspellings.txt)".into(),
+        }));
         assert!(
             rules.iter().all(|rule| !rule.provenance.is_empty()),
             "rule provenance"
@@ -143,12 +165,57 @@ pub fn phrases() -> &'static PhrasePack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The text after the checker's own fixes, applied until nothing changes (rules only).
+    fn fix(text: &str) -> String {
+        let mut req = crate::Request {
+            text: text.into(),
+            ..crate::Request::default()
+        };
+        for _ in 0..6 {
+            let pass = crate::rewrite_once(&req, false).unwrap();
+            if pass.edits.is_empty() {
+                break;
+            }
+            req.text = pass.text;
+        }
+        req.text
+    }
+    #[test]
+    fn usage_confusions_are_fixed_and_correct_text_never_changes() {
+        let data: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/usage.json")).unwrap();
+        let pairs = data["positives"].as_array().unwrap();
+        let (mut fixed, mut wrong) = (0, vec![]);
+        for p in pairs {
+            let (input, expected) = (p[0].as_str().unwrap(), p[1].as_str().unwrap());
+            match fix(input) {
+                out if out == expected => fixed += 1,
+                out if out == input => {}
+                out => wrong.push(format!("{input} => {out}")),
+            }
+        }
+        let touched: Vec<_> = data["negatives"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n.as_str().unwrap())
+            .filter(|n| fix(n) != *n)
+            .collect();
+        eprintln!("usage confusions fixed: {fixed}/{}", pairs.len());
+        assert!(touched.is_empty(), "changed correct text: {touched:?}");
+        assert!(wrong.is_empty(), "wrong rewrites: {wrong:?}");
+        assert!(
+            fixed * 10 >= pairs.len() * 9,
+            "only {fixed} confusions fixed"
+        );
+    }
     #[test]
     fn every_rule_has_provenance_and_fixtures() {
         let grammar: Vec<Rule> =
             serde_json::from_str(include_str!("../rules/grammar.json")).unwrap();
         let tone: Vec<Rule> = serde_json::from_str(include_str!("../rules/tone.json")).unwrap();
-        assert_eq!(grammar.len() + tone.len(), contextual().len());
+        let usage: Vec<Rule> = serde_json::from_str(include_str!("../rules/usage.json")).unwrap();
+        assert_eq!(grammar.len() + tone.len() + usage.len(), contextual().len());
         for c in contextual() {
             assert!(!c.rule.provenance.is_empty());
             assert!(
@@ -167,6 +234,24 @@ mod tests {
             assert!(!p.source.is_empty());
             assert_ne!(p.source, p.replacement);
         }
+    }
+    #[test]
+    fn listed_misspellings_are_never_words_or_names() {
+        let mut seen = std::collections::HashSet::new();
+        for (wrong, right) in misspellings() {
+            // Not a word or name in any English variant, listed once, and corrected to words.
+            assert!(!crate::spelling::known(wrong), "{wrong} is a word");
+            assert!(!crate::names::is_bundled_name(wrong), "{wrong} is a name");
+            assert!(seen.insert(wrong), "{wrong} listed twice");
+            assert!(
+                right
+                    .split(' ')
+                    .all(|w| w.contains('\'') || crate::spelling::known(w)),
+                "{right}"
+            );
+            assert!(wrong.bytes().all(|b| b.is_ascii_lowercase()), "{wrong}");
+        }
+        assert!(seen.len() > 300);
     }
     #[test]
     fn the_prefilter_never_hides_a_match() {

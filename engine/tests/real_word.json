@@ -272,6 +272,50 @@
     [
       "The pitch os too wet to play on today.",
       "The pitch is too wet to play on today."
+    ],
+    [
+      "The hotel was nice, out the breakfast was cold.",
+      "The hotel was nice, but the breakfast was cold."
+    ],
+    [
+      "I wanted to come, out I was sick.",
+      "I wanted to come, but I was sick."
+    ],
+    [
+      "It's expensive, out worth every penny.",
+      "It's expensive, but worth every penny."
+    ],
+    [
+      "Sorry, out I can't make it tonight.",
+      "Sorry, but I can't make it tonight."
+    ],
+    [
+      "We tried, bit it didn't work.",
+      "We tried, but it didn't work."
+    ],
+    [
+      "Bit seriously, thank you.",
+      "But seriously, thank you."
+    ],
+    [
+      "Out honestly, who cares?",
+      "But honestly, who cares?"
+    ],
+    [
+      "The food was okay, out the service was slow.",
+      "The food was okay, but the service was slow."
+    ],
+    [
+      "I like it, out not the price.",
+      "I like it, but not the price."
+    ],
+    [
+      "I cam send it tonight.",
+      "I can send it tonight."
+    ],
+    [
+      "They van meet us there.",
+      "They can meet us there."
     ]
   ],
   "negatives": [
@@ -357,6 +401,35 @@
     "From here to the station is a short walk.",
     "We came from the north side of the city.",
     "Are you free for lunch on Tuesday?",
-    "Use os.path.join to build the file path."
+    "Use os.path.join to build the file path.",
+    "The storm knocked the power out, but the generator kicked in.",
+    "She looked out, then closed the curtains.",
+    "We were in, out, and back home by noon.",
+    "Inside out, upside down, the room was a mess.",
+    "He shouted, out of breath, that the train had left.",
+    "Somewhere, out there, a dog was barking.",
+    "Then, out the window it went.",
+    "The new album, out now, is great.",
+    "Everything worked out fine in the end.",
+    "It turned out fine after all.",
+    "The tickets sold out, fine by me.",
+    "I figured it out, honestly.",
+    "Bit by bit, the team got faster.",
+    "A bit, I guess.",
+    "The dog bit, then ran off.",
+    "He is a tough nut, but fair.",
+    "Out of nowhere, a cyclist appeared.",
+    "Out here, the stars are bright.",
+    "Out of curiosity, what did you pick?",
+    "I can do Thursday if that helps.",
+    "You can stay as long as you like.",
+    "I came by but you weren't there.",
+    "We must have missed it.",
+    "I set the alarm before bed.",
+    "I feel like we talked about this already.",
+    "I hope you had a good weekend.",
+    "I wonder if they ever fixed it.",
+    "We talked to Jen and I think she agrees.",
+    "I spoke with Raj and I am glad we did."
   ]
 }

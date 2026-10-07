@@ -1,0 +1,854 @@
+{
+  "note": "Authored for Parzr (fresh sentences, none from public or benchmark sets). Positives hold one real-word confusion or usage error each (homophones, near-homophones, letter slips, pronoun case, nonstandard usage); negatives are correct text, many using a confusable word correctly, that must stay untouched.",
+  "positives": [
+    [
+      "Can you send the slides to Omar and I?",
+      "Can you send the slides to Omar and me?"
+    ],
+    [
+      "Thanks for driving my wife and I home.",
+      "Thanks for driving my wife and me home."
+    ],
+    [
+      "Me and Lucas are flying out Monday.",
+      "Lucas and I are flying out Monday."
+    ],
+    [
+      "Me and him went fishing.",
+      "He and I went fishing."
+    ],
+    [
+      "Me and my dad built a shed.",
+      "My dad and I built a shed."
+    ],
+    [
+      "Our neighbors and me are planning a party.",
+      "Our neighbors and I are planning a party."
+    ],
+    [
+      "Let I know when the build passes.",
+      "Let me know when the build passes."
+    ],
+    [
+      "Us engineers love a good diagram.",
+      "We engineers love a good diagram."
+    ],
+    [
+      "Everybody passed except he.",
+      "Everybody passed except him."
+    ],
+    [
+      "Please email Rosa or myself with questions.",
+      "Please email Rosa or me with questions."
+    ],
+    [
+      "Ines and myself will run the workshop.",
+      "Ines and I will run the workshop."
+    ],
+    [
+      "With who are you going?",
+      "With whom are you going?"
+    ],
+    [
+      "The woman whom answered the phone was helpful.",
+      "The woman who answered the phone was helpful."
+    ],
+    [
+      "Irregardless of what they say, I'm going.",
+      "Regardless of what they say, I'm going."
+    ],
+    [
+      "Honestly I could care less what he thinks.",
+      "Honestly, I couldn't care less what he thinks."
+    ],
+    [
+      "For all intensive purposes the deal is done.",
+      "For all intents and purposes the deal is done."
+    ],
+    [
+      "The red one is their's.",
+      "The red one is theirs."
+    ],
+    [
+      "This plan is gooder than the last one.",
+      "This plan is better than the last one."
+    ],
+    [
+      "That was the baddest storm in years.",
+      "That was the worst storm in years."
+    ],
+    [
+      "I feel badly about the mix-up.",
+      "I feel bad about the mix-up."
+    ],
+    [
+      "The reason was because the bus broke down.",
+      "The reason was that the bus broke down."
+    ],
+    [
+      "Anyways, see you Friday.",
+      "Anyway, see you Friday."
+    ],
+    [
+      "I need to lay down for a minute.",
+      "I need to lie down for a minute."
+    ],
+    [
+      "The cat was laying in the sun.",
+      "The cat was lying in the sun."
+    ],
+    [
+      "Could you borrow me your notes?",
+      "Could you lend me your notes?"
+    ],
+    [
+      "They rose the prices again.",
+      "They raised the prices again."
+    ],
+    [
+      "I did good in the interview.",
+      "I did well in the interview."
+    ],
+    [
+      "The trip went really good.",
+      "The trip went really well."
+    ],
+    [
+      "I'll revert back to you shortly.",
+      "I'll reply to you shortly."
+    ],
+    [
+      "The workshop was so tired.",
+      "The workshop was so tiring."
+    ],
+    [
+      "Its going to rain later.",
+      "It's going to rain later."
+    ],
+    [
+      "Its not a big deal.",
+      "It's not a big deal."
+    ],
+    [
+      "The puppy chased it's tail.",
+      "The puppy chased its tail."
+    ],
+    [
+      "The store is on it's last day.",
+      "The store is on its last day."
+    ],
+    [
+      "Their are two options.",
+      "There are two options."
+    ],
+    [
+      "I left my bag over their.",
+      "I left my bag over there."
+    ],
+    [
+      "Their always late.",
+      "They're always late."
+    ],
+    [
+      "I hope there coming tonight.",
+      "I hope they're coming tonight."
+    ],
+    [
+      "Your so kind!",
+      "You're so kind!"
+    ],
+    [
+      "Your not wrong.",
+      "You're not wrong."
+    ],
+    [
+      "This coffee is to hot to drink.",
+      "This coffee is too hot to drink."
+    ],
+    [
+      "It's way to early for this.",
+      "It's way too early for this."
+    ],
+    [
+      "Love you to!",
+      "Love you too!"
+    ],
+    [
+      "Did you here the news?",
+      "Did you hear the news?"
+    ],
+    [
+      "I'm sorry to here that.",
+      "I'm sorry to hear that."
+    ],
+    [
+      "Let us no if you need a ride.",
+      "Let us know if you need a ride."
+    ],
+    [
+      "I don't no where it is.",
+      "I don't know where it is."
+    ],
+    [
+      "Know thanks, I'm full.",
+      "No thanks, I'm full."
+    ],
+    [
+      "I spent the hole day cleaning.",
+      "I spent the whole day cleaning."
+    ],
+    [
+      "Can I have a peace of toast?",
+      "Can I have a piece of toast?"
+    ],
+    [
+      "Let me right it down.",
+      "Let me write it down."
+    ],
+    [
+      "The principle investigator is out.",
+      "The principal investigator is out."
+    ],
+    [
+      "That's a basic principal of design.",
+      "That's a basic principle of design."
+    ],
+    [
+      "She gave me a nice complement.",
+      "She gave me a nice compliment."
+    ],
+    [
+      "Wear is the remote?",
+      "Where is the remote?"
+    ],
+    [
+      "What are you going to where to the wedding?",
+      "What are you going to wear to the wedding?"
+    ],
+    [
+      "I don't know weather it will work.",
+      "I don't know whether it will work."
+    ],
+    [
+      "Who's car is parked outside?",
+      "Whose car is parked outside?"
+    ],
+    [
+      "We ran passed the gate.",
+      "We ran past the gate."
+    ],
+    [
+      "The meeting ran an our over.",
+      "The meeting ran an hour over."
+    ],
+    [
+      "Hour dog is sick today.",
+      "Our dog is sick today."
+    ],
+    [
+      "When our they arriving?",
+      "When are they arriving?"
+    ],
+    [
+      "I can't bare the suspense.",
+      "I can't bear the suspense."
+    ],
+    [
+      "Everyone should way in on the proposal.",
+      "Everyone should weigh in on the proposal."
+    ],
+    [
+      "The cab fair was twenty dollars.",
+      "The cab fare was twenty dollars."
+    ],
+    [
+      "They one the championship.",
+      "They won the championship."
+    ],
+    [
+      "The plain took off on time.",
+      "The plane took off on time."
+    ],
+    [
+      "We need to higher more nurses.",
+      "We need to hire more nurses."
+    ],
+    [
+      "Phones aren't aloud in class.",
+      "Phones aren't allowed in class."
+    ],
+    [
+      "So on and so fourth.",
+      "So on and so forth."
+    ],
+    [
+      "The school bored met yesterday.",
+      "The school board met yesterday."
+    ],
+    [
+      "I went threw the whole list.",
+      "I went through the whole list."
+    ],
+    [
+      "She through the ball to me.",
+      "She threw the ball to me."
+    ],
+    [
+      "That update brakes everything.",
+      "That update breaks everything."
+    ],
+    [
+      "It's quiet a big decision.",
+      "It's quite a big decision."
+    ],
+    [
+      "Please be quite during the exam.",
+      "Please be quiet during the exam."
+    ],
+    [
+      "Everyone left accept me.",
+      "Everyone left except me."
+    ],
+    [
+      "I'd advice against it.",
+      "I'd advise against it."
+    ],
+    [
+      "Were do you live?",
+      "Where do you live?"
+    ],
+    [
+      "Hold your breathe!",
+      "Hold your breath!"
+    ],
+    [
+      "Just breath and count to ten.",
+      "Just breathe and count to ten."
+    ],
+    [
+      "Even thought I tried, I failed.",
+      "Even though I tried, I failed."
+    ],
+    [
+      "Between tea and coffee, I prefer the later.",
+      "Between tea and coffee, I prefer the latter."
+    ],
+    [
+      "She stayed fully conscience during the procedure.",
+      "She stayed fully conscious during the procedure."
+    ],
+    [
+      "Medical personal only beyond this door.",
+      "Medical personnel only beyond this door."
+    ],
+    [
+      "Seek legal council first.",
+      "Seek legal counsel first."
+    ],
+    [
+      "That's a mute point.",
+      "That's a moot point."
+    ],
+    [
+      "I don't want to loose my job.",
+      "I don't want to lose my job."
+    ],
+    [
+      "My tooth is lose.",
+      "My tooth is loose."
+    ],
+    [
+      "The long-term affects are unknown.",
+      "The long-term effects are unknown."
+    ],
+    [
+      "The delay won't effect you.",
+      "The delay won't affect you."
+    ],
+    [
+      "Stay weary of strangers online.",
+      "Stay wary of strangers online."
+    ],
+    [
+      "The team preformed well under pressure.",
+      "The team performed well under pressure."
+    ],
+    [
+      "We will defiantly try it.",
+      "We will definitely try it."
+    ],
+    [
+      "I'd rather cook then order in.",
+      "I'd rather cook than order in."
+    ],
+    [
+      "It's nit working again.",
+      "It's not working again."
+    ],
+    [
+      "I bought milk an then went home.",
+      "I bought milk and then went home."
+    ],
+    [
+      "I called but the didn't answer.",
+      "I called but they didn't answer."
+    ],
+    [
+      "It as really cold today.",
+      "It is really cold today."
+    ],
+    [
+      "There's not reason to worry.",
+      "There's no reason to worry."
+    ],
+    [
+      "Dinner wit Alex tonight?",
+      "Dinner with Alex tonight?"
+    ],
+    [
+      "I hop so!",
+      "I hope so!"
+    ],
+    [
+      "I'm not sue that's right.",
+      "I'm not sure that's right."
+    ],
+    [
+      "They're gong home now.",
+      "They're going home now."
+    ],
+    [
+      "Could you ad a link?",
+      "Could you add a link?"
+    ],
+    [
+      "I'll pot the photos tonight.",
+      "I'll post the photos tonight."
+    ],
+    [
+      "We wet out for dinner.",
+      "We went out for dinner."
+    ],
+    [
+      "Happy new ear!",
+      "Happy new year!"
+    ],
+    [
+      "Take car, see you soon.",
+      "Take care, see you soon."
+    ],
+    [
+      "He's sill on the phone.",
+      "He's still on the phone."
+    ],
+    [
+      "We though it was Monday.",
+      "We thought it was Monday."
+    ],
+    [
+      "Hat works for me.",
+      "That works for me."
+    ],
+    [
+      "Thy want to meet at noon.",
+      "They want to meet at noon."
+    ],
+    [
+      "Hoe much does it cost?",
+      "How much does it cost?"
+    ],
+    [
+      "Fir now, let's wait.",
+      "For now, let's wait."
+    ],
+    [
+      "The new layout is more intuitiver.",
+      "The new layout is more intuitive."
+    ],
+    [
+      "That's mines, not yours.",
+      "That's mine, not yours."
+    ],
+    [
+      "Being that we're early, let's grab coffee.",
+      "Since we're early, let's grab coffee."
+    ],
+    [
+      "Equally as useful is the search bar.",
+      "Equally useful is the search bar."
+    ],
+    [
+      "Them cookies are delicious.",
+      "Those cookies are delicious."
+    ],
+    [
+      "Can I lend his bike?",
+      "Can I borrow his bike?"
+    ],
+    [
+      "The temperature raised to forty degrees.",
+      "The temperature rose to forty degrees."
+    ],
+    [
+      "He sings pretty good.",
+      "He sings pretty well."
+    ],
+    [
+      "Laying around on the shelf was my old phone.",
+      "Lying around on the shelf was my old phone."
+    ]
+  ],
+  "negatives": [
+    "Mike and I are going to the game.",
+    "Can you send it to Mike and me?",
+    "Between you and me, it was a mess.",
+    "She's taller than me.",
+    "Me and my big mouth.",
+    "Me too! See you soon.",
+    "Let me know when you're free.",
+    "Let them know we're late.",
+    "Let them no longer wait in the cold.",
+    "There's no way we finish by noon.",
+    "There's not one seat left.",
+    "No one knows the answer.",
+    "I said no to the offer.",
+    "To whom should I address the letter?",
+    "Who did you invite to the party?",
+    "The person whom we hired is great.",
+    "To whom was the parcel sent?",
+    "Everyone except Sam is coming.",
+    "Everyone came except her.",
+    "I sent the photos to myself.",
+    "I did it myself.",
+    "I bought myself a new chair.",
+    "Talk to Priti or me if you need help.",
+    "It's a nice day.",
+    "The company lost its biggest client.",
+    "The app updates its own settings.",
+    "Its only purpose is to log errors.",
+    "The bird flapped its wings.",
+    "Its very own cache is small.",
+    "It's been a long week.",
+    "Their car is parked outside.",
+    "Their house is near the park.",
+    "There is a typo on slide four.",
+    "I'll be there by six.",
+    "They get their keys today.",
+    "They're both out sick today.",
+    "They're going to love it.",
+    "Is there going to be food?",
+    "I think there is a delay.",
+    "Your welcome email is ready.",
+    "You're welcome!",
+    "Your right hand is bleeding.",
+    "Your late father would be proud.",
+    "Your going-away party was lovely.",
+    "Your being here means a lot.",
+    "I'm too tired to cook.",
+    "I'm used to late nights.",
+    "He got to sleep early.",
+    "I'm going to bed.",
+    "It's time to go.",
+    "Same to you!",
+    "I want you to.",
+    "Are you here about the flat?",
+    "Did you get here from the airport?",
+    "Did you hear the news?",
+    "Glad to be here.",
+    "There's a hole in my sock.",
+    "The whole team is out on Friday.",
+    "It gives me peace of mind.",
+    "We want peace of mind.",
+    "I'd like a piece of cake.",
+    "Turn right down the next street.",
+    "Write that down before you forget.",
+    "Right, that makes sense.",
+    "Write, edit, publish, repeat.",
+    "The principle of least privilege applies here.",
+    "The principal called a staff meeting.",
+    "Our guiding principle is simplicity.",
+    "We agree in principle.",
+    "The interest is charged on the principal.",
+    "The red sauce complements the pasta nicely.",
+    "The wine is a nice complement to the fish.",
+    "Thanks for the compliment!",
+    "Wear a coat, it's cold.",
+    "Where did you park?",
+    "What should I wear tonight?",
+    "Whether or not we go depends on the rain.",
+    "The weather is lovely today.",
+    "Whose jacket is this?",
+    "Who's coming tonight?",
+    "Who's ready for lunch?",
+    "We drove past your house yesterday.",
+    "The bus passed us on the bridge.",
+    "I passed the exam!",
+    "It took an hour to park our car.",
+    "Our flight leaves at six.",
+    "Our team is growing.",
+    "What time are you leaving?",
+    "I read the whole thread last night.",
+    "The sky turned red the moment we left.",
+    "I can't bear to watch.",
+    "Bear with me for a second.",
+    "The walls were bare.",
+    "Can you weigh in on the design?",
+    "The way in on the left is closed.",
+    "The bus fare went up again.",
+    "That's not fair!",
+    "The county fair was fun.",
+    "She won the raffle.",
+    "She was the one who called.",
+    "The plane was delayed two hours.",
+    "The plan worked perfectly.",
+    "It was a plain white shirt.",
+    "We should hire another designer.",
+    "Prices went higher again.",
+    "The poem was read aloud in class.",
+    "Pets are not allowed on the patio.",
+    "We went back and forth on it.",
+    "It's the fourth time this week.",
+    "She came fourth in the race.",
+    "I'm so bored.",
+    "The board approved the budget.",
+    "The bored kids voted to leave early.",
+    "Is everyone on board?",
+    "He threw the ball over the fence.",
+    "We got through it.",
+    "Thanks for being so thorough.",
+    "Be thorough the first time.",
+    "I'll walk you through the steps.",
+    "She walked through the park.",
+    "The car brakes well on ice.",
+    "This patch breaks the build.",
+    "It's quite a long drive.",
+    "The library is so quiet.",
+    "It was quiet at night.",
+    "I'm not quite sure.",
+    "Keep quiet a while longer.",
+    "The office is quite busy today.",
+    "Everyone except Jordan was there.",
+    "I accept your apology.",
+    "Did everyone accept the terms?",
+    "I'd advise against it.",
+    "Thanks for the advice on this.",
+    "Were you able to fix it?",
+    "Where are you?",
+    "Take a deep breath.",
+    "Just breathe. You'll be fine.",
+    "I'm out of breath.",
+    "Even though it rained, we had fun.",
+    "I even thought it was late.",
+    "I thought you were coming.",
+    "Of the two drafts, the latter is stronger.",
+    "I'll take the later train.",
+    "See you later!",
+    "He had a clear conscience.",
+    "I was barely conscious after that flight.",
+    "Keep your personal data safe.",
+    "Only authorized personnel may enter.",
+    "The city council met on Tuesday.",
+    "Ask legal counsel before you sign.",
+    "It's a moot point now.",
+    "Mute the call please.",
+    "Don't lose your keys again!",
+    "The knot came loose.",
+    "Hang loose, it'll be fine.",
+    "The new rules will affect everyone.",
+    "The policy had a big effect on retention.",
+    "The new director hopes to effect real change.",
+    "Patients with flat affect may seem uninterested.",
+    "I grew weary of the noise.",
+    "Be wary of links in texts.",
+    "The band performed really well.",
+    "The preformed panels fit nicely.",
+    "I'll definitely be there.",
+    "She defiantly refused to leave.",
+    "I'd rather stay in than go out.",
+    "We ate, then left.",
+    "That's a small nit.",
+    "I'm not sure.",
+    "It was an honor to be there.",
+    "An hour later she left.",
+    "She works for an NGO.",
+    "They didn't reply.",
+    "The are-you-sure dialog closed.",
+    "This is exactly what I wanted.",
+    "That as well, please.",
+    "Use this as a template.",
+    "Lunch with Dana at noon?",
+    "Her quick wit is great.",
+    "We hop on a call every Monday.",
+    "I hope you feel better.",
+    "I'm hopping on a call now.",
+    "Hi, I'm Sue.",
+    "Are you sure about that?",
+    "The gong rang at noon.",
+    "We're going to be late.",
+    "I saw the ad in the paper.",
+    "Please add me to the thread.",
+    "Pot the seedlings in spring.",
+    "Could you post the agenda?",
+    "We got wet to the bone.",
+    "Then we went home.",
+    "My left ear hurts.",
+    "See you next year!",
+    "It is a not insignificant cost.",
+    "Leave a short note on the door.",
+    "Take the car to the shop.",
+    "Take care of yourself!",
+    "The window sill is dusty.",
+    "It is still loading.",
+    "Even though you were away, we coped.",
+    "I thought so too.",
+    "We tough it out every winter.",
+    "Hat sizes vary a lot.",
+    "That sounds great.",
+    "Thy kingdom come.",
+    "They said it was fine.",
+    "Hoe the garden beds this weekend.",
+    "How was the concert?",
+    "A fir tree stood in the yard.",
+    "Thanks for the update.",
+    "The Douglas fir, the tallest one, fell.",
+    "He is a real do-gooder.",
+    "It does more good than harm.",
+    "The new parser is more efficient.",
+    "He was badly hurt in the fall.",
+    "The old coal mines closed down.",
+    "That one is mine.",
+    "Anyway, the demo went fine.",
+    "Both options are equally important.",
+    "Being that tired is no fun.",
+    "Please lay down your pens.",
+    "I need to lie down for a bit.",
+    "She laid the papers on the desk.",
+    "She lay on the couch all afternoon.",
+    "The hen was laying eggs.",
+    "Can I borrow your charger?",
+    "Can I borrow you for a second?",
+    "Can I lend a hand?",
+    "I'll lend you my umbrella.",
+    "She rose the next morning and raised the issue.",
+    "The sun rose over the hills.",
+    "Our rent was raised by five percent.",
+    "She did good work on the exam.",
+    "We want to do good in the world.",
+    "The band plays good music.",
+    "That sounds good to me.",
+    "I did well on the test.",
+    "Two espressos, please.",
+    "The settings revert to the defaults.",
+    "I will revert the change.",
+    "Let us nurses help.",
+    "We nurses need more support.",
+    "Those boots look great.",
+    "I'm going to give them boots for Christmas.",
+    "The meeting was exhausting.",
+    "The team was exhausted after the launch.",
+    "I was so bored at the meeting.",
+    "The movie was boring.",
+    "I was confused by the instructions.",
+    "Everything is working out fine so far.",
+    "I love you. I don't think this is working out, but it'll be fine.",
+    "He was out, but only for a minute.",
+    "The power's out, but we have candles.",
+    "Count me out, but thanks for asking.",
+    "Log out, then log back in.",
+    "Time out, I need a break.",
+    "Lights out, everyone.",
+    "He was knocked out, cold.",
+    "She stepped out, honestly a little annoyed.",
+    "I'm all in, out of options anyway.",
+    "Hand it over, out with it.",
+    "Here's to good friends and long weekends.",
+    "Your so-called fix broke the build.",
+    "Your very own copy is on the desk.",
+    "Your already busy schedule just got busier.",
+    "Your always-on display drains the battery.",
+    "Bring your SO to the party.",
+    "You and me both.",
+    "The patient showed little affect during the interview.",
+    "Positive affect predicts better sleep.",
+    "Which effect people prefer is still unclear.",
+    "What is conscience, really?",
+    "I already sit at my desk by eight.",
+    "Make sure you correctly sit before lifting.",
+    "It's still week after week of rain.",
+    "We want to get to more people this year.",
+    "Taxes raised by the council fund the parks.",
+    "The fees raised by the gala went to charity.",
+    "I told Sam and I know he agrees.",
+    "About who should attend, we'll decide later.",
+    "We hop that fence every day.",
+    "It was a plain ride home.",
+    "The plain journey took us across the valley.",
+    "This is the way to good health.",
+    "The quick brown fox jumps over the lazy dog.",
+    "I'd love you to come along.",
+    "The board members met at noon.",
+    "Our team won the first round.",
+    "That one is ours.",
+    "Is that yours or theirs?",
+    "She has her own desk.",
+    "He did well in the final.",
+    "They raised the rent last year.",
+    "Prices rose sharply in May.",
+    "Let Sam and me know by Friday.",
+    "Sam and I will set up the room.",
+    "Whom did you call?",
+    "Who called yesterday?",
+    "The person who called was kind.",
+    "Everyone but her was there.",
+    "I'm going to lie on the beach all day.",
+    "The cards were lying on the table.",
+    "We booked a table for eight people.",
+    "We need two more chairs.",
+    "When did we last restart the server?",
+    "My car is parked by the gate.",
+    "I feel like we should wait.",
+    "I want to see that film.",
+    "Do you want some tea?",
+    "Did you get my email?",
+    "Check that the flag is set.",
+    "Please send the file today.",
+    "Please read the notes first.",
+    "I'm off on Friday.",
+    "I still feel weak after the flu.",
+    "The cat is asleep on the sofa.",
+    "I ate early, then went for a walk.",
+    "She came fourth, then fifth.",
+    "The hen was laying an egg.",
+    "I'll lay the blanket on the grass.",
+    "Lay the book on the table, please.",
+    "He was knocked out cold.",
+    "Are you here for the interview?",
+    "Are your parents coming?",
+    "Our you-know-what is broken again.",
+    "Hour after hour, the rain kept falling.",
+    "He meets the team at noon.",
+    "He plans to visit next week.",
+    "An honest answer is all I want.",
+    "The are-we-there-yet questions started early.",
+    "That as well, thanks.",
+    "Is this as good as it gets?",
+    "It was as good as new.",
+    "It's as simple as that.",
+    "There's no time like the present.",
+    "I have no idea what happened.",
+    "Lunch with Dana at noon.",
+    "He is wont to wander off after dinner.",
+    "We had a quick ant problem in the kitchen.",
+    "Did you bet the house on red?",
+    "Where should we sit?",
+    "Their pleas were ignored.",
+    "That party was rad!",
+    "I'm of two minds about it.",
+    "This week was busy.",
+    "The kids ate pizza for dinner.",
+    "I need to go to the store.",
+    "We lost the game last night.",
+    "The cat parked itself on my keyboard.",
+    "I fell down the stairs yesterday."
+  ]
+}

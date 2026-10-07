@@ -1,9 +1,16 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
+mod capitalization;
+mod clause_repairs;
+mod clauses;
+mod compounds;
 mod context;
+mod contractions;
+mod determiners;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
+mod marks;
 #[cfg(feature = "local-model")]
 mod model;
 mod morphology;
@@ -429,6 +436,29 @@ fn match_case(replacement: &str, original: &str) -> String {
         replacement.to_string()
     }
 }
+/// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
+const DOUBLED_ON_PURPOSE: [&str; 48] = [
+    "that", "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well",
+    "blah", "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um",
+    "la", "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi",
+    "wow", "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
+];
+/// The word at `index` repeats the one before it by a slip ("the the", "call call"). Doubles that
+/// can be meant are kept, and so is "is is" after "what it" ("what it is is").
+fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let w = token.normalized.as_str();
+    let before = |k: usize| index >= k && tokens[index - k].sentence == token.sentence;
+    token.is_word
+        && !DOUBLED_ON_PURPOSE.contains(&w)
+        // "a A": an article and the letter it names.
+        && !(token.surface.chars().count() == 1 && token.surface != tokens[index - 1].surface)
+        && !(w == "is" && before(2) && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str()))
+        // A capitalized double inside a sentence is a name ("Bora Bora", "Walla Walla").
+        && !(token.surface.starts_with(char::is_uppercase)
+            && tokens[index - 1].surface.starts_with(char::is_uppercase)
+            && before(2))
+}
 fn has_clause_start(text: &str) -> bool {
     // A typed clause can be capitalized before final punctuation. Keep standalone
     // fragments unchanged and respect sentence_start at the caller.
@@ -445,6 +475,13 @@ fn starts_sentence(text: &str, byte: usize, req: &Request) -> bool {
         && !(before.ends_with('.')
             && tokenizer::abbreviation_continues(text, before.len() - 1)
             && !text[byte..].starts_with(char::is_uppercase))
+        // "Hmm... let me think": a lowercase word after an ellipsis goes on with the sentence.
+        && !((before.ends_with("..") || before.ends_with('…'))
+            && text[byte..].starts_with(char::is_lowercase))
+        // "“Where are you? she asked": the mark ends the quotation, not the sentence.
+        && !(before.ends_with(['!', '?'])
+            && text[byte..].starts_with(char::is_lowercase)
+            && marks::inside_open_quote(text, before.len() - 1))
 }
 fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String> {
     let started = Instant::now();
@@ -575,8 +612,38 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             };
             let mut replacement = String::new();
             captures.expand(&rule.replacement, &mut replacement);
+            // "Me and Sarah are" to "Sarah and I are": the name only moves, never respelled. The
+            // words before it go and the replacement follows it, as one linked pair of edits.
+            if let Some(moved) = captures.name("moved") {
+                let group = format!("{}@{}", rule.id, m.start());
+                let at = |b| utf16_at(&req.text, b);
+                let edit = |start, end, text: String| {
+                    make_edit(
+                        &req.text,
+                        start,
+                        end,
+                        text,
+                        &rule.category,
+                        &rule.id,
+                        &rule.explanation,
+                        rule.confidence,
+                    )
+                };
+                if let (Some(mut cut), Some(mut put)) = (
+                    edit(at(m.start()), at(moved.start()), String::new()),
+                    edit(at(moved.end()), at(moved.end()), replacement),
+                ) {
+                    cut.group_id = Some(group.clone());
+                    put.group_id = Some(group);
+                    edits.extend([cut, put]);
+                }
+                continue;
+            }
+            // "Jen and I" to "Jen and me": a lone "I" is capital by spelling, not by position.
             replacement = if rule.id == "grammar.between_you_i" {
                 "me".into()
+            } else if m.as_str() == "I" {
+                replacement
             } else {
                 typo_capital(
                     match_case(&replacement, m.as_str()),
@@ -640,8 +707,12 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
     }
     if !tone_only {
+        contractions::check(req, &tokens, &mut edits);
+        capitalization::check(req, &tokens, &mut edits);
+        compounds::check(req, &tokens, &mut edits);
         punctuation::check(req, &mut edits);
         structure::check(req, &mut edits);
+        clause_repairs::check(req, &mut edits);
     }
     for (index, token) in tokens
         .iter()
@@ -688,11 +759,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         } else if starts_sentence(&req.text, token.start_byte, req)
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
+                || capitalization::interjection(&token.normalized)
                 || req.capitalize_names && level[index] >= names::MEDIUM)
             && (req.text[token.start_byte..]
                 .trim_end()
                 .ends_with(['.', '!', '?'])
-                || has_clause_start(&req.text[token.start_byte..]))
+                || has_clause_start(&req.text[token.start_byte..])
+                || capitalization::salutation(&req.text, token))
         {
             let first = token.surface.chars().next().unwrap_or(' ');
             // "mcdonald" is "McDonald", "iphone" is "iPhone"; other words only need their first letter.
@@ -738,10 +811,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             if previous.normalized == token.normalized
                 && previous.sentence == token.sentence
                 && previous.paragraph == token.paragraph
-                && [
-                    "the", "a", "an", "to", "of", "in", "for", "with", "and", "you", "we",
-                ]
-                .contains(&token.normalized.as_str())
+                && repeated_by_mistake(&tokens, index)
             {
                 let gap = &req.text[previous.end_byte..token.start_byte];
                 // "a A$1.5 billion" and "US$ 5": the letter belongs to a currency or code token.
@@ -796,6 +866,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                     &tokens[..index],
                     &tokens[index + 1..],
                 )
+                .or_else(|| {
+                    spelling::suggest_capitalized(
+                        token,
+                        &req.dialect,
+                        index.checked_sub(1).and_then(|i| tokens.get(i)),
+                        tokens.get(index + 1),
+                        &tokens[..index],
+                        &tokens[index + 1..],
+                    )
+                })
                 .map(|replacement| {
                     (
                         "spelling.delete_index",
@@ -841,6 +921,24 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             }
         }
     }
+    // A restored contraction changes what the next word agrees with ("Youll love" is not a
+    // third-person subject): other edits to that word wait for the pass that reads the fix.
+    let restored: Vec<(usize, usize)> = edits
+        .iter()
+        .filter(|e| e.rule_id == "spelling.contraction")
+        .filter_map(|e| {
+            let next = tokens
+                .iter()
+                .find(|t| t.start_utf16 >= e.end_utf16 && t.is_word)?;
+            Some((e.end_utf16, next.end_utf16))
+        })
+        .collect();
+    edits.retain(|e| {
+        e.rule_id == "spelling.contraction"
+            || !restored
+                .iter()
+                .any(|(a, b)| e.start_utf16 >= *a && e.start_utf16 < *b)
+    });
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
     // Only lowercase letters turned capital, nothing else changed.
@@ -851,15 +949,65 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .zip(e.replacement.chars())
                 .all(|(a, b)| a == b || a.is_lowercase() && b.to_lowercase().eq([a]))
     };
+    // The tagger calls some apostrophe-less contractions names ("Im", "Theyre"); a contraction
+    // the user did not add to the dictionary is still restored.
+    let contraction = |e: &Edit| {
+        e.rule_id == "spelling.contraction"
+            && !req
+                .dictionary
+                .iter()
+                .chain(&req.names)
+                .any(|w| w.eq_ignore_ascii_case(&e.original))
+    };
+    // "Sarahs laptop" to "Sarah's laptop": an apostrophe added to or dropped from a name keeps
+    // every letter of it.
+    let apostrophe_only = |e: &Edit| {
+        e.rule_id == "punctuation.apostrophe"
+            && e.original.replace(['\'', '’'], "") == e.replacement.replace(['\'', '’'], "")
+    };
+    // A sentence's first word is capitalized by position, so the tagger's name guess there is weak
+    // evidence: an ordinary word that a context rule rewrites ("Hat makes sense", "Thy said", "Bit
+    // honestly") is a slip, unless the user, the bundled list or a capital elsewhere makes it a name.
+    let user_words = index.dictionary_hits(&tokens);
+    let opens_sentence = |i: usize| {
+        i == 0
+            || tokens[i - 1].paragraph != tokens[i].paragraph
+            || [".", "!", "?"].contains(&tokens[i - 1].surface)
+    };
+    let first_word_guess = |r: &TextRange| {
+        tokens.iter().enumerate().any(|(i, t)| {
+            t.proper_name
+                && t.start_utf16 == r.start_utf16
+                && t.end_utf16 == r.end_utf16
+                && !user_words[i]
+                && opens_sentence(i)
+                && spelling::ordinary(&t.normalized)
+                && !names::is_bundled_name(&t.normalized)
+                && !req.names.iter().any(|n| n.to_lowercase() == t.normalized)
+                && !tokens.iter().enumerate().any(|(j, o)| {
+                    j != i
+                        && o.normalized == t.normalized
+                        && o.surface.starts_with(char::is_uppercase)
+                        && !opens_sentence(j)
+                })
+        })
+    };
+    let slip = |e: &Edit| e.rule_id.starts_with("usage.") || e.rule_id == "spelling.real_word";
+    let exempt = |e: &Edit, r: &TextRange| {
+        (raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r)
+            || slip(e) && first_word_guess(r)
+    };
     let blocked = |e: &Edit| {
         protected
             .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !(raises_case(e) && tagged(r)))
+            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !exempt(e, r))
             || !case_only(e)
+                && !contraction(e)
+                && !apostrophe_only(e)
                 && if e.start_utf16 != e.end_utf16 {
-                    guard
-                        .iter()
-                        .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+                    guard.iter().any(|r| {
+                        overlaps(e.start_utf16, e.end_utf16, r) && !(slip(e) && first_word_guess(r))
+                    })
                 } else {
                     // An insertion may not split a name ("Aman. Jain"); a possessive space may.
                     e.rule_id != "spelling.possessive_boundary"
@@ -1305,10 +1453,15 @@ mod tests {
             fix_request(named("We flew to mumbai in june.", &[])),
             "We flew to Mumbai in June."
         );
-        // Ordinary words stay lowercase without a cue, and a tagged name is still never respelled.
+        // Ordinary words stay lowercase without a cue ("may" and "march" are verbs here; "in" is
+        // the cue that "august" is the month), and a tagged name is still never respelled.
         assert_eq!(
             fix_request(named("I may march in august.", &[])),
-            "I may march in august."
+            "I may march in August."
+        );
+        assert_eq!(
+            fix_request(named("I may march with august company.", &[])),
+            "I may march with august company."
         );
         assert_eq!(
             fix_request(named("Ask rakesh about it.", &["rakesh"])),

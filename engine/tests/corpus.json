@@ -1902,6 +1902,114 @@
       "input": "I am agreeing with you.",
       "expected": "I am agreeing with you.",
       "kind": "preservation"
+    },
+    {
+      "id": "spelling.contraction-001",
+      "input": "Theyre bringing the slides.",
+      "expected": "They're bringing the slides.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.contraction-002",
+      "input": "Ive shared the folder with you.",
+      "expected": "I've shared the folder with you.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.contraction-003",
+      "input": "The build wasnt green this morning.",
+      "expected": "The build wasn't green this morning.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.contraction-004",
+      "input": "Lets review the draft tomorrow.",
+      "expected": "Let's review the draft tomorrow.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.contraction-005",
+      "input": "We should'nt merge it yet.",
+      "expected": "We shouldn't merge it yet.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.contraction-006",
+      "input": "She lets the team decide.",
+      "expected": "She lets the team decide.",
+      "kind": "valid"
+    },
+    {
+      "id": "spelling.contraction-007",
+      "input": "Were you on the call?",
+      "expected": "Were you on the call?",
+      "kind": "valid"
+    },
+    {
+      "id": "spelling.common_misspelling-001",
+      "input": "The calender invite is attached.",
+      "expected": "The calendar invite is attached.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.common_misspelling-002",
+      "input": "Probaly the best option is to wait.",
+      "expected": "Probably the best option is to wait.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.opening_typo-001",
+      "input": "Waht do you think of the plan?",
+      "expected": "What do you think of the plan?",
+      "kind": "correction"
+    },
+    {
+      "id": "capitalization.proper_noun-001",
+      "input": "The team in toronto shipped it.",
+      "expected": "The team in Toronto shipped it.",
+      "kind": "correction"
+    },
+    {
+      "id": "capitalization.proper_noun-002",
+      "input": "Please translate it into german.",
+      "expected": "Please translate it into German.",
+      "kind": "correction"
+    },
+    {
+      "id": "capitalization.month-001",
+      "input": "The review is on march 14.",
+      "expected": "The review is on March 14.",
+      "kind": "correction"
+    },
+    {
+      "id": "capitalization.month-002",
+      "input": "You may march ahead.",
+      "expected": "You may march ahead.",
+      "kind": "valid"
+    },
+    {
+      "id": "capitalization.season-001",
+      "input": "We hire interns every Summer.",
+      "expected": "We hire interns every summer.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.compound-001",
+      "input": "Please backup the shared drive.",
+      "expected": "Please back up the shared drive.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.compound-002",
+      "input": "The data base migration is done.",
+      "expected": "The database migration is done.",
+      "kind": "correction"
+    },
+    {
+      "id": "spelling.compound-003",
+      "input": "The setup guide is in the wiki.",
+      "expected": "The setup guide is in the wiki.",
+      "kind": "valid"
     }
   ]
 }
