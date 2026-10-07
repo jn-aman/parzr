@@ -75,7 +75,7 @@ fn emit(
         edits.push(edit);
     }
 }
-fn plural(subject: &Token<'_>) -> Option<bool> {
+pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     let word = subject.normalized.as_str();
     if [
         "i", "you", "we", "they", "people", "children", "men", "women", "police",
@@ -117,6 +117,9 @@ fn plural(subject: &Token<'_>) -> Option<bool> {
         "aircraft",
         "personnel",
         "staff",
+        // American English treats "data" and "media" as one mass as often as many items.
+        "data",
+        "media",
     ]
     .contains(&word)
     {
@@ -494,7 +497,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                         "the", "a", "an", "this", "that", "these", "those", "it", "them", "us",
                         "already", "on", "for",
                     ]
-                    .contains(&next))
+                    .contains(&next)
+                        // "have time for", "have work on": a noun object, not a bare verb.
+                        && !(spelling::flags(w) & 2 != 0 && ["on", "for"].contains(&next)))
             {
                 emit(
                     req,
@@ -561,9 +566,15 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         if prev > 0
             && inverted_subject(&tokens[prev])
             && [
-                "did", "does", "do", "can", "could", "will", "would", "should", "must",
+                "did", "does", "do", "can", "could", "will", "would", "should", "must", "didn't",
+                "doesn't", "don't", "can't", "couldn't", "won't", "wouldn't", "shouldn't",
             ]
             .contains(&tokens[prev - 1].normalized.as_str())
+            // "How you do it matters": after its own subject "do" is the main verb, not inverted.
+            && !(prev >= 2
+                && tokens[prev - 2].sentence == t.sentence
+                && ["i", "you", "we", "they", "he", "she"]
+                    .contains(&tokens[prev - 2].normalized.as_str()))
             // "I talked to Will he said yes": a capitalized "Will" inside a sentence is a name.
             && (!tokens[prev - 1].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
@@ -626,6 +637,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     .is_some_and(|x| ["and", "or"].contains(&x.normalized.as_str()))
             {
                 let replacement = match (w, pl) {
+                    // "Where was I?": "I" takes "was" and "am", never "were" or "are".
+                    ("was", _) if s.normalized == "i" => None,
+                    ("is" | "are", _) if s.normalized == "i" => Some("am"),
+                    ("were", _) if s.normalized == "i" => Some("was"),
                     ("are", false) => Some("is"),
                     ("is", true) => Some("are"),
                     ("were", false) => Some("was"),
@@ -947,7 +962,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 || markers.iter().any(|m| frame.contains(m))
                 || (clause_prefix.trim_start().starts_with("then ")
                     && prefix.to_lowercase().contains("yesterday")));
-        if past && v.base != "be" && (w == v.base || w == v.third) && v.past != w {
+        // "has happened" is a perfect, not a present: the perfect rules decide its tense.
+        let perfect = v.base == "have"
+            && tokens.get(i + 1).is_some_and(|n| {
+                morphology::verb(&n.normalized)
+                    .is_some_and(|m| m.participle == n.normalized && m.base != "have")
+            });
+        if past && v.base != "be" && !perfect && (w == v.base || w == v.third) && v.past != w {
             emit(
                 req,
                 t,

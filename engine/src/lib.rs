@@ -1,5 +1,7 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
+mod clauses;
 mod context;
+mod determiners;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
@@ -429,6 +431,29 @@ fn match_case(replacement: &str, original: &str) -> String {
         replacement.to_string()
     }
 }
+/// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
+const DOUBLED_ON_PURPOSE: [&str; 48] = [
+    "that", "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well",
+    "blah", "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um",
+    "la", "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi",
+    "wow", "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
+];
+/// The word at `index` repeats the one before it by a slip ("the the", "call call"). Doubles that
+/// can be meant are kept, and so is "is is" after "what it" ("what it is is").
+fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let w = token.normalized.as_str();
+    let before = |k: usize| index >= k && tokens[index - k].sentence == token.sentence;
+    token.is_word
+        && !DOUBLED_ON_PURPOSE.contains(&w)
+        // "a A": an article and the letter it names.
+        && !(token.surface.chars().count() == 1 && token.surface != tokens[index - 1].surface)
+        && !(w == "is" && before(2) && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str()))
+        // A capitalized double inside a sentence is a name ("Bora Bora", "Walla Walla").
+        && !(token.surface.starts_with(char::is_uppercase)
+            && tokens[index - 1].surface.starts_with(char::is_uppercase)
+            && before(2))
+}
 fn has_clause_start(text: &str) -> bool {
     // A typed clause can be capitalized before final punctuation. Keep standalone
     // fragments unchanged and respect sentence_start at the caller.
@@ -642,6 +667,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     if !tone_only {
         punctuation::check(req, &mut edits);
         structure::check(req, &mut edits);
+        clauses::check(req, &mut edits);
     }
     for (index, token) in tokens
         .iter()
@@ -738,10 +764,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             if previous.normalized == token.normalized
                 && previous.sentence == token.sentence
                 && previous.paragraph == token.paragraph
-                && [
-                    "the", "a", "an", "to", "of", "in", "for", "with", "and", "you", "we",
-                ]
-                .contains(&token.normalized.as_str())
+                && repeated_by_mistake(&tokens, index)
             {
                 let gap = &req.text[previous.end_byte..token.start_byte];
                 // "a A$1.5 billion" and "US$ 5": the letter belongs to a currency or code token.
