@@ -36,7 +36,7 @@ This publishes `public/` as Workers static assets and binds the custom domain `p
 
 ## Changing links
 
-Repo and download URLs are one constant at the top of `public/main.js` (`LINKS`). Downloads point at `releases/latest/download/<fixed name>` (`Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip`), which every release publishes next to the versioned files, so a click starts the download of the newest release. Anchors in `index.html` carry `data-link="repo|release|vscode|browser|docs|license"` and the script sets their `href` from that constant. The `href` values in the HTML are only the no-JavaScript fallback, so update both when the repository moves.
+Repo and release URLs are one constant at the top of `public/main.js` (`LINKS`). Anchors in `index.html` carry `data-link="repo|release|docs|license"` and the script sets their `href` from that constant. The `href` values in the HTML are only the no-JavaScript fallback, so update both when the repository moves.
 
 ## How the motion works
 
@@ -59,8 +59,7 @@ Tracking never changes behavior: `track(name, props)` in `main.js` is a no-op wh
 
 | Event | Properties | Fires when |
 | --- | --- | --- |
-| Download clicked | placement: Nav, Hero, Download section, Footer | a Parzr.dmg download link is clicked (data attributes) |
-| Extension downloaded | extension: VS Code or Browser | an extension download link in the compatibility section is clicked (data attributes) |
+| Download clicked | placement: Nav, Hero, Download section, Footer | a releases/latest link is clicked (data attributes) |
 | GitHub opened | placement: Nav, Hero, Open source section, Download section, Footer | a repo link is clicked (data attributes) |
 | Docs opened | page: Integrations | the "Read the full evidence table" link is clicked |
 | License opened | none | the Apache-2.0 license link in the footer is clicked |

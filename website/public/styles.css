@@ -486,8 +486,6 @@ kbd{font:600 15px var(--sans)}
 .extras-l li{padding:18px;border-radius:18px;border:1px dashed #4a5559}
 .extras-l b{display:block;font-size:16px;font-weight:600}
 .extras-l span{display:block;margin-top:6px;color:var(--text-secondary);font-size:14.5px;line-height:1.5}
-.extras-dl{display:inline-block;margin-top:12px;font-size:14px;font-weight:600;color:var(--mint)}
-.extras-dl:hover{text-decoration:underline;text-underline-offset:3px}
 
 /* 9. OPEN SOURCE */
 .open{background:linear-gradient(180deg,var(--canvas),#1b2124)}

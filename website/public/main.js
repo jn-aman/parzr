@@ -3,12 +3,9 @@
 'use strict';
 
 // All repo and release URLs live here. Change them once, the whole page follows.
-// Downloads are the newest release's fixed-name assets (scripts/release_notes.py, LATEST), so a click starts the download.
 const LINKS = {
   repo: 'https://github.com/jn-aman/parzr',
-  release: 'https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg',
-  vscode: 'https://github.com/jn-aman/parzr/releases/latest/download/parzr-vscode.vsix',
-  browser: 'https://github.com/jn-aman/parzr/releases/latest/download/parzr-browser-extension.zip',
+  release: 'https://github.com/jn-aman/parzr/releases/latest',
 };
 LINKS.docs = LINKS.repo + '/blob/main/docs/integrations.md';
 LINKS.license = LINKS.repo + '/blob/main/LICENSE';
