@@ -82,7 +82,17 @@ shake shakes shook shaken shaking
 sing sings sang sung singing
 swim swims swam swum swimming
 throw throws threw thrown throwing
-become becomes became become becoming";
+become becomes became become becoming
+freeze freezes froze frozen freezing
+steal steals stole stolen stealing
+forgive forgives forgave forgiven forgiving
+swear swears swore sworn swearing
+seek seeks sought sought seeking
+sweep sweeps swept swept sweeping
+dig digs dug dug digging
+weep weeps wept wept weeping
+bleed bleeds bled bled bleeding
+flee flees fled fled fleeing";
         ROWS.lines()
             .map(|line| {
                 let forms: Vec<_> = line.split_whitespace().collect();
@@ -96,6 +106,13 @@ become becomes became become becoming";
             })
             .collect()
     })
+}
+/// The paradigm of an irregular verb from its base form ("buy" gives "bought"); None for regular verbs.
+pub fn irregular_base(base: &str) -> Option<Verb> {
+    irregular()
+        .iter()
+        .find(|v| v.base == base && v.past != format!("{base}ed") && v.past != format!("{base}d"))
+        .cloned()
 }
 pub fn from_base(base: &str) -> Option<Verb> {
     if let Some(v) = irregular().iter().find(|v| v.base == base) {
