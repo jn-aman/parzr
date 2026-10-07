@@ -46,7 +46,7 @@ final class PassiveObserver {
         activationToken = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { if SelfTestTarget.app == nil { self?.attach() } }
         }
-        Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps)
+        Preferences.shared.$passive.combineLatest(Preferences.shared.$paused, Preferences.shared.$disabledApps, Preferences.shared.$onboardingCompleted)
             .sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitors() } }
@@ -62,7 +62,7 @@ final class PassiveObserver {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
         observer = nil; observed = []; attachedPID = nil
-        guard Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
+        guard Preferences.shared.setupFinished, Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
               let app = SelfTestTarget.watched, let bundle = app.bundleIdentifier,
               bundle != Bundle.main.bundleIdentifier, Preferences.shared.enabled(for: bundle),
               !isExcluded(bundle) else { return }

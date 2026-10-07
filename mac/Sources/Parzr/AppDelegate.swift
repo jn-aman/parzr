@@ -9,7 +9,7 @@ final class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate, NSPopoverDelegate {
     let panelModel = AppModel()
     let studioModel = AppModel()
     private var statusItem: NSStatusItem?
@@ -34,16 +34,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var subscriptions: Set<AnyCancellable> = []
     private var keyMonitor: Any?
     private var outsideMonitor: Any?
+    private var popoverOutsideMonitor: Any?
     private var ownClickMonitor: Any?
     private var updates: UpdateController?
     private var updatePresenter: UpdatePresenter?
     private var updateDot: NSView?
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        showStudio()
+        openStudio()
         return true
     }
-    /// AppKit asks this once after launch; the Studio opens then, except under a fixture editor test, which must never put a Parzr window or the app's focus on the owner's screen.
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { if !Preferences.isFixtureTest { showStudio() }; return false }
+    /// AppKit asks this once after launch; the Studio (or, before setup is finished, the welcome guide) opens then, except under a fixture editor test, which must never put a Parzr window or the app's focus on the owner's screen.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { if !Preferences.isFixtureTest { openStudio() }; return false }
     func applicationWillTerminate(_ notification: Notification) { passive?.stop(); inline.stop() }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -162,7 +163,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         #endif
         panelModel.warm(); studioModel.warm()
-        studioModel.showOnboarding = { [weak self] in self?.showOnboarding() }
         Preferences.shared.purgeMisspelledNames()
         Preferences.shared.syncContacts()
         // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
@@ -263,22 +263,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 self?.statusPopover?.close()
                 self?.statusSourceApp?.activate(options: [])
                 Task { @MainActor in try? await Task.sleep(for: .milliseconds(60)); self?.openSelection() }
-            }, editor: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .playground) },
-            settings: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .general) },
-            about: { [weak self] in self?.statusPopover?.close(); self?.showStudio(route: .about) },
-            welcome: { [weak self] in self?.statusPopover?.close(); self?.showOnboarding() },
+            }, editor: { [weak self] in self?.statusPopover?.close(); self?.openStudio(route: .playground) },
+            settings: { [weak self] in self?.statusPopover?.close(); self?.openStudio(route: .general) },
+            about: { [weak self] in self?.statusPopover?.close(); self?.openStudio(route: .about) },
             quit: { NSApp.terminate(nil) })
+    }
+    func popoverDidClose(_ notification: Notification) {
+        if let popoverOutsideMonitor { NSEvent.removeMonitor(popoverOutsideMonitor); self.popoverOutsideMonitor = nil }
     }
     @objc private func toggleStatusPopover() {
         guard let button = statusItem?.button else { return }
         if statusPopover?.isShown == true { statusPopover?.close(); return }
+        guard Preferences.shared.setupFinished else { showOnboarding(); return }
         Preferences.shared.refreshPermission()
         let frontmost = NSWorkspace.shared.frontmostApplication
         if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier { statusSourceApp = frontmost }
         let popover = NSPopover(); popover.behavior = .transient
         popover.animates = !Preferences.shared.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.contentViewController = NSHostingController(rootView: statusPopoverView())
-        statusPopover = popover
+        statusPopover = popover; popover.delegate = self
+        // Parzr stays an accessory app and never takes focus from the writer's app, so a transient popover only sees clicks inside Parzr. A click anywhere else closes it.
+        if showsWindows, popoverOutsideMonitor == nil {
+            popoverOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in MainActor.assumeIsolated { self?.statusPopover?.close() } }
+        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.layoutSubtreeIfNeeded()
     }
@@ -288,7 +295,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let check = app.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""); check.target = self
         app.addItem(.separator())
         let settings = app.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ","); settings.target = self
-        let welcome = app.addItem(withTitle: "Welcome and permissions…", action: #selector(openWelcome), keyEquivalent: ""); welcome.target = self
         app.addItem(.separator())
         app.addItem(withTitle: "Hide Parzr", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: "Quit Parzr", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -312,6 +318,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
             item.target = self; item.isEnabled = enabled; menu.addItem(item); return item
         }
+        guard Preferences.shared.setupFinished else {
+            add("Finish setting up Parzr…", action: #selector(openWelcome)).image = NSImage(systemSymbolName: "hand.raised", accessibilityDescription: nil)
+            menu.addItem(.separator())
+            let quit = add("Quit Parzr", action: #selector(NSApplication.terminate(_:)), key: "q"); quit.target = NSApp
+            return
+        }
         _ = add(studioModel.engineReady ? "Parzr · Running locally" : studioModel.error == nil ? "Parzr · Starting locally…" : "Parzr · Engine unavailable", action: nil, enabled: false)
         menu.addItem(.separator())
         add("Check selected text", action: #selector(checkSelection)).image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
@@ -325,7 +337,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
         add("Open Parzr", action: #selector(openEditor)).image = NSImage(systemSymbolName: "square.and.pencil", accessibilityDescription: nil)
         add("Settings…", action: #selector(openSettings), key: ",").image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
-        add("Welcome and permissions…", action: #selector(openWelcome)).image = NSImage(systemSymbolName: "hand.raised", accessibilityDescription: nil)
         menu.addItem(.separator())
         let quit = add("Quit Parzr", action: #selector(NSApplication.terminate(_:)), key: "q"); quit.target = NSApp
     }
@@ -334,19 +345,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func toggleAutomatic() { Preferences.shared.passive.toggle() }
     @objc private func toggleCurrentApp(_ item: NSMenuItem) { if let id = item.representedObject as? String { Preferences.shared.toggleApp(id) } }
     @objc private func enableEditorAccess() { Preferences.shared.requestPermission() }
-    @objc private func openEditor() { showStudio(route: .playground) }
-    @objc private func openAbout() { showStudio(route: .about) }
+    @objc private func openEditor() { openStudio(route: .playground) }
+    @objc private func openAbout() { openStudio(route: .about) }
     @objc private func checkForUpdates() { UpdateModel.shared.perform(.check) }
-    @objc private func openSettings() { showStudio(route: .general) }
+    @objc private func openSettings() { openStudio(route: .general) }
     @objc private func openWelcome() { showOnboarding() }
-    /// The guided setup. Opens at the Accessibility step when that is still missing for a returning user; closing it by any route marks it completed.
+    /// The Studio from the Dock, menus and popover; before setup is finished, the welcome guide instead.
+    func openStudio(route: StudioRoute? = nil) { Preferences.shared.setupFinished ? showStudio(route: route) : showOnboarding() }
+    /// The guided setup. Opens at the Accessibility step when that is still missing for a returning user. Only Start writing completes it.
     func showOnboarding(step: OnboardingStep? = nil) {
         closePanel()
         if let window = onboarding, isShown(window) { if let step { onboardingModel?.step = step }; if showsWindows { NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil) }; return }
         Preferences.shared.refreshPermission()
         let model = OnboardingModel(step: step); onboardingModel = model
         let view = OnboardingView(model: model, settings: { [weak self] in self?.showStudio(route: .general) },
-                                  finish: { [weak self] in self?.onboarding?.close(); self?.showStudio(route: .playground) })
+                                  finish: { [weak self] in self?.onboardingModel?.complete(); self?.onboarding?.close(); self?.showStudio(route: .playground) })
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: OnboardingView.size), styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.appearance = Preferences.shared.appearance == "system" ? nil : NSAppearance(named: Preferences.shared.appearance == "paper" ? .aqua : .darkAqua)
         window.title = "Welcome to Parzr"; window.titlebarAppearsTransparent = true; window.isReleasedWhenClosed = false; window.delegate = self
@@ -356,10 +369,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard showsWindows else { headlessShown.insert(ObjectIdentifier(window)); return }
         NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil); window.orderFrontRegardless()
     }
+    /// Setup is mandatory: before it is finished, the close button and Cmd+W on the welcome guide ask to continue or quit instead of closing.
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === onboarding, !Preferences.shared.setupFinished else { return true }
+        guard showsWindows else { return false }
+        let alert = NSAlert()
+        alert.messageText = "Finish setting up Parzr"
+        alert.informativeText = "Parzr needs these steps before it can check your writing. You can quit now and finish setup the next time you open Parzr."
+        alert.addButton(withTitle: "Continue Setup"); alert.addButton(withTitle: "Quit Parzr")
+        alert.beginSheetModal(for: sender) { if $0 == .alertSecondButtonReturn { NSApp.terminate(nil) } }
+        return false
+    }
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         headlessShown.remove(ObjectIdentifier(window))
-        if window === onboarding { onboardingModel?.complete(); onboarding = nil; onboardingModel = nil }
+        if window === onboarding { onboarding = nil; onboardingModel = nil }
         updateActivationPolicy(closing: window)
     }
     /// An accessory app never owns the menu bar, so a Parzr window the user works in (the editor, the welcome guide) makes the app regular whatever Show in Dock says; with it off, the last one closing goes back to menu-bar-only. A minimized window counts as open.
@@ -385,6 +409,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
     private var capturing = false
     func openSelection() {
+        guard Preferences.shared.setupFinished else { showOnboarding(); return }
         passive?.suspend(); inline.dismiss()
         if isShown(panel) { closePanel(); return }
         // A copy-based capture owns the clipboard for up to half a second; ignore repeat presses meanwhile.
@@ -553,7 +578,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
-                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, welcome: {}, quit: {}), size: NSSize(width: 318, height: 334), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
+                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 334), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
                 // Update surfaces: one PNG per state, from a bare model (no Sparkle, no network).
                 let notes = "## What's new\n- **Smarter names:** fewer wrong fixes on names and places.\n- Updates arrive quietly now, and you can read what changed first.\n- Fixed a rare stall when switching apps mid-sentence.\n\nFull notes on the [releases page](https://github.com/jn-aman/parzr/releases)."
                 let release = UpdateInfo(version: "0.3.0", build: "7", bytes: 14_800_000, notes: notes, notesFormat: "markdown")
@@ -567,7 +592,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
                 let rowModel = UpdateModel(); rowModel.pending = release
                 UpdateModel.shared.pending = release
-                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, welcome: {}, quit: {}), size: NSSize(width: 318, height: 408), to: URL(fileURLWithPath: directory).appendingPathComponent("menu-update.png"))
+                try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 408), to: URL(fileURLWithPath: directory).appendingPathComponent("menu-update.png"))
                 UpdateModel.shared.pending = nil
                 try render(UpdateRow(model: rowModel).padding(18).frame(width: 318).background(Color.canvas), size: NSSize(width: 318, height: 92), to: URL(fileURLWithPath: directory).appendingPathComponent("update-row.png"))
                 try render(StudioView(model: studioModel, route: .about, renderingSnapshot: true), size: NSSize(width: 760, height: 540), to: URL(fileURLWithPath: directory).appendingPathComponent("about-small.png"))

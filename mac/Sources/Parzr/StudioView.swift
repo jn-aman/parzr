@@ -213,7 +213,7 @@ struct StudioView: View {
                     settingRow("Show in Dock", detail: "Turn off to keep Parzr in the menu bar only. Its menus and Dock icon still appear while a Parzr window is open.") { toggle("Show in Dock", $preferences.showInDock) }
                 }
                 group("SETUP") {
-                    settingRow("Welcome and permissions", detail: preferences.permissionGranted ? "Accessibility is on. Review Contacts, login and the shortcut, or try Parzr again." : "Accessibility is off. Parzr cannot check other apps until you allow it.") { NativeButton(title: "Open", action: { model.showOnboarding?() }).fixedSize() }
+                    settingRow("Accessibility", detail: preferences.permissionGranted ? "On. Parzr can read and correct the text you write in other apps." : "Off. Parzr cannot check other apps until you allow it.") { if !preferences.permissionGranted { NativeButton(title: "Allow…", action: { preferences.requestPermission() }).fixedSize() } }
                     divider
                     settingRow("Quit Parzr", detail: "Stops checking until you open Parzr again.") { NativeButton(title: "Quit", label: "Quit Parzr", action: { NSApp.terminate(nil) }).fixedSize() }
                 }
