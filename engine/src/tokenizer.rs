@@ -137,6 +137,21 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
                 tokens[i].proper_name = false;
             }
         }
+        // The tagger calls a capitalized unknown word at a sentence start a name; a clear typo
+        // there ("Waht", "Agian") is the sentence's capital on a damaged word.
+        let t = &tokens[i];
+        let opens = i == 0
+            || tokens[i - 1].paragraph != t.paragraph
+            || [".", "!", "?"].contains(&tokens[i - 1].surface);
+        let mut letters = t.surface.chars();
+        if t.proper_name
+            && opens
+            && letters.next().is_some_and(|c| c.is_ascii_uppercase())
+            && letters.all(|c| c.is_ascii_lowercase())
+            && crate::spelling::opening_typo(&t.normalized)
+        {
+            tokens[i].proper_name = false;
+        }
     }
     tokens
 }

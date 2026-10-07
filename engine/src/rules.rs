@@ -109,6 +109,13 @@ pub fn candidates(text: &str) -> Vec<bool> {
     }
     hit
 }
+/// The reviewed list of common misspellings: (misspelling, correction) pairs.
+pub fn misspellings() -> impl Iterator<Item = (&'static str, &'static str)> {
+    include_str!("../rules/misspellings.txt")
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split_once(' '))
+}
 #[derive(Deserialize)]
 pub struct PhraseRule {
     pub id: String,
@@ -127,8 +134,18 @@ pub struct PhrasePack {
 pub fn phrases() -> &'static PhrasePack {
     static PACK: OnceLock<PhrasePack> = OnceLock::new();
     PACK.get_or_init(|| {
-        let rules: Vec<PhraseRule> = serde_json::from_str(include_str!("../rules/phrases.json"))
-            .expect("valid embedded rule pack");
+        let mut rules: Vec<PhraseRule> =
+            serde_json::from_str(include_str!("../rules/phrases.json"))
+                .expect("valid embedded rule pack");
+        rules.extend(misspellings().map(|(source, replacement)| PhraseRule {
+            id: "spelling.common_misspelling".into(),
+            source: source.into(),
+            replacement: replacement.into(),
+            category: "Spelling".into(),
+            confidence: 0.97,
+            explanation: "This is a common misspelling.".into(),
+            provenance: "Parzr common misspellings list (rules/misspellings.txt)".into(),
+        }));
         assert!(
             rules.iter().all(|rule| !rule.provenance.is_empty()),
             "rule provenance"
@@ -167,6 +184,24 @@ mod tests {
             assert!(!p.source.is_empty());
             assert_ne!(p.source, p.replacement);
         }
+    }
+    #[test]
+    fn listed_misspellings_are_never_words_or_names() {
+        let mut seen = std::collections::HashSet::new();
+        for (wrong, right) in misspellings() {
+            // Not a word or name in any English variant, listed once, and corrected to words.
+            assert!(!crate::spelling::known(wrong), "{wrong} is a word");
+            assert!(!crate::names::is_bundled_name(wrong), "{wrong} is a name");
+            assert!(seen.insert(wrong), "{wrong} listed twice");
+            assert!(
+                right
+                    .split(' ')
+                    .all(|w| w.contains('\'') || crate::spelling::known(w)),
+                "{right}"
+            );
+            assert!(wrong.bytes().all(|b| b.is_ascii_lowercase()), "{wrong}");
+        }
+        assert!(seen.len() > 300);
     }
     #[test]
     fn the_prefilter_never_hides_a_match() {

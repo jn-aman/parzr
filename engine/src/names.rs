@@ -126,7 +126,7 @@ pub fn never_a_name(token: &str) -> bool {
     // A known misspelling stays correctable in any case: the system lexicon may accept its
     // capitalized form (aquire/Aquire) and the tagger may call a capitalized typo a person ("for
     // Teh meeting"). Names the user taught Parzr are matched separately and still win.
-    let typo = is_name_typo(lower);
+    let typo = is_name_typo(lower) || is_known_misspelling(lower);
     short || typo || SHORTHAND.contains(&lower) || CALENDAR.contains(&lower)
 }
 /// MEDIUM predicate: a bundled name that is not an ordinary word and not a known typo.
@@ -297,7 +297,9 @@ impl NameIndex {
                     || spelling::addressed(tokens, i) && spelling::closes_name(tokens, i));
             // "Hey Hope!", "thanks, Rose", "Dr Mark": a capital right after a greeting or title, or any
             // word there that closes its phrase ("bye, hope.").
+            // A known misspelling ("thanks alot") is never the person addressed.
             let addressed_capital = !sentence_start(i)
+                && !is_known_misspelling(b)
                 && (capitalized(t) && spelling::addressed(tokens, i)
                     || spelling::greeted(tokens, i)
                         && spelling::closes_name(tokens, i)

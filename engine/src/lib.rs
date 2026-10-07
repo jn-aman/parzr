@@ -1,5 +1,8 @@
 //! Parzr's hybrid writing engine. Every adapter shares UTF-16 edits and local language hints.
+mod capitalization;
+mod compounds;
 mod context;
+mod contractions;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
@@ -640,6 +643,9 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
     }
     if !tone_only {
+        contractions::check(req, &tokens, &mut edits);
+        capitalization::check(req, &tokens, &mut edits);
+        compounds::check(req, &tokens, &mut edits);
         punctuation::check(req, &mut edits);
         structure::check(req, &mut edits);
     }
@@ -688,11 +694,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         } else if starts_sentence(&req.text, token.start_byte, req)
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
+                || capitalization::interjection(&token.normalized)
                 || req.capitalize_names && level[index] >= names::MEDIUM)
             && (req.text[token.start_byte..]
                 .trim_end()
                 .ends_with(['.', '!', '?'])
-                || has_clause_start(&req.text[token.start_byte..]))
+                || has_clause_start(&req.text[token.start_byte..])
+                || capitalization::salutation(&req.text, token))
         {
             let first = token.surface.chars().next().unwrap_or(' ');
             // "mcdonald" is "McDonald", "iphone" is "iPhone"; other words only need their first letter.
@@ -796,6 +804,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                     &tokens[..index],
                     &tokens[index + 1..],
                 )
+                .or_else(|| {
+                    spelling::suggest_capitalized(
+                        token,
+                        &req.dialect,
+                        index.checked_sub(1).and_then(|i| tokens.get(i)),
+                        tokens.get(index + 1),
+                        &tokens[..index],
+                        &tokens[index + 1..],
+                    )
+                })
                 .map(|replacement| {
                     (
                         "spelling.delete_index",
@@ -841,6 +859,24 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             }
         }
     }
+    // A restored contraction changes what the next word agrees with ("Youll love" is not a
+    // third-person subject): other edits to that word wait for the pass that reads the fix.
+    let restored: Vec<(usize, usize)> = edits
+        .iter()
+        .filter(|e| e.rule_id == "spelling.contraction")
+        .filter_map(|e| {
+            let next = tokens
+                .iter()
+                .find(|t| t.start_utf16 >= e.end_utf16 && t.is_word)?;
+            Some((e.end_utf16, next.end_utf16))
+        })
+        .collect();
+    edits.retain(|e| {
+        e.rule_id == "spelling.contraction"
+            || !restored
+                .iter()
+                .any(|(a, b)| e.start_utf16 >= *a && e.start_utf16 < *b)
+    });
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
     // Only lowercase letters turned capital, nothing else changed.
@@ -851,22 +887,33 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .zip(e.replacement.chars())
                 .all(|(a, b)| a == b || a.is_lowercase() && b.to_lowercase().eq([a]))
     };
+    // The tagger calls some apostrophe-less contractions names ("Im", "Theyre"); a contraction
+    // the user did not add to the dictionary is still restored.
+    let contraction = |e: &Edit| {
+        e.rule_id == "spelling.contraction"
+            && !req
+                .dictionary
+                .iter()
+                .chain(&req.names)
+                .any(|w| w.eq_ignore_ascii_case(&e.original))
+    };
     let blocked = |e: &Edit| {
-        protected
-            .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !(raises_case(e) && tagged(r)))
-            || !case_only(e)
-                && if e.start_utf16 != e.end_utf16 {
-                    guard
+        protected.iter().any(|r| {
+            overlaps(e.start_utf16, e.end_utf16, r)
+                && !((raises_case(e) || contraction(e)) && tagged(r))
+        }) || !case_only(e)
+            && !contraction(e)
+            && if e.start_utf16 != e.end_utf16 {
+                guard
+                    .iter()
+                    .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+            } else {
+                // An insertion may not split a name ("Aman. Jain"); a possessive space may.
+                e.rule_id != "spelling.possessive_boundary"
+                    && guard
                         .iter()
-                        .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
-                } else {
-                    // An insertion may not split a name ("Aman. Jain"); a possessive space may.
-                    e.rule_id != "spelling.possessive_boundary"
-                        && guard
-                            .iter()
-                            .any(|r| e.start_utf16 > r.start_utf16 && e.start_utf16 < r.end_utf16)
-                }
+                        .any(|r| e.start_utf16 > r.start_utf16 && e.start_utf16 < r.end_utf16)
+            }
     };
     let blocked_groups: std::collections::HashSet<_> = edits
         .iter()
@@ -1305,10 +1352,15 @@ mod tests {
             fix_request(named("We flew to mumbai in june.", &[])),
             "We flew to Mumbai in June."
         );
-        // Ordinary words stay lowercase without a cue, and a tagged name is still never respelled.
+        // Ordinary words stay lowercase without a cue ("may" and "march" are verbs here; "in" is
+        // the cue that "august" is the month), and a tagged name is still never respelled.
         assert_eq!(
             fix_request(named("I may march in august.", &[])),
-            "I may march in august."
+            "I may march in August."
+        );
+        assert_eq!(
+            fix_request(named("I may march with august company.", &[])),
+            "I may march with august company."
         );
         assert_eq!(
             fix_request(named("Ask rakesh about it.", &["rakesh"])),
