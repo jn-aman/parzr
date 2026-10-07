@@ -1,9 +1,10 @@
 name: Verify and release Parzr
 # Full verification runs on pull requests, pushes to main, version tags (cut by the Release workflow)
 # and on demand; docs and website changes never need a Mac runner (path filters do not apply to tags).
+# Pull requests always start, so the required `verify` check always reports: a docs-only one skips it,
+# and GitHub counts a skipped required check as passed.
 on:
   pull_request:
-    paths-ignore: ['website/**', 'docs/**', '**/*.md']
   push:
     branches: [main]
     tags: ['v*']
@@ -24,7 +25,28 @@ concurrency:
   group: parzr-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE" HEAD | grep -vE '^(website/|docs/)|\.md$')" ]; then
+            echo code=true >> "$GITHUB_OUTPUT"
+          else
+            echo code=false >> "$GITHUB_OUTPUT"
+          fi
   verify:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:
