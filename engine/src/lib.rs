@@ -575,8 +575,38 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             };
             let mut replacement = String::new();
             captures.expand(&rule.replacement, &mut replacement);
+            // "Me and Sarah are" to "Sarah and I are": the name only moves, never respelled. The
+            // words before it go and the replacement follows it, as one linked pair of edits.
+            if let Some(moved) = captures.name("moved") {
+                let group = format!("{}@{}", rule.id, m.start());
+                let at = |b| utf16_at(&req.text, b);
+                let edit = |start, end, text: String| {
+                    make_edit(
+                        &req.text,
+                        start,
+                        end,
+                        text,
+                        &rule.category,
+                        &rule.id,
+                        &rule.explanation,
+                        rule.confidence,
+                    )
+                };
+                if let (Some(mut cut), Some(mut put)) = (
+                    edit(at(m.start()), at(moved.start()), String::new()),
+                    edit(at(moved.end()), at(moved.end()), replacement),
+                ) {
+                    cut.group_id = Some(group.clone());
+                    put.group_id = Some(group);
+                    edits.extend([cut, put]);
+                }
+                continue;
+            }
+            // "Jen and I" to "Jen and me": a lone "I" is capital by spelling, not by position.
             replacement = if rule.id == "grammar.between_you_i" {
                 "me".into()
+            } else if m.as_str() == "I" {
+                replacement
             } else {
                 typo_capital(
                     match_case(&replacement, m.as_str()),
@@ -851,15 +881,45 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 .zip(e.replacement.chars())
                 .all(|(a, b)| a == b || a.is_lowercase() && b.to_lowercase().eq([a]))
     };
+    // A sentence's first word is capitalized by position, so the tagger's name guess there is weak
+    // evidence: an ordinary word that a context rule rewrites ("Hat makes sense", "Thy said", "Bit
+    // honestly") is a slip, unless the user, the bundled list or a capital elsewhere makes it a name.
+    let user_words = index.dictionary_hits(&tokens);
+    let opens_sentence = |i: usize| {
+        i == 0
+            || tokens[i - 1].paragraph != tokens[i].paragraph
+            || [".", "!", "?"].contains(&tokens[i - 1].surface)
+    };
+    let first_word_guess = |r: &TextRange| {
+        tokens.iter().enumerate().any(|(i, t)| {
+            t.proper_name
+                && t.start_utf16 == r.start_utf16
+                && t.end_utf16 == r.end_utf16
+                && !user_words[i]
+                && opens_sentence(i)
+                && spelling::ordinary(&t.normalized)
+                && !names::is_bundled_name(&t.normalized)
+                && !req.names.iter().any(|n| n.to_lowercase() == t.normalized)
+                && !tokens.iter().enumerate().any(|(j, o)| {
+                    j != i
+                        && o.normalized == t.normalized
+                        && o.surface.starts_with(char::is_uppercase)
+                        && !opens_sentence(j)
+                })
+        })
+    };
+    let slip = |e: &Edit| e.rule_id.starts_with("usage.") || e.rule_id == "spelling.real_word";
+    let exempt =
+        |e: &Edit, r: &TextRange| raises_case(e) && tagged(r) || slip(e) && first_word_guess(r);
     let blocked = |e: &Edit| {
         protected
             .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !(raises_case(e) && tagged(r)))
+            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !exempt(e, r))
             || !case_only(e)
                 && if e.start_utf16 != e.end_utf16 {
-                    guard
-                        .iter()
-                        .any(|r| overlaps(e.start_utf16, e.end_utf16, r))
+                    guard.iter().any(|r| {
+                        overlaps(e.start_utf16, e.end_utf16, r) && !(slip(e) && first_word_guess(r))
+                    })
                 } else {
                     // An insertion may not split a name ("Aman. Jain"); a possessive space may.
                     e.rule_id != "spelling.possessive_boundary"
