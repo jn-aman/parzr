@@ -31,6 +31,9 @@ jobs:
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Holds RELEASE_PUSH_KEY, a write deploy key usable only from the default branch. The ruleset that makes
+    # `verify` required on the default branch lets only this key (and the owner) push there directly.
+    environment: release-push
     defaults:
       run:
         shell: bash  # bash -eo pipefail
@@ -43,6 +46,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           fetch-tags: true
+          ssh-key: ${{ secrets.RELEASE_PUSH_KEY }}
       - name: Require a clean working tree
         run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -74,7 +78,8 @@ jobs:
             git status --short
             exit 1
           fi
-          git commit -m "Release v$VERSION"
+          # [skip ci]: a deploy key push would start ci-release on main and on the tag; the dispatch below is the one build.
+          git commit -m "Release v$VERSION [skip ci]"
           git tag -a "v$VERSION" -m "Parzr v$VERSION"
           git push --atomic origin "HEAD:refs/heads/${{ github.event.repository.default_branch }}" "refs/tags/v$VERSION"
       - name: Start the signed build
@@ -83,7 +88,7 @@ jobs:
           INPUT_CRITICAL: ${{ inputs.critical }}
           INPUT_NOTES: ${{ inputs.notes }}
         run: |
-          # Pushes made with GITHUB_TOKEN do not trigger workflows, but workflow_dispatch is allowed.
+          # The release push carries [skip ci], so this dispatch is the one signed build (it keeps critical and notes).
           gh workflow run ci-release.yml --ref "v$VERSION" -f "critical=${INPUT_CRITICAL:-false}" -f "notes=$INPUT_NOTES"
           url=""
           for _ in $(seq 1 12); do
