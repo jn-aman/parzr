@@ -3,6 +3,8 @@ mod capitalization;
 mod clause_repairs;
 mod clauses;
 mod compounds;
+#[cfg(feature = "local-model")]
+mod confusion;
 mod context;
 mod contractions;
 mod determiners;
