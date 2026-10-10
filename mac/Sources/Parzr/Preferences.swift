@@ -8,10 +8,10 @@ import ServiceManagement
 final class Preferences: ObservableObject {
     static let shared = Preferences(defaults: selfTestDefaults ?? .standard)
     /// Self tests and snapshots apply a fix and undo it, which teaches learning: they run on a throwaway suite, never the owner's preferences. So does `swift test` (`underXCTest`), whose headless window tests change Show in Dock, dictionary and names.
-    nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--click-test", "--snapshot"]
+    nonisolated static let selfTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--ui-test", "--docs-test", "--editor-typing-test", "--own-editor-test", "--click-test", "--snapshot", "--web-composer-test"]
     nonisolated static var isSelfTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: selfTestFlags) }
     /// The editor tests that drive a `ParzrFixture` process: they must show nothing and take no focus, so not even Parzr's own Studio window opens.
-    nonisolated static let fixtureTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test"]
+    nonisolated static let fixtureTestFlags = ["--paste-test", "--typing-test", "--grammar-typing-test", "--integration-test", "--web-composer-test"]
     nonisolated static var isFixtureTest: Bool { !Set(CommandLine.arguments).isDisjoint(with: fixtureTestFlags) }
     nonisolated static var underXCTest: Bool { NSClassFromString("XCTestCase") != nil }
     nonisolated static let selfTestSuite = "app.parzr.desktop.selftest"

@@ -82,6 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--web-composer-test"), CommandLine.arguments.indices.contains(index + 2), let pid = pid_t(CommandLine.arguments[index + 2]) {
+            Task { @MainActor in
+                do { try await runWebComposerTest(reportDirectory: CommandLine.arguments[index + 1], pid: pid, ids: Array(CommandLine.arguments[(index + 3)...])); print("Web composer check passed."); NSApp.terminate(nil) }
+                catch { fputs("Web composer check failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--grammar-typing-test"),CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
                 do { try await runGrammarTypingTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic fixture grammar regression passed."); NSApp.terminate(nil) }
