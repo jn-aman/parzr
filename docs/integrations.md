@@ -11,8 +11,9 @@ What has been checked, and how (macOS accessibility probes, not full acceptance 
 - **Verified by probes:** TextEdit, Safari, Chrome, Brave and Firefox with default settings (text fields, textareas and contenteditable): focus, text, selection and replacement.
 - **Read verified:** Microsoft Word 16 reads text and selection (replacement uses the typed path below); Mail compose reads text, selection, word bounds and attributed text through WebKit text markers. Typed replacement in Mail and Word was not exercised live.
 - **Verified end to end:** Google Docs in Chrome, with Docs' screen reader and braille support on (see [Google Docs](#google-docs-chrome-edge-brave-arc)).
+- **Chat and mail composers in Chromium (marks verified on fixtures):** composers shaped like Slack's (Quill), Teams' (CKEditor), Discord's (Slate), Notion's blocks, Gmail's, WhatsApp Web's (Lexical) and Outlook's (RoosterJS), plus chips, images and wrapping text, get every mark in Chrome 149 and in a bare Electron 37 app (`--web-composer-test`, below). Chromium answers word geometry only on a composer's text runs, not on the composer itself; before Parzr measured the runs, these composers were read and checked but nothing was drawn.
+- **New Teams (26261), live:** focus, text, selection, word bounds, value notifications and typed replacement verified on a text field in its Edge WebView, signed out (the composer needs an account). Slack 4.52 (Electron 44) accepts the Electron switch; its composer also needs an account. Neither signed-in app was tested.
 - **Unit-tested only:** Electron re-activation, the VS Code and Cursor opt-in, Xcode comment and string filtering, and the Firefox hint.
-- **Untested:** Slack, Teams and Notion were not installed for testing.
 
 ## Install the optional extensions
 
@@ -111,7 +112,9 @@ A host must expose text, selection, range bounds and safe range replacement for 
 
 ### Firefox, Chromium and Electron
 
-Firefox 121+ starts its accessibility engine when Parzr reads the application role, so default Firefox needs nothing. If a user has turned on "Prevent accessibility services from accessing your browser" (Settings, Privacy & Security, Permissions), Firefox exposes no text; after several keystrokes with no field found, the menu-bar panel shows a one-time dismissible hint explaining how to turn that off. Parzr never edits Firefox's profile. Chromium browsers also get `AXEnhancedUserInterface`, which Chrome needs to report word bounds for underlines. The first focus query after activation can see only the menu bar, so Parzr looks once more after 1.5 seconds.
+Firefox 121+ starts its accessibility engine when Parzr reads the application role, so default Firefox needs nothing. If a user has turned on "Prevent accessibility services from accessing your browser" (Settings, Privacy & Security, Permissions), Firefox exposes no text; after several keystrokes with no field found, the menu-bar panel shows a one-time dismissible hint explaining how to turn that off. Parzr never edits Firefox's profile. Chromium browsers also get `AXEnhancedUserInterface`, which Chrome needs to build its accessibility tree at all. The first focus query after activation can see only the menu bar, so Parzr looks once more after 1.5 seconds.
+
+Chromium (browsers, Electron apps, and the Edge WebView inside new Teams) answers `AXBoundsForRange` on a rich-text composer (`contenteditable`) with an empty rect, and its line APIs report only the first line. Its text runs (the composer's `AXStaticText` descendants, one per DOM text node) do report true word rects, so Parzr aligns those runs to the composer's text and measures a range on the runs it covers, word by word when it wraps; a run that does not line up exactly ends the alignment, so a word gets no rect rather than a wrong one. Textareas and inputs answer directly. New Teams runs its web content in a separate helper process (`com.microsoft.teams2.helper`), but the Teams app itself answers the focus query and value notifications for it, and keys posted to the Teams app reach the composer, so it needs nothing else. Chromium also puts a line break around a non-editable chip (a mention) or an image in the composer's text, so an automatic check sees the words on either side of one as separate paragraphs.
 
 ### VS Code and Cursor (opt-in)
 
@@ -156,7 +159,8 @@ Neovim, Emacs, Zed, Helix and Sublime can use this route through compatible LSP 
 | Microsoft Word | Native AX, typed replacement | Text and selection read verified; replacement unverified |
 | Xcode | Native AX, comments and strings only | Semantic-type filtering unit-tested; works as a text editor today |
 | Native text views; Notes, Pages | Focus ancestry + AX capability probe | Native core tests; individual application fixtures required |
-| Teams, Slack, WhatsApp and other desktop chat | Native AX; supported Electron accessibility activation | Adapter implemented; actual named desktop hosts unverified |
+| Slack, Discord, Notion (Electron), new Teams (Edge WebView) | Native AX; Electron accessibility activation; marks measured on the composer's text runs | Every mark placed on composer fixtures in Electron 37 and Chrome 149; new Teams' WebView verified live on a text field (focus, text, bounds, typed replacement); the signed-in composers unverified |
+| WhatsApp (Catalyst), Messages | Native AX | Unverified |
 | Text input / textarea | Automatic browser underlines and inline corrections | Real Chromium DOM, engine, focus, single-correction Undo and stale-draft tests |
 | Teams/Slack-shaped rich composer | Shared rich-text browser adapter | Synthetic nested composer, mention, emoji, formatting, paragraphs and Undo tests; actual services unverified |
 | Gmail, Outlook, WhatsApp web, Discord web, CMS editors | Same DOM route | Implemented capability route; individual sites require tests |

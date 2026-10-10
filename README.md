@@ -121,7 +121,7 @@ Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device mod
 | --- | --- | --- |
 | Safari, Chrome, Brave, Edge, Arc, Firefox | macOS Accessibility, no extension | Verified (Safari, Chrome, Brave, Firefox) |
 | TextEdit, Mail, Word, Xcode comments | macOS Accessibility | TextEdit verified end to end; Mail and Word reads verified |
-| Slack, Teams, Notion, Discord (Electron) | macOS Accessibility | Supported, not yet tested here |
+| Slack, Discord, Notion (Electron), Teams | macOS Accessibility | Underlines verified on Electron and Chrome composer fixtures; the signed-in apps not yet tested |
 | VS Code, Cursor (Markdown and text) | Opt-in setting | Unit-tested |
 | Google Docs (Chrome, Edge, Brave, Arc) | Native underlines, card and fixes once Docs' screen reader and braille support are on (Tools, Accessibility); otherwise Option+Space copies, checks and pastes | Verified in Chrome |
 | Other canvas editors | Option+Space copies, checks and pastes the fix | Supported |

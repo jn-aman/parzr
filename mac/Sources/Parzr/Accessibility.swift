@@ -48,7 +48,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs() }
+    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs(); forgetWeb() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -108,7 +108,8 @@ enum AX {
     }
     static func bounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
         if isDocsText(element) { return docsBounds(element, range).map(cocoa) }
-        return axBounds(element, range).map(cocoa)
+        // Chromium contenteditable composers answer with an empty rect; their text runs carry the geometry (see WebGeometry).
+        return (axBounds(element, range) ?? webBounds(element, range)).map(cocoa)
     }
     static func line(_ element: AXUIElement, _ index: Int) -> Int? {
         var value: CFTypeRef?
@@ -128,6 +129,7 @@ enum AX {
     static func lineRects(_ element: AXUIElement, _ range: NSRange) -> [CGRect] {
         guard range.length > 0 else { return [] }
         if isDocsText(element) { return docsLines(element, range).map(cocoa).filter { $0.width > 0 } }
+        if isChromiumText(element) { return chromiumLines(element, range) }
         if let first = line(element, range.location), let last = line(element, NSMaxRange(range) - 1), last >= first, lineRange(element, first) != nil {
             var rects: [CGRect] = []
             for index in first...min(last, first + 7) {
