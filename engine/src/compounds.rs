@@ -4,7 +4,7 @@
 //! Only the frames where one reading is impossible are changed: "any way to help", "any one of
 //! them", "a short cut" and "the login page" are valid English and stay.
 use crate::tokenizer::Token;
-use crate::{Edit, Request, contractions, make_edit, morphology, names, spelling, starts_sentence};
+use crate::{Edit, Request, contractions, make_edit, morphology, spelling, starts_sentence};
 
 /// Compounds whose split spelling is not English, with the words after that keep it (`except`).
 struct Split {
@@ -501,23 +501,21 @@ fn push(req: &Request, edits: &mut Vec<Edit>, first: &Token<'_>, last: &Token<'_
         edits.push(e);
     }
 }
-/// A piece that stands as a word on its own: an ordinary word of two or more letters, "a", "I",
-/// or chat shorthand ("u", "ur").
+/// A piece that stands as a word on its own: an ordinary word of two or more letters, "a" or "I".
 fn whole(piece: &str) -> bool {
-    piece == "a"
-        || piece == "i"
-        || piece.len() >= 2 && spelling::ordinary(piece)
-        || names::is_shorthand(piece)
+    piece == "a" || piece == "i" || piece.len() >= 2 && spelling::ordinary(piece)
 }
 /// The second pieces that end a contraction typed with a space for its apostrophe ("don t").
 const CONTRACTION_TAILS: [&str; 8] = ["t", "nt", "s", "m", "re", "ll", "ve", "d"];
-/// A space typed inside a word ("no t", "Wh at", "thi s", "do nt"): two neighbouring pieces, at
-/// least one of them no word on its own, that make one frequent word (or a contraction) together.
-/// Two real words ("a part", "some one") have a reading as typed and are left to the phrase rules.
+/// A space typed inside a word ("no t", "Wh at", "thi s", "do nt", "I'l l"): two neighbouring
+/// pieces, at least one of them no word on its own, that make one frequent word, a contraction or
+/// a possessive together. Two real words ("a part", "some one") have a reading as typed and are
+/// left to the phrase rules; a damaged word beside a whole one ("the beac on Sunday") is a typo
+/// of its own when that reading is the likelier sentence.
 fn split_word(req: &Request, tokens: &[Token<'_>], i: usize) -> Option<String> {
     let text = req.text.as_str();
     let (a, b) = (&tokens[i], tokens.get(i + 1)?);
-    if !b.is_word || a.paragraph != b.paragraph || !plain(text, &tokens[i..=i + 1]) {
+    if !b.is_word || a.paragraph != b.paragraph || !pieces(text, &tokens[i..=i + 1]) {
         return None;
     }
     // A capital inside a sentence starts a name ("Le Pen", "Ho Chi Minh").
@@ -525,33 +523,96 @@ fn split_word(req: &Request, tokens: &[Token<'_>], i: usize) -> Option<String> {
     if capital(b) || capital(a) && a.surface != "I" && !starts_sentence(text, a.start_byte, req) {
         return None;
     }
-    // Chat shorthand beside a letter ("thank u s much") is chat, not a broken word.
-    let shorthand = |t: &Token<'_>| names::is_shorthand(&t.normalized);
-    if whole(&a.normalized) && whole(&b.normalized) || shorthand(a) || shorthand(b) {
+    if whole(&a.normalized) && whole(&b.normalized) {
         return None;
     }
     let joined = format!("{}{}", a.normalized, b.normalized);
-    // A damaged word beside a whole one ("the beac on Sunday", "a lt") is a typo of its own, not
-    // half of "beacon" or "alt": a piece of three letters or more that is one slip from a frequent
-    // word, or two letters that are a slip of a word more frequent than the joined one.
-    let typo_piece = |piece: &Token<'_>, other: &Token<'_>| {
-        whole(&other.normalized)
-            && piece.normalized.len() >= 2
-            && spelling::cheap_fix(&piece.normalized).is_some_and(|fix| {
-                piece.normalized.len() >= 3
-                    || spelling::frequency(&fix) > spelling::frequency(&joined)
-            })
-    };
-    let contraction_tail = CONTRACTION_TAILS.contains(&b.normalized.as_str());
-    if !contraction_tail && (typo_piece(a, b) || typo_piece(b, a)) {
+    let bare = joined.replace('\'', "");
+    // "do nt", "it s", "I'l l", "d on't": a contraction, with its apostrophe restored.
+    if let Some(contraction) = contractions::contraction(&bare)
+        && (joined.contains('\'') && joined == contraction
+            || !joined.contains('\'') && CONTRACTION_TAILS.contains(&b.normalized.as_str()))
+    {
+        let mark = if a.surface.contains('’') || b.surface.contains('’') {
+            "’"
+        } else {
+            "'"
+        };
+        return Some(contraction.replace('\'', mark));
+    }
+    // "nobod y's": a possessive.
+    let stem = joined.strip_suffix("'s").unwrap_or(&joined);
+    if stem.contains('\'') || !spelling::ordinary(stem) || spelling::frequency(stem) < 300 {
         return None;
     }
-    if CONTRACTION_TAILS.contains(&b.normalized.as_str())
-        && let Some(contraction) = contractions::contraction(&joined)
-    {
-        return Some(contraction.to_string());
+    // "to n ext", "for e veryone": a letter that joins the word after it belongs there.
+    let after_join = tokens.get(i + 2).is_some_and(|c| {
+        c.is_word
+            && pieces(text, &tokens[i + 1..=i + 2])
+            && !c.surface.starts_with(char::is_uppercase)
+            && whole(&a.normalized)
+            && !whole(&b.normalized)
+            && {
+                let right = format!("{}{}", b.normalized, c.normalized);
+                spelling::ordinary(&right) && spelling::frequency(&right) >= 300
+            }
+    });
+    if after_join {
+        return None;
     }
-    (spelling::ordinary(&joined) && spelling::frequency(&joined) >= 300).then_some(joined)
+    // "the beac on Sunday" is "beach on", not "beacon": compare the two readings as sentences.
+    let word = |j: Option<usize>| {
+        j.and_then(|j| tokens.get(j))
+            .filter(|t| t.is_word && t.sentence == a.sentence && spelling::ordinary(&t.normalized))
+            .map_or("", |t| t.normalized.as_str())
+    };
+    let (before, after) = (word(i.checked_sub(1)), word(Some(i + 2)));
+    for (piece, other, first) in [(a, b, true), (b, a, false)] {
+        if !whole(&other.normalized)
+            || piece.normalized.len() < 2
+            || piece.normalized.contains('\'')
+        {
+            continue;
+        }
+        if let Some(fix) = spelling::cheap_fix(&piece.normalized) {
+            let typo = if first {
+                [before, fix.as_str(), other.normalized.as_str(), after]
+            } else {
+                [before, other.normalized.as_str(), fix.as_str(), after]
+            };
+            let typo = spelling::phrase_logp(&typo) - spelling::slip_cost(&piece.normalized, &fix);
+            if typo > spelling::phrase_logp(&[before, stem, after]) - 0.5 {
+                return None;
+            }
+        }
+    }
+    let curly = a.surface.contains('’') || b.surface.contains('’');
+    Some(if curly {
+        joined.replace('\'', "’")
+    } else {
+        joined
+    })
+}
+/// Two word pieces separated by one space: letters (and apostrophes) in lowercase after the first,
+/// not glued to code or a path.
+fn pieces(text: &str, span: &[Token<'_>]) -> bool {
+    let (first, last) = (&span[0], &span[span.len() - 1]);
+    let before = text[..first.start_byte].chars().next_back();
+    let after = text[last.end_byte..].chars().next();
+    span.iter().all(|t| {
+        t.is_word
+            && t.surface.chars().all(|c| c.is_ascii() || c == '’')
+            && t.surface
+                .chars()
+                .skip(1)
+                .all(|c| c.is_ascii_lowercase() || c == '\'' || c == '’')
+    }) && span
+        .windows(2)
+        .all(|w| text[w[0].end_byte..w[1].start_byte] == *" ")
+        && !before.is_some_and(|c| "._/@#\\-".contains(c) || c.is_alphanumeric())
+        && !after.is_some_and(|c| "_/@\\-".contains(c) || c.is_alphanumeric())
+        && !(after == Some('.')
+            && text[last.end_byte + 1..].starts_with(|c: char| c.is_alphanumeric()))
 }
 /// Plain lowercase prose words separated by single spaces, not glued to code or a path.
 fn plain(text: &str, span: &[Token<'_>]) -> bool {

@@ -776,6 +776,51 @@ pub(crate) fn opening_slip(word: &str) -> bool {
             && !names::is_bundled_name(word)
             && slips_from(word).iter().any(|c| frequency(c) >= 500)
 }
+/// Ways to read `word` as two words seen together at least ten million times in the pair table
+/// ("can you", "out of", "i am"), each piece two letters or more ("I" may open), as
+/// (left, right, log10 pair count).
+fn glued_pairs(word: &str) -> Vec<(&str, &str, f64)> {
+    if word.len() < 4 || !word.bytes().all(|b| b.is_ascii_lowercase() || b == b'\'') {
+        return vec![];
+    }
+    let piece = |p: &str| ordinary(p) || p.contains('\'') && known(p);
+    (1..word.len() - 1)
+        .filter(|&i| word.is_char_boundary(i))
+        .map(|i| word.split_at(i))
+        .filter(|(a, b)| (a.len() >= 2 || *a == "i") && b.len() >= 2 && piece(a) && piece(b))
+        .filter_map(|(a, b)| {
+            let n = context::count(a, b);
+            (n >= 10_000_000).then(|| (a, b, (n as f64).log10()))
+        })
+        .collect()
+}
+/// Whether `word` reads as two very common neighbouring words typed without the space.
+pub(crate) fn glued_pair(word: &str) -> bool {
+    !known(word) && !glued_pairs(word).is_empty()
+}
+/// The likeliest two-word reading of a glued `word` between `before` and `after` (either may be
+/// empty), when every neighbour present was seen beside it: "canyou" is "can you".
+fn common_split(word: &str, before: &str, after: &str) -> Option<String> {
+    if known(word) {
+        return None;
+    }
+    glued_pairs(word)
+        .into_iter()
+        .filter(|(a, b, _)| {
+            (before.is_empty() || context::count(before, a) > 0)
+                && (after.is_empty() || context::count(b, after) > 0)
+        })
+        .map(|(a, b, _)| (phrase_logp(&[before, a, b, after]), a, b))
+        .max_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, a, b)| {
+            let a = if a == "i" || a.starts_with("i'") {
+                format!("I{}", &a[1..])
+            } else {
+                a.to_string()
+            };
+            format!("{a} {b}")
+        })
+}
 /// The most frequent ordinary word (frequency prior at least 400) one cheap slip from `word`.
 pub(crate) fn cheap_fix(word: &str) -> Option<String> {
     slips_from(word)
@@ -1593,7 +1638,7 @@ fn adjacent_keys(a: u8, b: u8) -> bool {
 }
 /// How unlikely (log10) a slip turns `intended` into `typed`, one edit apart: a dropped,
 /// doubled, swapped or neighbouring key is a common slip; a far key or a wrong first letter is not.
-fn slip_cost(typed: &str, intended: &str) -> f64 {
+pub(crate) fn slip_cost(typed: &str, intended: &str) -> f64 {
     let (t, w) = (typed.as_bytes(), intended.as_bytes());
     let vowel = |c: u8| b"aeiou".contains(&c);
     let first = |i: usize| if i == 0 { 0.5 } else { 0.0 };
@@ -1647,16 +1692,36 @@ fn slip_cost(typed: &str, intended: &str) -> f64 {
 /// one slot; an empty side is unknown): word-pair counts on each side over the word's own
 /// frequency, so a frequent word gains nothing from frequency alone where its neighbours rarely
 /// meet it.
-fn slot_fit(prev: &str, word: &str, next: &str) -> f64 {
-    let zipf = |w: &str| f64::from(frequency(w).max(100)) / 100.0;
-    let pair = |a: &str, b: &str| match context::count(a, b) {
+/// A word's frequency prior on the Zipf scale (log10 per billion words plus 3), at least 1.
+fn zipf(word: &str) -> f64 {
+    f64::from(frequency(word).max(100)) / 100.0
+}
+/// log10 of how often two words are seen side by side in the pair table (the same scale: a word
+/// of Zipf z is seen about 10^(z + 4.3) times).
+fn pair(a: &str, b: &str) -> f64 {
+    match context::count(a, b) {
         0 => {
             // The pair table keeps pairs seen 6.4 million times or more; an absent pair is rarer
             // than that, and rarer still than two independent words of this frequency would be.
             (zipf(a) + zipf(b) - 4.7).min(6.8) - 0.3
         }
         n => (n as f64).log10(),
+    }
+}
+/// log10 probability of a run of words under the pair model (empty words are skipped), for
+/// comparing two readings of the same text that differ in their number of words.
+pub(crate) fn phrase_logp(words: &[&str]) -> f64 {
+    let words: Vec<&str> = words.iter().copied().filter(|w| !w.is_empty()).collect();
+    let Some(first) = words.first() else {
+        return 0.0;
     };
+    zipf(first) - 9.0
+        + words
+            .windows(2)
+            .map(|w| pair(w[0], w[1]) - zipf(w[0]) - 4.3)
+            .sum::<f64>()
+}
+fn slot_fit(prev: &str, word: &str, next: &str) -> f64 {
     match (prev.is_empty(), next.is_empty()) {
         (false, false) => pair(prev, word) + pair(word, next) - zipf(word) - 4.3,
         (false, true) => pair(prev, word) - zipf(prev) - 4.3,
@@ -1709,6 +1774,34 @@ pub fn suggest_capitalized(
     // "Thi is fine", "Trhe recipe": an opening word that is a cheap slip of a frequent word,
     // unless the tagger or the bundled list calls it a name.
     let short = opening_slip(word);
+    // "Canyou help?", "Letme know": a glued pair opening the sentence.
+    if !token.proper_name
+        && !token.system_known
+        && token
+            .surface
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase())
+        && token
+            .surface
+            .chars()
+            .skip(1)
+            .all(|c| c.is_ascii_lowercase() || c == '\'')
+        && line_start(history, token)
+        && !namey(word)
+        && !names::is_bundled_name(word)
+        && let Some(split) = common_split(
+            word,
+            "",
+            next.filter(|n| n.is_word && n.sentence == token.sentence && ordinary(&n.normalized))
+                .map_or("", |n| n.normalized.as_str()),
+        )
+    {
+        let mut chars = split.chars();
+        return chars
+            .next()
+            .map(|c| c.to_uppercase().collect::<String>() + chars.as_str());
+    }
     if token.proper_name
         || token.system_known
         || word.len() < 2
@@ -1928,6 +2021,14 @@ pub fn suggest(
             && context_choice(word, &pool, &before, &after, 1.0)
                 .is_some_and(|c| context::count(&before, c) > 0 && context::count(c, &after) > 0)
     };
+    // "canyou", "letme", "atthe": two words that very often go together, typed without the space
+    // and fitting their neighbours, are split even where a name could stand ("meet atthe door").
+    if !accepted
+        && !namey(word)
+        && let Some(split) = common_split(word, &before, &after)
+    {
+        return Some(split);
+    }
     if namey(word) && !tiny && !name_only_typo(names::base(word), prev) && !slipped_name()
         || name_like(token, history, following_context)
     {

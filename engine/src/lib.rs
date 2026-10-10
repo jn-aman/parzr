@@ -933,9 +933,18 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     }
     // A restored contraction changes what the next word agrees with ("Youll love" is not a
     // third-person subject): other edits to that word wait for the pass that reads the fix.
+    // A respelled or rejoined word does the same ("T he build" is not "he build").
+    let rewords = |e: &Edit| {
+        [
+            "spelling.contraction",
+            "spelling.split_word",
+            "spelling.delete_index",
+        ]
+        .contains(&e.rule_id.as_str())
+    };
     let restored: Vec<(usize, usize)> = edits
         .iter()
-        .filter(|e| e.rule_id == "spelling.contraction")
+        .filter(|e| rewords(e))
         .filter_map(|e| {
             let next = tokens
                 .iter()
@@ -944,7 +953,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         })
         .collect();
     edits.retain(|e| {
-        e.rule_id == "spelling.contraction"
+        rewords(e)
             || !restored
                 .iter()
                 .any(|(a, b)| e.start_utf16 >= *a && e.start_utf16 < *b)

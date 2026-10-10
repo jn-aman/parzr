@@ -267,7 +267,13 @@ impl NameIndex {
         {
             let b = base(&t.normalized);
             // "Thi is fine": a sentence's capital on a short slip of a frequent word is no name.
-            if sentence_start(i) && !t.proper_name && spelling::opening_slip(b) {
+            // A lone letter opening a sentence ("W e usually eat") is a broken word, not an initial.
+            if sentence_start(i)
+                && !t.proper_name
+                && (spelling::opening_slip(b)
+                    || spelling::glued_pair(b)
+                    || b.len() == 1 && b != "i" && b != "a")
+            {
                 continue;
             }
             if !never_a_name(t.surface)
