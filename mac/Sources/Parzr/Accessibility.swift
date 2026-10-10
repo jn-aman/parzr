@@ -178,7 +178,9 @@ struct SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
         guard let app = SelfTestTarget.watched, let element = AX.focusedText(app),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
-        guard !AX.isSecure(element), !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        // Another app's secure input hides this plain field's typing too: name that app instead of blaming the field.
+        guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
         guard let selectedRange = AX.selection(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
@@ -214,11 +216,11 @@ struct SelectionSnapshot {
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
-        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
-              !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier else { throw ParzrError.message("Parzr does not read secure fields.") }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         let element = AX.focusedText(app) ?? AX.focused(app) ?? AXUIElementCreateApplication(app.processIdentifier)
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         let text = try await ClipboardTransaction.copySelection(from: app.processIdentifier) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536 else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }

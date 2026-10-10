@@ -6,6 +6,8 @@ struct StatusPopover: View {
     @ObservedObject var updates = UpdateModel.shared
     let engineReady: Bool
     let sourceApp: NSRunningApplication?
+    /// The app holding secure input, when it keeps Parzr from checking (see `SecureInput`).
+    var secureInput: Compat.SecureInputHolder? = nil
     var check: () -> Void
     var editor: () -> Void
     var settings: () -> Void
@@ -32,6 +34,10 @@ struct StatusPopover: View {
                 NativeButton(title: "Check selection", kind: .primary, symbol: "checkmark", label: "Check selected text", action: check)
                 Spacer(minLength: 4)
                 Text(preferences.shortcutDisplay).font(.system(size: 10, weight: .medium)).padding(.horizontal, 8).padding(.vertical, 5).background(Color.surface, in: RoundedRectangle(cornerRadius: 5))
+            }
+            if let secureInput {
+                HStack(spacing: 6) { Image(systemName: "lock.fill"); Text(SecureInput.pausedLine(secureInput)).fixedSize(horizontal: false, vertical: true) }
+                    .font(.system(size: 11)).foregroundStyle(Color.textSecondary).accessibilityElement(children: .combine)
             }
             if !preferences.permissionGranted {
                 HStack { Text("Enable editor access").font(.system(size: 11)).foregroundStyle(Color.textSecondary); Spacer(); NativeButton(title: "Enable…", action: { preferences.requestPermission() }).fixedSize() }

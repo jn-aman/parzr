@@ -265,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func setPolicy(_ policy: NSApplication.ActivationPolicy) { self.policy = policy; if showsWindows { NSApp.setActivationPolicy(policy) } }
     /// The menu-bar popover's content, wired to the app; its buttons close the popover, then act.
     func statusPopoverView() -> StatusPopover {
-        StatusPopover(engineReady: studioModel.engineReady, sourceApp: statusSourceApp,
+        StatusPopover(engineReady: studioModel.engineReady, sourceApp: statusSourceApp, secureInput: SecureInput.holder(watching: statusSourceApp),
             check: { [weak self] in
                 self?.statusPopover?.close()
                 self?.statusSourceApp?.activate(options: [])
@@ -332,6 +332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return
         }
         _ = add(studioModel.engineReady ? "Parzr · Running locally" : studioModel.error == nil ? "Parzr · Starting locally…" : "Parzr · Engine unavailable", action: nil, enabled: false)
+        if let holder = SecureInput.holder(watching: NSWorkspace.shared.frontmostApplication) { add(SecureInput.pausedLine(holder), action: nil, enabled: false).image = NSImage(systemSymbolName: "lock.fill", accessibilityDescription: nil) }
         menu.addItem(.separator())
         add("Check selected text", action: #selector(checkSelection)).image = NSImage(systemSymbolName: "text.cursor", accessibilityDescription: nil)
         add("Pause suggestions", action: #selector(togglePaused)).state = Preferences.shared.paused ? .on : .off
@@ -586,6 +587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
                 try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 334), to: URL(fileURLWithPath: directory).appendingPathComponent("menu.png"))
+                try render(StatusPopover(engineReady: true, sourceApp: nil, secureInput: .app("iTerm2"), check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 360), to: URL(fileURLWithPath: directory).appendingPathComponent("menu-secure-input.png"))
                 // Update surfaces: one PNG per state, from a bare model (no Sparkle, no network).
                 let notes = "## What's new\n- **Smarter names:** fewer wrong fixes on names and places.\n- Updates arrive quietly now, and you can read what changed first.\n- Fixed a rare stall when switching apps mid-sentence.\n\nFull notes on the [releases page](https://github.com/jn-aman/parzr/releases)."
                 let release = UpdateInfo(version: "0.3.0", build: "7", bytes: 14_800_000, notes: notes, notesFormat: "markdown")

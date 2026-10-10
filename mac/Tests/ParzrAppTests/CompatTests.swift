@@ -10,6 +10,31 @@ final class CompatTests: XCTestCase {
         XCTAssertFalse(Compat.acceptsFocus(elementPID: 43, appPID: 42))
         XCTAssertFalse(Compat.acceptsFocus(elementPID: nil, appPID: 42))
     }
+    func testSecureInputNamesAHolderOnlyWhenItCanAndNeverExplainsTheWritersOwnSecureField() {
+        func holder(owner: pid_t?, name: String?, terminal: Bool = false, watched: pid_t = 20, known: Bool = true, secure: Bool = false) -> Compat.SecureInputHolder? {
+            Compat.secureInputHolder(ownerPID: owner, ownerName: name, ownerIsTerminal: terminal, watchedPID: watched, focusKnown: known, focusSecure: secure)
+        }
+        // The writer is in a password field: that is the reason, say nothing.
+        XCTAssertNil(holder(owner: 20, name: "Safari", secure: true))
+        XCTAssertNil(holder(owner: 10, name: "iTerm2", secure: true))
+        // The reported app is the writer's and Parzr cannot see the field: it may be a secure one.
+        XCTAssertNil(holder(owner: 20, name: "Safari", known: false))
+        // A terminal with Secure Keyboard Entry, checked with Option+Space: name it.
+        XCTAssertEqual(holder(owner: 20, name: "Terminal", terminal: true), .app("Terminal"))
+        // Slack's plain composer while a background app holds secure input: the window server reports Slack itself, so Slack is not blamed.
+        XCTAssertEqual(holder(owner: 20, name: "Slack"), .elsewhere)
+        // A different app recorded as the holder is named.
+        XCTAssertEqual(holder(owner: 10, name: "iTerm2"), .app("iTerm2"))
+        XCTAssertEqual(holder(owner: nil, name: nil), .elsewhere)
+        XCTAssertTrue(Compat.isTerminal("com.googlecode.iterm2")); XCTAssertFalse(Compat.isTerminal("dev.zed.Zed")); XCTAssertFalse(Compat.isTerminal("com.tinyspeck.slackmacgap"))
+    }
+    @MainActor func testSecureInputWording() {
+        XCTAssertEqual(SecureInput.message(nil), "Parzr does not read secure fields.")
+        XCTAssertTrue(SecureInput.message(.app("iTerm2")).hasPrefix("Secure input is on in iTerm2"))
+        XCTAssertTrue(SecureInput.message(.elsewhere).hasPrefix("Another app has secure input on"))
+        XCTAssertEqual(SecureInput.pausedLine(.app("iTerm2")), "Paused: Secure input is on in iTerm2")
+        XCTAssertEqual(SecureInput.pausedLine(.elsewhere), "Paused: Secure input is on in another app")
+    }
     func testTerminalsAndCodeEditorsAreNeverCheckedAutomatically() {
         for bundle in ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp-Stable", "dev.warp.Warp-Preview", "com.mitchellh.ghostty", "net.kovidgoyal.kitty",
                        "org.alacritty", "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper", "dev.zed.Zed", "com.jetbrains.intellij"] {

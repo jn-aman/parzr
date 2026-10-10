@@ -9,9 +9,24 @@ enum Compat {
     static let chromium = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", "org.chromium.Chromium", "com.microsoft.teams2"]
     /// Never checked automatically: terminals (commands and output are not prose) and code editors with their own tooling. Bundle id prefixes,
     /// so preview and nightly builds match too (Warp Preview is dev.warp.Warp-Preview).
-    static let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "org.alacritty",
-                           "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper", "dev.zed.Zed", "com.jetbrains"]
+    static let terminals = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "org.alacritty",
+                            "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper"]
+    static let excluded = terminals + ["dev.zed.Zed", "com.jetbrains"]
     static func isExcluded(_ bundle: String?) -> Bool { excluded.contains { bundle?.hasPrefix($0) == true } }
+    static func isTerminal(_ bundle: String?) -> Bool { terminals.contains { bundle?.hasPrefix($0) == true } }
+    /// Who holds secure input, as far as Parzr can tell. The window server records the frontmost app's pid whenever the holder is a background process
+    /// (measured: a faceless holder app, with Warp and then Chrome in front, read as Warp and then Chrome), so a frontmost app is named only when it can
+    /// plausibly hold it itself: a terminal with Secure Keyboard Entry. A plain field in any other app means a holder Parzr cannot name.
+    enum SecureInputHolder: Equatable { case app(String), elsewhere }
+    /// Nothing when the writer is in a secure field (that is the reason, and it is expected), or when the reported holder is the writer's app and Parzr
+    /// cannot see their field (it may be a secure one).
+    static func secureInputHolder(ownerPID: pid_t?, ownerName: String?, ownerIsTerminal: Bool, watchedPID: pid_t?, focusKnown: Bool, focusSecure: Bool) -> SecureInputHolder? {
+        guard !focusSecure else { return nil }
+        guard let ownerPID, let ownerName, !ownerName.isEmpty else { return .elsewhere }
+        guard ownerPID == watchedPID else { return .app(ownerName) }
+        guard focusKnown else { return nil }
+        return ownerIsTerminal ? .app(ownerName) : .elsewhere
+    }
     static let proseExtensions = [".md", ".markdown", ".txt", ".mdx", ".rst"]
     /// Firefox needs this many keystrokes with no text field found before the hint appears.
     static let firefoxHintKeystrokes = 8
