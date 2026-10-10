@@ -909,6 +909,14 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             &index.phrase_cover(&tokens),
             |b| utf16_at(&req.text, b),
         ) {
+            // A word the spelling pass respelled ("covers moe than" to "more") is no name to capitalize.
+            if edits.iter().any(|e| {
+                e.category == "Spelling"
+                    && e.start_utf16 < c.end_utf16
+                    && e.end_utf16 > c.start_utf16
+            }) {
+                continue;
+            }
             if let Some(e) = make_edit(
                 &req.text,
                 c.start_utf16,
@@ -995,9 +1003,23 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         })
     };
     let slip = |e: &Edit| e.rule_id.starts_with("usage.") || e.rule_id == "spelling.real_word";
+    // "Tha t is fine": the tagger's name guess on a piece of a word split by a space is no name;
+    // the user's names and dictionary and the bundled list still win.
+    let tagger_piece = |e: &Edit, r: &TextRange| {
+        e.rule_id == "spelling.split_word"
+            && tokens.iter().enumerate().any(|(i, t)| {
+                t.proper_name
+                    && t.start_utf16 == r.start_utf16
+                    && t.end_utf16 == r.end_utf16
+                    && !user_words[i]
+                    && !names::is_bundled_name(&t.normalized)
+                    && !req.names.iter().any(|n| n.to_lowercase() == t.normalized)
+            })
+    };
     let exempt = |e: &Edit, r: &TextRange| {
         (raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r)
             || slip(e) && first_word_guess(r)
+            || tagger_piece(e, r)
     };
     let blocked = |e: &Edit| {
         protected
@@ -1008,7 +1030,9 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 && !apostrophe_only(e)
                 && if e.start_utf16 != e.end_utf16 {
                     guard.iter().any(|r| {
-                        overlaps(e.start_utf16, e.end_utf16, r) && !(slip(e) && first_word_guess(r))
+                        overlaps(e.start_utf16, e.end_utf16, r)
+                            && !(slip(e) && first_word_guess(r))
+                            && !tagger_piece(e, r)
                     })
                 } else {
                     // An insertion may not split a name ("Aman. Jain"); a possessive space may.

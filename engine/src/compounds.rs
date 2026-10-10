@@ -4,7 +4,7 @@
 //! Only the frames where one reading is impossible are changed: "any way to help", "any one of
 //! them", "a short cut" and "the login page" are valid English and stay.
 use crate::tokenizer::Token;
-use crate::{Edit, Request, make_edit, morphology, spelling};
+use crate::{Edit, Request, contractions, make_edit, morphology, names, spelling, starts_sentence};
 
 /// Compounds whose split spelling is not English, with the words after that keep it (`except`).
 struct Split {
@@ -501,6 +501,58 @@ fn push(req: &Request, edits: &mut Vec<Edit>, first: &Token<'_>, last: &Token<'_
         edits.push(e);
     }
 }
+/// A piece that stands as a word on its own: an ordinary word of two or more letters, "a", "I",
+/// or chat shorthand ("u", "ur").
+fn whole(piece: &str) -> bool {
+    piece == "a"
+        || piece == "i"
+        || piece.len() >= 2 && spelling::ordinary(piece)
+        || names::is_shorthand(piece)
+}
+/// The second pieces that end a contraction typed with a space for its apostrophe ("don t").
+const CONTRACTION_TAILS: [&str; 8] = ["t", "nt", "s", "m", "re", "ll", "ve", "d"];
+/// A space typed inside a word ("no t", "Wh at", "thi s", "do nt"): two neighbouring pieces, at
+/// least one of them no word on its own, that make one frequent word (or a contraction) together.
+/// Two real words ("a part", "some one") have a reading as typed and are left to the phrase rules.
+fn split_word(req: &Request, tokens: &[Token<'_>], i: usize) -> Option<String> {
+    let text = req.text.as_str();
+    let (a, b) = (&tokens[i], tokens.get(i + 1)?);
+    if !b.is_word || a.paragraph != b.paragraph || !plain(text, &tokens[i..=i + 1]) {
+        return None;
+    }
+    // A capital inside a sentence starts a name ("Le Pen", "Ho Chi Minh").
+    let capital = |t: &Token<'_>| t.surface.starts_with(char::is_uppercase);
+    if capital(b) || capital(a) && a.surface != "I" && !starts_sentence(text, a.start_byte, req) {
+        return None;
+    }
+    // Chat shorthand beside a letter ("thank u s much") is chat, not a broken word.
+    let shorthand = |t: &Token<'_>| names::is_shorthand(&t.normalized);
+    if whole(&a.normalized) && whole(&b.normalized) || shorthand(a) || shorthand(b) {
+        return None;
+    }
+    let joined = format!("{}{}", a.normalized, b.normalized);
+    // A damaged word beside a whole one ("the beac on Sunday", "a lt") is a typo of its own, not
+    // half of "beacon" or "alt": a piece of three letters or more that is one slip from a frequent
+    // word, or two letters that are a slip of a word more frequent than the joined one.
+    let typo_piece = |piece: &Token<'_>, other: &Token<'_>| {
+        whole(&other.normalized)
+            && piece.normalized.len() >= 2
+            && spelling::cheap_fix(&piece.normalized).is_some_and(|fix| {
+                piece.normalized.len() >= 3
+                    || spelling::frequency(&fix) > spelling::frequency(&joined)
+            })
+    };
+    let contraction_tail = CONTRACTION_TAILS.contains(&b.normalized.as_str());
+    if !contraction_tail && (typo_piece(a, b) || typo_piece(b, a)) {
+        return None;
+    }
+    if CONTRACTION_TAILS.contains(&b.normalized.as_str())
+        && let Some(contraction) = contractions::contraction(&joined)
+    {
+        return Some(contraction.to_string());
+    }
+    (spelling::ordinary(&joined) && spelling::frequency(&joined) >= 300).then_some(joined)
+}
 /// Plain lowercase prose words separated by single spaces, not glued to code or a path.
 fn plain(text: &str, span: &[Token<'_>]) -> bool {
     let first = &span[0];
@@ -526,6 +578,28 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
             continue;
         }
         let paragraph = token.paragraph;
+        if let Some(joined) = split_word(req, tokens, i) {
+            let last = &tokens[i + 1];
+            let original = &req.text[token.start_byte..last.end_byte];
+            let replacement = if joined.starts_with("i'") {
+                format!("I{}", &joined[1..])
+            } else {
+                case_like(&joined, original)
+            };
+            if let Some(e) = make_edit(
+                &req.text,
+                token.start_utf16,
+                last.end_utf16,
+                replacement,
+                "Spelling",
+                "spelling.split_word",
+                "A space was typed inside this word.",
+                0.93,
+            ) {
+                edits.push(e);
+            }
+            continue;
+        }
         let prev = word(tokens, i.checked_sub(1), paragraph);
         let lower = token.normalized.as_str();
         // "data base" to "database".

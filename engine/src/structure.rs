@@ -287,8 +287,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     // Hinglish verbs ("Thoda wait karo") are not English agreement errors.
     let hinglish: Vec<usize> = tokens
         .iter()
-        .filter(|t| t.is_word && spelling::hinglish(&t.normalized))
-        .map(|t| t.sentence)
+        .enumerate()
+        .filter(|(i, t)| t.is_word && spelling::roman_hindi(&tokens, *i))
+        .map(|(_, t)| t.sentence)
         .collect();
     for (i, t) in tokens.iter().enumerate().filter(|(_, t)| t.is_word) {
         let w = t.normalized.as_str();

@@ -260,8 +260,16 @@ impl NameIndex {
         };
         // Words capitalized somewhere in the text (not "I", not typos, not ordinary words).
         let mut capitalized_elsewhere: HashSet<&str> = HashSet::new();
-        for t in tokens.iter().filter(|t| t.is_word && capitalized(t)) {
+        for (i, t) in tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.is_word && capitalized(t))
+        {
             let b = base(&t.normalized);
+            // "Thi is fine": a sentence's capital on a short slip of a frequent word is no name.
+            if sentence_start(i) && !t.proper_name && spelling::opening_slip(b) {
+                continue;
+            }
             if !never_a_name(t.surface)
                 && b != "i"
                 && !b.starts_with("i'")

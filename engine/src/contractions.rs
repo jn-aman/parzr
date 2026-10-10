@@ -103,7 +103,7 @@ const WORD_FORMS: [&str; 14] = [
 const NOT_WORDS: [&str; 3] = ["whats", "wheres", "hows"];
 
 /// The contraction whose letters are `joined` ("dont" to "don't").
-fn contraction(joined: &str) -> Option<&'static str> {
+pub(crate) fn contraction(joined: &str) -> Option<&'static str> {
     static JOINED: OnceLock<HashMap<String, &'static str>> = OnceLock::new();
     JOINED
         .get_or_init(|| {
