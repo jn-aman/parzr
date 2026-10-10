@@ -10,6 +10,15 @@ final class CompatTests: XCTestCase {
         XCTAssertFalse(Compat.acceptsFocus(elementPID: 43, appPID: 42))
         XCTAssertFalse(Compat.acceptsFocus(elementPID: nil, appPID: 42))
     }
+    func testTerminalsAndCodeEditorsAreNeverCheckedAutomatically() {
+        for bundle in ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp-Stable", "dev.warp.Warp-Preview", "com.mitchellh.ghostty", "net.kovidgoyal.kitty",
+                       "org.alacritty", "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper", "dev.zed.Zed", "com.jetbrains.intellij"] {
+            XCTAssertTrue(Compat.isExcluded(bundle), bundle)
+        }
+        for bundle in ["com.apple.TextEdit", "com.tinyspeck.slackmacgap", "com.microsoft.teams2", "com.google.Chrome", "com.apple.mail", nil] as [String?] {
+            XCTAssertFalse(Compat.isExcluded(bundle), bundle ?? "nil")
+        }
+    }
     func testUnlistedChromiumBrowsersAreRecognisedByTheirRendererHelper() {
         XCTAssertTrue(Compat.hasRendererHelper(["Google Chrome for Testing Helper (Alerts).app", "Google Chrome for Testing Helper (Renderer).app", "chrome_crashpad_handler"]))
         XCTAssertTrue(Compat.hasRendererHelper(["Brave Browser Helper (Aperitif Renderer).app", "Brave Browser Helper (Renderer).app"]))

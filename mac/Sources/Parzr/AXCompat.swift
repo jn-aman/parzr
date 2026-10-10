@@ -7,6 +7,11 @@ import ParzrCore
 enum Compat {
     static let vscode = ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92"]
     static let chromium = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", "org.chromium.Chromium", "com.microsoft.teams2"]
+    /// Never checked automatically: terminals (commands and output are not prose) and code editors with their own tooling. Bundle id prefixes,
+    /// so preview and nightly builds match too (Warp Preview is dev.warp.Warp-Preview).
+    static let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "org.alacritty",
+                           "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper", "dev.zed.Zed", "com.jetbrains"]
+    static func isExcluded(_ bundle: String?) -> Bool { excluded.contains { bundle?.hasPrefix($0) == true } }
     static let proseExtensions = [".md", ".markdown", ".txt", ".mdx", ".rst"]
     /// Firefox needs this many keystrokes with no text field found before the hint appears.
     static let firefoxHintKeystrokes = 8

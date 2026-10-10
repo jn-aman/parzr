@@ -22,10 +22,9 @@ final class PassiveObserver {
     private var firefoxKeystrokes = 0, docsKeystrokes = 0
     /// Counts monitor (re)installs; a grant after launch must install fresh ones, since monitors made before the grant never deliver.
     private(set) var monitorInstalls = 0
-    private let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.zed.Zed", "com.jetbrains"]
     /// VS Code and Cursor are checked only after the user opts in (Apps settings).
     private func isExcluded(_ bundle: String) -> Bool {
-        excluded.contains { bundle.hasPrefix($0) } || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
+        Compat.isExcluded(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
     }
     func installMonitors() {
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
