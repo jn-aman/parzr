@@ -764,7 +764,10 @@ pub(crate) fn short_slip(word: &str) -> bool {
         && !ordinary(word)
         && (word.len() <= 2 || !known(word))
         && !names::is_bundled_name(word)
-        && slips_from(word).iter().any(|c| frequency(c) >= 600)
+        // Two letters take only a cheap slip ("Bo" is no slip of "be").
+        && if word.len() <= 2 { slips_within(word, 0.5) } else { slips_from(word) }
+            .iter()
+            .any(|c| frequency(c) >= 600)
 }
 /// A capitalized sentence opener that is a slip, not a name: a short slip (`short_slip`), or an
 /// unknown word of four or more letters one cheap slip from a frequent word ("Trhe", "Thegy").
@@ -887,13 +890,33 @@ pub(crate) fn slip_fits(
         t.filter(|t| t.is_word && t.sentence == sentence && ordinary(&t.normalized))
             .map_or("", |t| t.normalized.as_str())
     }
+    // A neighbour that is no ordinary word ("sai raju", "rituparna sen") is more of the name.
+    let odd = |t: Option<&Token<'_>>| {
+        t.is_some_and(|t| {
+            t.is_word
+                && t.sentence == token.sentence
+                && !ordinary(&t.normalized)
+                && t.normalized != "i"
+                && !t.normalized.starts_with("i'")
+        })
+    };
+    if odd(previous) || odd(next) {
+        return false;
+    }
     let (before, after) = (side(previous, token.sentence), side(next, token.sentence));
     (!before.is_empty() || !after.is_empty())
         && slips_from(word).iter().any(|c| {
             frequency(c) >= 500
+                && c != before
+                && c != after
                 && (before.is_empty() || context::count(before, c) > 0)
                 && (after.is_empty() || context::count(c, after) > 0)
         })
+}
+/// A slip that leaves no doubt: a doubled, dropped, swapped or neighbouring key (cost 0.5 or less)
+/// of one of the ~200 most frequent words ("thegy" for "they"). "hari" (hair) and "bo" (be) are not.
+fn strong_slip(word: &str) -> bool {
+    !ordinary(word) && slips_within(word, 0.6).iter().any(|c| frequency(c) >= 600)
 }
 /// The most frequent ordinary word (frequency prior at least 400) one cheap slip from `word`.
 pub(crate) fn cheap_fix(word: &str) -> Option<String> {
@@ -912,6 +935,9 @@ fn slips_from(word: &str) -> Vec<String> {
 }
 /// Ordinary words one edit from `word` whose slip costs at most `max_cost` (`slip_cost`).
 fn slips_within(word: &str, max_cost: f64) -> Vec<String> {
+    if word.is_empty() || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+        return vec![];
+    }
     let lexicon = lexicon();
     let mut near: HashSet<String> = HashSet::new();
     if let Some(values) = lexicon.deletes.get(word) {
@@ -1371,7 +1397,10 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
     let joined_by_and = |t: Option<&Token<'_>>| {
         t.is_some_and(|t| ["and", "&", "or"].contains(&t.normalized.as_str()))
     };
+    // After a greeting or a word of address only an unmistakable slip counts ("thank yyou", not
+    // "looping in hari").
     if slip_fits(word, history.last(), following.first(), token)
+        && (!addressed_by(history, token) || strong_slip(word))
         && !(in_list(history, token, following)
             && (joined_by_and(history.last()) || joined_by_and(following.first())))
         && !name_list(history, token, following)
@@ -1518,7 +1547,9 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
                 || !FINITE.contains(&n.normalized.as_str())
                     && morphology::verb(&n.normalized).is_some_and(|v| {
                         // "thegy went home" is "they went": a slip of a frequent word is no subject.
-                        v.past == n.normalized && !opening_slip(word)
+                        v.past == n.normalized
+                            && !strong_slip(word)
+                            && !(v.past == v.base && opening_slip(word))
                             || !shaped && v.third == n.normalized
                     })
         })
@@ -2143,8 +2174,18 @@ pub fn suggest(
     };
     // "canyou", "letme", "atthe": two words that very often go together, typed without the space
     // and fitting their neighbours, are split even where a name could stand ("meet atthe door").
+    // "arjun menon" is a full name, not "men on": a neighbour that is no ordinary word blocks it.
+    let name_beside = [previous, next].into_iter().flatten().any(|t| {
+        t.is_word
+            && t.sentence == token.sentence
+            && t.surface.chars().all(|c| c.is_lowercase())
+            && !ordinary(&t.normalized)
+            && t.normalized != "i"
+            && !t.normalized.starts_with("i'")
+    });
     if !accepted
         && !namey(word)
+        && !name_beside
         && let Some(split) = common_split(word, &before, &after)
     {
         return Some(split);
@@ -2218,6 +2259,8 @@ pub fn suggest(
         // "aman" to "man" or "aclear" to "clear" drops a word's first letter and either loses an
         // article or erases a name; neither is a correction. A doubled "a" ("aare") is a slip.
         .filter(|candidate| word.starts_with("aa") || word.strip_prefix('a') != Some(candidate))
+        // A slip into the neighbouring word would double it ("sai said").
+        .filter(|candidate| *candidate != before && *candidate != after)
         .collect();
     // Topic and argument preferences only rank unknown-word candidates; the context choice below
     // never overrides a ranking they decided ("cazes" near a bakery is "cakes").
@@ -2577,7 +2620,7 @@ pub fn suggest(
     };
     let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
     let in_context = || -> Option<String> {
-        if accepted || tiny && (damaged(previous) || damaged(next)) {
+        if accepted || word.len() <= 3 && (damaged(previous) || damaged(next)) {
             return None;
         }
         let pool: Vec<String> = candidates
@@ -2606,11 +2649,24 @@ pub fn suggest(
                 });
         // Seen beside a neighbour, or a likely slip (a doubled, dropped or swapped key) of a word
         // of three letters or more that the neighbours clearly favour ("forgot ihs keys").
-        let attested = seen(&before, choice)
-            || seen(choice, &after)
-            || word.len() >= 3 && slip_cost(word, choice) <= 0.6;
+        // A changed first letter ("emi" read as "semi") needs both neighbours.
+        let first_changed =
+            word.as_bytes().first() != choice.as_bytes().first() && slip_cost(word, choice) > 0.6;
+        let attested = if first_changed {
+            (before.is_empty() || seen(&before, choice))
+                && (after.is_empty() || seen(choice, &after))
+                && (!before.is_empty() || !after.is_empty())
+        } else {
+            seen(&before, choice)
+                || seen(choice, &after)
+                || word.len() >= 3 && slip_cost(word, choice) <= 0.6 && frequency(choice) >= 400
+        };
         (!clause_verb && attested).then(|| choice.clone())
     };
+    // A short word beside an unknown lowercase word may be half of a name ("sai raju").
+    if word.len() <= 3 && (damaged(previous) || damaged(next)) {
+        return None;
+    }
     if !tiny
         && let Some(best) = candidates
             .first()
