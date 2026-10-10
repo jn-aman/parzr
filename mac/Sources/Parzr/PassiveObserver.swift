@@ -116,7 +116,7 @@ final class PassiveObserver {
     /// Google Docs shows nothing to read until its "braille support" is on: after several keystrokes with no text, offer the one-time setup hint.
     private func noteDocsKeystroke() {
         let prefs = Preferences.shared
-        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = SelfTestTarget.watched, Compat.isChromium(app.bundleIdentifier) else { return }
+        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = SelfTestTarget.watched, AX.isChromiumBrowser(app) else { return }
         docsKeystrokes += 1
         guard docsKeystrokes >= Compat.docsHintKeystrokes else { return }
         docsKeystrokes = 0

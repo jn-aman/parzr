@@ -10,6 +10,12 @@ final class CompatTests: XCTestCase {
         XCTAssertFalse(Compat.acceptsFocus(elementPID: 43, appPID: 42))
         XCTAssertFalse(Compat.acceptsFocus(elementPID: nil, appPID: 42))
     }
+    func testUnlistedChromiumBrowsersAreRecognisedByTheirRendererHelper() {
+        XCTAssertTrue(Compat.hasRendererHelper(["Google Chrome for Testing Helper (Alerts).app", "Google Chrome for Testing Helper (Renderer).app", "chrome_crashpad_handler"]))
+        XCTAssertTrue(Compat.hasRendererHelper(["Brave Browser Helper (Aperitif Renderer).app", "Brave Browser Helper (Renderer).app"]))
+        XCTAssertFalse(Compat.hasRendererHelper(["chrome_crashpad_handler"]), "Electron's framework keeps only the crash handler; its helpers sit beside the framework")
+        XCTAssertFalse(Compat.hasRendererHelper([]))
+    }
     func testElectronSwitchIsResetOnActivationButRateLimited() {
         var gate = ActivationGate(); let t = Date(timeIntervalSince1970: 1000)
         XCTAssertTrue(gate.shouldSet(pid: 1, now: t, force: false), "first sight sets once")

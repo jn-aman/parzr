@@ -14,8 +14,6 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
     SelfTestTarget.watch(app, stage: screen.frame)
     defer { SelfTestTarget.clear() }
     AX.prepare(app, force: true)
-    // Chrome for Testing is not on Parzr's browser list, so the test host gets Chrome's switch here (an Electron host already took AXManualAccessibility).
-    _ = AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
     try await Task.sleep(for: .milliseconds(1200))
     func find(_ id: String) -> AXUIElement? {
         var hit: AXUIElement?

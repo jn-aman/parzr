@@ -13,6 +13,9 @@ enum Compat {
     static func isVSCode(_ bundle: String?) -> Bool { vscode.contains { bundle?.hasPrefix($0) == true } }
     static func isFirefox(_ bundle: String?) -> Bool { bundle?.hasPrefix("org.mozilla.") == true }
     static func isChromium(_ bundle: String?) -> Bool { chromium.contains { bundle?.hasPrefix($0) == true } }
+    /// A Chromium browser that is not on the list (Chrome for Testing, and new ones packaged the standard way) keeps a "<Name> Helper (Renderer).app" inside its
+    /// "<Name> Framework.framework/Versions/Current/Helpers". Electron apps keep theirs beside the framework, and take AXManualAccessibility anyway.
+    static func hasRendererHelper(_ helpers: [String]) -> Bool { helpers.contains { $0.hasSuffix(" (Renderer).app") } }
     static func isXcode(_ bundle: String?) -> Bool { bundle == "com.apple.dt.Xcode" }
     /// VS Code and Cursor show a screen-reader notice when asked for accessibility, so they are touched only when the user opted in.
     static func shouldPrepare(bundle: String?, vscodeEnabled: Bool) -> Bool { !isVSCode(bundle) || vscodeEnabled }
@@ -129,13 +132,27 @@ extension AX {
         guard Compat.shouldPrepare(bundle: bundle, vscodeEnabled: Preferences.shared.checkVSCode) else { return }
         let element = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(element, 0.25)
-        if Compat.readsAppRole(bundle) { _ = get(element, kAXRoleAttribute) }
+        let chromium = isChromiumBrowser(app)
+        if Compat.readsAppRole(bundle) || chromium { _ = get(element, kAXRoleAttribute) }
         guard !Compat.isFirefox(bundle), gate.shouldSet(pid: app.processIdentifier, force: force) else { return }
         // Electron's documented assistive-technology switch exposes nested composers. Unsupported apps simply refuse it.
-        // Chrome rejects it and needs AXEnhancedUserInterface for word bounds; native apps are left alone because that can disturb window managers.
-        if AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success, Compat.isChromium(bundle) {
+        // Chrome rejects it and builds no accessibility tree without AXEnhancedUserInterface; native apps are left alone because that can disturb window managers.
+        if AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success, chromium {
             _ = AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
         }
+    }
+    private static var chromiumBundles: [String: Bool] = [:]
+    /// A listed Chromium browser, or one recognised by its bundle (see `Compat.hasRendererHelper`); the bundle is looked at once per app.
+    static func isChromiumBrowser(_ app: NSRunningApplication) -> Bool {
+        if Compat.isChromium(app.bundleIdentifier) { return true }
+        guard let url = app.bundleURL else { return false }
+        if let known = chromiumBundles[url.path] { return known }
+        let frameworks = url.appendingPathComponent("Contents/Frameworks"), files = FileManager.default
+        let found = ((try? files.contentsOfDirectory(atPath: frameworks.path)) ?? []).filter { $0.hasSuffix(".framework") }.contains { name in
+            Compat.hasRendererHelper((try? files.contentsOfDirectory(atPath: frameworks.appendingPathComponent(name).appendingPathComponent("Versions/Current/Helpers").path)) ?? [])
+        }
+        chromiumBundles[url.path] = found
+        return found
     }
     /// Electron apps answer the system-wide focus query when the per-app one fails (-25212).
     static func systemFocused(for app: NSRunningApplication) -> AXUIElement? {
