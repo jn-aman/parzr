@@ -1,0 +1,202 @@
+# Correct sentences for the frozen TEST typo fuzz set. Written after the engine changes were finished
+# and never used for tuning: rerun scripts/generate-typo-fuzz.py --split test only to rebuild the same set.
+Could you remind me what time the dentist appointment is?
+I left the umbrella in your car last night.
+The printer on the second floor keeps jamming.
+We ordered pizza because nobody wanted to cook.
+My brother is moving to a new apartment next month.
+Please bring a jacket, it gets cold after sunset.
+The train was delayed by almost an hour.
+I have never seen so many people at the beach.
+She finally found the keys under the sofa.
+Our neighbors are having a party this weekend.
+Let me check my calendar and get back to you.
+The coffee machine in the kitchen is broken again.
+He spent the whole afternoon fixing his bike.
+I think the store closes at nine on Sundays.
+Do you know where I put my reading glasses?
+The kids built a huge sandcastle near the water.
+Thank you for waiting, the doctor will see you now.
+We should leave early to avoid the traffic.
+I am still waiting for the package to arrive.
+That restaurant has the best noodles in town.
+My phone screen cracked when I dropped it.
+Can you pick up some eggs on your way home?
+The weather forecast says it will rain all day.
+I forgot to send the invoice yesterday.
+They are planning a trip to the mountains in spring.
+Her dog barks every time someone rings the bell.
+The movie was much longer than I expected.
+I need to renew my passport before the summer.
+We watched the sunrise from the top of the hill.
+He always takes the stairs instead of the elevator.
+The new update made the app much faster.
+I will call you as soon as I land.
+Please don't touch the paint, it's still wet.
+My grandmother makes the best apple pie.
+The meeting room is booked for the whole morning.
+I lost track of time while reading.
+Can we move the call to Thursday afternoon?
+The library is quiet on weekday mornings.
+He was too tired to finish the game.
+Our team won the match in the last minute.
+I usually drink tea before going to bed.
+The parking lot was completely full.
+She sent me a photo of her new kitten.
+Don't forget to lock the back door.
+The soup needs a little more salt.
+I have two tickets for the concert on Friday.
+We need to replace the batteries in the remote.
+He promised to help me move the furniture.
+The garden looks beautiful after the rain.
+My laptop battery only lasts a few hours now.
+I'm not sure if this is the right address.
+They opened a small bakery around the corner.
+The bus stop is right in front of the school.
+Could you send me the slides after the talk?
+I was surprised by how cheap the tickets were.
+We spent the evening playing board games.
+The baby finally fell asleep at midnight.
+Please let the team know about the new schedule.
+He wants to learn how to play the guitar.
+The bridge will be closed for repairs next week.
+I made a list of things we still need to buy.
+The museum is free on the first Sunday of the month.
+She has been working on her thesis for two years.
+My car needs new tires before the winter.
+I hope the weather stays nice for the picnic.
+The hotel room had a great view of the river.
+We are running out of milk and bread.
+He forgot his wallet at the restaurant.
+The teacher asked us to read three chapters.
+I couldn't hear you because of the noise.
+Our flight was cancelled because of the storm.
+The cat likes to sleep on the warm laptop.
+Do you want to share a taxi to the airport?
+I finally cleaned out the garage last weekend.
+The report should be ready by the end of the day.
+She always remembers everyone's birthday.
+The water in the lake was surprisingly warm.
+We have to wake up early tomorrow.
+He looks a lot like his father.
+I will bring some snacks for the road trip.
+The shop on the corner sells fresh flowers.
+My sister is learning to drive.
+The noise from the construction site is terrible.
+Please make sure the windows are closed.
+I think we took a wrong turn somewhere.
+The children were excited about the snow.
+This sweater is too small for me now.
+We need more chairs for the guests.
+He reads the news every morning with his coffee.
+I really enjoyed the dinner last night.
+The elevator is out of order today.
+She asked if we could meet a little later.
+My boss approved the vacation request.
+The internet has been slow all week.
+I have a headache, so I am going to lie down.
+They painted the kitchen a bright yellow.
+The price of the tickets went up again.
+I will wait for you at the main entrance.
+The dog ran off with my sandwich.
+We should probably book the hotel soon.
+He fixed the leaking tap in the bathroom.
+I can never remember where I parked.
+The flowers you sent us weren't cheap, I'm sure.
+Our new office has a lot more light.
+Could you turn the music down a little?
+I almost missed the last bus home.
+She made a cake for the whole team.
+The road was icy, so we drove slowly.
+I have been meaning to call you all week.
+They finally fixed the broken streetlight.
+My shoes got soaked in the rain.
+The store was out of the cereal I like.
+He is always the first one to arrive.
+We had a long talk about our plans.
+The documents are in the top drawer.
+I think the cat knocked the vase over.
+Let us know if you need a ride.
+The view from the train was amazing.
+She lent me her notes from the lecture.
+My old phone still works perfectly.
+I need to finish this chapter tonight.
+The neighbors' dog keeps digging under the fence.
+We forgot to buy candles for the cake.
+He was late because his alarm didn't go off.
+The beach was crowded on Saturday.
+I am going to try that new recipe tonight.
+The plants on the balcony need water.
+Could you help me carry these boxes upstairs?
+They've decided to stay home instead.
+The movie theater near us closed last year.
+I always lose my keys when I am in a hurry.
+The baker gave us an extra loaf of bread.
+Our holiday photos are finally printed.
+He told me a funny story about his trip.
+I would rather walk than take the car.
+The stairs in the old house creak at night.
+She is the best cook I know.
+The tickets sold out in less than an hour.
+We need to talk about the budget for next year.
+My hands were freezing after the walk.
+The windows were covered in frost this morning.
+I haven't seen that movie yet.
+He keeps all his receipts in a shoebox.
+The school bus was late again today.
+Could you water my plants while I am away?
+I am really proud of what we built together.
+The lights went out during the storm.
+She was happy to hear the good news.
+They are looking for a bigger house.
+My coffee went cold while I was on the phone.
+The class starts at eight sharp.
+I found an old letter in the attic.
+We should invite them over for dinner.
+The trail was muddy after the rain.
+He always forgets to charge his phone.
+I'm glad you made it home safely.
+The waiter brought us the wrong order.
+Our dog loves running in the park.
+I'm afraid I've left the stove on.
+The game was postponed because of the weather.
+She bought a new bike for her commute.
+Please keep the receipt in case you need it.
+The city looks different at night.
+I will send you the address in a minute.
+We waited in line for almost two hours.
+He has a meeting with the bank tomorrow.
+The tea is too hot to drink right now.
+I want to visit my parents this weekend.
+The office will be closed on Monday.
+She learned to swim when she was five.
+The milk in the fridge has gone sour.
+They are building a new park downtown.
+I could use some help with the dishes.
+My computer restarted in the middle of my work.
+The concert was louder than I expected.
+We have plenty of time before the show starts.
+He bought flowers for his mother.
+I keep forgetting to reply to that email.
+The hallway smells like fresh paint.
+Could you hold the door for a second?
+The river was too cold for swimming.
+I am thinking about taking a cooking class.
+The puppy chewed one of my slippers.
+She'll be back from lunch in ten minutes.
+We drove past the old school on the way.
+He made a mistake in the final report.
+The store gave me a discount on the shoes.
+I have to pick up my sister from the station.
+The sun came out just before we left.
+Our landlord finally fixed the heating.
+I would love to hear more about your trip.
+The bakery runs out of croissants by noon.
+They watched the fireworks from the roof.
+My keyboard is missing a few keys.
+The hike took longer than we planned.
+She is worried about the exam next week.
+I need a new pair of running shoes.
+The street was quiet after midnight.
+We're almost out of coffee.
+He gave a short speech at the wedding.
