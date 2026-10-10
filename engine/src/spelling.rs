@@ -821,6 +821,30 @@ fn common_split(word: &str, before: &str, after: &str) -> Option<String> {
             format!("{a} {b}")
         })
 }
+/// Whether a cheap slip of a frequent word (`opening_slip`) fits between the neighbouring words:
+/// some frequent slip target was seen beside every ordinary neighbour in the same sentence, and
+/// there is at least one such neighbour.
+pub(crate) fn slip_fits(
+    word: &str,
+    previous: Option<&Token<'_>>,
+    next: Option<&Token<'_>>,
+    token: &Token<'_>,
+) -> bool {
+    if !opening_slip(word) {
+        return false;
+    }
+    fn side<'a>(t: Option<&'a Token<'_>>, sentence: usize) -> &'a str {
+        t.filter(|t| t.is_word && t.sentence == sentence && ordinary(&t.normalized))
+            .map_or("", |t| t.normalized.as_str())
+    }
+    let (before, after) = (side(previous, token.sentence), side(next, token.sentence));
+    (!before.is_empty() || !after.is_empty())
+        && slips_from(word).iter().any(|c| {
+            frequency(c) >= 500
+                && (before.is_empty() || context::count(before, c) > 0)
+                && (after.is_empty() || context::count(c, after) > 0)
+        })
+}
 /// The most frequent ordinary word (frequency prior at least 400) one cheap slip from `word`.
 pub(crate) fn cheap_fix(word: &str) -> Option<String> {
     slips_from(word)
@@ -1285,6 +1309,11 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
     // A word that looks like a typo ("farhad" is "far had") is still a name where the context
     // names a person: only the weaker signals below give way to its shape.
     let shaped = typo_shaped(word) || opening_slip(word);
+    // "thank yyou", "ask mme to help": a cheap slip of a frequent word that its neighbours were
+    // seen beside is that word, even after a greeting or a verb of address.
+    if slip_fits(word, history.last(), following.first(), token) {
+        return false;
+    }
     let previous = history.last();
     let next = following.first();
     let before_previous = &history[..history.len().saturating_sub(1)];
@@ -1642,6 +1671,9 @@ pub(crate) fn slip_cost(typed: &str, intended: &str) -> f64 {
     let (t, w) = (typed.as_bytes(), intended.as_bytes());
     let vowel = |c: u8| b"aeiou".contains(&c);
     let first = |i: usize| if i == 0 { 0.5 } else { 0.0 };
+    // A doubled first letter ("tthe", "aare") is a doubled key, not a wrong first letter.
+    let first_doubled = t.len() == w.len() + 1 && t.len() > 1 && t[0] == t[1];
+    let first = |i: usize| if first_doubled { 0.0 } else { first(i) };
     if t.len() == w.len() {
         let diff: Vec<usize> = (0..t.len()).filter(|&i| t[i] != w[i]).collect();
         return match diff[..] {
@@ -2016,10 +2048,15 @@ pub fn suggest(
             .into_iter()
             .filter(|c| frequency(c) >= 500)
             .collect();
-        !before.is_empty()
-            && !after.is_empty()
-            && context_choice(word, &pool, &before, &after, 1.0)
-                .is_some_and(|c| context::count(&before, c) > 0 && context::count(c, &after) > 0)
+        let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
+        // Both neighbours agree, or one does on a doubled letter or a swap ("bathroom iss?").
+        (!before.is_empty() || !after.is_empty())
+            && context_choice(word, &pool, &before, &after, 1.0).is_some_and(|c| {
+                seen(&before, c) && seen(c, &after)
+                    || slip_cost(word, c) <= 0.3
+                        && (before.is_empty() || seen(&before, c))
+                        && (after.is_empty() || seen(c, &after))
+            })
     };
     // "canyou", "letme", "atthe": two words that very often go together, typed without the space
     // and fitting their neighbours, are split even where a name could stand ("meet atthe door").
@@ -2029,8 +2066,9 @@ pub fn suggest(
     {
         return Some(split);
     }
-    if namey(word) && !tiny && !name_only_typo(names::base(word), prev) && !slipped_name()
-        || name_like(token, history, following_context)
+    if (namey(word) && !tiny && !name_only_typo(names::base(word), prev)
+        || name_like(token, history, following_context))
+        && !slipped_name()
     {
         return None;
     }
@@ -2093,8 +2131,8 @@ pub fn suggest(
         // "foetuses" and "fetuses", "premisses" and "premises" are two valid spellings.
         .filter(|candidate| !dialect.is_empty() || !variant_spelling(word, candidate))
         // "aman" to "man" or "aclear" to "clear" drops a word's first letter and either loses an
-        // article or erases a name; neither is a correction.
-        .filter(|candidate| word.strip_prefix('a') != Some(candidate))
+        // article or erases a name; neither is a correction. A doubled "a" ("aare") is a slip.
+        .filter(|candidate| word.starts_with("aa") || word.strip_prefix('a') != Some(candidate))
         .collect();
     let score = |candidate: &str| -> i32 {
         let mut score = i32::from(morphology::common(candidate)) * 14
@@ -2435,13 +2473,40 @@ pub fn suggest(
     }
     // A word one edit from a rare candidate ("chinese" and "chines") is not a typo, and one the
     // system checker accepts is respelled only to a very common word ("statin" and "station").
+    // Several frequent words fit the slip ("thi": this, the, thin; "ar": are, art, at): the
+    // neighbouring words decide, by how often each candidate meets them and how likely each slip
+    // is, and the word stays when they cannot.
+    let in_context = || -> Option<String> {
+        if accepted {
+            return None;
+        }
+        let pool: Vec<String> = candidates
+            .iter()
+            .filter(|c| frequency(c) >= if tiny { 500 } else { 300 })
+            .cloned()
+            .collect();
+        let choice = context_choice(word, &pool, &before, &after, if tiny { 1.0 } else { 0.7 })?;
+        // The winner must have been seen beside its neighbours, not only be frequent.
+        let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
+        // "This si note is difficult": a verb chosen for a slot whose clause has its own verb
+        // just after is a guess that breaks the clause ("si note" is a noun phrase).
+        let clause_verb = FINITE.contains(&choice.as_str())
+            && following_context
+                .iter()
+                .take(3)
+                .take_while(|t| t.sentence == token.sentence && t.is_word)
+                .any(|t| {
+                    FINITE.contains(&t.normalized.as_str())
+                        || COPULAS.contains(&t.normalized.as_str())
+                });
+        (!clause_verb && (seen(&before, choice) || seen(choice, &after))).then(|| choice.clone())
+    };
     if !tiny
         && let Some(best) = candidates
             .first()
             .filter(|c| frequency(c) >= if accepted { 400 } else { 250 })
     {
-        // Close scores between the neighbours of a short word ("bos": box, bus, boy) are a guess;
-        // the word-pair evidence below may still settle them.
+        // Close scores between the neighbours of a short word ("bos": box, bus, boy) are a guess.
         let margin = if accepted {
             20
         } else if word.len() <= 3 {
@@ -2452,33 +2517,18 @@ pub fn suggest(
         if candidates.len() == 1
             || (score(best) >= 40 && score(best) > score(&candidates[1]) + margin)
         {
+            // An unlikely slip ("arre" read as "acre") yields to a likely one the neighbours
+            // were seen beside ("are").
+            if slip_cost(word, best) >= 1.5
+                && let Some(choice) = in_context()
+                && slip_cost(word, &choice) <= 0.5
+            {
+                return Some(choice);
+            }
             return Some(best.clone());
         }
     }
-    if accepted {
-        return None;
-    }
-    // Several frequent words fit the slip ("thi": this, the, thin; "ar": are, art, at): the
-    // neighbouring words decide, by how often each candidate meets them, and the word stays when
-    // they cannot.
-    let pool: Vec<String> = candidates
-        .into_iter()
-        .filter(|c| frequency(c) >= if tiny { 500 } else { 300 })
-        .collect();
-    let choice = context_choice(word, &pool, &before, &after, if tiny { 1.0 } else { 0.7 })?;
-    // The winner must have been seen beside its neighbours, not only be frequent.
-    let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
-    // "This si note is difficult": a verb chosen for a slot whose clause has its own verb just
-    // after is a guess that breaks the clause ("si note" is a noun phrase).
-    let clause_verb = FINITE.contains(&choice.as_str())
-        && following_context
-            .iter()
-            .take(3)
-            .take_while(|t| t.sentence == token.sentence && t.is_word)
-            .any(|t| {
-                FINITE.contains(&t.normalized.as_str()) || COPULAS.contains(&t.normalized.as_str())
-            });
-    (!clause_verb && (seen(&before, choice) || seen(choice, &after))).then(|| choice.clone())
+    in_context()
 }
 /// A two-letter word that may be a slip of a frequent word: not glued to or after a number
 /// ("5th", "10 km"), which makes it a unit or an ordinal, and not beside another uncommon short

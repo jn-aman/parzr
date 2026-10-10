@@ -314,6 +314,8 @@ impl NameIndex {
             // A known misspelling ("thanks alot") is never the person addressed.
             let addressed_capital = !sentence_start(i)
                 && !is_known_misspelling(b)
+                // "Thank yyou so much": a slip of "you", not a person thanked.
+                && !spelling::slip_fits(b, i.checked_sub(1).map(|j| &tokens[j]), tokens.get(i + 1), t)
                 && (capitalized(t) && spelling::addressed(tokens, i)
                     || spelling::greeted(tokens, i)
                         && spelling::closes_name(tokens, i)

@@ -320,6 +320,47 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
 }
 /// The case of `surface` on `contraction` ("Dont" to "Don't", "DONT" to "DON'T"); None for mixed
 /// case, which is a name or an identifier.
+/// The contraction one slip away from an unknown word with an apostrophe ("i'j" is "i'm",
+/// "don'y" is "don't"), when one is clearly the likeliest slip. A possessive of a known word
+/// ("team's") or of a name is left alone.
+fn slipped(word: &str) -> Option<&'static str> {
+    if word.matches('\'').count() != 1
+        || spelling::known(word)
+        || word
+            .strip_suffix("'s")
+            .is_some_and(|stem| spelling::known(stem) || crate::names::is_bundled_name(stem))
+    {
+        return None;
+    }
+    let mut near: Vec<(f64, &'static str)> = CONTRACTIONS
+        .iter()
+        .filter(|c| one_edit(word, c))
+        .map(|c| (spelling::slip_cost(word, c), *c))
+        .collect();
+    near.sort_by(|a, b| a.0.total_cmp(&b.0));
+    match near[..] {
+        [(cost, only)] if cost <= 1.5 => Some(only),
+        [(best, c), (second, _), ..] if best <= 1.5 && second - best >= 0.4 => Some(c),
+        _ => None,
+    }
+}
+/// One insertion, deletion, substitution or adjacent swap apart (any characters).
+fn one_edit(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a == b || a.len().abs_diff(b.len()) > 1 {
+        return false;
+    }
+    if a.len() == b.len() {
+        let diff: Vec<usize> = (0..a.len()).filter(|&i| a[i] != b[i]).collect();
+        return diff.len() == 1
+            || diff.len() == 2
+                && diff[1] == diff[0] + 1
+                && a[diff[0]] == b[diff[1]]
+                && a[diff[1]] == b[diff[0]];
+    }
+    let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
+    (0..long.len()).any(|i| long[..i] == short[..i] && long[i + 1..] == short[i..])
+}
 fn cased(contraction: &str, surface: &str, apostrophe: char) -> Option<String> {
     let letters: Vec<char> = surface.chars().filter(|c| c.is_alphabetic()).collect();
     let upper = letters.iter().filter(|c| c.is_uppercase()).count();
@@ -399,6 +440,22 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         }
         let normalized = token.normalized.as_str();
         let joined = normalized.replace('\'', "");
+        // "I'j", "Don'y", "it'z", "I'lkl": a contraction with one key slipped.
+        if contraction(&joined).is_none()
+            && let Some(full) = slipped(normalized)
+            && token.surface.chars().skip(1).all(|c| !c.is_uppercase())
+            && let Some(replacement) = cased(full, token.surface, apostrophe)
+        {
+            push(
+                req,
+                edits,
+                token.start_byte,
+                token.end_byte,
+                replacement,
+                "This contraction has a typo.",
+            );
+            continue;
+        }
         let Some(full) = contraction(&joined) else {
             continue;
         };
