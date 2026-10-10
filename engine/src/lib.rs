@@ -1014,10 +1014,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     let slip = |e: &Edit| e.rule_id.starts_with("usage.") || e.rule_id == "spelling.real_word";
     // "Tha t is fine": the tagger's name guess on a piece of a word split by a space is no name;
     // the user's names and dictionary and the bundled list still win.
+    // "Wwe watched", "Cna we": the tagger's name guess on a sentence opener that is a clear slip.
     let tagger_piece = |e: &Edit, r: &TextRange| {
-        e.rule_id == "spelling.split_word"
+        (e.rule_id == "spelling.split_word" || e.rule_id == "spelling.delete_index")
             && tokens.iter().enumerate().any(|(i, t)| {
                 t.proper_name
+                    && (e.rule_id == "spelling.split_word"
+                        || spelling::opening_name_slip(&tokens, i))
                     && t.start_utf16 == r.start_utf16
                     && t.end_utf16 == r.end_utf16
                     && !user_words[i]

@@ -821,6 +821,42 @@ fn common_split(word: &str, before: &str, after: &str) -> Option<String> {
             format!("{a} {b}")
         })
 }
+/// A capitalized sentence opener the system tagger guesses is a name, that is really a slip: a
+/// doubled, dropped or swapped key (cost 0.3 or less) away from one of the ~200 most frequent
+/// words, which the next word was seen after ("Wwe watched", "Cna we", "Thi is"). A name the tagger
+/// knows next to a word it does not fit ("Thi said", "Anh is", "Hoa is") keeps its spelling.
+pub(crate) fn opening_name_slip(tokens: &[Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let word = token.normalized.as_str();
+    let next = tokens
+        .get(index + 1)
+        .filter(|n| n.is_word && n.sentence == token.sentence && ordinary(&n.normalized))
+        .map(|n| n.normalized.as_str());
+    let mut letters = token.surface.chars();
+    letters.next().is_some_and(|c| c.is_ascii_uppercase())
+        && letters.all(|c| c.is_ascii_lowercase())
+        && line_start(&tokens[..index], token)
+        && opening_slip(word)
+        && next.is_some_and(|next| {
+            slips_from(word).iter().any(|c| {
+                frequency(c) >= 600 && doubled_or_swapped(word, c) && context::count(c, next) > 0
+            })
+        })
+}
+/// `typed` is `intended` with one key pressed twice ("wwe") or two neighbouring keys swapped
+/// ("cna"): slips that leave no name-like shape, unlike a dropped letter ("Yu", "Tis").
+fn doubled_or_swapped(typed: &str, intended: &str) -> bool {
+    let (t, w) = (typed.as_bytes(), intended.as_bytes());
+    if t.len() == w.len() {
+        return transposed(typed, intended);
+    }
+    t.len() == w.len() + 1
+        && (0..t.len()).any(|i| {
+            t[..i] == w[..i]
+                && t[i + 1..] == w[i..]
+                && (i > 0 && t[i - 1] == t[i] || t.get(i + 1) == Some(&t[i]))
+        })
+}
 /// Whether a cheap slip of a frequent word (`opening_slip`) fits between the neighbouring words:
 /// some frequent slip target was seen beside every ordinary neighbour in the same sentence, and
 /// there is at least one such neighbour.
@@ -1806,6 +1842,13 @@ pub fn suggest_capitalized(
     // "Thi is fine", "Trhe recipe": an opening word that is a cheap slip of a frequent word,
     // unless the tagger or the bundled list calls it a name.
     let short = opening_slip(word);
+    let index = history.len();
+    let tagger_guess = token.proper_name && {
+        let mut tokens = history.to_vec();
+        tokens.push(token.clone());
+        tokens.extend(following_context.iter().take(1).cloned());
+        opening_name_slip(&tokens, index)
+    };
     // "Canyou help?", "Letme know": a glued pair opening the sentence.
     if !token.proper_name
         && !token.system_known
@@ -1834,7 +1877,7 @@ pub fn suggest_capitalized(
             .next()
             .map(|c| c.to_uppercase().collect::<String>() + chars.as_str());
     }
-    if token.proper_name
+    if token.proper_name && !tagger_guess
         || token.system_known
         || word.len() < 2
         || word.len() > 24
@@ -1849,6 +1892,7 @@ pub fn suggest_capitalized(
     }
     let mut lowered = token.clone();
     lowered.surface = word;
+    lowered.proper_name = false;
     let candidate = suggest(
         &lowered,
         dialect,
@@ -1978,8 +2022,11 @@ pub fn suggest(
     if let Some(s) = short {
         return Some(s.into());
     }
+    // A lone letter ("reasons t switch", "let m know") is a short word missing a letter. Letters
+    // that usually label something ("plan b", "option c", "vitamin d", "x is 5") are left alone.
+    let letter = word.len() == 1 && "fghjlmnopqstvw".contains(word.as_str());
     // A proper noun typed in lowercase ("lyft", "duolingo") is capitalized, never respelled.
-    if lexicon().lowercase.contains(word)
+    if lexicon().lowercase.contains(word) && !letter
         || names::is_shorthand(word)
         || crate::capitalization::proper_noun(names::base(word)).is_some()
     {
@@ -2488,6 +2535,11 @@ pub fn suggest(
         let choice = context_choice(word, &pool, &before, &after, if tiny { 1.0 } else { 0.7 })?;
         // The winner must have been seen beside its neighbours, not only be frequent.
         let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
+        // A lone letter may be a label, a variable or a grade ("plan b", "x"): both neighbours
+        // must have been seen beside the word it stands for.
+        if letter && !(seen(&before, choice) && seen(choice, &after)) {
+            return None;
+        }
         // "This si note is difficult": a verb chosen for a slot whose clause has its own verb
         // just after is a guess that breaks the clause ("si note" is a noun phrase).
         let clause_verb = FINITE.contains(&choice.as_str())

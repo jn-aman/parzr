@@ -269,7 +269,7 @@ impl NameIndex {
             // "Thi is fine": a sentence's capital on a short slip of a frequent word is no name.
             // A lone letter opening a sentence ("W e usually eat") is a broken word, not an initial.
             if sentence_start(i)
-                && !t.proper_name
+                && (!t.proper_name || spelling::opening_name_slip(tokens, i))
                 && (spelling::opening_slip(b)
                     || spelling::glued_pair(b)
                     || b.len() == 1 && b != "i" && b != "a")
@@ -327,8 +327,14 @@ impl NameIndex {
                                 && ["hi", "hello", "hey", "hiya", "dear"]
                                     .contains(&tokens[i - 1].normalized.as_str())
                                 && !["me", "you", "us", "all"].contains(&b)));
+            // The tagger calls most capitalized sentence openers it does not know names; a clear
+            // slip of a frequent word there ("Wwe watched") is not one.
+            let tagger_name = t.proper_name
+                && !(sentence_start(i)
+                    && !is_bundled_name(b)
+                    && spelling::opening_name_slip(tokens, i));
             level[i] = if hits[i]
-                || t.proper_name
+                || tagger_name
                 || addressed_capital
                 || by_request
                 || capitalized_elsewhere.contains(b)

@@ -586,6 +586,14 @@ fn split_word(req: &Request, tokens: &[Token<'_>], i: usize) -> Option<String> {
             }
         }
     }
+    // A lone letter beside a whole word may be a label ("a b in math", "option c or d"): it joins
+    // only into a very frequent word ("t he", "w ere").
+    let lone = |t: &Token<'_>| t.normalized.len() == 1 && !whole(&t.normalized);
+    if (lone(a) && whole(&b.normalized) || lone(b) && whole(&a.normalized))
+        && spelling::frequency(stem) < 500
+    {
+        return None;
+    }
     let curly = a.surface.contains('’') || b.surface.contains('’');
     Some(if curly {
         joined.replace('\'', "’")
