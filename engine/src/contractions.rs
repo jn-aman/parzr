@@ -441,7 +441,12 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         let normalized = token.normalized.as_str();
         let joined = normalized.replace('\'', "");
         // "I'j", "Don'y", "it'z", "I'lkl": a contraction with one key slipped.
+        // "I'l l": a lone letter after it is the rest of the word (the split-word rule joins it).
+        let piece_after = tokens.get(index + 1).is_some_and(|t| {
+            t.is_word && t.normalized.len() == 1 && !["a", "i"].contains(&t.normalized.as_str())
+        });
         if contraction(&joined).is_none()
+            && !piece_after
             && let Some(full) = slipped(normalized)
             && token.surface.chars().skip(1).all(|c| !c.is_uppercase())
             && let Some(replacement) = cased(full, token.surface, apostrophe)

@@ -1961,8 +1961,14 @@ pub fn suggest_capitalized(
         history,
         following_context,
     )?;
+    // A short opener becomes only a word one cheap slip away ("Anh" is no slip of "And").
+    // With no tagger to tell a name ("Hoa is fine"), only a doubled or swapped key counts.
+    let cheap = word.len() > 3
+        || slips_from(word).contains(&candidate)
+            && (!token.pos.is_empty() || doubled_or_swapped(word, &candidate));
     (!candidate.contains(' ')
         && distance_one(word, &candidate)
+        && cheap
         && (names::is_name_typo(word) || frequency(&candidate) >= 400))
         .then(|| {
             let mut chars = candidate.chars();
@@ -2169,7 +2175,14 @@ pub fn suggest(
             && (context_choice(word, &pool, &before, &after, 1.0)
                 .is_some_and(|c| seen(&before, c) && seen(c, &after))
                 || context_choice(word, &pool, &before, &after, 1.5).is_some_and(|c| {
-                    slip_cost(word, c) <= 0.3 && (seen(&before, c) || seen(c, &after))
+                    // The other side unseen only where two words that rare would be.
+                    let fair = |a: &str, b: &str| {
+                        a.is_empty() || b.is_empty() || seen(a, b) || zipf(a) + zipf(b) < 11.5
+                    };
+                    slip_cost(word, c) <= 0.3
+                        && (seen(&before, c) || seen(c, &after))
+                        && fair(&before, c)
+                        && fair(c, &after)
                 }))
     };
     // "canyou", "letme", "atthe": two words that very often go together, typed without the space

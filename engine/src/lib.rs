@@ -1712,6 +1712,80 @@ mod tests {
         }
     }
     #[test]
+    fn keystroke_slips_of_frequent_words_are_fixed() {
+        for (input, fixed) in [
+            // The owner's report: a dropped letter, a space inside a word and a bare verb.
+            ("thi is no t do", "This is not done"),
+            ("I like thi book.", "I like this book."),
+            ("It is thi one.", "It is this one."),
+            // A space typed inside a word.
+            ("I do nt know.", "I don't know."),
+            ("Wh at is it?", "What is it?"),
+            ("Tha t is fine.", "That is fine."),
+            ("I'l l be late.", "I'll be late."),
+            (
+                "I always check the weat her first.",
+                "I always check the weather first.",
+            ),
+            (
+                "The meeting has been moved to n ext week.",
+                "The meeting has been moved to next week.",
+            ),
+            // Two words typed without the space.
+            (
+                "It took me an hour to gethere.",
+                "It took me an hour to get here.",
+            ),
+            ("Didyou send it yet?", "Did you send it yet?"),
+            // Short slips the neighbours settle, and slipped contractions.
+            (
+                "The kids ar playing outside.",
+                "The kids are playing outside.",
+            ),
+            ("She ws here.", "She was here."),
+            ("The kids aare here.", "The kids are here."),
+            ("I'j writing to you.", "I'm writing to you."),
+            ("Don'y wait up.", "Don't wait up."),
+            (
+                "There are many reasons t switch providers.",
+                "There are many reasons to switch providers.",
+            ),
+        ] {
+            assert_eq!(fix(input), fixed, "{input}");
+        }
+    }
+    #[test]
+    fn slips_leave_names_slang_code_and_labels_alone() {
+        for input in [
+            "Anh is late.",
+            "Hoa is fine.",
+            "Yu said yes.",
+            "It is sai raju here.",
+            // Without the system tagger to rule out a name, a short opener needs a doubled or
+            // swapped key (the app passes the tagger, which reads "Thi is fine" as "This").
+            "Thi is fine.",
+            "I met arjun menon yesterday.",
+            "Looping in hari for visibility.",
+            "tom and ann went home",
+            "lol tbh idk",
+            "thx, pls send it",
+            "gtg, ttyl",
+            "We need plan b now.",
+            "Choose option c or d.",
+            "The value of x is 5.",
+            "Use os.path.join to build paths.",
+            "We pin it in requirements.txt today.",
+            "I can not believe it.",
+            "Bhai yaar kya hai.",
+            "bas, that's it",
+        ] {
+            assert_eq!(fix(input), input, "{input}");
+        }
+        // A short Roman Hindi word alone in English is a slip; beside Roman Hindi it stays.
+        assert_eq!(fix("I like aur house."), "I like our house.");
+        assert_eq!(fix("aur kya chal raha hai"), "aur kya chal raha hai");
+    }
+    #[test]
     fn valid_uses_of_rare_words_are_kept() {
         for input in [
             "Do re mi fa so la si do.",
