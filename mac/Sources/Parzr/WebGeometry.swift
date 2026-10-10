@@ -118,6 +118,58 @@ extension AX {
         webRunsCache = (element, value, runs, cursor, !reachedEnd, now)
         return runs
     }
+    /// A contenteditable composer in Chromium: it has text runs, where a textarea or an input has none.
+    static func isChromiumComposer(_ element: AXUIElement) -> Bool { isChromiumText(element) && !webRuns(element, through: 1).isEmpty }
+    /// Chromium counts a composer's AXSelectedTextRange without the break between two <p> blocks and without the two breaks of an inline image, while
+    /// its AXValue has them (measured in Chrome 149: "redy" read as 61 where the value has it at 63, past one emoji). Parzr works in value offsets,
+    /// so a selection is read and set through text markers on the runs instead, which name a run and an offset inside it.
+    static func chromiumSelection(_ element: AXUIElement) -> NSRange? {
+        guard let marked = get(element, "AXSelectedTextMarkerRange"), CFGetTypeID(marked) == AXTextMarkerRangeGetTypeID() else { return nil }
+        let range = marked as! AXTextMarkerRange
+        guard let start = valueOffset(element, AXTextMarkerRangeCopyStartMarker(range)), let end = valueOffset(element, AXTextMarkerRangeCopyEndMarker(range)), end >= start else {
+            // Without a run under the selection (an empty composer), the plain range is right only when there is no break it could miscount.
+            return string(element, kAXValueAttribute)?.contains("\n") == false ? rawRange(element) : nil
+        }
+        return NSRange(location: start, length: end - start)
+    }
+    /// Selects `range` (value offsets) through markers; false when an end falls outside every run (inside a break), so nothing is selected wrongly.
+    static func chromiumSelect(_ element: AXUIElement, _ range: NSRange) -> Bool {
+        guard let start = chromiumMarker(element, at: range.location, opening: true),
+              let end = range.length == 0 ? start : chromiumMarker(element, at: NSMaxRange(range), opening: false),
+              let marked = param(element, "AXTextMarkerRangeForUnorderedTextMarkers", [start, end] as CFArray) else { return false }
+        return AXUIElementSetAttributeValue(element, "AXSelectedTextMarkerRange" as CFString, marked) == .success
+    }
+    private static func runStart(_ element: AXUIElement, _ run: DocsRun) -> CFTypeRef? {
+        guard let range = param(element, "AXTextMarkerRangeForUIElement", run.element), CFGetTypeID(range) == AXTextMarkerRangeGetTypeID() else { return nil }
+        return AXTextMarkerRangeCopyStartMarker(range as! AXTextMarkerRange)
+    }
+    private static func markerLength(_ element: AXUIElement, from start: CFTypeRef, to end: CFTypeRef) -> Int? {
+        guard let range = param(element, "AXTextMarkerRangeForUnorderedTextMarkers", [start, end] as CFArray) else { return nil }
+        return (param(element, "AXLengthForTextMarkerRange", range) as? NSNumber)?.intValue
+    }
+    private static func valueOffset(_ element: AXUIElement, _ marker: CFTypeRef) -> Int? {
+        guard let value = string(element, kAXValueAttribute), let leaf = param(element, "AXUIElementForTextMarker", marker), CFGetTypeID(leaf) == AXUIElementGetTypeID(),
+              let run = webRuns(element, through: (value as NSString).length).first(where: { CFEqual($0.element, leaf) }),
+              let start = runStart(element, run), let local = markerLength(element, from: start, to: marker), local >= 0, local <= run.range.length else { return nil }
+        return run.range.location + local
+    }
+    /// The marker at `offset`: a start belongs to the run it opens, an end to the run it closes. Steps character by character from the run's start
+    /// and checks the length it reached (a surrogate pair is one step and two units).
+    private static func chromiumMarker(_ element: AXUIElement, at offset: Int, opening: Bool) -> CFTypeRef? {
+        let runs = webRuns(element, through: offset + 1)
+        let inside = runs.first { opening ? offset >= $0.range.location && offset < NSMaxRange($0.range) : offset > $0.range.location && offset <= NSMaxRange($0.range) }
+        guard let run = inside ?? runs.first(where: { offset == NSMaxRange($0.range) || offset == $0.range.location }), let start = runStart(element, run) else { return nil }
+        let local = offset - run.range.location
+        guard local <= 4000 else { return nil }
+        var marker = start, reached = 0
+        for _ in 0..<4 {
+            guard reached < local else { break }
+            for _ in 0..<(local - reached) { guard let next = param(element, "AXNextTextMarkerForTextMarker", marker) else { return nil }; marker = next }
+            guard let length = markerLength(element, from: start, to: marker) else { return nil }
+            reached = length
+        }
+        return reached == local ? marker : nil
+    }
     /// One rect (AX coordinates) per run piece of `range`, in text order; empty unless this is a Chromium element.
     private static func webPieces(_ element: AXUIElement, _ range: NSRange) -> [CGRect] {
         guard range.length > 0, isChromiumText(element) else { return [] }

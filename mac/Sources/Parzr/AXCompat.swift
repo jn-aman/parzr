@@ -256,6 +256,13 @@ extension AX {
               let focus = focusedText(app), CFEqual(focus, element), docs || select(element, range) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }
+        // A Chromium composer must hold exactly the words being replaced before anything is typed: a selection that landed elsewhere would be overwritten.
+        if !docs, isChromiumComposer(element) {
+            let wanted = (before as NSString).substring(with: range)
+            var held = false
+            for _ in 0..<15 { if string(element, kAXSelectedTextAttribute) ?? "" == wanted { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
+            guard held else { throw ParzrError.message("The editor did not select the words to replace. Nothing was typed.") }
+        }
         if docs {
             var held = false
             for _ in 0..<40 { if self.range(element) == range { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }

@@ -19,8 +19,14 @@ enum AX {
         guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
         return NSRange(location: range.location, length: range.length)
     }
-    static func range(_ element: AXUIElement) -> NSRange? { isDocsText(element) ? docsSelection(element) : rawRange(element) }
+    static func range(_ element: AXUIElement) -> NSRange? {
+        if isDocsText(element) { return docsSelection(element) }
+        // Chromium composers count their selection without some of the breaks their value has; markers on the text runs give value offsets.
+        if isChromiumComposer(element) { return chromiumSelection(element) }
+        return rawRange(element)
+    }
     static func setRange(_ element: AXUIElement, _ range: NSRange) -> Bool {
+        if !isDocsText(element), isChromiumComposer(element) { return chromiumSelect(element, range) }
         let target = isDocsText(element) ? docsSelectionRange(element, range) : range
         var range = CFRange(location: target.location, length: target.length)
         guard let value = AXValueCreate(.cfRange, &range) else { return false }
@@ -191,8 +197,8 @@ struct SelectionSnapshot {
         // Docs with braille support off: only zero-width characters here, so the explicit check falls back to copying.
         if docs, Compat.docsTextHidden(full) { throw ParzrError.message("Select the words you want to improve, then try again.") }
         var selection = selectedRange
-        // Docs' own selected text lacks the paragraph breaks its ranges skip, so its text always comes from the value.
-        var text = docs ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
+        // Docs' own selected text lacks the paragraph breaks its ranges skip, and a Chromium composer's lacks its image breaks, so their text comes from the value.
+        var text = docs || AX.isChromiumComposer(element) ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
         var inlineBreaks: [Int] = []
         if passive {
             guard let full, selectedRange.location <= (full as NSString).length,

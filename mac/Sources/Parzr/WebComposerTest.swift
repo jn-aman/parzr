@@ -5,7 +5,7 @@ import ParzrCore
 /// Explicit QA for Chromium contenteditable composers (`parzr --web-composer-test <dir> <pid> <dom-id>...`). A Chromium host you started for the test
 /// (Chrome for Testing, a bare Electron) shows `tests/fixtures/web-composers.html` and is frontmost, since Chromium reports focus only then. For each DOM id
 /// the composer is focused through Accessibility, captured as an automatic check would be, run through the typing engine and marked; the run fails unless
-/// every edit gets a mark. Nothing is typed and nothing is applied, and the host is never one the owner uses.
+/// every edit gets a mark. Nothing is typed unless an id ends in "+apply"; the host is never one the owner uses.
 @MainActor
 func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) async throws {
     guard AXIsProcessTrusted() else { throw ParzrError.message("Composer QA needs Accessibility.") }
@@ -30,7 +30,9 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
     let inline = InlineSuggestions(headless: false)
     defer { inline.stop() }
     var failures: [String] = [], lines: [String] = []
-    for id in ids {
+    for name in ids {
+        // "id+apply" also applies every edit (typed into the test host only) and requires the composer to read exactly the corrected text afterwards.
+        let applying = name.hasSuffix("+apply"), id = applying ? String(name.dropLast(6)) : name
         guard let element = find(id), let value = AX.text(element) else { failures.append("\(id): not found"); continue }
         AX.forgetFocus()
         _ = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
@@ -50,6 +52,14 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
         lines.append("\(id): role=\(AX.string(snapshot.element, kAXRoleAttribute) ?? "?") chromium=\(AX.isChromiumText(snapshot.element)) edits=\(result.edits.map(\.original)) marked=\(marked.count)/\(result.edits.count) shown=\(shown) snapshotBounds=\(snapshot.bounds != nil) lines=\(AX.lineRects(snapshot.element, snapshot.selection).count) rects=\(rects)")
         if result.edits.isEmpty || marked.count != result.edits.count || snapshot.bounds == nil { failures.append("\(id): \(marked.count) of \(result.edits.count) edits marked") }
         inline.dismiss()
+        if applying, let full = snapshot.fullText {
+            let expected = NSMutableString(string: full)
+            for edit in result.edits.reversed() { expected.replaceCharacters(in: NSRange(location: snapshot.selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16), with: edit.replacement) }
+            do { try await snapshot.apply(result.edits) } catch { failures.append("\(id): apply failed: \(error.localizedDescription)") }
+            let after = AX.text(element) ?? ""
+            lines.append("\(id): applied -> \(after.debugDescription)")
+            if after != expected as String { failures.append("\(id): applied text \(after.debugDescription) is not \((expected as String).debugDescription)") }
+        }
     }
     lines.forEach { print($0) }
     let directory = URL(fileURLWithPath: reportDirectory)
