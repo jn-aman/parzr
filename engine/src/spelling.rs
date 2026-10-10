@@ -1778,7 +1778,7 @@ pub(crate) fn slip_cost(typed: &str, intended: &str) -> f64 {
                     + if adjacent_keys(t[i], w[i]) {
                         0.5
                     } else if vowel(t[i]) && vowel(w[i]) {
-                        1.0
+                        1.2
                     } else {
                         1.5
                     }
