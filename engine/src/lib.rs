@@ -942,21 +942,26 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         ]
         .contains(&e.rule_id.as_str())
     };
-    let restored: Vec<(usize, usize)> = edits
+    // The word after a respelled word waits only for agreement edits; after a contraction, for all.
+    let restored: Vec<(usize, usize, bool)> = edits
         .iter()
         .filter(|e| rewords(e))
         .filter_map(|e| {
             let next = tokens
                 .iter()
                 .find(|t| t.start_utf16 >= e.end_utf16 && t.is_word)?;
-            Some((e.end_utf16, next.end_utf16))
+            Some((
+                e.end_utf16,
+                next.end_utf16,
+                e.rule_id != "spelling.delete_index",
+            ))
         })
         .collect();
     edits.retain(|e| {
         rewords(e)
-            || !restored
-                .iter()
-                .any(|(a, b)| e.start_utf16 >= *a && e.start_utf16 < *b)
+            || !restored.iter().any(|(a, b, all)| {
+                e.start_utf16 >= *a && e.start_utf16 < *b && (*all || e.category == "Grammar")
+            })
     });
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();

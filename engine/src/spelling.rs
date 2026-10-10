@@ -1951,7 +1951,13 @@ pub fn suggest(
 ) -> Option<String> {
     let word = &token.normalized;
     // "requirements.txt", "example.org": a word glued after a dot is an extension or a domain.
-    let dotted = previous.is_some_and(|p| p.surface == "." && p.end_byte == token.start_byte);
+    // "os.path.join": a word glued before a dot and another word is code.
+    let dotted = previous.is_some_and(|p| p.surface == "." && p.end_byte == token.start_byte)
+        || matches!(following_context, [dot, after, ..]
+            if dot.surface == "."
+                && dot.start_byte == token.end_byte
+                && after.start_byte == dot.end_byte
+                && after.surface.starts_with(char::is_alphanumeric));
     if token.proper_name
         || token.surface.chars().any(char::is_uppercase)
         || word.len() > 24
@@ -2213,6 +2219,80 @@ pub fn suggest(
         // article or erases a name; neither is a correction. A doubled "a" ("aare") is a slip.
         .filter(|candidate| word.starts_with("aa") || word.strip_prefix('a') != Some(candidate))
         .collect();
+    // Topic and argument preferences only rank unknown-word candidates; the context choice below
+    // never overrides a ranking they decided ("cazes" near a bakery is "cakes").
+    let topical = |candidate: &str| -> bool {
+        let nearby_topic = |topics: &[&str]| {
+            history
+                .iter()
+                .rev()
+                .take(18)
+                .chain(following_context.iter().take(8))
+                .any(|t| {
+                    topics.contains(&t.normalized.as_str())
+                        || !known(&t.normalized)
+                            && topics
+                                .iter()
+                                .any(|topic| distance_one(&t.normalized, topic))
+                })
+        };
+        match candidate {
+            "stall" => nearby_topic(&["fruit", "vegetable", "market", "vendor"]),
+            "cakes" => nearby_topic(&["bakery", "baker", "pastry"]),
+            "chairs" => nearby_topic(&["furniture", "seating", "dining"]),
+            "drums" => nearby_topic(&["music", "band", "percussion"]),
+            "concert" => nearby_topic(&["charity", "music", "orchestra"]),
+            "theater" => ["opening", "stage", "performance", "audience"].contains(&following),
+            "printer" => nearby_topic(&["battery", "print", "ink", "paper", "cartridge"]),
+            "spare" => {
+                ["folders", "folder", "copies", "parts", "keys", "battery"]
+                    .iter()
+                    .any(|w| *w == following || !known(following) && distance_one(following, w))
+                    || ["foldersin", "folderin", "folderand", "foldersand"].contains(&following)
+            }
+            "delay" => following_context.iter().take(3).any(|t| {
+                ["meeting", "appointment", "departure", "event"]
+                    .iter()
+                    .any(|w| {
+                        *w == t.normalized
+                            || !known(&t.normalized) && distance_one(&t.normalized, w)
+                    })
+            }),
+            "improves" => ["weather", "health", "condition", "quality"].contains(&prev),
+            "starts" => ["meeting", "class", "event", "concert", "session", "match"]
+                .iter()
+                .any(|w| *w == prev || !known(prev) && distance_one(prev, w)),
+            "dates" => prev == "the" && nearby_topic(&["check", "schedule", "calendar", "confirm"]),
+            "bought" => {
+                nearby_topic(&["store", "shop", "market", "purchase", "bakery"])
+                    && !following_context
+                        .iter()
+                        .take(6)
+                        .any(|t| ["to", "into"].contains(&t.normalized.as_str()))
+            }
+            "brought" => following_context
+                .iter()
+                .take(6)
+                .any(|t| ["to", "into", "toward"].contains(&t.normalized.as_str())),
+            "store" => nearby_topic(&["hardware", "clothing", "grocery", "furniture", "book"]),
+            "earlier" => {
+                next.is_some_and(|t| t.surface == ",")
+                    && nearby_topic(&["had", "prepared", "finished", "arrived"])
+            }
+            "every" => {
+                ["morning", "evening", "day", "night", "week", "month"].contains(&following)
+                    || following_context
+                        .first()
+                        .is_some_and(|t| distance_one(&t.normalized, "morning"))
+            }
+            "fewer" => next_flags & 2 != 0 && following.ends_with('s'),
+            "ready" => {
+                ["is", "was", "are", "were"].contains(&prev)
+                    && (following.is_empty() || ["for", "to"].contains(&following))
+            }
+            _ => false,
+        }
+    };
     let score = |candidate: &str| -> i32 {
         let mut score = i32::from(morphology::common(candidate)) * 14
             + i32::from(frequency(candidate) / 5)
@@ -2336,79 +2416,7 @@ pub fn suggest(
         if word.chars().next() != candidate.chars().next() {
             score -= 35;
         }
-        // Topic and argument preferences only rank unknown-word candidates. They do
-        // not replace valid words or prescribe a reference paragraph.
-        let nearby_topic = |topics: &[&str]| {
-            history
-                .iter()
-                .rev()
-                .take(18)
-                .chain(following_context.iter().take(8))
-                .any(|t| {
-                    topics.contains(&t.normalized.as_str())
-                        || !known(&t.normalized)
-                            && topics
-                                .iter()
-                                .any(|topic| distance_one(&t.normalized, topic))
-                })
-        };
-        let topical = match candidate {
-            "stall" => nearby_topic(&["fruit", "vegetable", "market", "vendor"]),
-            "cakes" => nearby_topic(&["bakery", "baker", "pastry"]),
-            "chairs" => nearby_topic(&["furniture", "seating", "dining"]),
-            "drums" => nearby_topic(&["music", "band", "percussion"]),
-            "concert" => nearby_topic(&["charity", "music", "orchestra"]),
-            "theater" => ["opening", "stage", "performance", "audience"].contains(&following),
-            "printer" => nearby_topic(&["battery", "print", "ink", "paper", "cartridge"]),
-            "spare" => {
-                ["folders", "folder", "copies", "parts", "keys", "battery"]
-                    .iter()
-                    .any(|w| *w == following || !known(following) && distance_one(following, w))
-                    || ["foldersin", "folderin", "folderand", "foldersand"].contains(&following)
-            }
-            "delay" => following_context.iter().take(3).any(|t| {
-                ["meeting", "appointment", "departure", "event"]
-                    .iter()
-                    .any(|w| {
-                        *w == t.normalized
-                            || !known(&t.normalized) && distance_one(&t.normalized, w)
-                    })
-            }),
-            "improves" => ["weather", "health", "condition", "quality"].contains(&prev),
-            "starts" => ["meeting", "class", "event", "concert", "session", "match"]
-                .iter()
-                .any(|w| *w == prev || !known(prev) && distance_one(prev, w)),
-            "dates" => prev == "the" && nearby_topic(&["check", "schedule", "calendar", "confirm"]),
-            "bought" => {
-                nearby_topic(&["store", "shop", "market", "purchase", "bakery"])
-                    && !following_context
-                        .iter()
-                        .take(6)
-                        .any(|t| ["to", "into"].contains(&t.normalized.as_str()))
-            }
-            "brought" => following_context
-                .iter()
-                .take(6)
-                .any(|t| ["to", "into", "toward"].contains(&t.normalized.as_str())),
-            "store" => nearby_topic(&["hardware", "clothing", "grocery", "furniture", "book"]),
-            "earlier" => {
-                next.is_some_and(|t| t.surface == ",")
-                    && nearby_topic(&["had", "prepared", "finished", "arrived"])
-            }
-            "every" => {
-                ["morning", "evening", "day", "night", "week", "month"].contains(&following)
-                    || following_context
-                        .first()
-                        .is_some_and(|t| distance_one(&t.normalized, "morning"))
-            }
-            "fewer" => next_flags & 2 != 0 && following.ends_with('s'),
-            "ready" => {
-                ["is", "was", "are", "were"].contains(&prev)
-                    && (following.is_empty() || ["for", "to"].contains(&following))
-            }
-            _ => false,
-        };
-        if topical {
+        if topical(candidate) {
             score += 230;
         }
         if ["revised", "revise"].contains(&candidate)
@@ -2555,8 +2563,21 @@ pub fn suggest(
     // Several frequent words fit the slip ("thi": this, the, thin; "ar": are, art, at): the
     // neighbouring words decide, by how often each candidate meets them and how likely each slip
     // is, and the word stays when they cannot.
+    // A neighbour that is itself damaged ("ot collectthe") is no context yet: the word waits for
+    // the pass that repairs it.
+    let damaged = |t: Option<&Token<'_>>| {
+        t.is_some_and(|t| {
+            t.is_word
+                && t.sentence == token.sentence
+                && t.surface.chars().all(|c| c.is_lowercase() || c == '\'')
+                && !known(&t.normalized)
+                && !names::is_shorthand(&t.normalized)
+                && !hinglish(&t.normalized)
+        })
+    };
+    let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
     let in_context = || -> Option<String> {
-        if accepted {
+        if accepted || tiny && (damaged(previous) || damaged(next)) {
             return None;
         }
         let pool: Vec<String> = candidates
@@ -2609,8 +2630,15 @@ pub fn suggest(
             // An unlikely slip ("arre" read as "acre") yields to a likely one the neighbours
             // were seen beside ("are").
             if slip_cost(word, best) >= 1.5
+                && !topical(best)
                 && let Some(choice) = in_context()
                 && slip_cost(word, &choice) <= 0.5
+                // A best word seen beside both neighbours stays ("the lztter was" is "letter").
+                && !(seen(&before, best) && seen(best, &after))
+                // Seen beside a neighbour, or close to the best in the general ranking too.
+                && (seen(&before, &choice)
+                    || seen(&choice, &after)
+                    || score(&choice) + 100 >= score(best))
             {
                 return Some(choice);
             }
