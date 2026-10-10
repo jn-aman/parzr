@@ -88,10 +88,10 @@ pub fn fold(s: &str) -> String {
 pub fn base(normalized: &str) -> &str {
     normalized.strip_suffix("'s").unwrap_or(normalized)
 }
-const SHORTHAND: [&str; 40] = [
+const SHORTHAND: [&str; 41] = [
     "u", "ur", "r", "k", "pls", "plz", "thx", "ty", "btw", "lol", "omg", "idk", "ok", "okk", "ya",
     "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb", "gtg", "ttyl", "lmk", "smh",
-    "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk",
+    "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk", "omw",
 ];
 const CALENDAR: [&str; 19] = [
     "monday",

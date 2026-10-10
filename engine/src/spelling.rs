@@ -2564,7 +2564,7 @@ pub fn suggest(
             .filter(|c| frequency(c) >= if tiny { 500 } else { 300 })
             .cloned()
             .collect();
-        let choice = context_choice(word, &pool, &before, &after, if tiny { 1.0 } else { 0.7 })?;
+        let choice = context_choice(word, &pool, &before, &after, if tiny { 0.5 } else { 0.4 })?;
         // The winner must have been seen beside its neighbours, not only be frequent.
         let seen = |a: &str, b: &str| !a.is_empty() && !b.is_empty() && context::count(a, b) > 0;
         // A lone letter may be a label, a variable or a grade ("plan b", "x"): both neighbours
