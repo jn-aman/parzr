@@ -34,7 +34,9 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
         guard let element = find(id), let value = AX.text(element) else { failures.append("\(id): not found"); continue }
         AX.forgetFocus()
         _ = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-        _ = AX.setRange(element, NSRange(location: (value as NSString).length, length: 0))
+        try await Task.sleep(for: .milliseconds(150))
+        // The caret goes just before the last character: Chromium refuses the very end of a composer with several blocks.
+        _ = AX.setRange(element, NSRange(location: max(0, (value as NSString).length - 1), length: 0))
         try await Task.sleep(for: .milliseconds(250))
         let snapshot: SelectionSnapshot
         do { snapshot = try SelectionSnapshot.capture(passive: true) } catch { failures.append("\(id): capture failed: \(error.localizedDescription)"); continue }
@@ -44,6 +46,7 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
         let shown = inline.show(snapshot: snapshot, result: result)
         let marked = result.edits.filter { inline.markedView(for: $0) != nil }
         let rects = result.edits.map { edit in AX.bounds(snapshot.element, NSRange(location: snapshot.selection.location + edit.start_utf16, length: max(1, edit.end_utf16 - edit.start_utf16))).map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))x\(Int($0.height))" } ?? "none" }
+        lines.append("\(id): caret=\(snapshot.expectedSelection.location) checked=\(snapshot.text.debugDescription) protected=\(snapshot.protectedRanges().count)")
         lines.append("\(id): role=\(AX.string(snapshot.element, kAXRoleAttribute) ?? "?") chromium=\(AX.isChromiumText(snapshot.element)) edits=\(result.edits.map(\.original)) marked=\(marked.count)/\(result.edits.count) shown=\(shown) snapshotBounds=\(snapshot.bounds != nil) lines=\(AX.lineRects(snapshot.element, snapshot.selection).count) rects=\(rects)")
         if result.edits.isEmpty || marked.count != result.edits.count || snapshot.bounds == nil { failures.append("\(id): \(marked.count) of \(result.edits.count) edits marked") }
         inline.dismiss()

@@ -1,6 +1,6 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Parzr web composer fixtures</title>
-<style>body{font:14px -apple-system;margin:10px} [contenteditable],textarea,input{display:block;border:1px solid #888;margin:6px 0;padding:4px;width:560px;min-height:20px}</style></head>
+<style>body{font:14px -apple-system;margin:10px} [contenteditable="true"],textarea,input{display:block;border:1px solid #888;margin:6px 0;padding:4px;width:560px;min-height:20px}</style></head>
 <body>
 <!-- Authored text only. Each composer copies the DOM shape of a real app's editor; run with `parzr --web-composer-test` (docs/qa/README.md). -->
 <!-- Plain textarea (control) -->
@@ -21,6 +21,12 @@
 <div id="outlook" contenteditable="true" role="textbox" aria-label="Message body" aria-multiline="true" class="elementToProof"><div>i hope your doing well. teh report is redy</div><div><br></div></div>
 <!-- Rich: bold, a link, a mention chip and an emoji image; Chromium puts line breaks around the chip and the image in the composer's value -->
 <div id="rich" contenteditable="true" role="textbox" aria-label="Rich message"><p>i <b>hope</b> your doing <a href="https://example.com">well</a> <span contenteditable="false" class="mention">@Priya Shah</span> <img alt=":smile:" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="16" height="16"> teh <i>report</i> is redy</p></div>
+<!-- Mention: a Slack or Teams message with a mention chip and an emoji image mid-sentence; checked as one sentence, the chip kept as is -->
+<div id="mention" contenteditable="true" role="textbox" aria-label="Message with a mention"><p>Hey <span contenteditable="false" class="c-member_slug" data-member-id="U1">@Priya Shah</span> i hope your doing well <img class="emoji" alt=":smile:" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="16" height="16"> teh report is redy</p></div>
+<!-- Paragraphs: Enter starts a new block; the caret is in the second, which is checked on its own -->
+<div id="paragraphs" contenteditable="true" role="textbox" aria-label="Two paragraphs"><p>i hope your doing well</p><p>teh report is redy</p></div>
+<!-- Line break: Shift+Enter inside one block still separates the lines -->
+<div id="linebreak" contenteditable="true" role="textbox" aria-label="Two lines"><p>i hope your doing well<br>teh report is redy</p></div>
 <!-- Long: one text node that wraps over several lines -->
 <div id="long" contenteditable="true" role="textbox" aria-label="Long message" style="width:300px"><p>Yesterday I goes to the market and buyer some vegetables but the shopkeeper was not there so I was waiting for him many times. Then my friend come and tell me that he dont works there anymore.</p></div>
 </body></html>

@@ -167,6 +167,8 @@ struct SelectionSnapshot {
     let canPatch: Bool
     /// Google Docs through its hidden text area: replacements are typed, and range geometry comes from `DocsGeometry` rather than AX bounds.
     let docs: Bool
+    /// Document offsets of line breaks Chromium wrote around an inline image inside this paragraph: `text` has spaces there, and they are protected.
+    var inlineBreaks: [Int] = []
     /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
     var headlessEditor: NSTextView?
     /// The Studio writing space: the card is a key window of this same app, so the app's focus is then the card, not the editor.
@@ -191,18 +193,22 @@ struct SelectionSnapshot {
         var selection = selectedRange
         // Docs' own selected text lacks the paragraph breaks its ranges skip, so its text always comes from the value.
         var text = docs ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
+        var inlineBreaks: [Int] = []
         if passive {
             guard let full, selectedRange.location <= (full as NSString).length,
                   selectedRange.length <= (full as NSString).length - selectedRange.location,
                   full.utf8.count <= 262_144 else { throw ParzrError.message("No supported typing context.") }
-            selection = selectedRange.length == 0 ? (full as NSString).paragraphRange(for: selectedRange) : selectedRange
+            // A Chromium composer's emoji image reads as a line break; the sentence around it is one paragraph.
+            let joined = selectedRange.length == 0 ? AX.chromiumParagraph(element, value: full, around: selectedRange) : nil
+            selection = joined?.range ?? (selectedRange.length == 0 ? (full as NSString).paragraphRange(for: selectedRange) : selectedRange)
+            inlineBreaks = joined?.inlineBreaks ?? []
             // Pasted paragraphs commonly end in a newline, leaving the caret in an
             // empty paragraph. Keep the just-written paragraph eligible for marks.
             if selectedRange.length == 0, selection.length == 0, selectedRange.location == (full as NSString).length, selectedRange.location > 0 {
                 selection = (full as NSString).paragraphRange(for: NSRange(location: selectedRange.location - 1, length: 0))
             }
             guard selection.length <= 8192 else { throw ParzrError.message("Paragraph exceeds passive-analysis limit.") }
-            text = (full as NSString).substring(with: selection)
+            text = WebGeometry.joining((full as NSString).substring(with: selection), origin: selection.location, breaks: inlineBreaks)
         } else if text.isEmpty, let full, selectedRange.location <= (full as NSString).length, selectedRange.length <= (full as NSString).length - selectedRange.location {
             text = (full as NSString).substring(with: selectedRange)
         }
@@ -211,7 +217,7 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs)
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -263,8 +269,11 @@ struct SelectionSnapshot {
         return text.trimmingCharacters(in: .whitespaces).last.map { ".!?\n".contains($0) } == true
     }
     func protectedRanges() -> [TextSpan] {
-        guard let richText, richText.string == text else { return [] }
-        return Self.protectedSpans(in: richText) + (Compat.isXcode(bundle) ? Compat.codeProtectedSpans(in: richText) : [])
+        // A joined image break is a space only in `text`: no edit may touch it.
+        let breaks = inlineBreaks.filter { NSLocationInRange($0, selection) }.map { TextSpan(NSRange(location: $0 - selection.location, length: 1)) }
+        let raw = inlineBreaks.isEmpty ? text : fullText.map { ($0 as NSString).substring(with: selection) } ?? text
+        guard let richText, richText.string == raw else { return breaks }
+        return Self.protectedSpans(in: richText) + (Compat.isXcode(bundle) ? Compat.codeProtectedSpans(in: richText) : []) + breaks
     }
     /// Links and attachments, under both the AppKit keys and the "AXLink"/"AXAttachment" keys the Accessibility API uses, plus @mention runs.
     nonisolated static func protectedSpans(in text: NSAttributedString) -> [TextSpan] {

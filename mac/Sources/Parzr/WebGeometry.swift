@@ -30,7 +30,53 @@ enum WebGeometry {
     }
 }
 
+extension WebGeometry {
+    /// The paragraph around `caret` in `value`, joined across runs of line breaks that `isInline` accepts, with the offsets of the joined breaks.
+    /// Chromium writes "\n\n" into a composer's value for an inline image (an emoji in Slack or Teams), which cut the sentence around it in two.
+    /// With nothing joined this is exactly `paragraphRange(for: caret)`, so real paragraph and line breaks still separate paragraphs.
+    static func paragraph(around caret: NSRange, in value: NSString, isInline: (NSRange) -> Bool) -> (range: NSRange, inlineBreaks: [Int]) {
+        let newline: unichar = 10
+        var start = caret.location, end = NSMaxRange(caret), breaks: [Int] = []
+        for _ in 0..<16 {
+            while start > 0, value.character(at: start - 1) != newline { start -= 1 }
+            var gapStart = start
+            while gapStart > 0, value.character(at: gapStart - 1) == newline { gapStart -= 1 }
+            let gap = NSRange(location: gapStart, length: start - gapStart)
+            guard gap.length > 0, gapStart > 0, isInline(gap) else { break }
+            breaks += Array(gap.location..<NSMaxRange(gap)); start = gapStart
+        }
+        for _ in 0..<16 {
+            while end < value.length, value.character(at: end) != newline { end += 1 }
+            var gapEnd = end
+            while gapEnd < value.length, value.character(at: gapEnd) == newline { gapEnd += 1 }
+            let gap = NSRange(location: end, length: gapEnd - end)
+            guard gap.length > 0, gapEnd < value.length, isInline(gap) else { break }
+            breaks += Array(gap.location..<NSMaxRange(gap)); end = gapEnd
+        }
+        guard !breaks.isEmpty else { return (value.paragraphRange(for: caret), []) }
+        return (value.paragraphRange(for: NSRange(location: start, length: end - start)), breaks.sorted())
+    }
+    /// `text` with the characters at `breaks` (offsets in the document, `text` starting at `origin`) turned into spaces; the length never changes.
+    static func joining(_ text: String, origin: Int, breaks: [Int]) -> String {
+        let joined = NSMutableString(string: text)
+        for index in breaks where index >= origin && index - origin < joined.length { joined.replaceCharacters(in: NSRange(location: index - origin, length: 1), with: " ") }
+        return joined as String
+    }
+}
+
 extension AX {
+    /// The caret's paragraph in a Chromium composer, joined across the line breaks Chromium writes around inline images; nil for other editors.
+    static func chromiumParagraph(_ element: AXUIElement, value: String, around caret: NSRange) -> (range: NSRange, inlineBreaks: [Int])? {
+        guard value.contains("\n"), isChromiumText(element) else { return nil }
+        return WebGeometry.paragraph(around: caret, in: value as NSString) { chromiumInlineGap(element, $0) }
+    }
+    /// A run of line breaks is inline when the text runs on either side of it sit on one visual line (an Enter, a Shift+Enter or a new block moves to the next).
+    private static func chromiumInlineGap(_ element: AXUIElement, _ gap: NSRange) -> Bool {
+        let runs = webRuns(element, through: NSMaxRange(gap) + 1)
+        guard let before = runs.last(where: { NSMaxRange($0.range) == gap.location }), let after = runs.first(where: { $0.range.location == NSMaxRange(gap) }),
+              let left = axBounds(before.element, NSRange(location: before.range.length - 1, length: 1)), let right = axBounds(after.element, NSRange(location: 0, length: 1)) else { return false }
+        return abs(left.midY - right.midY) < min(left.height, right.height) * 0.5
+    }
     private static var chromiumKnown: [(element: AXUIElement, chromium: Bool, time: TimeInterval)] = []
     /// `covered`: how far into the value the runs reach; `complete`: the walk saw everything it could (it did not stop early at the range it was asked for).
     private static var webRunsCache: (element: AXUIElement, value: String, runs: [DocsRun], covered: Int, complete: Bool, time: TimeInterval)?
