@@ -1,0 +1,51 @@
+# Correct everyday sentences written for the DEV typo fuzz set (tuning allowed). One per line.
+This is not done yet.
+I like this book a lot.
+It is this one, not that one.
+What do you think about the plan?
+That was a really good movie.
+Can you send me the file when you get a chance?
+We are going to the store after work.
+I don't think he will come today.
+She said she would call me back later.
+They have already finished the report.
+Please let me know if you need anything else.
+My phone is almost out of battery.
+The meeting has been moved to next week.
+I will be there in about ten minutes.
+Do you want to grab lunch tomorrow?
+It was nice to see you again.
+We should probably leave a little earlier.
+He forgot his keys at home again.
+Thanks for your help with the move.
+I have to finish this before the deadline.
+Where did you put the charger?
+The kids are playing outside with their friends.
+I think we need more time for testing.
+Could you check the numbers one more time?
+This should work now, but let me know.
+I'm not sure what you mean.
+It's too late to change the order now.
+We can talk about it on the call.
+The weather has been great all week.
+I just wanted to say thank you.
+Let's meet at the coffee shop near the station.
+You can find the link in my last message.
+He is working from home this week.
+They were waiting for us at the door.
+Have you seen my blue jacket anywhere?
+I need to buy some milk and bread.
+The first version was much better than this one.
+Is it okay if I bring a friend?
+We didn't have enough chairs for everyone.
+Her presentation was clear and well organized.
+I can't believe how fast the year went by.
+Our team will review the changes on Monday.
+Don't forget to water the plants.
+The new office is bigger than the old one.
+What time does the train leave?
+I would like to book a table for two.
+Everything looks good to me.
+Can we push the release by one day?
+He asked me to help him with his homework.
+I usually walk to work when it is sunny.

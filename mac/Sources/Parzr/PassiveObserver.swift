@@ -22,10 +22,9 @@ final class PassiveObserver {
     private var firefoxKeystrokes = 0, docsKeystrokes = 0
     /// Counts monitor (re)installs; a grant after launch must install fresh ones, since monitors made before the grant never deliver.
     private(set) var monitorInstalls = 0
-    private let excluded = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.zed.Zed", "com.jetbrains"]
     /// VS Code and Cursor are checked only after the user opts in (Apps settings).
     private func isExcluded(_ bundle: String) -> Bool {
-        excluded.contains { bundle.hasPrefix($0) } || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
+        Compat.isExcluded(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
     }
     func installMonitors() {
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
@@ -116,7 +115,7 @@ final class PassiveObserver {
     /// Google Docs shows nothing to read until its "braille support" is on: after several keystrokes with no text, offer the one-time setup hint.
     private func noteDocsKeystroke() {
         let prefs = Preferences.shared
-        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = SelfTestTarget.watched, Compat.isChromium(app.bundleIdentifier) else { return }
+        guard !stopped, !prefs.docsHintDismissed, !prefs.docsHint, let app = SelfTestTarget.watched, AX.isChromiumBrowser(app) else { return }
         docsKeystrokes += 1
         guard docsKeystrokes >= Compat.docsHintKeystrokes else { return }
         docsKeystrokes = 0

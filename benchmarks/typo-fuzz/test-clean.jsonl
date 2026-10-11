@@ -1,0 +1,200 @@
+{"id": "fuzz-test-test-s000", "category": "clean", "subcategory": "base", "input": "Could you remind me what time the dentist appointment is?"}
+{"id": "fuzz-test-test-s001", "category": "clean", "subcategory": "base", "input": "I left the umbrella in your car last night."}
+{"id": "fuzz-test-test-s002", "category": "clean", "subcategory": "base", "input": "The printer on the second floor keeps jamming."}
+{"id": "fuzz-test-test-s003", "category": "clean", "subcategory": "base", "input": "We ordered pizza because nobody wanted to cook."}
+{"id": "fuzz-test-test-s004", "category": "clean", "subcategory": "base", "input": "My brother is moving to a new apartment next month."}
+{"id": "fuzz-test-test-s005", "category": "clean", "subcategory": "base", "input": "Please bring a jacket, it gets cold after sunset."}
+{"id": "fuzz-test-test-s006", "category": "clean", "subcategory": "base", "input": "The train was delayed by almost an hour."}
+{"id": "fuzz-test-test-s007", "category": "clean", "subcategory": "base", "input": "I have never seen so many people at the beach."}
+{"id": "fuzz-test-test-s008", "category": "clean", "subcategory": "base", "input": "She finally found the keys under the sofa."}
+{"id": "fuzz-test-test-s009", "category": "clean", "subcategory": "base", "input": "Our neighbors are having a party this weekend."}
+{"id": "fuzz-test-test-s010", "category": "clean", "subcategory": "base", "input": "Let me check my calendar and get back to you."}
+{"id": "fuzz-test-test-s011", "category": "clean", "subcategory": "base", "input": "The coffee machine in the kitchen is broken again."}
+{"id": "fuzz-test-test-s012", "category": "clean", "subcategory": "base", "input": "He spent the whole afternoon fixing his bike."}
+{"id": "fuzz-test-test-s013", "category": "clean", "subcategory": "base", "input": "I think the store closes at nine on Sundays."}
+{"id": "fuzz-test-test-s014", "category": "clean", "subcategory": "base", "input": "Do you know where I put my reading glasses?"}
+{"id": "fuzz-test-test-s015", "category": "clean", "subcategory": "base", "input": "The kids built a huge sandcastle near the water."}
+{"id": "fuzz-test-test-s016", "category": "clean", "subcategory": "base", "input": "Thank you for waiting, the doctor will see you now."}
+{"id": "fuzz-test-test-s017", "category": "clean", "subcategory": "base", "input": "We should leave early to avoid the traffic."}
+{"id": "fuzz-test-test-s018", "category": "clean", "subcategory": "base", "input": "I am still waiting for the package to arrive."}
+{"id": "fuzz-test-test-s019", "category": "clean", "subcategory": "base", "input": "That restaurant has the best noodles in town."}
+{"id": "fuzz-test-test-s020", "category": "clean", "subcategory": "base", "input": "My phone screen cracked when I dropped it."}
+{"id": "fuzz-test-test-s021", "category": "clean", "subcategory": "base", "input": "Can you pick up some eggs on your way home?"}
+{"id": "fuzz-test-test-s022", "category": "clean", "subcategory": "base", "input": "The weather forecast says it will rain all day."}
+{"id": "fuzz-test-test-s023", "category": "clean", "subcategory": "base", "input": "I forgot to send the invoice yesterday."}
+{"id": "fuzz-test-test-s024", "category": "clean", "subcategory": "base", "input": "They are planning a trip to the mountains in spring."}
+{"id": "fuzz-test-test-s025", "category": "clean", "subcategory": "base", "input": "Her dog barks every time someone rings the bell."}
+{"id": "fuzz-test-test-s026", "category": "clean", "subcategory": "base", "input": "The movie was much longer than I expected."}
+{"id": "fuzz-test-test-s027", "category": "clean", "subcategory": "base", "input": "I need to renew my passport before the summer."}
+{"id": "fuzz-test-test-s028", "category": "clean", "subcategory": "base", "input": "We watched the sunrise from the top of the hill."}
+{"id": "fuzz-test-test-s029", "category": "clean", "subcategory": "base", "input": "He always takes the stairs instead of the elevator."}
+{"id": "fuzz-test-test-s030", "category": "clean", "subcategory": "base", "input": "The new update made the app much faster."}
+{"id": "fuzz-test-test-s031", "category": "clean", "subcategory": "base", "input": "I will call you as soon as I land."}
+{"id": "fuzz-test-test-s032", "category": "clean", "subcategory": "base", "input": "Please don't touch the paint, it's still wet."}
+{"id": "fuzz-test-test-s033", "category": "clean", "subcategory": "base", "input": "My grandmother makes the best apple pie."}
+{"id": "fuzz-test-test-s034", "category": "clean", "subcategory": "base", "input": "The meeting room is booked for the whole morning."}
+{"id": "fuzz-test-test-s035", "category": "clean", "subcategory": "base", "input": "I lost track of time while reading."}
+{"id": "fuzz-test-test-s036", "category": "clean", "subcategory": "base", "input": "Can we move the call to Thursday afternoon?"}
+{"id": "fuzz-test-test-s037", "category": "clean", "subcategory": "base", "input": "The library is quiet on weekday mornings."}
+{"id": "fuzz-test-test-s038", "category": "clean", "subcategory": "base", "input": "He was too tired to finish the game."}
+{"id": "fuzz-test-test-s039", "category": "clean", "subcategory": "base", "input": "Our team won the match in the last minute."}
+{"id": "fuzz-test-test-s040", "category": "clean", "subcategory": "base", "input": "I usually drink tea before going to bed."}
+{"id": "fuzz-test-test-s041", "category": "clean", "subcategory": "base", "input": "The parking lot was completely full."}
+{"id": "fuzz-test-test-s042", "category": "clean", "subcategory": "base", "input": "She sent me a photo of her new kitten."}
+{"id": "fuzz-test-test-s043", "category": "clean", "subcategory": "base", "input": "Don't forget to lock the back door."}
+{"id": "fuzz-test-test-s044", "category": "clean", "subcategory": "base", "input": "The soup needs a little more salt."}
+{"id": "fuzz-test-test-s045", "category": "clean", "subcategory": "base", "input": "I have two tickets for the concert on Friday."}
+{"id": "fuzz-test-test-s046", "category": "clean", "subcategory": "base", "input": "We need to replace the batteries in the remote."}
+{"id": "fuzz-test-test-s047", "category": "clean", "subcategory": "base", "input": "He promised to help me move the furniture."}
+{"id": "fuzz-test-test-s048", "category": "clean", "subcategory": "base", "input": "The garden looks beautiful after the rain."}
+{"id": "fuzz-test-test-s049", "category": "clean", "subcategory": "base", "input": "My laptop battery only lasts a few hours now."}
+{"id": "fuzz-test-test-s050", "category": "clean", "subcategory": "base", "input": "I'm not sure if this is the right address."}
+{"id": "fuzz-test-test-s051", "category": "clean", "subcategory": "base", "input": "They opened a small bakery around the corner."}
+{"id": "fuzz-test-test-s052", "category": "clean", "subcategory": "base", "input": "The bus stop is right in front of the school."}
+{"id": "fuzz-test-test-s053", "category": "clean", "subcategory": "base", "input": "Could you send me the slides after the talk?"}
+{"id": "fuzz-test-test-s054", "category": "clean", "subcategory": "base", "input": "I was surprised by how cheap the tickets were."}
+{"id": "fuzz-test-test-s055", "category": "clean", "subcategory": "base", "input": "We spent the evening playing board games."}
+{"id": "fuzz-test-test-s056", "category": "clean", "subcategory": "base", "input": "The baby finally fell asleep at midnight."}
+{"id": "fuzz-test-test-s057", "category": "clean", "subcategory": "base", "input": "Please let the team know about the new schedule."}
+{"id": "fuzz-test-test-s058", "category": "clean", "subcategory": "base", "input": "He wants to learn how to play the guitar."}
+{"id": "fuzz-test-test-s059", "category": "clean", "subcategory": "base", "input": "The bridge will be closed for repairs next week."}
+{"id": "fuzz-test-test-s060", "category": "clean", "subcategory": "base", "input": "I made a list of things we still need to buy."}
+{"id": "fuzz-test-test-s061", "category": "clean", "subcategory": "base", "input": "The museum is free on the first Sunday of the month."}
+{"id": "fuzz-test-test-s062", "category": "clean", "subcategory": "base", "input": "She has been working on her thesis for two years."}
+{"id": "fuzz-test-test-s063", "category": "clean", "subcategory": "base", "input": "My car needs new tires before the winter."}
+{"id": "fuzz-test-test-s064", "category": "clean", "subcategory": "base", "input": "I hope the weather stays nice for the picnic."}
+{"id": "fuzz-test-test-s065", "category": "clean", "subcategory": "base", "input": "The hotel room had a great view of the river."}
+{"id": "fuzz-test-test-s066", "category": "clean", "subcategory": "base", "input": "We are running out of milk and bread."}
+{"id": "fuzz-test-test-s067", "category": "clean", "subcategory": "base", "input": "He forgot his wallet at the restaurant."}
+{"id": "fuzz-test-test-s068", "category": "clean", "subcategory": "base", "input": "The teacher asked us to read three chapters."}
+{"id": "fuzz-test-test-s069", "category": "clean", "subcategory": "base", "input": "I couldn't hear you because of the noise."}
+{"id": "fuzz-test-test-s070", "category": "clean", "subcategory": "base", "input": "Our flight was cancelled because of the storm."}
+{"id": "fuzz-test-test-s071", "category": "clean", "subcategory": "base", "input": "The cat likes to sleep on the warm laptop."}
+{"id": "fuzz-test-test-s072", "category": "clean", "subcategory": "base", "input": "Do you want to share a taxi to the airport?"}
+{"id": "fuzz-test-test-s073", "category": "clean", "subcategory": "base", "input": "I finally cleaned out the garage last weekend."}
+{"id": "fuzz-test-test-s074", "category": "clean", "subcategory": "base", "input": "The report should be ready by the end of the day."}
+{"id": "fuzz-test-test-s075", "category": "clean", "subcategory": "base", "input": "She always remembers everyone's birthday."}
+{"id": "fuzz-test-test-s076", "category": "clean", "subcategory": "base", "input": "The water in the lake was surprisingly warm."}
+{"id": "fuzz-test-test-s077", "category": "clean", "subcategory": "base", "input": "We have to wake up early tomorrow."}
+{"id": "fuzz-test-test-s078", "category": "clean", "subcategory": "base", "input": "He looks a lot like his father."}
+{"id": "fuzz-test-test-s079", "category": "clean", "subcategory": "base", "input": "I will bring some snacks for the road trip."}
+{"id": "fuzz-test-test-s080", "category": "clean", "subcategory": "base", "input": "The shop on the corner sells fresh flowers."}
+{"id": "fuzz-test-test-s081", "category": "clean", "subcategory": "base", "input": "My sister is learning to drive."}
+{"id": "fuzz-test-test-s082", "category": "clean", "subcategory": "base", "input": "The noise from the construction site is terrible."}
+{"id": "fuzz-test-test-s083", "category": "clean", "subcategory": "base", "input": "Please make sure the windows are closed."}
+{"id": "fuzz-test-test-s084", "category": "clean", "subcategory": "base", "input": "I think we took a wrong turn somewhere."}
+{"id": "fuzz-test-test-s085", "category": "clean", "subcategory": "base", "input": "The children were excited about the snow."}
+{"id": "fuzz-test-test-s086", "category": "clean", "subcategory": "base", "input": "This sweater is too small for me now."}
+{"id": "fuzz-test-test-s087", "category": "clean", "subcategory": "base", "input": "We need more chairs for the guests."}
+{"id": "fuzz-test-test-s088", "category": "clean", "subcategory": "base", "input": "He reads the news every morning with his coffee."}
+{"id": "fuzz-test-test-s089", "category": "clean", "subcategory": "base", "input": "I really enjoyed the dinner last night."}
+{"id": "fuzz-test-test-s090", "category": "clean", "subcategory": "base", "input": "The elevator is out of order today."}
+{"id": "fuzz-test-test-s091", "category": "clean", "subcategory": "base", "input": "She asked if we could meet a little later."}
+{"id": "fuzz-test-test-s092", "category": "clean", "subcategory": "base", "input": "My boss approved the vacation request."}
+{"id": "fuzz-test-test-s093", "category": "clean", "subcategory": "base", "input": "The internet has been slow all week."}
+{"id": "fuzz-test-test-s094", "category": "clean", "subcategory": "base", "input": "I have a headache, so I am going to lie down."}
+{"id": "fuzz-test-test-s095", "category": "clean", "subcategory": "base", "input": "They painted the kitchen a bright yellow."}
+{"id": "fuzz-test-test-s096", "category": "clean", "subcategory": "base", "input": "The price of the tickets went up again."}
+{"id": "fuzz-test-test-s097", "category": "clean", "subcategory": "base", "input": "I will wait for you at the main entrance."}
+{"id": "fuzz-test-test-s098", "category": "clean", "subcategory": "base", "input": "The dog ran off with my sandwich."}
+{"id": "fuzz-test-test-s099", "category": "clean", "subcategory": "base", "input": "We should probably book the hotel soon."}
+{"id": "fuzz-test-test-s100", "category": "clean", "subcategory": "base", "input": "He fixed the leaking tap in the bathroom."}
+{"id": "fuzz-test-test-s101", "category": "clean", "subcategory": "base", "input": "I can never remember where I parked."}
+{"id": "fuzz-test-test-s102", "category": "clean", "subcategory": "base", "input": "The flowers you sent us weren't cheap, I'm sure."}
+{"id": "fuzz-test-test-s103", "category": "clean", "subcategory": "base", "input": "Our new office has a lot more light."}
+{"id": "fuzz-test-test-s104", "category": "clean", "subcategory": "base", "input": "Could you turn the music down a little?"}
+{"id": "fuzz-test-test-s105", "category": "clean", "subcategory": "base", "input": "I almost missed the last bus home."}
+{"id": "fuzz-test-test-s106", "category": "clean", "subcategory": "base", "input": "She made a cake for the whole team."}
+{"id": "fuzz-test-test-s107", "category": "clean", "subcategory": "base", "input": "The road was icy, so we drove slowly."}
+{"id": "fuzz-test-test-s108", "category": "clean", "subcategory": "base", "input": "I have been meaning to call you all week."}
+{"id": "fuzz-test-test-s109", "category": "clean", "subcategory": "base", "input": "They finally fixed the broken streetlight."}
+{"id": "fuzz-test-test-s110", "category": "clean", "subcategory": "base", "input": "My shoes got soaked in the rain."}
+{"id": "fuzz-test-test-s111", "category": "clean", "subcategory": "base", "input": "The store was out of the cereal I like."}
+{"id": "fuzz-test-test-s112", "category": "clean", "subcategory": "base", "input": "He is always the first one to arrive."}
+{"id": "fuzz-test-test-s113", "category": "clean", "subcategory": "base", "input": "We had a long talk about our plans."}
+{"id": "fuzz-test-test-s114", "category": "clean", "subcategory": "base", "input": "The documents are in the top drawer."}
+{"id": "fuzz-test-test-s115", "category": "clean", "subcategory": "base", "input": "I think the cat knocked the vase over."}
+{"id": "fuzz-test-test-s116", "category": "clean", "subcategory": "base", "input": "Let us know if you need a ride."}
+{"id": "fuzz-test-test-s117", "category": "clean", "subcategory": "base", "input": "The view from the train was amazing."}
+{"id": "fuzz-test-test-s118", "category": "clean", "subcategory": "base", "input": "She lent me her notes from the lecture."}
+{"id": "fuzz-test-test-s119", "category": "clean", "subcategory": "base", "input": "My old phone still works perfectly."}
+{"id": "fuzz-test-test-s120", "category": "clean", "subcategory": "base", "input": "I need to finish this chapter tonight."}
+{"id": "fuzz-test-test-s121", "category": "clean", "subcategory": "base", "input": "The neighbors' dog keeps digging under the fence."}
+{"id": "fuzz-test-test-s122", "category": "clean", "subcategory": "base", "input": "We forgot to buy candles for the cake."}
+{"id": "fuzz-test-test-s123", "category": "clean", "subcategory": "base", "input": "He was late because his alarm didn't go off."}
+{"id": "fuzz-test-test-s124", "category": "clean", "subcategory": "base", "input": "The beach was crowded on Saturday."}
+{"id": "fuzz-test-test-s125", "category": "clean", "subcategory": "base", "input": "I am going to try that new recipe tonight."}
+{"id": "fuzz-test-test-s126", "category": "clean", "subcategory": "base", "input": "The plants on the balcony need water."}
+{"id": "fuzz-test-test-s127", "category": "clean", "subcategory": "base", "input": "Could you help me carry these boxes upstairs?"}
+{"id": "fuzz-test-test-s128", "category": "clean", "subcategory": "base", "input": "They've decided to stay home instead."}
+{"id": "fuzz-test-test-s129", "category": "clean", "subcategory": "base", "input": "The movie theater near us closed last year."}
+{"id": "fuzz-test-test-s130", "category": "clean", "subcategory": "base", "input": "I always lose my keys when I am in a hurry."}
+{"id": "fuzz-test-test-s131", "category": "clean", "subcategory": "base", "input": "The baker gave us an extra loaf of bread."}
+{"id": "fuzz-test-test-s132", "category": "clean", "subcategory": "base", "input": "Our holiday photos are finally printed."}
+{"id": "fuzz-test-test-s133", "category": "clean", "subcategory": "base", "input": "He told me a funny story about his trip."}
+{"id": "fuzz-test-test-s134", "category": "clean", "subcategory": "base", "input": "I would rather walk than take the car."}
+{"id": "fuzz-test-test-s135", "category": "clean", "subcategory": "base", "input": "The stairs in the old house creak at night."}
+{"id": "fuzz-test-test-s136", "category": "clean", "subcategory": "base", "input": "She is the best cook I know."}
+{"id": "fuzz-test-test-s137", "category": "clean", "subcategory": "base", "input": "The tickets sold out in less than an hour."}
+{"id": "fuzz-test-test-s138", "category": "clean", "subcategory": "base", "input": "We need to talk about the budget for next year."}
+{"id": "fuzz-test-test-s139", "category": "clean", "subcategory": "base", "input": "My hands were freezing after the walk."}
+{"id": "fuzz-test-test-s140", "category": "clean", "subcategory": "base", "input": "The windows were covered in frost this morning."}
+{"id": "fuzz-test-test-s141", "category": "clean", "subcategory": "base", "input": "I haven't seen that movie yet."}
+{"id": "fuzz-test-test-s142", "category": "clean", "subcategory": "base", "input": "He keeps all his receipts in a shoebox."}
+{"id": "fuzz-test-test-s143", "category": "clean", "subcategory": "base", "input": "The school bus was late again today."}
+{"id": "fuzz-test-test-s144", "category": "clean", "subcategory": "base", "input": "Could you water my plants while I am away?"}
+{"id": "fuzz-test-test-s145", "category": "clean", "subcategory": "base", "input": "I am really proud of what we built together."}
+{"id": "fuzz-test-test-s146", "category": "clean", "subcategory": "base", "input": "The lights went out during the storm."}
+{"id": "fuzz-test-test-s147", "category": "clean", "subcategory": "base", "input": "She was happy to hear the good news."}
+{"id": "fuzz-test-test-s148", "category": "clean", "subcategory": "base", "input": "They are looking for a bigger house."}
+{"id": "fuzz-test-test-s149", "category": "clean", "subcategory": "base", "input": "My coffee went cold while I was on the phone."}
+{"id": "fuzz-test-test-s150", "category": "clean", "subcategory": "base", "input": "The class starts at eight sharp."}
+{"id": "fuzz-test-test-s151", "category": "clean", "subcategory": "base", "input": "I found an old letter in the attic."}
+{"id": "fuzz-test-test-s152", "category": "clean", "subcategory": "base", "input": "We should invite them over for dinner."}
+{"id": "fuzz-test-test-s153", "category": "clean", "subcategory": "base", "input": "The trail was muddy after the rain."}
+{"id": "fuzz-test-test-s154", "category": "clean", "subcategory": "base", "input": "He always forgets to charge his phone."}
+{"id": "fuzz-test-test-s155", "category": "clean", "subcategory": "base", "input": "I'm glad you made it home safely."}
+{"id": "fuzz-test-test-s156", "category": "clean", "subcategory": "base", "input": "The waiter brought us the wrong order."}
+{"id": "fuzz-test-test-s157", "category": "clean", "subcategory": "base", "input": "Our dog loves running in the park."}
+{"id": "fuzz-test-test-s158", "category": "clean", "subcategory": "base", "input": "I'm afraid I've left the stove on."}
+{"id": "fuzz-test-test-s159", "category": "clean", "subcategory": "base", "input": "The game was postponed because of the weather."}
+{"id": "fuzz-test-test-s160", "category": "clean", "subcategory": "base", "input": "She bought a new bike for her commute."}
+{"id": "fuzz-test-test-s161", "category": "clean", "subcategory": "base", "input": "Please keep the receipt in case you need it."}
+{"id": "fuzz-test-test-s162", "category": "clean", "subcategory": "base", "input": "The city looks different at night."}
+{"id": "fuzz-test-test-s163", "category": "clean", "subcategory": "base", "input": "I will send you the address in a minute."}
+{"id": "fuzz-test-test-s164", "category": "clean", "subcategory": "base", "input": "We waited in line for almost two hours."}
+{"id": "fuzz-test-test-s165", "category": "clean", "subcategory": "base", "input": "He has a meeting with the bank tomorrow."}
+{"id": "fuzz-test-test-s166", "category": "clean", "subcategory": "base", "input": "The tea is too hot to drink right now."}
+{"id": "fuzz-test-test-s167", "category": "clean", "subcategory": "base", "input": "I want to visit my parents this weekend."}
+{"id": "fuzz-test-test-s168", "category": "clean", "subcategory": "base", "input": "The office will be closed on Monday."}
+{"id": "fuzz-test-test-s169", "category": "clean", "subcategory": "base", "input": "She learned to swim when she was five."}
+{"id": "fuzz-test-test-s170", "category": "clean", "subcategory": "base", "input": "The milk in the fridge has gone sour."}
+{"id": "fuzz-test-test-s171", "category": "clean", "subcategory": "base", "input": "They are building a new park downtown."}
+{"id": "fuzz-test-test-s172", "category": "clean", "subcategory": "base", "input": "I could use some help with the dishes."}
+{"id": "fuzz-test-test-s173", "category": "clean", "subcategory": "base", "input": "My computer restarted in the middle of my work."}
+{"id": "fuzz-test-test-s174", "category": "clean", "subcategory": "base", "input": "The concert was louder than I expected."}
+{"id": "fuzz-test-test-s175", "category": "clean", "subcategory": "base", "input": "We have plenty of time before the show starts."}
+{"id": "fuzz-test-test-s176", "category": "clean", "subcategory": "base", "input": "He bought flowers for his mother."}
+{"id": "fuzz-test-test-s177", "category": "clean", "subcategory": "base", "input": "I keep forgetting to reply to that email."}
+{"id": "fuzz-test-test-s178", "category": "clean", "subcategory": "base", "input": "The hallway smells like fresh paint."}
+{"id": "fuzz-test-test-s179", "category": "clean", "subcategory": "base", "input": "Could you hold the door for a second?"}
+{"id": "fuzz-test-test-s180", "category": "clean", "subcategory": "base", "input": "The river was too cold for swimming."}
+{"id": "fuzz-test-test-s181", "category": "clean", "subcategory": "base", "input": "I am thinking about taking a cooking class."}
+{"id": "fuzz-test-test-s182", "category": "clean", "subcategory": "base", "input": "The puppy chewed one of my slippers."}
+{"id": "fuzz-test-test-s183", "category": "clean", "subcategory": "base", "input": "She'll be back from lunch in ten minutes."}
+{"id": "fuzz-test-test-s184", "category": "clean", "subcategory": "base", "input": "We drove past the old school on the way."}
+{"id": "fuzz-test-test-s185", "category": "clean", "subcategory": "base", "input": "He made a mistake in the final report."}
+{"id": "fuzz-test-test-s186", "category": "clean", "subcategory": "base", "input": "The store gave me a discount on the shoes."}
+{"id": "fuzz-test-test-s187", "category": "clean", "subcategory": "base", "input": "I have to pick up my sister from the station."}
+{"id": "fuzz-test-test-s188", "category": "clean", "subcategory": "base", "input": "The sun came out just before we left."}
+{"id": "fuzz-test-test-s189", "category": "clean", "subcategory": "base", "input": "Our landlord finally fixed the heating."}
+{"id": "fuzz-test-test-s190", "category": "clean", "subcategory": "base", "input": "I would love to hear more about your trip."}
+{"id": "fuzz-test-test-s191", "category": "clean", "subcategory": "base", "input": "The bakery runs out of croissants by noon."}
+{"id": "fuzz-test-test-s192", "category": "clean", "subcategory": "base", "input": "They watched the fireworks from the roof."}
+{"id": "fuzz-test-test-s193", "category": "clean", "subcategory": "base", "input": "My keyboard is missing a few keys."}
+{"id": "fuzz-test-test-s194", "category": "clean", "subcategory": "base", "input": "The hike took longer than we planned."}
+{"id": "fuzz-test-test-s195", "category": "clean", "subcategory": "base", "input": "She is worried about the exam next week."}
+{"id": "fuzz-test-test-s196", "category": "clean", "subcategory": "base", "input": "I need a new pair of running shoes."}
+{"id": "fuzz-test-test-s197", "category": "clean", "subcategory": "base", "input": "The street was quiet after midnight."}
+{"id": "fuzz-test-test-s198", "category": "clean", "subcategory": "base", "input": "We're almost out of coffee."}
+{"id": "fuzz-test-test-s199", "category": "clean", "subcategory": "base", "input": "He gave a short speech at the wedding."}

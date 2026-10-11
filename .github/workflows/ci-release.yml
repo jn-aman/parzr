@@ -83,6 +83,13 @@ jobs:
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
             --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
+      - name: Keystroke-typo quality gate
+        # benchmarks/typo-fuzz test set: every keystroke slip type on 200 sentences written after the fixes.
+        run: |
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/test.jsonl --clean benchmarks/typo-fuzz/test-clean.jsonl \
+            --split all --layers rules,gec --output dist/qa/typo-fuzz \
+            --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03
       - name: Browser and editor integration checks
         run: |
           npm ci

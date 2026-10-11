@@ -19,8 +19,14 @@ enum AX {
         guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
         return NSRange(location: range.location, length: range.length)
     }
-    static func range(_ element: AXUIElement) -> NSRange? { isDocsText(element) ? docsSelection(element) : rawRange(element) }
+    static func range(_ element: AXUIElement) -> NSRange? {
+        if isDocsText(element) { return docsSelection(element) }
+        // Chromium composers count their selection without some of the breaks their value has; markers on the text runs give value offsets.
+        if isChromiumComposer(element) { return chromiumSelection(element) }
+        return rawRange(element)
+    }
     static func setRange(_ element: AXUIElement, _ range: NSRange) -> Bool {
+        if !isDocsText(element), isChromiumComposer(element) { return chromiumSelect(element, range) }
         let target = isDocsText(element) ? docsSelectionRange(element, range) : range
         var range = CFRange(location: target.location, length: target.length)
         guard let value = AXValueCreate(.cfRange, &range) else { return false }
@@ -48,7 +54,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs() }
+    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs(); forgetWeb() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -108,7 +114,8 @@ enum AX {
     }
     static func bounds(_ element: AXUIElement, _ range: NSRange) -> CGRect? {
         if isDocsText(element) { return docsBounds(element, range).map(cocoa) }
-        return axBounds(element, range).map(cocoa)
+        // Chromium contenteditable composers answer with an empty rect; their text runs carry the geometry (see WebGeometry).
+        return (axBounds(element, range) ?? webBounds(element, range)).map(cocoa)
     }
     static func line(_ element: AXUIElement, _ index: Int) -> Int? {
         var value: CFTypeRef?
@@ -128,6 +135,7 @@ enum AX {
     static func lineRects(_ element: AXUIElement, _ range: NSRange) -> [CGRect] {
         guard range.length > 0 else { return [] }
         if isDocsText(element) { return docsLines(element, range).map(cocoa).filter { $0.width > 0 } }
+        if isChromiumText(element) { return chromiumLines(element, range) }
         if let first = line(element, range.location), let last = line(element, NSMaxRange(range) - 1), last >= first, lineRange(element, first) != nil {
             var rects: [CGRect] = []
             for index in first...min(last, first + 7) {
@@ -165,6 +173,8 @@ struct SelectionSnapshot {
     let canPatch: Bool
     /// Google Docs through its hidden text area: replacements are typed, and range geometry comes from `DocsGeometry` rather than AX bounds.
     let docs: Bool
+    /// Document offsets of line breaks Chromium wrote around an inline image inside this paragraph: `text` has spaces there, and they are protected.
+    var inlineBreaks: [Int] = []
     /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
     var headlessEditor: NSTextView?
     /// The Studio writing space: the card is a key window of this same app, so the app's focus is then the card, not the editor.
@@ -176,7 +186,9 @@ struct SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
         guard let app = SelfTestTarget.watched, let element = AX.focusedText(app),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
-        guard !AX.isSecure(element), !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        // Another app's secure input hides this plain field's typing too: name that app instead of blaming the field.
+        guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
         guard let selectedRange = AX.selection(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
@@ -185,20 +197,24 @@ struct SelectionSnapshot {
         // Docs with braille support off: only zero-width characters here, so the explicit check falls back to copying.
         if docs, Compat.docsTextHidden(full) { throw ParzrError.message("Select the words you want to improve, then try again.") }
         var selection = selectedRange
-        // Docs' own selected text lacks the paragraph breaks its ranges skip, so its text always comes from the value.
-        var text = docs ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
+        // Docs' own selected text lacks the paragraph breaks its ranges skip, and a Chromium composer's lacks its image breaks, so their text comes from the value.
+        var text = docs || AX.isChromiumComposer(element) ? "" : AX.string(element, kAXSelectedTextAttribute) ?? ""
+        var inlineBreaks: [Int] = []
         if passive {
             guard let full, selectedRange.location <= (full as NSString).length,
                   selectedRange.length <= (full as NSString).length - selectedRange.location,
                   full.utf8.count <= 262_144 else { throw ParzrError.message("No supported typing context.") }
-            selection = selectedRange.length == 0 ? (full as NSString).paragraphRange(for: selectedRange) : selectedRange
+            // A Chromium composer's emoji image reads as a line break; the sentence around it is one paragraph.
+            let joined = selectedRange.length == 0 ? AX.chromiumParagraph(element, value: full, around: selectedRange) : nil
+            selection = joined?.range ?? (selectedRange.length == 0 ? (full as NSString).paragraphRange(for: selectedRange) : selectedRange)
+            inlineBreaks = joined?.inlineBreaks ?? []
             // Pasted paragraphs commonly end in a newline, leaving the caret in an
             // empty paragraph. Keep the just-written paragraph eligible for marks.
             if selectedRange.length == 0, selection.length == 0, selectedRange.location == (full as NSString).length, selectedRange.location > 0 {
                 selection = (full as NSString).paragraphRange(for: NSRange(location: selectedRange.location - 1, length: 0))
             }
             guard selection.length <= 8192 else { throw ParzrError.message("Paragraph exceeds passive-analysis limit.") }
-            text = (full as NSString).substring(with: selection)
+            text = WebGeometry.joining((full as NSString).substring(with: selection), origin: selection.location, breaks: inlineBreaks)
         } else if text.isEmpty, let full, selectedRange.location <= (full as NSString).length, selectedRange.length <= (full as NSString).length - selectedRange.location {
             text = (full as NSString).substring(with: selectedRange)
         }
@@ -207,16 +223,16 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs)
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
-        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier,
-              !IsSecureEventInputEnabled() else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier != Bundle.main.bundleIdentifier else { throw ParzrError.message("Parzr does not read secure fields.") }
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         let element = AX.focusedText(app) ?? AX.focused(app) ?? AXUIElementCreateApplication(app.processIdentifier)
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         let text = try await ClipboardTransaction.copySelection(from: app.processIdentifier) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
         guard text.utf8.count <= 65_536 else { throw ParzrError.message("This selection is too large or this editor reports inconsistent ranges. Copy it into the playground.") }
@@ -259,8 +275,11 @@ struct SelectionSnapshot {
         return text.trimmingCharacters(in: .whitespaces).last.map { ".!?\n".contains($0) } == true
     }
     func protectedRanges() -> [TextSpan] {
-        guard let richText, richText.string == text else { return [] }
-        return Self.protectedSpans(in: richText) + (Compat.isXcode(bundle) ? Compat.codeProtectedSpans(in: richText) : [])
+        // A joined image break is a space only in `text`: no edit may touch it.
+        let breaks = inlineBreaks.filter { NSLocationInRange($0, selection) }.map { TextSpan(NSRange(location: $0 - selection.location, length: 1)) }
+        let raw = inlineBreaks.isEmpty ? text : fullText.map { ($0 as NSString).substring(with: selection) } ?? text
+        guard let richText, richText.string == raw else { return breaks }
+        return Self.protectedSpans(in: richText) + (Compat.isXcode(bundle) ? Compat.codeProtectedSpans(in: richText) : []) + breaks
     }
     /// Links and attachments, under both the AppKit keys and the "AXLink"/"AXAttachment" keys the Accessibility API uses, plus @mention runs.
     nonisolated static func protectedSpans(in text: NSAttributedString) -> [TextSpan] {

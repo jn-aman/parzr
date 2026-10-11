@@ -7,12 +7,35 @@ import ParzrCore
 enum Compat {
     static let vscode = ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92"]
     static let chromium = ["com.google.Chrome", "com.microsoft.edgemac", "com.brave.Browser", "company.thebrowser.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera", "org.chromium.Chromium", "com.microsoft.teams2"]
+    /// Never checked automatically: terminals (commands and output are not prose) and code editors with their own tooling. Bundle id prefixes,
+    /// so preview and nightly builds match too (Warp Preview is dev.warp.Warp-Preview).
+    static let terminals = ["com.apple.Terminal", "com.googlecode.iterm2", "dev.warp.Warp", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "org.alacritty",
+                            "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper"]
+    static let excluded = terminals + ["dev.zed.Zed", "com.jetbrains"]
+    static func isExcluded(_ bundle: String?) -> Bool { excluded.contains { bundle?.hasPrefix($0) == true } }
+    static func isTerminal(_ bundle: String?) -> Bool { terminals.contains { bundle?.hasPrefix($0) == true } }
+    /// Who holds secure input, as far as Parzr can tell. The window server records the frontmost app's pid whenever the holder is a background process
+    /// (measured: a faceless holder app, with Warp and then Chrome in front, read as Warp and then Chrome), so a frontmost app is named only when it can
+    /// plausibly hold it itself: a terminal with Secure Keyboard Entry. A plain field in any other app means a holder Parzr cannot name.
+    enum SecureInputHolder: Equatable { case app(String), elsewhere }
+    /// Nothing when the writer is in a secure field (that is the reason, and it is expected), or when the reported holder is the writer's app and Parzr
+    /// cannot see their field (it may be a secure one).
+    static func secureInputHolder(ownerPID: pid_t?, ownerName: String?, ownerIsTerminal: Bool, watchedPID: pid_t?, focusKnown: Bool, focusSecure: Bool) -> SecureInputHolder? {
+        guard !focusSecure else { return nil }
+        guard let ownerPID, let ownerName, !ownerName.isEmpty else { return .elsewhere }
+        guard ownerPID == watchedPID else { return .app(ownerName) }
+        guard focusKnown else { return nil }
+        return ownerIsTerminal ? .app(ownerName) : .elsewhere
+    }
     static let proseExtensions = [".md", ".markdown", ".txt", ".mdx", ".rst"]
     /// Firefox needs this many keystrokes with no text field found before the hint appears.
     static let firefoxHintKeystrokes = 8
     static func isVSCode(_ bundle: String?) -> Bool { vscode.contains { bundle?.hasPrefix($0) == true } }
     static func isFirefox(_ bundle: String?) -> Bool { bundle?.hasPrefix("org.mozilla.") == true }
     static func isChromium(_ bundle: String?) -> Bool { chromium.contains { bundle?.hasPrefix($0) == true } }
+    /// A Chromium browser that is not on the list (Chrome for Testing, and new ones packaged the standard way) keeps a "<Name> Helper (Renderer).app" inside its
+    /// "<Name> Framework.framework/Versions/Current/Helpers". Electron apps keep theirs beside the framework, and take AXManualAccessibility anyway.
+    static func hasRendererHelper(_ helpers: [String]) -> Bool { helpers.contains { $0.hasSuffix(" (Renderer).app") } }
     static func isXcode(_ bundle: String?) -> Bool { bundle == "com.apple.dt.Xcode" }
     /// VS Code and Cursor show a screen-reader notice when asked for accessibility, so they are touched only when the user opted in.
     static func shouldPrepare(bundle: String?, vscodeEnabled: Bool) -> Bool { !isVSCode(bundle) || vscodeEnabled }
@@ -129,13 +152,27 @@ extension AX {
         guard Compat.shouldPrepare(bundle: bundle, vscodeEnabled: Preferences.shared.checkVSCode) else { return }
         let element = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetMessagingTimeout(element, 0.25)
-        if Compat.readsAppRole(bundle) { _ = get(element, kAXRoleAttribute) }
+        let chromium = isChromiumBrowser(app)
+        if Compat.readsAppRole(bundle) || chromium { _ = get(element, kAXRoleAttribute) }
         guard !Compat.isFirefox(bundle), gate.shouldSet(pid: app.processIdentifier, force: force) else { return }
         // Electron's documented assistive-technology switch exposes nested composers. Unsupported apps simply refuse it.
-        // Chrome rejects it and needs AXEnhancedUserInterface for word bounds; native apps are left alone because that can disturb window managers.
-        if AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success, Compat.isChromium(bundle) {
+        // Chrome rejects it and builds no accessibility tree without AXEnhancedUserInterface; native apps are left alone because that can disturb window managers.
+        if AXUIElementSetAttributeValue(element, "AXManualAccessibility" as CFString, kCFBooleanTrue) != .success, chromium {
             _ = AXUIElementSetAttributeValue(element, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
         }
+    }
+    private static var chromiumBundles: [String: Bool] = [:]
+    /// A listed Chromium browser, or one recognised by its bundle (see `Compat.hasRendererHelper`); the bundle is looked at once per app.
+    static func isChromiumBrowser(_ app: NSRunningApplication) -> Bool {
+        if Compat.isChromium(app.bundleIdentifier) { return true }
+        guard let url = app.bundleURL else { return false }
+        if let known = chromiumBundles[url.path] { return known }
+        let frameworks = url.appendingPathComponent("Contents/Frameworks"), files = FileManager.default
+        let found = ((try? files.contentsOfDirectory(atPath: frameworks.path)) ?? []).filter { $0.hasSuffix(".framework") }.contains { name in
+            Compat.hasRendererHelper((try? files.contentsOfDirectory(atPath: frameworks.appendingPathComponent(name).appendingPathComponent("Versions/Current/Helpers").path)) ?? [])
+        }
+        chromiumBundles[url.path] = found
+        return found
     }
     /// Electron apps answer the system-wide focus query when the per-app one fails (-25212).
     static func systemFocused(for app: NSRunningApplication) -> AXUIElement? {
@@ -218,6 +255,13 @@ extension AX {
         guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
               let focus = focusedText(app), CFEqual(focus, element), docs || select(element, range) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
+        }
+        // A Chromium composer must hold exactly the words being replaced before anything is typed: a selection that landed elsewhere would be overwritten.
+        if !docs, isChromiumComposer(element) {
+            let wanted = (before as NSString).substring(with: range)
+            var held = false
+            for _ in 0..<15 { if string(element, kAXSelectedTextAttribute) ?? "" == wanted { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
+            guard held else { throw ParzrError.message("The editor did not select the words to replace. Nothing was typed.") }
         }
         if docs {
             var held = false
