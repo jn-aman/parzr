@@ -8,6 +8,7 @@ mod confusion;
 mod context;
 mod contractions;
 mod determiners;
+mod forms;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
@@ -439,11 +440,11 @@ fn match_case(replacement: &str, original: &str) -> String {
     }
 }
 /// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
-const DOUBLED_ON_PURPOSE: [&str; 48] = [
-    "that", "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well",
-    "blah", "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um",
-    "la", "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi",
-    "wow", "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
+const DOUBLED_ON_PURPOSE: [&str; 47] = [
+    "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well", "blah",
+    "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um", "la",
+    "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi", "wow",
+    "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
 ];
 /// The word at `index` repeats the one before it by a slip ("the the", "call call"). Doubles that
 /// can be meant are kept, and so is "is is" after "what it" ("what it is is").
@@ -455,7 +456,27 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
         && !DOUBLED_ON_PURPOSE.contains(&w)
         // "a A": an article and the letter it names.
         && !(token.surface.chars().count() == 1 && token.surface != tokens[index - 1].surface)
-        && !(w == "is" && before(2) && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str()))
+        // "what it is is", "all that is is": a clause about what something is, then its verb.
+        && !(w == "is"
+            && before(3)
+            && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str())
+            && ["what", "all", "way", "how", "who", "where", "whatever"]
+                .contains(&tokens[index - 3].normalized.as_str()))
+        // "that that": a demonstrative after the conjunction ("I know that that works") is meant;
+        // a pronoun, article or plural noun after both is not.
+        && !(w == "that"
+            && !tokens.get(index + 1).is_some_and(|n| {
+                n.sentence == token.sentence
+                    && ([
+                        "i", "you", "he", "she", "we", "they", "there", "the", "a", "an", "my",
+                        "your", "his", "our", "their", "its", "some", "many", "most", "these",
+                        "those", "if", "when", "once",
+                    ]
+                    .contains(&n.normalized.as_str())
+                        || n.pos == "Noun"
+                            && structure::plural(n) == Some(true)
+                            && !n.proper_name)
+            }))
         // A capitalized double inside a sentence is a name ("Bora Bora", "Walla Walla").
         && !(token.surface.starts_with(char::is_uppercase)
             && tokens[index - 1].surface.starts_with(char::is_uppercase)
@@ -810,22 +831,55 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
         if index > 0 {
             let previous = &tokens[index - 1];
-            if previous.normalized == token.normalized
+            // "we we're", "should shouldn't": the word and then its own contraction.
+            let contracted = previous.normalized != "that"
+                && previous.is_word
+                && token
+                    .normalized
+                    .strip_prefix(previous.normalized.as_str())
+                    .is_some_and(|rest| {
+                        ["'re", "'s", "'d", "'ll", "'ve", "'m", "n't", "'t"].contains(&rest)
+                    });
+            if (previous.normalized == token.normalized && repeated_by_mistake(&tokens, index)
+                || contracted)
                 && previous.sentence == token.sentence
                 && previous.paragraph == token.paragraph
-                && repeated_by_mistake(&tokens, index)
             {
                 let gap = &req.text[previous.end_byte..token.start_byte];
                 // "a A$1.5 billion" and "US$ 5": the letter belongs to a currency or code token.
-                let code = req.text[token.end_byte..]
-                    .starts_with(|c: char| c.is_ascii_digit() || "$€£¥#/_-".contains(c));
+                // A word of two letters or more may run into a hyphen ("for for-profit").
+                let code = req.text[token.end_byte..].starts_with(|c: char| {
+                    c.is_ascii_digit()
+                        || "$€£¥#/_".contains(c)
+                        || c == '-' && token.surface.chars().count() < 2
+                });
+                // "the The Beatles", "we we're": the second copy is the one to keep. A capital
+                // after a lowercase copy is kept only on a function word ("home arena Arena
+                // Mexico" is a name, "as well as AS units" an acronym).
+                let raised = token.surface.starts_with(char::is_uppercase)
+                    && !previous.surface.starts_with(char::is_uppercase);
+                let keep_second = contracted || raised;
+                let name_like = raised
+                    && (![
+                        "the", "a", "an", "and", "of", "in", "on", "to", "for", "with", "at", "by",
+                        "from",
+                    ]
+                    .contains(&token.normalized.as_str())
+                        || token.surface.chars().count() > 1
+                            && token.surface.chars().all(char::is_uppercase));
+                let (start, end) = if keep_second {
+                    (previous.start_utf16, token.start_utf16)
+                } else {
+                    (previous.end_utf16, token.end_utf16)
+                };
                 if !gap.is_empty()
                     && !code
+                    && !name_like
                     && gap.chars().all(|c| c == ' ' || c == '\t')
                     && let Some(e) = make_edit(
                         &req.text,
-                        previous.end_utf16,
-                        token.end_utf16,
+                        start,
+                        end,
                         String::new(),
                         "Repetition",
                         "grammar.repeated_word",
