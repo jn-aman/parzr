@@ -433,24 +433,18 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     let start = Instant::now();
     // Fold names and dictionary once; every pass below shares the index.
     let req = &req.indexed();
-    // Validate the original request before computing or remapping any structural ranges.
-    #[allow(unused_mut)]
-    let mut initial = req.clone();
     #[cfg(feature = "local-model")]
-    {
-        initial.mode = Mode::Fix;
+    if req.mode != Mode::Fix {
+        return tone(req, start);
     }
-    let mut first = rewrite_once(&initial, false)?.edits;
+    let mut first = rewrite_once(req, false)?.edits;
     // No edit leaves the text as it was, so the confirmation pass below would only repeat this one.
-    let unchanged = first.is_empty() && initial.mode == Mode::Fix;
+    let unchanged = first.is_empty() && req.mode == Mode::Fix;
     let mut protected = protected_ranges(req);
     let mut document = Document::new(&req.text);
-    // Explicit checks and tone modes ask the model about words the rules would respell; the
-    // automatic path stays model-free.
-    let mut judge = Judge::new(
-        cfg!(feature = "local-model") && (req.mode != Mode::Fix || req.deep),
-        name_score,
-    );
+    // Explicit checks ask the model about words the rules would respell; the automatic path
+    // stays model-free.
+    let mut judge = Judge::new(cfg!(feature = "local-model") && req.deep, name_score);
     judge.screen(&document, &mut first, &mut protected);
     document.apply(&first)?;
     if !unchanged {
@@ -459,7 +453,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     #[allow(unused_mut)]
     let mut warnings = vec![];
     #[cfg(feature = "local-model")]
-    if req.mode != Mode::Fix || req.deep {
+    if req.deep {
         // The model gets no instructions about names, so every name candidate is masked.
         let mut masked = protected.clone();
         masked.extend(name_guard_ranges(req));
@@ -470,14 +464,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                 document.apply(&contextual.edits)?;
                 grammar(&mut document, req, &mut protected, &mut judge)?;
             }
-            Err(error) if req.mode == Mode::Fix => {
+            Err(error) => {
                 // Keep verified grammar edits when contextual refinement cannot safely
                 // preserve links/mentions. Never report the refinement as successful.
                 warnings.push(format!(
                     "Grammar checked; context refinement unavailable. {error}"
                 ));
             }
-            Err(error) => return Err(error),
         }
     }
     #[cfg(not(feature = "local-model"))]
@@ -486,7 +479,10 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         document.apply(&tone.edits)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
     }
-    let edits = document.plan(&req.text)?;
+    let mut edits = document.plan(&req.text)?;
+    if req.mode != Mode::Fix {
+        edits = crate::wording::phrases(&req.text, edits, &protected);
+    }
     let (text, source_map) = apply_edits(&req.text, &edits)?;
     if text != document.text() {
         return Err("The composed edit plan is inconsistent.".into());
@@ -518,16 +514,55 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         (text, source_map, edits)
     };
     Ok(RewriteResult {
-        version: if cfg!(feature = "local-model") {
-            concat!(
-                "parzr-",
-                env!("CARGO_PKG_VERSION"),
-                "/hybrid-qwen3.5-0.8b-q5"
-            )
-        } else {
-            concat!("parzr-", env!("CARGO_PKG_VERSION"), "/rules-3")
-        }
-        .into(),
+        version: VERSION.into(),
+        text,
+        edits,
+        source_map,
+        elapsed_ms: start.elapsed().as_secs_f64() * 1000.0,
+        protected_count: protected.len(),
+        warnings,
+    })
+}
+const VERSION: &str = if cfg!(feature = "local-model") {
+    concat!(
+        "parzr-",
+        env!("CARGO_PKG_VERSION"),
+        "/hybrid-qwen3.5-0.8b-q5"
+    )
+} else {
+    concat!("parzr-", env!("CARGO_PKG_VERSION"), "/rules-3")
+};
+/// A tone rewrite: the full explicit check corrects the passage first (rules, Smart grammar when
+/// on, the model's context pass and sentence swaps), then the model rewrites the corrected text
+/// sentence by sentence under the meaning guard, and the rules check the result once more.
+#[cfg(feature = "local-model")]
+fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
+    let fixed = rewrite(&Request {
+        mode: Mode::Fix,
+        deep: true,
+        ..req.clone()
+    })?;
+    let mut warnings = fixed.warnings;
+    let mut protected = protected_ranges(req);
+    let mut document = Document::new(&req.text);
+    document.apply(&fixed.edits)?;
+    let mut judge = Judge::new(true, name_score);
+    // The model gets no instructions about names, so every name candidate is masked.
+    let mut masked = protected.clone();
+    masked.extend(name_guard_ranges(req));
+    let mut contextual = crate::model::rewrite(&document.request(req, &masked, req.mode))?;
+    // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
+    judge.screen(&document, &mut contextual.edits, &mut protected);
+    document.apply(&contextual.edits)?;
+    grammar(&mut document, req, &mut protected, &mut judge)?;
+    warnings.extend(contextual.warnings);
+    let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);
+    let (text, source_map) = apply_edits(&req.text, &edits)?;
+    if text != document.text() {
+        return Err("The composed edit plan is inconsistent.".into());
+    }
+    Ok(RewriteResult {
+        version: VERSION.into(),
         text,
         edits,
         source_map,

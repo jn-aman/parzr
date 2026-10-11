@@ -14,6 +14,8 @@ mod gec;
 mod gec_text;
 mod marks;
 #[cfg(feature = "local-model")]
+mod meaning;
+#[cfg(feature = "local-model")]
 mod model;
 mod morphology;
 mod names;
@@ -24,6 +26,7 @@ mod rules;
 mod spelling;
 mod structure;
 mod tokenizer;
+mod wording;
 pub use names::NameIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -78,6 +81,10 @@ pub struct Request {
     /// files or the native runtime this does nothing.
     #[serde(default)]
     pub gec: bool,
+    /// The text comes from a chat app (Slack, Teams, Messages…): a short Friendly rewrite may end
+    /// with one fitting emoji. Other modes and apps never get one.
+    #[serde(default)]
+    pub casual: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -112,6 +119,7 @@ impl Default for Request {
             sentence_end: true,
             deep: false,
             gec: false,
+            casual: false,
             name_index: None,
         }
     }
@@ -128,6 +136,15 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         return pipeline::rewrite(&enriched);
     }
     pipeline::rewrite(req)
+}
+
+/// Whether `output`, a `mode` rewrite of `source`, says what `source` says: the check every
+/// tone rewrite passes sentence by sentence. For evaluation tools (examples/tone_judge.rs).
+#[cfg(feature = "local-model")]
+#[doc(hidden)]
+pub fn tone_keeps_meaning(mode: Mode, source: &str, output: &str) -> Result<(), String> {
+    let hints = |s: &str| model::linguistic_hints(s).unwrap_or_default();
+    meaning::keeps_meaning(mode, source, output, "", &hints(source), &hints(output))
 }
 
 /// Cancel an in-flight local inference. No editor mutation happens in the engine.
