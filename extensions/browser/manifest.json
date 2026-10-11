@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parzr \u00b7 offline writing assistant",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0mBDUV3mpYpxA3zwaT9v6JXOemao9A7ZtaeM8F/EZ8oBUBNlbmJB6ygOHRPMVZqBSYHEdo3LdEs1TF7k/Npxlj4DdRBW/geI1IbNoOSHZjNqzUrTSqP9ji/0wUuN3prN51r+2Cf/wuksN6GJw+n7wy356f2Bu5nTQBztDOkL1L0GBU0sodKxS20MEdztWRyg3/j3xIdEUqhTCGne7SbkJFOZV4ALojIpF/2OG+rVbPNSEVvNdLTRPYxlLdWrlteI49GClf90/yd4wMmnq+gNoKNDm8GS+Iiqm/y+s5ODeEuI1kl5thFh4U0DN5wIPQN8V3mojUpcxSo95NlcGoIFAQIDAQAB",
   "description": "Local inline grammar suggestions in writing fields and chat composers. Activate on the current page.",
   "permissions": [
