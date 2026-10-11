@@ -10,6 +10,9 @@ use std::{
     time::Instant,
 };
 
+/// A typing check's warning when sentence swaps still wait for the model: the app checks again shortly.
+#[cfg(feature = "local-model")]
+pub const PENDING_WARNING: &str = "context.pending";
 /// log P(yes) - log P(no) at or above which a word the rules would respell is kept as a name.
 /// Calibrated on benchmarks/names: protects 94.9% of held-out names and spares 98.7% of typos.
 const JUDGE_THRESHOLD: f32 = -0.9;
@@ -502,7 +505,11 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     // Short-word swaps the whole sentence decides (explicit checks, and typing with Smart grammar on).
     #[cfg(feature = "local-model")]
     let (text, source_map, edits) = if req.mode == Mode::Fix && (req.gec || req.deep) {
+        crate::confusion::take_pending();
         let merged = crate::confusion::combine(req, &protected, edits.clone());
+        if crate::confusion::take_pending() {
+            warnings.push(PENDING_WARNING.into());
+        }
         match apply_edits(&req.text, &merged) {
             Ok((text, source_map)) => (text, source_map, merged),
             Err(_) => (text, source_map, edits),

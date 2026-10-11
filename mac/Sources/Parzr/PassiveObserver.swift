@@ -12,6 +12,10 @@ final class PassiveObserver {
     private var pacer = CheckPacer()
     /// A check is waiting out its delay; false once it has started reading the editor.
     private var pending = false
+    /// Quiet re-checks after a typing check left sentence swaps for the model (cold, busy or over budget),
+    /// so "I hat it." gets its mark without another keystroke. Reset by every real change.
+    private var followUps = 0
+    static let maxFollowUps = 3
     private var activationToken: NSObjectProtocol?
     private var inputMonitor: Any?
     private var clickMonitor: Any?
@@ -153,9 +157,10 @@ final class PassiveObserver {
         pacer.ceiling = Preferences.shared.boundedCheckingDelay
         let plan = pacer.changed(at: ProcessInfo.processInfo.systemUptime)
         if value || plan != .keep { onDismiss?() }
+        followUps = 0
         schedule(plan)
     }
-    private func schedule(_ plan: CheckPacer.Plan) {
+    private func schedule(_ plan: CheckPacer.Plan, followUp: Bool = false) {
         guard Preferences.shared.passive, !Preferences.shared.paused else { work?.cancel(); pending = false; return }
         let delay: Double
         switch plan {
@@ -169,7 +174,8 @@ final class PassiveObserver {
                 if delay > 0 { try await Task.sleep(for: .milliseconds(Int(delay.rounded()))) }
                 try Task.checkCancellation()
                 self?.pending = false
-                self?.onDismiss?()
+                // A follow-up re-check keeps the marks on screen until its own result replaces them.
+                if !followUp { self?.onDismiss?() }
                 let snapshot = try SelectionSnapshot.capture(passive: true)
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
@@ -182,12 +188,19 @@ final class PassiveObserver {
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: request.text)
                 try Task.checkCancellation(); try snapshot.validate()
                 RepetitionLearning.observe(result.edits, in: snapshot)
-                guard !result.edits.isEmpty else { return }
-                self?.onSuggestion?(snapshot, result)
+                let again = self.map { Self.shouldFollowUp(warnings: result.warnings, done: $0.followUps) } ?? false
+                if !result.edits.isEmpty {
+                    if followUp { self?.onDismiss?() }
+                    self?.onSuggestion?(snapshot, result)
+                }
+                if again, let self { self.followUps += 1; self.schedule(.restart(ms: Self.followUpDelay), followUp: true) }
             } catch { /* Passive failures are quiet and never log writing text. */ }
         }
     }
     func suspend() { work?.cancel(); pending = false; onDismiss?() }
+    static let followUpDelay: Double = 900
+    /// The engine's "context.pending" warning: sentence swaps wait for the model, so look again shortly.
+    static func shouldFollowUp(warnings: [String]?, done: Int) -> Bool { (warnings ?? []).contains("context.pending") && done < maxFollowUps }
     func stop() {
         stopped = true; suspend(); focusRetry?.cancel()
         if let observer {

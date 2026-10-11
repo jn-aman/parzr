@@ -56,6 +56,8 @@ const TYPING_JOB_MS: u32 = 600;
 const EXPLICIT_BUDGET_MS: u32 = 4000;
 /// Sentences longer than this are not scored (the window is one sentence).
 const MAX_PIECE_BYTES: usize = 400;
+/// At most this much of the sentence before is scored with a sentence, as context.
+const CONTEXT_BYTES: usize = 240;
 const CACHE_ENTRIES: usize = 1024;
 
 /// Homophones and contractions that are not one keyboard slip apart.
@@ -415,6 +417,15 @@ fn score_sentence(piece: &str, swaps: &[Swap], how: Use, scorer: Scorer) -> Opti
 }
 /// True while the typing job runs: at most one, so typing never queues work on the model.
 static JOB: AtomicBool = AtomicBool::new(false);
+thread_local! {
+    /// Set when a typing check left a sentence for the model (cold, busy or slower than the budget):
+    /// the app checks once more shortly, so the swap appears without another keystroke.
+    static PENDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+/// Whether the last typing check on this thread left model work pending (and clears it).
+pub fn take_pending() -> bool {
+    PENDING.with(|p| p.replace(false))
+}
 /// Starts the typing job for one sentence and waits for it at most `wait`.
 fn typing_job(piece: &str, swaps: Vec<Swap>, scorer: Scorer, wait: Duration) -> Option<Verdict> {
     if JOB.swap(true, Ordering::AcqRel) {
@@ -465,49 +476,74 @@ pub fn combine_with(
     shielded.extend(quoted(text));
     let to16 = |byte: usize| text[..byte].encode_utf16().count();
     let mut added = vec![];
+    let mut previous: Option<usize> = None;
     for (a, b) in crate::gec::pieces(text) {
         let piece = text[a..b].trim_end();
         if piece.len() > MAX_PIECE_BYTES || piece.is_empty() {
+            previous = None;
             continue;
         }
-        let verdict = match cached(piece) {
+        // The sentence before, in the same paragraph, is scored as context: "This is so bad. I hat it."
+        // gives "hate" twice the gain "I hat it." alone does, where "I hit it" reads just as well.
+        let from = previous
+            .filter(|&p| {
+                !text[p..a].contains('\n') && a + piece.len() - p <= MAX_PIECE_BYTES + CONTEXT_BYTES
+            })
+            .unwrap_or(a);
+        previous = Some(a);
+        let window = &text[from..a + piece.len()];
+        let shift = a - from;
+        let verdict = match cached(window) {
             Some((hit, complete)) if complete || !req.deep => hit,
             _ => {
                 let spent = started.elapsed().as_millis() as u32;
                 if spent >= total {
                     continue;
                 }
-                let swaps = sentence_swaps(piece, &[]);
+                let swaps: Vec<Swap> = sentence_swaps(piece, &[])
+                    .into_iter()
+                    .map(|mut w| {
+                        w.start += shift;
+                        w.end += shift;
+                        w
+                    })
+                    .collect();
                 if swaps.is_empty() {
-                    remember(piece, None, true);
+                    remember(window, None, true);
                     continue;
                 }
                 let verdict = if req.deep {
                     let how = Use::Explicit {
                         budget_ms: total - spent,
                     };
-                    score_sentence(piece, &swaps, how, scorer)
+                    score_sentence(window, &swaps, how, scorer)
                 } else {
                     let wait = Duration::from_millis(u64::from(total - spent));
-                    typing_job(piece, swaps, scorer, wait)
+                    typing_job(window, swaps, scorer, wait)
                 };
-                let Some((verdict, _)) = verdict else {
+                let Some((verdict, complete)) = verdict else {
+                    if !req.deep {
+                        PENDING.with(|p| p.set(true));
+                    }
                     continue;
                 };
+                if !req.deep && !complete && verdict.is_none() {
+                    PENDING.with(|p| p.set(true));
+                }
                 verdict
             }
         };
         let Some((swap, gain)) = verdict else {
             continue;
         };
-        let (s, e) = (to16(a + swap.start), to16(a + swap.end));
+        let (s, e) = (to16(from + swap.start), to16(from + swap.end));
         if shielded
             .iter()
             .any(|r| s < r.end_utf16 && e > r.start_utf16)
         {
             continue;
         }
-        let original = &text[a + swap.start..a + swap.end];
+        let original = &text[from + swap.start..from + swap.end];
         // A user dictionary word, and a less common word the text uses more than once ("the fa ...
         // the fa", "the sub"), is a term the writer means.
         let lower = original.to_lowercase();
