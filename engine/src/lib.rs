@@ -745,11 +745,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         let dotted_abbreviation = req.text[token.end_byte..]
             .strip_prefix('.')
             .is_some_and(|rest| rest.starts_with(char::is_alphabetic));
-        if token.normalized == "i" && token.surface == "i" && !dotted_abbreviation {
+        // "i'm", "i’ll": the contracted pronoun takes its capital too, and only its first letter.
+        let contracted_i = ["i'm", "i've", "i'll", "i'd"].contains(&token.normalized.as_str())
+            && token.surface.starts_with('i')
+            && token.surface[1..].chars().all(|c| !c.is_uppercase());
+        if (token.normalized == "i" && token.surface == "i" || contracted_i) && !dotted_abbreviation
+        {
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
-                token.end_utf16,
+                token.start_utf16 + 1,
                 "I".into(),
                 "Capitalization",
                 "grammar.personal_pronoun",

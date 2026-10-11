@@ -1048,7 +1048,16 @@ fn fragment(
 }
 
 /// Sentence-opening words that a comma separates from the clause they introduce.
-const INTRO_WORDS: [&str; 22] = [
+const INTRO_WORDS: [&str; 31] = [
+    "moreover",
+    "furthermore",
+    "firstly",
+    "secondly",
+    "thirdly",
+    "lastly",
+    "nonetheless",
+    "finally",
+    "nowadays",
     "yes",
     "no",
     "well",
@@ -1071,6 +1080,34 @@ const INTRO_WORDS: [&str; 22] = [
     "additionally",
     "consequently",
     "nevertheless",
+];
+/// Transitional phrases that open a sentence and take a comma before its clause ("For example,
+/// the…", "On the other hand, we…").
+const INTRO_PHRASES: [&[&str]; 24] = [
+    &["for", "example"],
+    &["for", "instance"],
+    &["in", "addition"],
+    &["on", "the", "other", "hand"],
+    &["on", "the", "one", "hand"],
+    &["in", "conclusion"],
+    &["as", "a", "result"],
+    &["in", "fact"],
+    &["of", "course"],
+    &["first", "of", "all"],
+    &["in", "my", "opinion"],
+    &["to", "sum", "up"],
+    &["in", "other", "words"],
+    &["in", "short"],
+    &["in", "summary"],
+    &["all", "in", "all"],
+    &["by", "the", "way"],
+    &["above", "all"],
+    &["in", "contrast"],
+    &["as", "you", "know"],
+    &["as", "you", "can", "see"],
+    &["to", "conclude"],
+    &["in", "general"],
+    &["in", "particular"],
 ];
 const GREETINGS: [&str; 4] = ["hi", "hey", "hello", "dear"];
 /// Words that begin a message right after a greeting and a name ("Hi Sarah I hope…").
@@ -1113,6 +1150,27 @@ fn introductory_comma(
             "punctuation.introductory_comma",
             "Put a comma after an introductory word.",
         );
+        return;
+    }
+    // "For example the plan…", "On the other hand we…".
+    if let Some(phrase) = INTRO_PHRASES.iter().find(|p| {
+        p.iter().enumerate().all(|(k, w)| {
+            word(tokens, s + k) == *w
+                && (k == 0 || spaced(&req.text, &tokens[s + k - 1], &tokens[s + k]))
+        })
+    }) {
+        let k = s + phrase.len();
+        if k < end
+            && spaced(&req.text, &tokens[k - 1], &tokens[k])
+            && (clause_at(tokens, k, end).is_some() || imperative_at(tokens, k, end))
+        {
+            comma_after(
+                edits,
+                k - 1,
+                "punctuation.introductory_comma",
+                "Put a comma after an introductory phrase.",
+            );
+        }
         return;
     }
     // "Hi Sarah I hope": a comma closes the greeting.
