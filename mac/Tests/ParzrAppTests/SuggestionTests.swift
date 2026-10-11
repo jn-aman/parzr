@@ -44,18 +44,19 @@ final class SuggestionTests: XCTestCase {
         XCTAssertFalse(model.showsSuggestion, "A rewrite of other text is never offered.")
     }
     func testTheCardOffersTheRewriteWithOneActionBesideTheFixesAndAlone() async throws {
+        // Separate constants and explicit closes: reassigning a tuple var with a defer across awaits aborts the test runner.
         let model = try checked(); model.suggestion?.result = try result([hate]); model.suggestion?.done = true
-        var (window, host) = mount(model)
+        let alone = mount(model)
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: host), "With nothing to fix, the rewrite is the primary action.")
-        window.close()
+        XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: alone.1), "With nothing to fix, the rewrite is the primary action.")
+        alone.0.close()
         let space = WritingEdit(start: 15, end: 16, replacement: "  ", original: " ", category: "Punctuation", ruleID: "spacing")
         let fixes = try checked(fixes: [space]); fixes.suggestion?.result = try result([hate]); fixes.suggestion?.done = true
-        (window, host) = mount(fixes)
-        defer { window.close() }
+        let beside = mount(fixes)
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: host), "Beside the fixes, the rewrite has its own Use button.")
-        XCTAssertNotNil(NativeControls.find(label: "Ignore", in: host), "The fixes keep their actions.")
+        XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: beside.1), "Beside the fixes, the rewrite has its own Use button.")
+        XCTAssertNotNil(NativeControls.find(label: "Ignore", in: beside.1), "The fixes keep their actions.")
+        beside.0.close()
     }
     func testUsingTheRewriteShowsItAsTheToneResultWithoutANewCheck() throws {
         let model = try checked(); let written = try result([hate])
