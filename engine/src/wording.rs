@@ -80,8 +80,11 @@ pub(crate) fn whole_words(
                 }
             }
         }
+        // An insertion where the next edit starts is part of it: two edits never share a start
+        // ("at all! " inserted before "I" becoming "I'm").
         let joins = |g: &(usize, usize, usize, usize)| {
             s < g.1
+                || (s == g.1 && g.0 == g.1)
                 || (join_spaces
                     && chars[g.1..s].iter().all(|c| *c == ' ' || *c == '\t')
                     && !(g.1..s).any(blocked))
@@ -295,6 +298,33 @@ mod tests {
             [p("hi", "Hi"), p("ok thx", "OK thanks")]
         );
         assert_eq!(pairs("so bad", "so bad!", true), [p("", "!")]);
+    }
+
+    #[test]
+    fn an_insertion_beside_a_replaced_word_joins_it() {
+        // The model's "No worries at all! I'm here" once came back as an insertion and a
+        // replacement that both started at "I"; the second was lost.
+        let edits = whole_words(
+            "worries, I can",
+            raw("worries, I can", "worries at all! I'm here"),
+            &[],
+            false,
+        );
+        let starts: Vec<usize> = edits.iter().map(|e| e.start_utf16).collect();
+        let mut unique = starts.clone();
+        unique.dedup();
+        assert_eq!(starts, unique, "{edits:?}");
+        assert_eq!(
+            apply_edits("worries, I can", &edits).unwrap().0,
+            "worries at all! I'm here"
+        );
+        assert_eq!(
+            pairs("changes? its only", "changes? It is only", false)
+                .into_iter()
+                .filter(|(o, _)| o.contains("its"))
+                .count(),
+            1
+        );
     }
 
     #[test]
