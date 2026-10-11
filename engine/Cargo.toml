@@ -41,3 +41,7 @@ path = "src/lsp.rs"
 default = ["local-model"]
 local-model = []
 baseline-harper = ["dep:harper-core"]
+
+[[example]]
+name = "tone_judge"
+required-features = ["local-model"]

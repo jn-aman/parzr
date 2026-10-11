@@ -1,0 +1,72 @@
+{"id": "chat-01", "kind": "chat", "typos": true, "text": "This is so bad. I hat it."}
+{"id": "chat-02", "kind": "chat", "typos": true, "text": "hey can u send me the report by tmrw? need it for the 3pm meeting"}
+{"id": "chat-03", "kind": "chat", "typos": true, "text": "thx for the help yesterday, realy appreciate it!"}
+{"id": "chat-04", "kind": "chat", "typos": true, "text": "im running 10 mins late, start without me"}
+{"id": "chat-05", "kind": "chat", "typos": true, "text": "did you get a chance to look at my PR? its blocking the deploy"}
+{"id": "chat-06", "kind": "chat", "typos": true, "text": "lol that meeting was so long, i almost fell asleep"}
+{"id": "chat-07", "kind": "chat", "typos": false, "text": "can we move our 1:1 to thursday? something came up"}
+{"id": "chat-08", "kind": "chat", "typos": false, "text": "no worries, I can take care of it tonight"}
+{"id": "chat-09", "kind": "chat", "typos": true, "text": "I dont think we should merge this before the release"}
+{"id": "chat-10", "kind": "chat", "typos": false, "text": "Just pushed the fix, can you test it again?"}
+{"id": "chat-11", "kind": "chat", "typos": true, "text": "sorry i missed your call, whats up?"}
+{"id": "chat-12", "kind": "chat", "typos": false, "text": "The build is broken again and I have no idea why."}
+{"id": "chat-13", "kind": "chat", "typos": false, "text": "Great job on the demo today, the client loved it!"}
+{"id": "chat-14", "kind": "chat", "typos": false, "text": "are you free for lunch on friday?"}
+{"id": "chat-15", "kind": "chat", "typos": false, "text": "I'm not sure the new design works on mobile."}
+{"id": "chat-16", "kind": "chat", "typos": true, "text": "pls dont forget to update the ticket befor you leave"}
+{"id": "chat-17", "kind": "chat", "typos": false, "text": "We shipped 3 features this week, nice work everyone"}
+{"id": "chat-18", "kind": "chat", "typos": true, "text": "can someone review my changes? its only 2 files"}
+{"id": "chat-19", "kind": "chat", "typos": false, "text": "I hate when the wifi drops in the middle of a call."}
+{"id": "chat-20", "kind": "chat", "typos": false, "text": "Priya said the server is down, can you check?"}
+{"id": "chat-21", "kind": "chat", "typos": true, "text": "i'll be off tomorow, ping Sam if anything breaks"}
+{"id": "chat-22", "kind": "chat", "typos": false, "text": "Honestly I think this approach is way too complicated."}
+{"id": "chat-23", "kind": "chat", "typos": true, "text": "the coffee machine on the 2nd floor is broken agian"}
+{"id": "chat-24", "kind": "chat", "typos": false, "text": "Thanks, that totally fixed it!"}
+{"id": "email-01", "kind": "email", "typos": false, "text": "Hi Mark, I wanted to follow up on the invoice I sent last week. Could you let me know when it will be paid?"}
+{"id": "email-02", "kind": "email", "typos": false, "text": "I am writing to let you know that we will not be able to attend the conference in May."}
+{"id": "email-03", "kind": "email", "typos": false, "text": "Please find attached the slides for tomorrow's presentation. Let me know if you have any questions."}
+{"id": "email-04", "kind": "email", "typos": true, "text": "Unfortunatly the shipment has been delayed by two weeks due to a supplier issue."}
+{"id": "email-05", "kind": "email", "typos": false, "text": "Thank you for your quick reply. I have reviewed the contract and I have a few concerns about section 4."}
+{"id": "email-06", "kind": "email", "typos": false, "text": "Could you please send me the updated budget by Friday so I can share it with the board?"}
+{"id": "email-07", "kind": "email", "typos": true, "text": "I recieved your message and I will get back to you as soon as possible."}
+{"id": "email-08", "kind": "email", "typos": false, "text": "We are happy to offer you the position of Senior Designer starting on March 1."}
+{"id": "email-09", "kind": "email", "typos": false, "text": "I apologize for the confusion in my previous email. The meeting is on Tuesday, not Wednesday."}
+{"id": "email-10", "kind": "email", "typos": false, "text": "Just a quick reminder that the deadline for submissions is this Thursday at noon."}
+{"id": "email-11", "kind": "email", "typos": false, "text": "Can we schedule a call next week to discuss the project timeline?"}
+{"id": "email-12", "kind": "email", "typos": true, "text": "I am very dissapointed with the service we recieved during our last visit."}
+{"id": "email-13", "kind": "email", "typos": false, "text": "The team has finished the first phase and we are on track to deliver by the end of June."}
+{"id": "email-14", "kind": "email", "typos": false, "text": "We noticed that your subscription will expire in 5 days. Please renew it to avoid any interruption."}
+{"id": "email-15", "kind": "email", "typos": true, "text": "Im sorry but I cant make it to the meeting on monday, can we reschedule?"}
+{"id": "email-16", "kind": "email", "typos": false, "text": "Thanks for reaching out. Unfortunately we are not hiring for this role at the moment."}
+{"id": "email-17", "kind": "email", "typos": false, "text": "I would like to request two days of leave next month for a family event."}
+{"id": "email-18", "kind": "email", "typos": true, "text": "As discused, I have attached the revised proposal with the new pricing."}
+{"id": "email-19", "kind": "email", "typos": false, "text": "Our office will be closed on December 25 and 26 for the holidays."}
+{"id": "email-20", "kind": "email", "typos": false, "text": "Please let me know if the new schedule works for your team."}
+{"id": "email-21", "kind": "email", "typos": true, "text": "I havent heard back from the vendor yet, so the order is still pending."}
+{"id": "email-22", "kind": "email", "typos": true, "text": "Its been a pleasure working with you on this project and I hope we can work together again."}
+{"id": "email-23", "kind": "email", "typos": false, "text": "The payment of $1,200 was refunded to your account yesterday."}
+{"id": "email-24", "kind": "email", "typos": true, "text": "Kindly confirm your atendance by replying to this email before the end of the week."}
+{"id": "doc-01", "kind": "doc", "typos": false, "text": "The system processes about 2,000 requests per second and never drops a message."}
+{"id": "doc-02", "kind": "doc", "typos": false, "text": "Users can export their data at any time from the settings page."}
+{"id": "doc-03", "kind": "doc", "typos": false, "text": "This feature is not available on the free plan."}
+{"id": "doc-04", "kind": "doc", "typos": false, "text": "The new onboarding flow reduced support tickets by 30 percent in the first month."}
+{"id": "doc-05", "kind": "doc", "typos": false, "text": "We decided to use PostgreSQL because it supports the queries we need."}
+{"id": "doc-06", "kind": "doc", "typos": false, "text": "Before you begin, make sure that you have installed version 3 of the tool."}
+{"id": "doc-07", "kind": "doc", "typos": false, "text": "The results show that the old method is slower and less accurate."}
+{"id": "doc-08", "kind": "doc", "typos": false, "text": "Each team member is responsible for reviewing at least one pull request per day."}
+{"id": "doc-09", "kind": "doc", "typos": false, "text": "The report was written by Dr. Chen and reviewed by the research committee."}
+{"id": "doc-10", "kind": "doc", "typos": false, "text": "If the battery is low, the device will automatically turn off the screen."}
+{"id": "doc-11", "kind": "doc", "typos": false, "text": "We do not store any personal information on our servers."}
+{"id": "doc-12", "kind": "doc", "typos": false, "text": "The project was completed two months ahead of schedule and under budget."}
+{"id": "doc-13", "kind": "doc", "typos": true, "text": "The aplication crashes when the user uploads a file larger then 10 MB."}
+{"id": "doc-14", "kind": "doc", "typos": true, "text": "Our goal is to make the proces faster and more reliable for every customer."}
+{"id": "doc-15", "kind": "doc", "typos": true, "text": "The comittee will review all aplications and announce the results in June."}
+{"id": "doc-16", "kind": "doc", "typos": true, "text": "In order to improve performence, we cache the results for one hour."}
+{"id": "doc-17", "kind": "doc", "typos": true, "text": "The survey found that most employes prefer to work from home two days a week."}
+{"id": "doc-18", "kind": "doc", "typos": true, "text": "It is important to note that the API does not suport batch requests yet."}
+{"id": "doc-19", "kind": "doc", "typos": true, "text": "The new policy apply to all staff starting next quarter."}
+{"id": "doc-20", "kind": "doc", "typos": true, "text": "Their are three main reasons why the launch was delayed."}
+{"id": "doc-21", "kind": "doc", "typos": true, "text": "The data shows a clear increse in sales during the holiday season."}
+{"id": "doc-22", "kind": "doc", "typos": true, "text": "We recomend restarting the server after installing the update."}
+{"id": "doc-23", "kind": "doc", "typos": true, "text": "The meeting notes was shared with all participants after the call."}
+{"id": "doc-24", "kind": "doc", "typos": true, "text": "Customers who signed up before 2023 will keep there current price."}
