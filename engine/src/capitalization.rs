@@ -259,8 +259,9 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
     // did"), so a sentence with Hinglish in it keeps the writer's case.
     let hinglish: Vec<(usize, usize)> = tokens
         .iter()
-        .filter(|t| t.is_word && spelling::hinglish(&t.normalized))
-        .map(|t| (t.paragraph, t.sentence))
+        .enumerate()
+        .filter(|(i, t)| t.is_word && spelling::roman_hindi(tokens, *i))
+        .map(|(_, t)| (t.paragraph, t.sentence))
         .collect();
     let mut i = 0;
     while i < tokens.len() {

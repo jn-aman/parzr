@@ -909,6 +909,14 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             &index.phrase_cover(&tokens),
             |b| utf16_at(&req.text, b),
         ) {
+            // A word the spelling pass respelled ("covers moe than" to "more") is no name to capitalize.
+            if edits.iter().any(|e| {
+                e.category == "Spelling"
+                    && e.start_utf16 < c.end_utf16
+                    && e.end_utf16 > c.start_utf16
+            }) {
+                continue;
+            }
             if let Some(e) = make_edit(
                 &req.text,
                 c.start_utf16,
@@ -925,21 +933,35 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     }
     // A restored contraction changes what the next word agrees with ("Youll love" is not a
     // third-person subject): other edits to that word wait for the pass that reads the fix.
-    let restored: Vec<(usize, usize)> = edits
+    // A respelled or rejoined word does the same ("T he build" is not "he build").
+    let rewords = |e: &Edit| {
+        [
+            "spelling.contraction",
+            "spelling.split_word",
+            "spelling.delete_index",
+        ]
+        .contains(&e.rule_id.as_str())
+    };
+    // The word after a respelled word waits only for agreement edits; after a contraction, for all.
+    let restored: Vec<(usize, usize, bool)> = edits
         .iter()
-        .filter(|e| e.rule_id == "spelling.contraction")
+        .filter(|e| rewords(e))
         .filter_map(|e| {
             let next = tokens
                 .iter()
                 .find(|t| t.start_utf16 >= e.end_utf16 && t.is_word)?;
-            Some((e.end_utf16, next.end_utf16))
+            Some((
+                e.end_utf16,
+                next.end_utf16,
+                e.rule_id != "spelling.delete_index",
+            ))
         })
         .collect();
     edits.retain(|e| {
-        e.rule_id == "spelling.contraction"
-            || !restored
-                .iter()
-                .any(|(a, b)| e.start_utf16 >= *a && e.start_utf16 < *b)
+        rewords(e)
+            || !restored.iter().any(|(a, b, all)| {
+                e.start_utf16 >= *a && e.start_utf16 < *b && (*all || e.category == "Grammar")
+            })
     });
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
@@ -995,9 +1017,26 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         })
     };
     let slip = |e: &Edit| e.rule_id.starts_with("usage.") || e.rule_id == "spelling.real_word";
+    // "Tha t is fine": the tagger's name guess on a piece of a word split by a space is no name;
+    // the user's names and dictionary and the bundled list still win.
+    // "Wwe watched", "Cna we": the tagger's name guess on a sentence opener that is a clear slip.
+    let tagger_piece = |e: &Edit, r: &TextRange| {
+        (e.rule_id == "spelling.split_word" || e.rule_id == "spelling.delete_index")
+            && tokens.iter().enumerate().any(|(i, t)| {
+                t.proper_name
+                    && (e.rule_id == "spelling.split_word"
+                        || spelling::opening_name_slip(&tokens, i))
+                    && t.start_utf16 == r.start_utf16
+                    && t.end_utf16 == r.end_utf16
+                    && !user_words[i]
+                    && !names::is_bundled_name(&t.normalized)
+                    && !req.names.iter().any(|n| n.to_lowercase() == t.normalized)
+            })
+    };
     let exempt = |e: &Edit, r: &TextRange| {
         (raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r)
             || slip(e) && first_word_guess(r)
+            || tagger_piece(e, r)
     };
     let blocked = |e: &Edit| {
         protected
@@ -1008,7 +1047,9 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 && !apostrophe_only(e)
                 && if e.start_utf16 != e.end_utf16 {
                     guard.iter().any(|r| {
-                        overlaps(e.start_utf16, e.end_utf16, r) && !(slip(e) && first_word_guess(r))
+                        overlaps(e.start_utf16, e.end_utf16, r)
+                            && !(slip(e) && first_word_guess(r))
+                            && !tagger_piece(e, r)
                     })
                 } else {
                     // An insertion may not split a name ("Aman. Jain"); a possessive space may.
@@ -1669,6 +1710,80 @@ mod tests {
             assert_eq!(fix(input), expected, "{input}");
             assert_eq!(fix(expected), expected, "idempotent: {expected}");
         }
+    }
+    #[test]
+    fn keystroke_slips_of_frequent_words_are_fixed() {
+        for (input, fixed) in [
+            // The owner's report: a dropped letter, a space inside a word and a bare verb.
+            ("thi is no t do", "This is not done"),
+            ("I like thi book.", "I like this book."),
+            ("It is thi one.", "It is this one."),
+            // A space typed inside a word.
+            ("I do nt know.", "I don't know."),
+            ("Wh at is it?", "What is it?"),
+            ("Tha t is fine.", "That is fine."),
+            ("I'l l be late.", "I'll be late."),
+            (
+                "I always check the weat her first.",
+                "I always check the weather first.",
+            ),
+            (
+                "The meeting has been moved to n ext week.",
+                "The meeting has been moved to next week.",
+            ),
+            // Two words typed without the space.
+            (
+                "It took me an hour to gethere.",
+                "It took me an hour to get here.",
+            ),
+            ("Didyou send it yet?", "Did you send it yet?"),
+            // Short slips the neighbours settle, and slipped contractions.
+            (
+                "The kids ar playing outside.",
+                "The kids are playing outside.",
+            ),
+            ("She ws here.", "She was here."),
+            ("The kids aare here.", "The kids are here."),
+            ("I'j writing to you.", "I'm writing to you."),
+            ("Don'y wait up.", "Don't wait up."),
+            (
+                "There are many reasons t switch providers.",
+                "There are many reasons to switch providers.",
+            ),
+        ] {
+            assert_eq!(fix(input), fixed, "{input}");
+        }
+    }
+    #[test]
+    fn slips_leave_names_slang_code_and_labels_alone() {
+        for input in [
+            "Anh is late.",
+            "Hoa is fine.",
+            "Yu said yes.",
+            "It is sai raju here.",
+            // Without the system tagger to rule out a name, a short opener needs a doubled or
+            // swapped key (the app passes the tagger, which reads "Thi is fine" as "This").
+            "Thi is fine.",
+            "I met arjun menon yesterday.",
+            "Looping in hari for visibility.",
+            "tom and ann went home",
+            "lol tbh idk",
+            "thx, pls send it",
+            "gtg, ttyl",
+            "We need plan b now.",
+            "Choose option c or d.",
+            "The value of x is 5.",
+            "Use os.path.join to build paths.",
+            "We pin it in requirements.txt today.",
+            "I can not believe it.",
+            "Bhai yaar kya hai.",
+            "bas, that's it",
+        ] {
+            assert_eq!(fix(input), input, "{input}");
+        }
+        // A short Roman Hindi word alone in English is a slip; beside Roman Hindi it stays.
+        assert_eq!(fix("I like aur house."), "I like our house.");
+        assert_eq!(fix("aur kya chal raha hai"), "aur kya chal raha hai");
     }
     #[test]
     fn valid_uses_of_rare_words_are_kept() {

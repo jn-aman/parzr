@@ -88,9 +88,10 @@ pub fn fold(s: &str) -> String {
 pub fn base(normalized: &str) -> &str {
     normalized.strip_suffix("'s").unwrap_or(normalized)
 }
-const SHORTHAND: [&str; 24] = [
+const SHORTHAND: [&str; 41] = [
     "u", "ur", "r", "k", "pls", "plz", "thx", "ty", "btw", "lol", "omg", "idk", "ok", "okk", "ya",
-    "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb",
+    "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb", "gtg", "ttyl", "lmk", "smh",
+    "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk", "omw",
 ];
 const CALENDAR: [&str; 19] = [
     "monday",
@@ -260,8 +261,22 @@ impl NameIndex {
         };
         // Words capitalized somewhere in the text (not "I", not typos, not ordinary words).
         let mut capitalized_elsewhere: HashSet<&str> = HashSet::new();
-        for t in tokens.iter().filter(|t| t.is_word && capitalized(t)) {
+        for (i, t) in tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.is_word && capitalized(t))
+        {
             let b = base(&t.normalized);
+            // "Thi is fine": a sentence's capital on a short slip of a frequent word is no name.
+            // A lone letter opening a sentence ("W e usually eat") is a broken word, not an initial.
+            if sentence_start(i)
+                && (!t.proper_name || spelling::opening_name_slip(tokens, i))
+                && (spelling::opening_slip(b)
+                    || spelling::glued_pair(b)
+                    || b.len() == 1 && b != "i" && b != "a")
+            {
+                continue;
+            }
             if !never_a_name(t.surface)
                 && b != "i"
                 && !b.starts_with("i'")
@@ -300,6 +315,8 @@ impl NameIndex {
             // A known misspelling ("thanks alot") is never the person addressed.
             let addressed_capital = !sentence_start(i)
                 && !is_known_misspelling(b)
+                // "Thank yyou so much": a slip of "you", not a person thanked.
+                && !spelling::slip_fits(b, i.checked_sub(1).map(|j| &tokens[j]), tokens.get(i + 1), t)
                 && (capitalized(t) && spelling::addressed(tokens, i)
                     || spelling::greeted(tokens, i)
                         && spelling::closes_name(tokens, i)
@@ -311,8 +328,14 @@ impl NameIndex {
                                 && ["hi", "hello", "hey", "hiya", "dear"]
                                     .contains(&tokens[i - 1].normalized.as_str())
                                 && !["me", "you", "us", "all"].contains(&b)));
+            // The tagger calls most capitalized sentence openers it does not know names; a clear
+            // slip of a frequent word there ("Wwe watched") is not one.
+            let tagger_name = t.proper_name
+                && !(sentence_start(i)
+                    && !is_bundled_name(b)
+                    && spelling::opening_name_slip(tokens, i));
             level[i] = if hits[i]
-                || t.proper_name
+                || tagger_name
                 || addressed_capital
                 || by_request
                 || capitalized_elsewhere.contains(b)
