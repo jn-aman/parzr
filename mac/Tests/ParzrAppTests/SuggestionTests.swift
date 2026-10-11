@@ -43,17 +43,17 @@ final class SuggestionTests: XCTestCase {
         model.source = "Something else entirely."
         XCTAssertFalse(model.showsSuggestion, "A rewrite of other text is never offered.")
     }
-    func testTheCardOffersTheRewriteWithOneActionBesideTheFixesAndAlone() async throws {
-        // Separate constants and explicit closes: reassigning a tuple var with a defer across awaits aborts the test runner.
+    func testTheCardOffersTheRewriteWithOneActionBesideTheFixesAndAlone() throws {
+        // Synchronous on purpose: an optional-chained `try` assignment inside an async test aborts the runner ("freed pointer was not the last allocation").
         let model = try checked(); model.suggestion?.result = try result([hate]); model.suggestion?.done = true
         let alone = mount(model)
-        try await Task.sleep(for: .milliseconds(100))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: alone.1), "With nothing to fix, the rewrite is the primary action.")
         alone.0.close()
         let space = WritingEdit(start: 15, end: 16, replacement: "  ", original: " ", category: "Punctuation", ruleID: "spacing")
         let fixes = try checked(fixes: [space]); fixes.suggestion?.result = try result([hate]); fixes.suggestion?.done = true
         let beside = mount(fixes)
-        try await Task.sleep(for: .milliseconds(100))
+        RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         XCTAssertNotNil(NativeControls.find(label: "Use Friendly version", in: beside.1), "Beside the fixes, the rewrite has its own Use button.")
         XCTAssertNotNil(NativeControls.find(label: "Ignore", in: beside.1), "The fixes keep their actions.")
         beside.0.close()
