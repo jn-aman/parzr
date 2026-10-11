@@ -14,6 +14,8 @@ mod gec;
 mod gec_text;
 mod marks;
 #[cfg(feature = "local-model")]
+mod meaning;
+#[cfg(feature = "local-model")]
 mod model;
 mod morphology;
 mod names;
@@ -24,6 +26,7 @@ mod rules;
 mod spelling;
 mod structure;
 mod tokenizer;
+mod wording;
 pub use names::NameIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -128,6 +131,15 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         return pipeline::rewrite(&enriched);
     }
     pipeline::rewrite(req)
+}
+
+/// Whether `output`, a `mode` rewrite of `source`, says what `source` says: the check every
+/// tone rewrite passes sentence by sentence. For evaluation tools (examples/tone_judge.rs).
+#[cfg(feature = "local-model")]
+#[doc(hidden)]
+pub fn tone_keeps_meaning(mode: Mode, source: &str, output: &str) -> Result<(), String> {
+    let hints = |s: &str| model::linguistic_hints(s).unwrap_or_default();
+    meaning::keeps_meaning(mode, source, output, "", &hints(source), &hints(output))
 }
 
 /// Cancel an in-flight local inference. No editor mutation happens in the engine.
