@@ -413,7 +413,8 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
         let output = infer(r, &prompt(req, &masked, &literals, strict, careful))?;
-        // The writer's own emoji are placeholders here; any emoji in the answer is the model's.
+        // The writer's own emoji are placeholders here; any emoji in the answer is the model's,
+        // and a tone rewrite only ever gets the one `pick_emoji` chooses.
         let output = if req.mode == Mode::Fix {
             output
         } else {
@@ -467,6 +468,116 @@ fn emoji_regex() -> &'static regex::Regex {
         )
         .expect("constant emoji regex")
     })
+}
+/// Friendly may end a casual chat message with one emoji: the text comes from a chat app, is
+/// short (at most 280 characters and three sentences), ends where the selection ends, and has no
+/// emoji of its own and no code. Other modes never get one.
+fn emoji_allowed(req: &Request) -> bool {
+    let sentences = req.text.matches(['.', '!', '?']).count();
+    req.mode == Mode::Friendly
+        && req.casual
+        && req.sentence_end
+        && req.text.chars().count() <= 280
+        && sentences <= 3
+        && !emoji_regex().is_match(&req.text)
+        && !req.text.contains('`')
+        && !req.text.lines().any(|l| {
+            let l = l.trim_start();
+            l.starts_with("$ ") || l.starts_with("> ") || l.contains("();") || l.contains("=>")
+        })
+}
+/// Emoji a Friendly rewrite may end with: common, unambiguous chat emoji. Anything else the
+/// model suggests is not used.
+const EMOJI: &[&str] = &[
+    "😊", "🙂", "😄", "😁", "😅", "😂", "🤣", "🎉", "🥳", "🙏", "👍", "👏", "🙌", "❤️", "💪", "🔥",
+    "🚀", "✅", "✨", "😎", "🤗", "🤞", "👋", "😢", "😔", "😞", "😩", "😫", "😬", "😴", "😭", "😕",
+    "😤", "☕", "🍕", "🍔",
+];
+/// Words that carry a feeling an emoji can echo; a message without one gets no emoji.
+const FEELING: &[&str] = &[
+    "thanks",
+    "thank",
+    "thx",
+    "appreciate",
+    "great",
+    "awesome",
+    "amazing",
+    "nice",
+    "love",
+    "loved",
+    "congrats",
+    "congratulations",
+    "yay",
+    "excited",
+    "happy",
+    "glad",
+    "lol",
+    "haha",
+    "sorry",
+    "unfortunately",
+    "hate",
+    "bad",
+    "sad",
+    "ugh",
+    "oops",
+    "fun",
+    "enjoy",
+    "cheers",
+    "finally",
+    "asleep",
+    "tired",
+    "late",
+    "lunch",
+    "coffee",
+    "broken",
+    "wow",
+    "cool",
+    "perfect",
+    "fixed",
+];
+/// One emoji to end a casual Friendly message with, chosen by the model and kept only when it is
+/// a common chat emoji and the message carries a feeling. None far more often than not.
+fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
+    if !emoji_allowed(req) {
+        return None;
+    }
+    let tokens = crate::tokenizer::tokenize(text, &[]);
+    if !tokens
+        .iter()
+        .any(|t| FEELING.contains(&t.normalized.as_str()))
+    {
+        return None;
+    }
+    let r = runtime().ok()?;
+    let prompt = format!(
+        "<|im_start|>system\nAnswer with one emoji that fits the feeling of this chat message, or with the word none if no emoji fits.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+        text.trim()
+    );
+    let answer = infer(r, &prompt).ok()?;
+    let answer = answer.trim().trim_end_matches('\u{FE0F}');
+    EMOJI
+        .iter()
+        .find(|e| e.trim_end_matches('\u{FE0F}') == answer)
+        .copied()
+}
+/// Adds `emoji` at the end of the rewritten text, after its last word or mark.
+fn end_with(source: &str, mut changes: Vec<Edit>, emoji: &str) -> Vec<Edit> {
+    let end = source.trim_end().encode_utf16().count();
+    match changes.last_mut() {
+        Some(last) if last.end_utf16 == end => last.replacement.push_str(&format!(" {emoji}")),
+        _ => changes.push(Edit {
+            start_utf16: end,
+            end_utf16: end,
+            original: String::new(),
+            replacement: format!(" {emoji}"),
+            category: "Style".into(),
+            rule_id: "local-model".into(),
+            explanation: "Suggested rewrite".into(),
+            confidence: 1.0,
+            group_id: None,
+        }),
+    }
+    changes
 }
 /// Removes every emoji the model added. A removed emoji takes the spaces that would be left
 /// doubled or dangling.
@@ -1826,6 +1937,10 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     } else {
         meaning_guard(req, all)
     };
+    let changes = match pick_emoji(req, &apply_edits(&req.text, &changes)?.0) {
+        Some(emoji) => end_with(&req.text, changes, emoji),
+        None => changes,
+    };
     let (text, source_map) = apply_edits(&req.text, &changes)?;
     Ok(RewriteResult {
         version: concat!("parzr-", env!("CARGO_PKG_VERSION"), "/qwen3.5-0.8b-q5").into(),
@@ -2338,6 +2453,64 @@ mod tests {
         assert_eq!(limit_emoji("🔥 Ship it."), "Ship it.");
         assert_eq!(limit_emoji("Done 👍🏽\nNext"), "Done\nNext");
         assert_eq!(limit_emoji("No emoji here."), "No emoji here.");
+    }
+    #[test]
+    fn only_a_short_casual_friendly_message_may_get_an_emoji() {
+        let req = |text: &str, mode: Mode, casual: bool| Request {
+            text: text.into(),
+            mode,
+            casual,
+            ..Request::default()
+        };
+        assert!(emoji_allowed(&req(
+            "Thanks, that fixed it!",
+            Mode::Friendly,
+            true
+        )));
+        for mode in [Mode::Fix, Mode::Professional, Mode::Concise, Mode::Direct] {
+            assert!(
+                !emoji_allowed(&req("Thanks, that fixed it!", mode, true)),
+                "{mode:?}"
+            );
+        }
+        assert!(!emoji_allowed(&req(
+            "Thanks, that fixed it!",
+            Mode::Friendly,
+            false
+        )));
+        assert!(!emoji_allowed(&req(
+            "Thanks, that fixed it! 🎉",
+            Mode::Friendly,
+            true
+        )));
+        assert!(!emoji_allowed(&req(
+            "Run `cargo test` again, thanks!",
+            Mode::Friendly,
+            true
+        )));
+        let long = "This sentence is long enough. ".repeat(10);
+        assert!(!emoji_allowed(&req(&long, Mode::Friendly, true)));
+        let mut partial = req("Thanks, that fixed it", Mode::Friendly, true);
+        partial.sentence_end = false;
+        assert!(!emoji_allowed(&partial));
+    }
+    #[test]
+    fn the_emoji_goes_after_the_last_word() {
+        let text = "Thanks, that fixed it!  ";
+        let added = end_with(text, vec![], "🎉");
+        assert_eq!(
+            apply_edits(text, &added).unwrap().0,
+            "Thanks, that fixed it! 🎉  "
+        );
+        // A change that already ends there carries the emoji, so two insertions never share a point.
+        let source = "thanks that fixed it";
+        let mut fix = edits(source, "thanks that fixed it!", Mode::Friendly, &[]);
+        fix = end_with(source, fix, "🎉");
+        assert_eq!(fix.len(), 1);
+        assert_eq!(
+            apply_edits(source, &fix).unwrap().0,
+            "thanks that fixed it! 🎉"
+        );
     }
     #[test]
     fn numbers_reach_a_tone_rewrite_unmasked() {

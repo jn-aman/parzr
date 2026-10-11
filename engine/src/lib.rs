@@ -81,6 +81,10 @@ pub struct Request {
     /// files or the native runtime this does nothing.
     #[serde(default)]
     pub gec: bool,
+    /// The text comes from a chat app (Slack, Teams, Messages…): a short Friendly rewrite may end
+    /// with one fitting emoji. Other modes and apps never get one.
+    #[serde(default)]
+    pub casual: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -115,6 +119,7 @@ impl Default for Request {
             sentence_end: true,
             deep: false,
             gec: false,
+            casual: false,
             name_index: None,
         }
     }
