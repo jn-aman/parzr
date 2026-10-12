@@ -19,7 +19,8 @@ A pair is kept when every check below passes; each one guards a kind of false al
   * a single natural edit is enough only for a misspelling of 5+ letters that keeps the word's ending;
   * the correction is made of lexicon words valid in both British and American English, and at most 2 edits
     away (3 for corrections of 8+ letters; a run-together pair must be the same letters with spaces), so
-    renames and rewrites ("Orissa" -> "Odisha") are not typos;
+    renames and rewrites ("Orissa" -> "Odisha") are not typos, and it never drops a negative prefix
+    ("untelevised" -> "televised");
   * at least 90% of the edits of the misspelling go to the same correction, and no other frequent word is
     one slip away from it ("revies": "reviews" or "revise") unless five natural edits agree on a word of
     six letters or more;
@@ -161,6 +162,8 @@ def main():
             ('distance', target.replace(' ', '') == o if ' ' in target
              else osa(o, target) <= (3 if len(target) >= 8 else 2)),
             ('agreement', n >= 0.9 * total),
+            # "untelevised" -> "televised" drops a negative prefix: an edit of meaning, not a typo.
+            ('negation', not any(o == p + target for p in ('un', 'in', 'im', 'il', 'ir', 'non', 'dis', 'a'))),
             ('evidence', natural >= need or curated >= 1 and not proper and (alike or natural >= 1)),
         ]
         # Another frequent word one slip away ("revies": "reviews" or "revise") leaves the choice to

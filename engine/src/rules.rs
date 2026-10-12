@@ -265,6 +265,10 @@ mod tests {
             ("Seperate the files please.", "Separate the files please."),
             ("The competion was fierce.", "The competition was fierce."),
             ("See you on Wenesday.", "See you on Wednesday."),
+            (
+                "Look up a non-existant invoice.",
+                "Look up a non-existent invoice.",
+            ),
         ] {
             assert_eq!(fix(input), expected);
         }

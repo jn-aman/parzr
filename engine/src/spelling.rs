@@ -1604,12 +1604,10 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
         return true;
     }
     // "jean-luc", "jae-won": an unknown word hyphenated to another word is a name part.
-    // "non-existant", "psuedo-code": a part beside an ordinary word is a damaged word, not a name.
     let before_dash = !shaped
         && previous.zip(before_previous.last()).is_some_and(|(d, o)| {
             d.surface == "-"
                 && o.is_word
-                && !ordinary(&o.normalized)
                 && o.end_byte == d.start_byte
                 && d.end_byte == token.start_byte
         });
@@ -1617,7 +1615,6 @@ fn name_like(token: &Token<'_>, history: &[Token<'_>], following: &[Token<'_>]) 
         && next.zip(following.get(1)).is_some_and(|(d, o)| {
             d.surface == "-"
                 && o.is_word
-                && !ordinary(&o.normalized)
                 && token.end_byte == d.start_byte
                 && d.end_byte == o.start_byte
         });
@@ -2172,7 +2169,9 @@ fn typo_score(word: &str, candidate: &str, before: &str, after: &str) -> f64 {
 fn typo_ranking(word: &str, before: &str, after: &str, dialect_flags: u8) -> Vec<(f64, String)> {
     let mut ranked: Vec<(f64, String)> = within_two(word)
         .into_iter()
+        // "rethrown" is no slip of "thrown": a whole word inside it is a word with an affix.
         .filter(|c| flags(c) & dialect_flags != 0 && c != before && c != after)
+        .filter(|c| !word.starts_with(c.as_str()) && !word.ends_with(c.as_str()))
         .map(|c| (typo_score(word, &c, before, after), c))
         .collect();
     ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
@@ -2428,7 +2427,11 @@ pub fn suggest(
     let proper_noun = crate::capitalization::proper_noun(names::base(word)).is_some();
     // "i canf do it" is "can't", not "can": a slip that sits one edit from both a negative and
     // its positive keeps the negation, since dropping it reverses what was meant.
-    if let Some(negative) = kept_negation(word) {
+    // "aren 't" is a contraction typed with a space, not a slip.
+    let apostrophe_next = following_context
+        .first()
+        .is_some_and(|t| t.surface.starts_with(['\'', '’']));
+    if !apostrophe_next && let Some(negative) = kept_negation(word) {
         return Some(negative);
     }
     // "bron bron": a word typed twice in a row is a nickname or a sound, not a slip.
@@ -3251,7 +3254,6 @@ mod tests {
             ("A file containg the data.", "containg", "containing"),
             ("Call me befor the meeting.", "befor", "before"),
             ("The algotihms are fast.", "algotihms", "algorithms"),
-            ("Look up a non-existant invoice.", "existant", "existent"),
         ] {
             let got = suggest_at(text, word, false);
             if got.as_deref() != Some(fixed) {

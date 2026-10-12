@@ -6,33 +6,14 @@
 # written on purpose in corrected text, and is corrected the same way at least 90% of the time; see the script.
 aaafter after
 aaailability availability
-aabout about
-aaccessing accessing
-aaccount account
 aacdemic academic
-aacross across
-aactually actually
-aadapters adapters
-aadditional additional
-aadvisors advisors
 aainst against
 aalist list
-aallow allow
-aalong along
-aalso also
 aanounced announced
 aanulled annulled
-aapply apply
-aaround around
-aarranged arranged
-aarriving arriving
 aaserted asserted
 aasociated associated
-aauthorization authorization
-aautomatically automatically
-aaway away
 aawhenever whenever
-aazure azure
 abaddoned abandoned
 abadoned abandoned
 abailable available
@@ -536,7 +517,6 @@ acomplish accomplish
 acomplished accomplished
 acomplishment accomplishment
 acomplishments accomplishments
-acontext context
 acoording according
 acordding according
 acordeon accordion
@@ -576,7 +556,6 @@ acrhitectural architectural
 acroding according
 acronymun acronym
 acroos across
-acrosses crosses
 acrosss across
 acroynm acronym
 acrtive active
@@ -1050,7 +1029,6 @@ aftermathc aftermath
 aftermmath aftermath
 afterthe after the
 aftyer after
-afull full
 agacent adjacent
 agahan afghan
 agaianst against
@@ -1072,7 +1050,6 @@ aganst against
 agaubst against
 agaue agave
 agencey agency
-agenuinely genuinely
 aggain again
 aggaravates aggravates
 aggasvive aggressive
@@ -1121,7 +1098,6 @@ agnoscicism agnosticism
 agnositc agnostic
 agonstic agnostic
 agove above
-agovernor governor
 agravate aggravate
 agravation aggravation
 agreeded agreed
@@ -1160,7 +1136,6 @@ agruments arguments
 agsinst against
 agthering gathering
 agular angular
-ahadith hadith
 ahadowy shadowy
 aheres adheres
 ahievements achievements
@@ -1196,7 +1171,6 @@ airpor airport
 airpot airport
 airrcraft aircraft
 airstip airstrip
-aitself itself
 ajacent adjacent
 ajdust adjust
 ajective adjective
@@ -1247,7 +1221,6 @@ alculus calculus
 aldough although
 aleady already
 aleardy already
-aleast least
 aledgidly allegedly
 alegations allegations
 aleged alleged
@@ -1513,7 +1486,6 @@ amalgation amalgamation
 amalgumated amalgamated
 amament armament
 amanger manager
-amany many
 amatour amateur
 amatuers amateurs
 amatures amateurs
@@ -1561,7 +1533,6 @@ amfetamine amphetamine
 amibitious ambitious
 amification amplification
 amiguous ambiguous
-amilitary military
 amimators animators
 aminals animals
 aminities amenities
@@ -1595,7 +1566,6 @@ ammuntion ammunition
 ammused amused
 amnes amines
 amnetities amenities
-amodels models
 amogst amongst
 amonb among
 amonbg among
@@ -1675,7 +1645,6 @@ anaphyllactic anaphylactic
 anarchim anarchism
 anarquist anarchist
 anasthesia anesthesia
-anative native
 anaylsis analysis
 anaylsts analysts
 anayltics analytics
@@ -2307,7 +2276,6 @@ aprised apprised
 aproached approached
 aproaches approaches
 aproaching approaching
-aproducer producer
 apropriate appropriate
 apropriately appropriately
 apropriation appropriation
@@ -2471,11 +2439,9 @@ ardware hardware
 areana arena
 arebe are
 areest arrest
-arelationship relationship
 arentheses parentheses
 areodynamics aerodynamics
 areound around
-arepository repository
 arere are
 arethmetic arithmetic
 arficat artifact
@@ -2700,7 +2666,6 @@ ascention ascension
 ascetism asceticism
 ascts acts
 ascular vascular
-asecond second
 asectics ascetics
 aseet asset
 asembled assembled
@@ -2713,7 +2678,6 @@ asessing assessing
 asessment assessment
 asethetic aesthetic
 asetic ascetic
-aseveral several
 asgainst against
 ashetic aesthetic
 ashphalt asphalt
@@ -3035,7 +2999,6 @@ ataset dataset
 atatckers attackers
 atatistics statistics
 atchieved achieved
-atemplate template
 atempt attempt
 atempts attempts
 atemt attempt
@@ -3108,7 +3071,6 @@ atronomical astronomical
 atround around
 atrribute attribute
 atrributed attributed
-atrue true
 atstachment attachment
 attachement attachment
 attachements attachments
@@ -3276,7 +3238,6 @@ aukland Auckland
 aulthough although
 aultumn autumn
 aumated automated
-aunauthorized unauthorized
 auomatically automatically
 auotmatically automatically
 aupport support
@@ -3558,7 +3519,6 @@ aynchronously asynchronously
 aysnc async
 aysnchronous asynchronous
 aysnchrounously asynchronously
-azero zero
 azuer azure
 babtist baptist
 babyis babies
@@ -10574,7 +10534,6 @@ disabilites disabilities
 disabl disable
 disableing disabling
 disablity disability
-disaccredited accredited
 disactivates deactivates
 disadvantagous disadvantageous
 disadvantege disadvantage
@@ -16873,7 +16832,6 @@ incestous incestuous
 incfluenced influenced
 incfuence influence
 incharge in charge
-inchief chief
 inchued inclined
 incicdent incident
 incicident incident
@@ -17171,7 +17129,6 @@ indeterminant indeterminate
 indetical identical
 indetification identification
 indetifing identifying
-indevelopment development
 indiaction indication
 indianpolis Indianapolis
 indiate indicate
@@ -17483,7 +17440,6 @@ infurated infuriated
 infuriorating infuriating
 infux influx
 ingaged engaged
-ingame game
 ingedients ingredients
 ingegrated integrated
 ingenius ingenious
@@ -17505,7 +17461,6 @@ ingridients ingredients
 inguagral inaugural
 inhabhitants inhabitants
 inhabiatants inhabitants
-inhabitability habitability
 inhabitans inhabitants
 inhabitanted inhabited
 inhabitated inhabited
@@ -17696,7 +17651,6 @@ inncluded included
 inncoent innocent
 innder inner
 inndustrially industrially
-innecessitated necessitated
 innefective ineffective
 inneffective ineffective
 inneficiant inefficient
@@ -17788,7 +17742,6 @@ inrementn increment
 inriguing intriguing
 inroduced introduced
 inrospection introspection
-inrow row
 insainly insanely
 insaitible insatiable
 insall install
@@ -18700,7 +18653,6 @@ irreconciliable irreconcilable
 irreconcilible irreconcilable
 irredescent iridescent
 irreducilbe irreducible
-irregardless regardless
 irregularily irregularly
 irregularites irregularities
 irregulartities irregularities
@@ -33851,7 +33803,6 @@ umbrile umbrella
 umitations limitations
 umplementations implementations
 umprecedented unprecedented
-unaccentuated accentuated
 unacceptible unacceptable
 unaccessible inaccessible
 unaccostomed unaccustomed
@@ -33919,9 +33870,7 @@ unbeknownest unbeknownst
 unbeknowst unbeknownst
 unbeleivable unbelievable
 unbelieveable unbelievable
-unbuffered buffered
 unbuntu Ubuntu
-uncached cached
 uncapable incapable
 unceartain uncertain
 uncertainities uncertainties
@@ -34139,7 +34088,6 @@ unges urges
 unghappy unhappy
 ungreatful ungrateful
 unguded unguided
-ungzipping gzipping
 unheaded unheeded
 unhealty unhealthy
 unhygenic unhygienic
@@ -34280,7 +34228,6 @@ unmaintainble unmaintainable
 unmanagable unmanageable
 unmaned unmanned
 unmangeable unmanageable
-unmercilessly mercilessly
 unmistakeable unmistakable
 unmistakeably unmistakably
 unmobilized immobilized
@@ -34363,7 +34310,6 @@ unpriveleged unprivileged
 unpriviledged unprivileged
 unprivlaged unprivileged
 unprobable improbable
-unproduced produced
 unproffesional unprofessional
 unpronouncable unpronounceable
 unpronuncable unpronounceable
@@ -34459,7 +34405,6 @@ unsusally unusually
 unsusbcribed unsubscribed
 unsused unused
 unsypathetic unsympathetic
-untelevised televised
 untennable untenable
 untenured nontenured
 unterlying underlying
