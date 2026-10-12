@@ -325,6 +325,68 @@ const FILLER: &[&str] = &[
     "quick",
     "quickly",
 ];
+/// Rude or crude words ("stupid", "hell"): softening them is what a tone rewrite is for, so every tone may drop
+/// them, and a softened sentence may say "not" ("a dumb idea" is "not the best idea").
+const RUDE: &[&str] = &[
+    "stupid",
+    "dumb",
+    "idiot",
+    "idiotic",
+    "idiots",
+    "moron",
+    "moronic",
+    "hell",
+    "damn",
+    "damned",
+    "dammit",
+    "goddamn",
+    "crap",
+    "crappy",
+    "shit",
+    "shitty",
+    "bullshit",
+    "fuck",
+    "fucking",
+    "fucked",
+    "wtf",
+    "bloody",
+    "freaking",
+    "frigging",
+    "sucks",
+    "suck",
+    "sucky",
+    "lame",
+    "pathetic",
+    "useless",
+    "ridiculous",
+    "garbage",
+    "trash",
+    "ass",
+    "asshole",
+    "jerk",
+    "screw",
+    "screwed",
+    "nonsense",
+    "shut",
+];
+/// How a reply begins: a rewrite that starts like this answers the message instead of rewriting it.
+const REPLY_OPENERS: &[&str] = &[
+    "sure",
+    "of course",
+    "absolutely",
+    "no problem",
+    "certainly",
+    "yes,",
+    "yes!",
+    "no,",
+    "thanks for asking",
+    "i'd love to",
+    "i would love to",
+    "i'd be happy to",
+    "i would be happy to",
+    "happy to help",
+    "great question",
+];
 /// Hedging verbs ("I think", "I guess"): Direct and Concise may drop them.
 const HEDGES: &[&str] = &[
     "think", "guess", "believe", "suppose", "feel", "reckon", "seem",
@@ -1005,8 +1067,32 @@ pub(crate) fn keeps_meaning(
 ) -> Result<(), String> {
     let (src, out) = (words(source, source_hints), words(output, output_hints));
     let around = words(elsewhere, &[]);
+    let rude = |w: &Word| mode != Mode::Fix && w.keys.iter().any(|k| RUDE.contains(&k.as_str()));
+    let softened = src
+        .iter()
+        .any(|s| rude(s) && !out.iter().any(|o| matches(s, o)));
+    if let Some(w) = out
+        .iter()
+        .find(|o| rude(o) && !src.iter().any(|s| matches(s, o)))
+    {
+        return Err(format!("adds “{}”, which is rude", w.surface));
+    }
+    // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
+    // an instruction), and it never answers the message ("Sure, I'd love to take a look!").
+    if mode != Mode::Direct && source.trim_end().ends_with('?') && !output.trim_end().ends_with('?')
+    {
+        return Err("turns a question into a statement".into());
+    }
+    let opener = |t: &str| {
+        let t = t.trim_start().to_lowercase();
+        REPLY_OPENERS.iter().any(|o| t.starts_with(o))
+    };
+    if opener(output) && !opener(source) {
+        return Err("answers the message instead of rewriting it".into());
+    }
     let negated = |w: &[Word]| w.iter().any(|w| w.kind == Kind::Negation);
-    if negated(&src) != negated(&out) {
+    // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
+    if negated(&src) != negated(&out) && (negated(&src) || !softened) {
         return Err(if negated(&src) {
             "drops a negation".into()
         } else {
@@ -1069,7 +1155,7 @@ pub(crate) fn keeps_meaning(
     };
     let lost: Vec<&Word> = src_content
         .iter()
-        .filter(|s| !hedge(s) && !out.iter().any(|o| matches(s, o)))
+        .filter(|s| !hedge(s) && !rude(s) && !out.iter().any(|o| matches(s, o)))
         .collect();
     let added: Vec<&str> = out_content
         .iter()
@@ -1288,6 +1374,40 @@ mod tests {
         assert!(!ok(c, "Please send me the slides.", "Please send me."));
     }
 
+    #[test]
+    fn tones_soften_rudeness_but_never_answer_or_turn_a_question_around() {
+        assert!(ok(
+            Mode::Professional,
+            "Why the hell is this broken again?",
+            "Why is this broken again?"
+        ));
+        assert!(ok(
+            Mode::Professional,
+            "This is a dumb idea.",
+            "This is not a good idea."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "This is a dumb idea.",
+            "This is a stupid idea."
+        ));
+        assert!(!ok(
+            Mode::Friendly,
+            "Could you review this?",
+            "Sure, I'd love to review this!"
+        ));
+        assert!(!ok(
+            Mode::Professional,
+            "Can we meet tomorrow?",
+            "We would be happy to meet tomorrow."
+        ));
+        assert!(ok(
+            Mode::Direct,
+            "Could you review this?",
+            "Please review this."
+        ));
+        assert!(!ok(Mode::Fix, "This is a dumb idea.", "This is an idea."));
+    }
     #[test]
     fn tones_may_swap_synonyms_but_not_the_point() {
         for mode in [Mode::Professional, Mode::Friendly, Mode::Direct] {

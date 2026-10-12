@@ -609,6 +609,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 guard !panelModel.busy, !panelModel.chosenEdits.isEmpty else { throw ParzrError.message("The snapshot's real passage check did not complete.") }
                 try render(RewritePanel(model: panelModel), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("rewrite.png"))
                 try render(RewritePanel(model: panelModel, showsModes: false), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("inline.png"))
+                // A tone with nothing to change, and a tone whose rewrite changed the meaning and was withheld.
+                let tone = AppModel(); tone.mode = .direct; tone.source = "Are you stupid?"
+                tone.result = try JSONDecoder().decode(RewriteResult.self, from: Data(#"{"version":"s","text":"Are you stupid?","edits":[],"source_map":[],"elapsed_ms":1,"protected_count":0}"#.utf8))
+                try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-empty.png"))
+                tone.status = EmptyCheck.toneWithheld
+                try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-withheld.png"))
                 try cardSnapshots(to: URL(fileURLWithPath: directory))
                 for route in [StudioRoute.general, .writing, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
