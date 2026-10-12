@@ -274,8 +274,8 @@ const IT_IS_NEXT: [&str; 44] = [
     "still",
     "such",
     "them",
-    "totally",
     "too",
+    "totally",
     "us",
     "what",
     "where",
@@ -390,7 +390,8 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
             // "on its back", "in its prime": after a preposition "its" owns the noun.
             let owned = [
                 "on", "in", "of", "for", "with", "from", "to", "at", "by", "into", "onto", "about",
-                "under", "over", "through", "within", "without", "and", "all",
+                "under", "over", "through", "within", "without", "and", "all", "since", "after",
+                "before", "behind", "during", "until", "upon", "despite", "against", "like",
             ]
             .contains(&prev);
             // "its A330s": the next word is a plain lowercase word, not part of a code or model.
@@ -405,6 +406,25 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
                 && !owned
                 && plain
                 && (IT_IS_NEXT.contains(&next)
+                    // "its in the docs", "its on the shelf": a preposition and its determiner.
+                    || [
+                        "on", "in", "at", "from", "with", "by", "near", "behind", "inside", "under",
+                    ]
+                    .contains(&next)
+                        && [
+                            "the", "a", "an", "my", "your", "our", "their", "his", "her", "this",
+                            "that",
+                        ]
+                        .contains(&f.after_next())
+                    // "its taking up space", "its working now": a gerund followed by a particle,
+                    // an object or the clause's end is a verb ("its growing popularity" is not).
+                    || gerund(next)
+                        && [
+                            "up", "down", "out", "off", "a", "an", "the", "my", "your", "his",
+                            "her", "our", "their", "me", "you", "him", "us", "them", "it", "so",
+                            "too", "now", "again", "here", "there", "well", "fine",
+                        ]
+                        .contains(&f.after_next())
                     || IT_IS_PREDICATES.contains(&next) && ends(f.tokens.get(f.index + 2)))
         }
         "ill" => f.clause_start(false) && AFTER_I_WILL.contains(&next),
@@ -872,6 +892,12 @@ mod tests {
             ),
             ("Its not my fault.", "It's not my fault."),
             ("Its so cold outside.", "It's so cold outside."),
+            (
+                "Delete the backup, its taking up space.",
+                "Delete the backup, it's taking up space.",
+            ),
+            ("Its on the shelf.", "It's on the shelf."),
+            ("Its in the docs folder.", "It's in the docs folder."),
         ] {
             assert_eq!(fixed(input), output, "{input}");
         }
@@ -888,6 +914,12 @@ mod tests {
             "The app and its free tier.",
             "A shark with a fin on its back, such as this one.",
             "The airline got its A330s last year.",
+            "The city and its in-house team.",
+            "The court ruled on its taking of the land.",
+            "The app owes its growing popularity to word of mouth.",
+            "Its founding members met in 1990.",
+            "Since its founding, the school has grown.",
+            "Its on air moniker is Cat Country.",
             "The fame of Southwell is its late 13th century chapter house.",
         ] {
             assert_eq!(fixed(text), text, "{text}");
