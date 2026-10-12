@@ -12,6 +12,14 @@ final class CompatTests: XCTestCase {
         let ignored: Set<String> = [IgnoreKey.of(first)]
         XCTAssertEqual(IgnoreKey.ids(in: [moved, other], ignored: ignored), [moved.id], "The same change at new offsets stays ignored.")
     }
+    func testSearchBoxesAreNotCheckedAsYouType() {
+        XCTAssertTrue(Compat.isSearchField(role: "AXTextField", subrole: "AXSearchField", labels: []))
+        XCTAssertTrue(Compat.isSearchField(role: "AXComboBox", subrole: nil, labels: []))
+        XCTAssertTrue(Compat.isSearchField(role: "AXTextField", subrole: nil, labels: [nil, "Address and search bar"]))
+        XCTAssertTrue(Compat.isSearchField(role: "AXTextArea", subrole: nil, labels: ["Search"]))
+        XCTAssertFalse(Compat.isSearchField(role: "AXTextArea", subrole: nil, labels: ["Message in devops-general"]))
+        XCTAssertFalse(Compat.isSearchField(role: "AXTextArea", subrole: nil, labels: ["Research notes"]))
+    }
     func testAComposersPlaceholderIsNoWriting() {
         XCTAssertTrue(Compat.isPlaceholder("Message in devops-general", labels: [nil, "Message in devops-general", nil]))
         XCTAssertTrue(Compat.isPlaceholder(" Type a message \n", labels: ["Type a message"]))
