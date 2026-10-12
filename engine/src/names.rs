@@ -461,10 +461,31 @@ pub fn capitalizations(
                 || cover[i]
                 || spelling::addressed(tokens, i) && spelling::closes_name(tokens, i))
     };
+    // A slug or compound glued by hyphens to a word that is no name ("devops-general", "team-aman-notes") is an
+    // identifier, never a name to capitalize in part.
+    let glued = |a: usize, b: usize| tokens[a].end_byte == tokens[b].start_byte;
+    let hyphen_at = |k: usize| tokens.get(k).is_some_and(|t| t.surface == "-");
+    let in_slug = |i: usize| {
+        let mut k = i;
+        while k >= 2 && hyphen_at(k - 1) && glued(k - 2, k - 1) && glued(k - 1, k) {
+            k -= 2;
+            if !eligible(k) {
+                return true;
+            }
+        }
+        let mut k = i;
+        while hyphen_at(k + 1) && k + 2 < tokens.len() && glued(k, k + 1) && glued(k + 1, k + 2) {
+            k += 2;
+            if !eligible(k) {
+                return true;
+            }
+        }
+        false
+    };
     let mut out = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
-        if !eligible(i) {
+        if !eligible(i) || in_slug(i) {
             i += 1;
             continue;
         }
