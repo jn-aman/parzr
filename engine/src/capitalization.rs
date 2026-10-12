@@ -7,8 +7,15 @@ use crate::{Edit, Request, make_edit, morphology, spelling, starts_sentence};
 use std::{collections::HashMap, sync::OnceLock};
 
 /// Lowercase proper nouns whose usual reading is the proper noun, though the lexicon also lists
-/// a rare common word ("japan" lacquer, "french" a verb).
-const USUALLY_PROPER: [&str; 4] = ["japan", "french", "thanksgiving", "christian"];
+/// a rare common word ("japan" lacquer, "french" a verb, "protestant" one who protests).
+const USUALLY_PROPER: [&str; 6] = [
+    "japan",
+    "french",
+    "thanksgiving",
+    "christian",
+    "protestant",
+    "protestants",
+];
 type Entries = HashMap<String, Vec<(Vec<String>, Vec<&'static str>)>>;
 /// Gazetteer entries keyed by their first lowercase word, longest first.
 fn gazetteer() -> &'static Entries {

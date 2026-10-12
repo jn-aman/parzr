@@ -19,6 +19,56 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     hyphens(req, &tokens, edits);
     apostrophes(req, &tokens, edits);
     colons(req, &tokens, edits);
+    stray_marks(req, &tokens, edits);
+}
+
+/// Unambiguous slips with marks: an apostrophe typed as an accent ("Anna´s") and "the worlds
+/// largest" for the possessive.
+fn stray_marks(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let text = &req.text;
+    static ACCENT: OnceLock<Regex> = OnceLock::new();
+    let accent = ACCENT
+        .get_or_init(|| Regex::new(r"\p{L}(?P<m>\u{B4})(?:s|t|ll|re|ve|d|m)\b").expect("accent"));
+    for cap in accent.captures_iter(text) {
+        let m = cap.name("m").expect("m");
+        put(
+            req,
+            edits,
+            m.start(),
+            m.end(),
+            "'",
+            "punctuation.apostrophe",
+            "Use an apostrophe, not an accent mark.",
+            0.9,
+        );
+    }
+    for (i, t) in tokens.iter().enumerate() {
+        if t.normalized == "worlds"
+            && i > 0
+            && tokens[i - 1].normalized == "the"
+            && tokens.get(i + 1).is_some_and(|n| {
+                spaced(text, t, n)
+                    && ([
+                        "most", "best", "first", "only", "leading", "worst", "least", "top",
+                    ]
+                    .contains(&n.normalized.as_str())
+                        || n.normalized.len() > 4
+                            && n.normalized.ends_with("est")
+                            && spelling::flags(&n.normalized) & 8 != 0)
+            })
+        {
+            put(
+                req,
+                edits,
+                t.end_byte - 1,
+                t.end_byte - 1,
+                "'",
+                "punctuation.apostrophe",
+                "Add the apostrophe of the possessive.",
+                0.9,
+            );
+        }
+    }
 }
 
 #[expect(
@@ -1689,6 +1739,61 @@ mod tests {
             "Set user.Name to the new value.",
             "The range is 1..10 in Rust.",
             "print(hello world)",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
+    fn dates_asides_and_stray_marks() {
+        for (input, expected) in [
+            (
+                "Hirsch (June 17 1923 – January 28 2004) was a player.",
+                "Hirsch (June 17, 1923 – January 28, 2004) was a player.",
+            ),
+            (
+                "On June 15 2008 the service started.",
+                "On June 15, 2008 the service started.",
+            ),
+            (
+                "The police however have said nothing.",
+                "The police, however, have said nothing.",
+            ),
+            (
+                "He did however make a sortie.",
+                "He did, however, make a sortie.",
+            ),
+            (
+                "It ended badly; however we stayed.",
+                "It ended badly; however, we stayed.",
+            ),
+            ("Anna´s book is here.", "Anna's book is here."),
+            (
+                "It is the worlds largest bank.",
+                "It is the world's largest bank.",
+            ),
+            (
+                "For example the plan was too slow.",
+                "For example, the plan was too slow.",
+            ),
+            (
+                "On the other hand we could wait.",
+                "On the other hand, we could wait.",
+            ),
+            (
+                "Moreover you can change it.",
+                "Moreover, you can change it.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+        for text in [
+            "On March 3 1500 troops landed.",
+            "I'll do it however you like.",
+            "You can do it however hard it is.",
+            "In addition to the fee we pay tax.",
+            "In General Dastgir resigned.",
+            "Of course not.",
+            "The worlds collide.",
         ] {
             assert_eq!(fix(text), text);
         }
