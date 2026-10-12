@@ -166,11 +166,12 @@ fn direct_action_keeps_a_separate_style_anchor() {
             .iter()
             .any(|e| e.start_utf16 == 0 && e.end_utf16 == 10 && e.replacement.is_empty())
     );
+    // The action word is its own whole-word edit ("review" to "Review", never "r" to "R").
     assert!(
         result
             .edits
             .iter()
-            .any(|e| e.start_utf16 == 10 && e.end_utf16 == 11 && e.replacement == "R")
+            .any(|e| e.start_utf16 == 10 && e.end_utf16 == 16 && e.replacement == "Review")
     );
 }
 

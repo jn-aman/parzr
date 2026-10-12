@@ -222,6 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !self.inline.show(snapshot: snapshot, result: result) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
+        // The selection card offers one rewrite after a Fix check; the Studio's checks do not.
+        panelModel.offersRewrite = true
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
         // A grant made in System Settings flips permissionGranted (watcher or trust notification); the monitors and observers re-attach from that, so no restart. Bring the welcome window back to show the check.
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
@@ -559,6 +561,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             for (suffix, look) in [("", "graphite"), ("-light", "paper")] {
                 Preferences.shared.appearance = look
                 try render(view, size: size, to: directory.appendingPathComponent("card-\(name)\(suffix).png"))
+            }
+        }
+        // The rewrite a Fix check offers: being written, written for a clean selection, and written beside fixes.
+        func written(_ source: String, _ pairs: [(String, String)], ending: String) throws -> RewriteResult {
+            let end = source.utf16.count
+            let all = edits(source, pairs) + [WritingEdit(start: end, end: end, replacement: ending, original: "", category: "Style", ruleID: "local-model", explanation: "Suggested rewrite")]
+            let object: [String: Any] = ["version": "", "text": try EditPlan.apply(all, to: source), "edits": try JSONSerialization.jsonObject(with: JSONEncoder().encode(all)), "source_map": [], "elapsed_ms": 0, "protected_count": 0]
+            return try JSONDecoder().decode(RewriteResult.self, from: JSONSerialization.data(withJSONObject: object))
+        }
+        let clean = "can we move our sync to thursday? something came up"
+        let warm = try written(clean, [("can", "Can"), ("thursday", "Thursday"), ("something", "Something")], ending: ". 🙏")
+        let polished = try written(text, [("i hope", "I hope"), ("your", "you're"), ("can you chek this once", "Could you check this when you have a moment")], ending: "")
+        for (name, source, fixes, offered) in [("suggestion-working", clean, [WritingEdit](), nil as RewriteResult?), ("suggestion-ready", clean, [], warm), ("suggestion-with-fixes", text, found, polished)] {
+            let model = AppModel(); model.mode = .fix; model.source = source; model.offersRewrite = true
+            let r = try result(source, fixes); model.result = r; model.selectedEdits = Set(r.edits.map(\.id)); model.focusedEditID = r.edits.first?.id
+            var version = SuggestedVersion(tone: .friendly, source: source)
+            if let offered { version.result = offered; version.done = true }
+            model.suggestion = version
+            for (suffix, look) in [("", "graphite"), ("-light", "paper")] {
+                Preferences.shared.appearance = look
+                try render(RewritePanel(model: model), size: RewritePanel.size, to: directory.appendingPathComponent("card-\(name)\(suffix).png"))
             }
         }
     }

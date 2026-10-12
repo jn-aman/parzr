@@ -72,6 +72,12 @@ final class PlaygroundTests: XCTestCase {
         let outside = WritingEdit(start: thanks.location, end: NSMaxRange(thanks), replacement: "Thank you", original: "Thanks")
         XCTAssertEqual(SentencePreview.edits(source: source, edits: edits + [outside], focused: edits[0]), edits)
     }
+    func testASpacingFixAtASentenceEndPreviewsWithoutCrashing() {
+        // Widening the space after "bad." to whole words reaches "I", past the end of the first sentence.
+        let source = "This is so bad. I hat it."
+        let space = WritingEdit(start: 15, end: 16, replacement: "  ", original: " ", category: "Punctuation", ruleID: "spacing")
+        XCTAssertFalse(String(SentencePreview.diff(source: source, edits: [space], focused: space).characters).isEmpty)
+    }
     func testNativeMenuActionsAndCheckStates() throws {
         _ = NSApplication.shared
         let delegate = AppDelegate(); let menu = NSMenu()
