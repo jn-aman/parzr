@@ -4,6 +4,13 @@ import Sparkle
 
 @MainActor
 final class UpdateTests: XCTestCase {
+    func testThePanelTakesFocusOncePerRequestNotOnEveryProgressTick() {
+        XCTAssertTrue(UpdateFocus.take(requested: true, allowed: true, granted: false), "A check you started brings the panel forward once.")
+        XCTAssertFalse(UpdateFocus.take(requested: true, allowed: true, granted: true), "Download progress never pulls the keyboard back to the panel.")
+        XCTAssertFalse(UpdateFocus.take(requested: false, allowed: true, granted: false), "A background download never takes focus.")
+        XCTAssertFalse(UpdateFocus.take(requested: true, allowed: false, granted: false))
+    }
+
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
     func testQuietInstallWaitsForAFiveMinuteIdleWithNothingOpen() {

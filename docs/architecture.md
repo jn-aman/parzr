@@ -6,7 +6,7 @@ Three diagrams explain the system at three zoom levels, and the [Smart grammar](
 
 ## Overview
 
-<p align="center"><img src="media/architecture.png" width="900" alt="Parzr architecture: apps, macOS Accessibility, the Swift app, the Rust engine over a C FFI with its GECToR step, the native runtime with GECToR on the Neural Engine and Qwen on Metal, and a real request and response, all inside the Mac. Google Docs is read through its hidden text area, and the daily Sparkle update check to GitHub is the only network request."></p>
+<p align="center"><img src="media/architecture.png" width="900" alt="Parzr architecture: apps, macOS Accessibility, the Swift app, the Rust engine over a C FFI with its GECToR step, the native runtime with GECToR on the Neural Engine and Qwen on Metal, and a real request and response, all inside the Mac. Google Docs is read through its hidden text area, and the hourly Sparkle update check to GitHub is the only network request."></p>
 
 How to read it, left to right:
 
@@ -19,7 +19,7 @@ How to read it, left to right:
 7. **Google Docs** (band under the optional adapters). Docs paints its page on a canvas, so the app reads its hidden "Document content" text area through the same Accessibility calls (screen reader and braille support on), places each word from the caret's screen point plus the word's offset in the hidden copy, and applies a fix by selecting the range once and typing the replacement, then re-reading to confirm. [integrations](integrations.md#google-docs-chrome-edge-brave-arc) has the setup.
 8. **The wire** (strip below). A real request and response from `parzr-engine`, shortened. The response is the contract: `start_utf16` and `end_utf16` ranges into your original text, the `replacement`, a `category` that decides the underline colour (Style and Tone are blue, everything else red) and a `rule_id` that says who wrote the edit.
 
-The dashed green border is the privacy boundary: the app, the engine and the model runtime make no network requests while checking text. The one request the app makes is the daily update check (Sparkle fetches `appcast.xml` from the latest GitHub release and verifies EdDSA signatures); it carries no writing and can be turned off in Settings. See [releases](releases.md). The bottom row of the diagram shows it: Sparkle in the app, a plain HTTPS GET of the feed about once a day, no system profile, and only an update whose EdDSA signature verifies is installed.
+The dashed green border is the privacy boundary: the app, the engine and the model runtime make no network requests while checking text. The one request the app makes is the hourly update check (Sparkle fetches `appcast.xml` from the latest GitHub release and verifies EdDSA signatures); it carries no writing and can be turned off in Settings. See [releases](releases.md). The bottom row of the diagram shows it: Sparkle in the app, a plain HTTPS GET of the feed about once an hour, no system profile, and only an update whose EdDSA signature verifies is installed.
 
 ## The typing path
 
