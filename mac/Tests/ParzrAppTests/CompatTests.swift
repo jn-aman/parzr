@@ -5,6 +5,20 @@ import ParzrCore
 
 @MainActor
 final class CompatTests: XCTestCase {
+    func testAnIgnoreOutlivesMoreTypingAndAFreshCheck() {
+        let first = WritingEdit(start: 20, end: 27, replacement: "Jn-Aman", original: "jn-aman", category: "Style", ruleID: "names.capitalize")
+        let moved = WritingEdit(start: 31, end: 38, replacement: "Jn-Aman", original: "jn-aman", category: "Style", ruleID: "names.capitalize")
+        let other = WritingEdit(start: 0, end: 3, replacement: "the", original: "teh", category: "Spelling", ruleID: "spelling.typo")
+        let ignored: Set<String> = [IgnoreKey.of(first)]
+        XCTAssertEqual(IgnoreKey.ids(in: [moved, other], ignored: ignored), [moved.id], "The same change at new offsets stays ignored.")
+    }
+    func testAComposersPlaceholderIsNoWriting() {
+        XCTAssertTrue(Compat.isPlaceholder("Message in devops-general", labels: [nil, "Message in devops-general", nil]))
+        XCTAssertTrue(Compat.isPlaceholder(" Type a message \n", labels: ["Type a message"]))
+        XCTAssertFalse(Compat.isPlaceholder("Message in devops-general is down", labels: ["Message in devops-general"]))
+        XCTAssertFalse(Compat.isPlaceholder("", labels: [""]))
+        XCTAssertFalse(Compat.isPlaceholder("hello", labels: [nil]))
+    }
     func testFocusFallbackAcceptsOnlyTheAppsOwnPid() {
         XCTAssertTrue(Compat.acceptsFocus(elementPID: 42, appPID: 42))
         XCTAssertFalse(Compat.acceptsFocus(elementPID: 43, appPID: 42))

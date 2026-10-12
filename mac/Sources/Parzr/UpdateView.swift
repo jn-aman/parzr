@@ -166,8 +166,9 @@ struct UpdateRow: View {
 struct UpdateCheckButton: View {
     @ObservedObject var model: UpdateModel
     var kind: NativeButton.Kind = .utility
+    var quiet = false
     var body: some View {
-        NativeButton(title: "Check for Updates…", kind: kind, symbol: kind == .utility ? nil : "arrow.triangle.2.circlepath", label: "Check for updates", enabled: model.canCheck && !model.inProgress, action: { model.perform(.check) }).fixedSize()
+        NativeButton(title: "Check for Updates…", kind: kind, symbol: kind == .utility ? nil : "arrow.triangle.2.circlepath", label: "Check for updates", enabled: model.canCheck && !model.inProgress, quiet: quiet, action: { model.perform(.check) }).fixedSize()
     }
 }
 

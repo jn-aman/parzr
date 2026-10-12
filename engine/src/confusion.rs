@@ -743,6 +743,12 @@ mod tests {
             gec: true,
             ..Request::default()
         };
+        // Load the word lists first: their one-time start-up is not the typing budget under test.
+        let warm = Request {
+            text: "Load the lists once.".into(),
+            ..req.clone()
+        };
+        combine_with(&warm, &[], vec![], fake);
         let started = Instant::now();
         assert!(combine_with(&req, &[], vec![], slow).is_empty());
         assert!(started.elapsed() < Duration::from_millis(250));

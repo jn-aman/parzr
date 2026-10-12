@@ -4,6 +4,20 @@ use crate::{
     tokenizer::{self, Token},
 };
 
+/// "Will Smith was great.", "May Lee has left.": a capitalized "Will" or "May" before another
+/// capitalized word, in a sentence that asks nothing, is a first name, not an inverted auxiliary.
+fn full_name_statement(tokens: &[Token<'_>], aux: usize) -> bool {
+    let (first, next) = (&tokens[aux], tokens.get(aux + 1));
+    ["will", "may"].contains(&first.normalized.as_str())
+        && first.surface.starts_with(char::is_uppercase)
+        && next.is_some_and(|n| {
+            n.is_word && n.surface.starts_with(char::is_uppercase) && n.normalized != "i"
+        })
+        && tokens
+            .iter()
+            .rfind(|t| t.paragraph == first.paragraph && t.sentence == first.sentence)
+            .is_some_and(|last| last.surface != "?")
+}
 /// Words after which a clause (and so a subject) can begin.
 const CLAUSE_OPENERS: [&str; 41] = [
     "and",
@@ -584,6 +598,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             // "I talked to Will he said yes": a capitalized "Will" inside a sentence is a name.
             && (!tokens[prev - 1].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
+            && !full_name_statement(&tokens, prev - 1)
         {
             if w != v.base {
                 emit(

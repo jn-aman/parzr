@@ -10,6 +10,8 @@ struct NativeButton: NSViewRepresentable {
     var label: String? = nil
     var key: String = ""
     var enabled = true
+    /// Small, secondary text for housekeeping actions (About, Quit) that sit below the main ones.
+    var quiet = false
     var action: () -> Void
     @Environment(\.isEnabled) private var environmentEnabled
     func makeCoordinator() -> Coordinator { Coordinator(action) }
@@ -28,9 +30,10 @@ struct NativeButton: NSViewRepresentable {
         button.title = title; button.isEnabled = enabled && environmentEnabled
         button.isBordered = false
         (button as? ActionButton)?.visualKind = kind
-        let ink = kind == .primary && button.isEnabled ? NSColor(Color.onAccent) : NSColor(Color.textPrimary)
+        let ink = kind == .primary && button.isEnabled ? NSColor(Color.onAccent) : NSColor(quiet ? Color.textSecondary : Color.textPrimary)
         button.contentTintColor = ink
-        button.attributedTitle = NSAttributedString(string: symbol != nil && !title.isEmpty ? " " + title : title, attributes: [.font: button.font ?? .systemFont(ofSize: 12), .foregroundColor: ink.withAlphaComponent(button.isEnabled ? 1 : 0.4)])
+        let font: NSFont = quiet ? .systemFont(ofSize: 11) : button.font ?? .systemFont(ofSize: 12)
+        button.attributedTitle = NSAttributedString(string: symbol != nil && !title.isEmpty ? " " + title : title, attributes: [.font: font, .foregroundColor: ink.withAlphaComponent(button.isEnabled ? 1 : 0.4)])
         button.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         button.imagePosition = symbol == nil ? .noImage : title.isEmpty ? .imageOnly : .imageLeading
         button.keyEquivalent = key; button.keyEquivalentModifierMask = []
