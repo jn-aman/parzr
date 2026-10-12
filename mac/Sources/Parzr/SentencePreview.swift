@@ -75,6 +75,8 @@ enum SentencePreview {
             }
             cursor = stop
         }
+        // Widening a spacing edit at a sentence end ("bad.␣I") can carry the cursor into the next sentence's first word.
+        end = max(end, cursor)
         out += AttributedString(value.substring(with: NSRange(location: cursor, length: end - cursor)))
         while let c = out.characters.first, c.isWhitespace { out.characters.removeFirst() }
         while let c = out.characters.last, c.isWhitespace { out.characters.removeLast() }

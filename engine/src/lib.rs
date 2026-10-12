@@ -15,6 +15,8 @@ mod gec;
 mod gec_text;
 mod marks;
 #[cfg(feature = "local-model")]
+mod meaning;
+#[cfg(feature = "local-model")]
 mod model;
 mod morphology;
 mod names;
@@ -25,6 +27,7 @@ mod rules;
 mod spelling;
 mod structure;
 mod tokenizer;
+mod wording;
 pub use names::NameIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -79,6 +82,10 @@ pub struct Request {
     /// files or the native runtime this does nothing.
     #[serde(default)]
     pub gec: bool,
+    /// The text comes from a chat app (Slack, Teams, Messages…): a short Friendly rewrite may end
+    /// with one fitting emoji. Other modes and apps never get one.
+    #[serde(default)]
+    pub casual: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -113,6 +120,7 @@ impl Default for Request {
             sentence_end: true,
             deep: false,
             gec: false,
+            casual: false,
             name_index: None,
         }
     }
@@ -129,6 +137,15 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         return pipeline::rewrite(&enriched);
     }
     pipeline::rewrite(req)
+}
+
+/// Whether `output`, a `mode` rewrite of `source`, says what `source` says: the check every
+/// tone rewrite passes sentence by sentence. For evaluation tools (examples/tone_judge.rs).
+#[cfg(feature = "local-model")]
+#[doc(hidden)]
+pub fn tone_keeps_meaning(mode: Mode, source: &str, output: &str) -> Result<(), String> {
+    let hints = |s: &str| model::linguistic_hints(s).unwrap_or_default();
+    meaning::keeps_meaning(mode, source, output, "", &hints(source), &hints(output))
 }
 
 /// Cancel an in-flight local inference. No editor mutation happens in the engine.
@@ -269,7 +286,7 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|(?i:\b[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
 }
 fn protected_ranges(req: &Request) -> Vec<TextRange> {
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
@@ -766,11 +783,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         let dotted_abbreviation = req.text[token.end_byte..]
             .strip_prefix('.')
             .is_some_and(|rest| rest.starts_with(char::is_alphabetic));
-        if token.normalized == "i" && token.surface == "i" && !dotted_abbreviation {
+        // "i'm", "i’ll": the contracted pronoun takes its capital too, and only its first letter.
+        let contracted_i = ["i'm", "i've", "i'll", "i'd"].contains(&token.normalized.as_str())
+            && token.surface.starts_with('i')
+            && token.surface[1..].chars().all(|c| !c.is_uppercase());
+        if (token.normalized == "i" && token.surface == "i" || contracted_i) && !dotted_abbreviation
+        {
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
-                token.end_utf16,
+                token.start_utf16 + 1,
                 "I".into(),
                 "Capitalization",
                 "grammar.personal_pronoun",
@@ -1434,6 +1456,37 @@ mod tests {
         // Off by default: case is left alone mid-sentence.
         let text = "ask aman jain about it";
         assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
+    }
+    #[test]
+    fn file_names_and_domains_are_never_capitalized() {
+        for text in [
+            "aman.png",
+            "rename it to aman.png",
+            "send AMAN.PNG and priya_notes.docx",
+            "see parzr.app and github.com",
+        ] {
+            assert_eq!(
+                fix_request(with_names(text, &["Aman", "Priya"], true)),
+                text
+            );
+        }
+        assert_eq!(
+            fix_request(with_names("send it to aman", &["Aman"], true)),
+            "send it to Aman"
+        );
+    }
+    #[test]
+    fn contracted_i_gets_one_capital_and_possessive_names_do_not_crash() {
+        assert_eq!(
+            fix_request(with_names("i'm here and i've done it", &[], true)),
+            "I'm here and I've done it"
+        );
+        // The pipeline once panicked here, splitting the name's capital from its apostrophe.
+        let req = Request {
+            gec: true,
+            ..with_names("I like noahs life.", &[], true)
+        };
+        assert!(pipeline::rewrite(&req).is_ok());
     }
     #[test]
     fn capitalize_names_adds_one_case_only_edit() {

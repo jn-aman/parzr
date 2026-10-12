@@ -272,7 +272,7 @@ enum KnownNames {
 
 enum NameCapitalization: String, CaseIterable {
     case never, documents, everywhere
-    static let chatApps = ["com.tinyspeck.slackmacgap", "com.microsoft.teams", "com.microsoft.teams2", "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.hnc.Discord", "ru.keepcoder.Telegram", "com.apple.MobileSMS", "com.facebook.archon"]
+    static let chatApps = SuggestedRewrite.chatApps
     func enabled(bundle: String?) -> Bool {
         switch self {
         case .never: false
