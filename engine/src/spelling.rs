@@ -1293,10 +1293,9 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize) -> bool {
 /// never respells them.
 pub(crate) fn chat(word: &str) -> bool {
     [
-        "abt", "bday", "bruh", "cmon", "convo", "coz", "cya", "dat", "dem", "dis", "dunno",
-        "gimme", "gonna", "gotta", "ima", "imma", "kinda", "lemme", "lil", "luv", "nvm", "obvi",
-        "outta", "probs", "sorta", "srsly", "tho", "thru", "totes", "wanna", "whatcha", "yall",
-        "yup",
+        "abt", "bday", "bruh", "cmon", "convo", "coz", "cya", "dunno", "gimme", "gonna", "gotta",
+        "ima", "imma", "kinda", "lemme", "lil", "luv", "nvm", "obvi", "outta", "probs", "sorta",
+        "srsly", "tho", "thru", "totes", "wanna", "whatcha", "yall", "yup",
     ]
     .contains(&word)
 }
@@ -1342,9 +1341,12 @@ fn kept_negation(word: &str) -> Option<String> {
 /// Whether a result drops the negation the typed word carries ("didnt" read as "did").
 fn drops_negation(word: &str, result: &str) -> bool {
     // A slip of a negative written without its apostrophe ("dosnt", "wouldnt") read as the
-    // positive it negates ("does", "would"); "wesnt" read as "went" negates nothing.
+    // positive it negates ("does", "would") when the negative is the likelier slip; "wesnt" read
+    // as "went" negates nothing, and "canj" is "can" with a neighbouring key.
     NEGATIVES.iter().any(|(bare, _, positive)| {
-        (*bare == word || distance_one(word, bare)) && result == *positive
+        (*bare == word || distance_one(word, bare))
+            && result == *positive
+            && typo_cost(word, bare) <= typo_cost(word, positive)
     })
 }
 /// A common prefix on an ordinary word ("refax", "preschedule", "unshare", "multiuser"): a word
@@ -1416,18 +1418,18 @@ pub(crate) fn calendar_slip(token: &Token<'_>) -> Option<String> {
 }
 /// Acronyms, product codes and company names people type in lowercase ("aws", "hcl", "gcp"):
 /// sorted for binary search.
-const ACRONYMS: [&str; 138] = [
+const ACRONYMS: [&str; 136] = [
     "aks", "api", "apis", "aws", "bba", "bcom", "bpo", "btech", "cad", "cdn", "ceo", "cfo", "cgpa",
     "ci", "cicd", "cli", "cmo", "coo", "cpu", "crm", "css", "csv", "cto", "cv", "dba", "dbms",
     "dm", "dns", "docx", "dpi", "ecs", "eks", "emi", "erp", "eta", "evp", "faq", "faqs", "ftp",
     "gcp", "gdpr", "gke", "gmat", "gpa", "gpu", "gre", "grpc", "gst", "gui", "hcl", "hdd", "hdfc",
     "hdmi", "hod", "hr", "html", "http", "https", "iaas", "iam", "ibm", "icici", "ide", "ielts",
-    "ifsc", "iit", "imap", "ios", "irctc", "isro", "jdk", "jre", "json", "jvm", "jwt", "kpmg",
-    "llm", "llms", "lms", "mba", "mcq", "mtech", "mvc", "mvp", "mysql", "neft", "nlp", "nosql",
-    "npm", "nvm", "oauth", "ocr", "okta", "orm", "paas", "pdf", "pdfs", "pnpm", "ppt", "pptx",
-    "pwc", "qa", "rds", "rpc", "rtgs", "saas", "sbi", "sdk", "sdks", "seo", "sftp", "smtp", "sns",
-    "sql", "sqs", "ssd", "ssh", "ssl", "sso", "svg", "svp", "tcp", "tcs", "tls", "toefl", "tsx",
-    "udp", "ui", "upi", "url", "urls", "usb", "ux", "vpc", "vpn", "wipro", "xlsx", "yaml",
+    "ifsc", "imap", "ios", "irctc", "isro", "jdk", "jre", "json", "jvm", "jwt", "kpmg", "llm",
+    "llms", "lms", "mba", "mcq", "mtech", "mvc", "mvp", "mysql", "neft", "nlp", "nosql", "npm",
+    "nvm", "oauth", "ocr", "okta", "orm", "paas", "pdf", "pdfs", "pnpm", "ppt", "pptx", "pwc",
+    "qa", "rds", "rpc", "rtgs", "saas", "sbi", "sdk", "sdks", "seo", "sftp", "smtp", "sns", "sql",
+    "sqs", "ssd", "ssh", "ssl", "svg", "svp", "tcp", "tcs", "tls", "toefl", "tsx", "udp", "ui",
+    "upi", "url", "urls", "usb", "ux", "vpc", "vpn", "wipro", "xlsx", "yaml",
 ];
 /// A listed acronym, product code or company name typed in lowercase ("aws", "hcl", "gcp"):
 /// respelling one ("aws" to "as") breaks a name.
@@ -1435,11 +1437,14 @@ pub(crate) fn acronym(word: &str) -> bool {
     ACRONYMS.binary_search(&word).is_ok()
 }
 /// Whether a short word without a vowel ("hcl", "ppt", "frm") may become `choice`: only by
-/// adding letters to make a very frequent word ("frm" is "from", "thn" is "then"), never by
-/// dropping or changing one ("hcl" is no "cl", "jvm" no "jam").
+/// adding letters or by a neighbouring key in place of a vowel, to make a frequent word ("frm" is
+/// "from", "thw" is "the", "cqll" is "call"), never by dropping a letter or changing one for a
+/// far key ("hcl" is no "cl", "jvm" no "jam").
 fn vowelless_slip(word: &str, choice: &str) -> bool {
     let mut rest = choice.bytes();
-    word.bytes().all(|b| rest.any(|c| c == b)) && frequency(choice) >= 400
+    let added = choice.len() > word.len() && word.bytes().all(|b| rest.any(|c| c == b));
+    let neighbour = choice.len() == word.len() && slip_cost(word, choice) <= 1.0;
+    (added || neighbour) && frequency(choice) >= 400
 }
 /// Words that must stay as typed: Roman Hindi, Indian English vocabulary, Latin and foreign
 /// phrases, "etc". A damaged spelling is never inferred from these.
@@ -3130,14 +3135,13 @@ pub fn suggest(
         if word.len() <= 4 {
             let doubled = word.as_bytes().windows(2).any(|w| w[0] == w[1]);
             let shorter = choice.len() < word.len();
-            // Four letters may drop a final "e" ("nowe") or a cheap extra key on their own.
-            let cheap = word.len() == 4 && (word.ends_with('e') || slip_cost(word, &choice) <= 0.5);
-            if !choice.bytes().any(|b| b"aeiouy".contains(&b))
-                || shorter
-                    && !doubled
-                    && !cheap
-                    && !(seen(&before, &choice) && seen(&choice, &after))
-            {
+            // Four letters may drop a final "e" ("nowe") or a cheap extra key on their own; three
+            // letters only a neighbouring key before one of the most frequent words ("kon").
+            let cheap = word.len() == 4 && (word.ends_with('e') || slip_cost(word, &choice) <= 0.5)
+                || slip_cost(word, &choice) <= 1.0 && frequency(&choice) >= 600;
+            let backed = seen(&before, &choice) && seen(&choice, &after);
+            let dropped_ok = !shorter || doubled || cheap || backed;
+            if !choice.bytes().any(|b| b"aeiouy".contains(&b)) || !dropped_ok {
                 return None;
             }
         }
