@@ -578,6 +578,9 @@ pub fn check(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     modal_gerund(req, s, edits);
     infinitive_base(req, s, edits);
     noun_number(req, s, edits);
+    agreement(req, s, edits);
+    word_form(req, s, edits);
+    slips(req, s, edits);
 }
 /// Adverbs that may stand between a helping verb and its participle ("was originally built").
 const MID_ADVERBS: &[&str] = &[
@@ -669,8 +672,11 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
-        // "This is mark from the design team": a lowercase name, not a verb.
-        if crate::names::is_bundled_name(w) || crate::names::name_word(w) {
+        // "This is mark from the design team", "This is bill": a lowercase name, not a verb.
+        if crate::names::is_bundled_name(w)
+            || crate::names::name_word(w)
+            || ["this", "that", "here", "who"].contains(&word(s, i - 1)) && k == i + 1
+        {
             continue;
         }
         let Some(v) = morphology::verb(w) else {
@@ -1204,8 +1210,6 @@ fn noun_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             "several",
             "both",
             "numerous",
-            "these",
-            "those",
         ]
         .contains(&q)
             && ["kind", "type", "sort"].contains(&word(s, i + 1))
@@ -1296,7 +1300,11 @@ fn noun_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             {
                 continue;
             }
-            if let Some(p) = plural_of(w) {
+            // "too many food" wants "much": the plural must be the usual phrase.
+            if let Some(p) = plural_of(w)
+                && (numeral
+                    || crate::context::count("many", &p) >= 2 * crate::context::count("much", w))
+            {
                 fix(
                     edits,
                     k,
@@ -1378,6 +1386,712 @@ fn noun_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             if let Some(p) = plural_of(w) {
                 fix(edits, k, p, "After “one of the”, use the plural noun.");
             }
+        }
+    }
+}
+
+/// Nouns that name a group and may take a plural verb in British English ("the team have").
+const COLLECTIVE: &[&str] = &[
+    "theatre",
+    "theater",
+    "school",
+    "university",
+    "college",
+    "hospital",
+    "church",
+    "city",
+    "country",
+    "nation",
+    "state",
+    "world",
+    "industry",
+    "community",
+    "press",
+    "following",
+    "family",
+    "team",
+    "government",
+    "company",
+    "staff",
+    "police",
+    "group",
+    "crowd",
+    "public",
+    "band",
+    "club",
+    "committee",
+    "council",
+    "party",
+    "board",
+    "army",
+    "navy",
+    "crew",
+    "audience",
+    "class",
+    "jury",
+    "couple",
+    "majority",
+    "minority",
+    "number",
+    "rest",
+    "total",
+    "management",
+    "union",
+    "firm",
+    "office",
+    "department",
+    "ministry",
+    "parliament",
+    "congress",
+    "senate",
+    "cabinet",
+    "squad",
+    "side",
+    "media",
+    "data",
+    "lot",
+    "half",
+    "variety",
+    "series",
+    "pair",
+];
+/// Pronouns that take a singular verb.
+const SINGULAR_PRONOUNS: &[&str] = &[
+    "everyone",
+    "everybody",
+    "someone",
+    "somebody",
+    "nobody",
+    "anyone",
+    "anybody",
+    "everything",
+    "something",
+    "nothing",
+    "anything",
+];
+/// Verbs whose "-s" form is no common noun, so "is depends" can only be a stray "is".
+const S_VERBS: &[&str] = &[
+    "depends",
+    "seems",
+    "belongs",
+    "consists",
+    "exists",
+    "contains",
+    "includes",
+    "requires",
+    "provides",
+    "allows",
+    "becomes",
+    "remains",
+    "happens",
+    "involves",
+    "refers",
+    "relies",
+    "occurs",
+    "applies",
+    "affects",
+    "appears",
+    "deserves",
+    "describes",
+    "explains",
+];
+/// "My father have a car", "Everyone have", "Computers is useful", "there is problems", "is
+/// depends on": a clear subject and the helping verb after it disagree.
+fn agreement(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let fix = |edits: &mut Vec<Edit>, k: usize, r: &str, id: &str, why: &str| {
+        push(
+            req,
+            edits,
+            span(s, k, k),
+            crate::match_case(r, s[k].surface),
+            id,
+            why,
+            0.94,
+        );
+    };
+    // "requires that an organization have": the subjunctive keeps the bare verb.
+    let mandative = |i: usize| {
+        i >= 2
+            && word(s, i - 1) == "that"
+            && [
+                "require",
+                "requires",
+                "required",
+                "suggest",
+                "suggests",
+                "suggested",
+                "recommend",
+                "recommends",
+                "recommended",
+                "insist",
+                "insists",
+                "insisted",
+                "demand",
+                "demands",
+                "demanded",
+                "ask",
+                "asks",
+                "asked",
+                "propose",
+                "proposed",
+                "important",
+                "essential",
+                "necessary",
+                "vital",
+                "crucial",
+                "request",
+                "requested",
+                "urge",
+                "urged",
+            ]
+            .contains(&word(s, i - 2))
+    };
+    for i in 0..s.len().saturating_sub(1) {
+        let w = word(s, i);
+        if mandative(i) {
+            continue;
+        }
+        // A determiner and one singular noun at the start of a clause, then "have".
+        let det = [
+            "the", "my", "your", "his", "her", "its", "our", "their", "this", "that", "each",
+            "every", "a", "an",
+        ]
+        .contains(&w)
+            && crate::clause_repairs::clause_start(s, i)
+            && !(i > 0 && ["and", "or", "nor", "both"].contains(&word(s, i - 1)));
+        if det
+            && let Some(n) = s.get(i + 1)
+            && noun_like(n)
+            && (n.pos == "Noun"
+                || n.pos.is_empty() && crate::spelling::flags(&n.normalized) & 4 == 0)
+            && crate::spelling::flags(&n.normalized) & 16 == 0
+            && !n.normalized.ends_with('s')
+            && plural_of(&n.normalized).is_some()
+            && !COLLECTIVE.contains(&n.normalized.as_str())
+            && !NUMBERLESS.contains(&n.normalized.as_str())
+            && word(s, i + 2) == "have"
+            && !req.text[n.end_byte..].starts_with(['\'', '’', '-'])
+        {
+            fix(
+                edits,
+                i + 2,
+                "has",
+                "grammar.subject_have",
+                "Use “has” with a singular subject.",
+            );
+            continue;
+        }
+        // "Everyone have", "Nobody have".
+        if SINGULAR_PRONOUNS.contains(&w)
+            && crate::clause_repairs::clause_start(s, i)
+            && word(s, i + 1) == "have"
+            && word(s, i + 2) != "to"
+        {
+            fix(
+                edits,
+                i + 1,
+                "has",
+                "grammar.subject_have",
+                "Use “has” with a singular subject.",
+            );
+            continue;
+        }
+        // A plural noun opening the sentence ("Computers is", "Such clothes is").
+        let lead = match (i, w) {
+            (0, "such" | "most" | "many" | "several" | "both" | "few") => Some(1),
+            (0, _) => Some(0),
+            _ => None,
+        };
+        if let Some(lead) = lead
+            // "AIDS is": an acronym may be one thing.
+            && s.get(lead).is_some_and(|n| {
+                noun_like(n)
+                    && (lead > 0 || n.pos == "Noun")
+                    && n.surface.chars().skip(1).all(char::is_lowercase)
+            })
+        {
+            let n = &s[lead];
+            let nw = n.normalized.as_str();
+            let verb = word(s, lead + 1);
+            if crate::spelling::flags(nw) & 16 != 0
+                && singular_of(nw).is_some()
+                && !nw.ends_with("ics")
+                && !MASS.contains(&nw)
+                && !COLLECTIVE.contains(&nw)
+                && ![
+                    "news", "series", "species", "means", "measles", "lots", "thanks",
+                ]
+                .contains(&nw)
+                && ["is", "was", "has"].contains(&verb)
+            {
+                let r = match verb {
+                    "is" => "are",
+                    "was" => "were",
+                    _ => "have",
+                };
+                fix(
+                    edits,
+                    lead + 1,
+                    r,
+                    "grammar.subject_copula",
+                    "Match the verb to its plural subject.",
+                );
+                continue;
+            }
+        }
+        // "There is problems": a bare plural noun after "there is".
+        if w == "there"
+            && ["is", "was"].contains(&word(s, i + 1))
+            && let Some(n) = s.get(i + 2)
+            && noun_like(n)
+            && crate::spelling::flags(&n.normalized) & 16 != 0
+            && singular_of(&n.normalized).is_some()
+            && !MASS.contains(&n.normalized.as_str())
+            && !COLLECTIVE.contains(&n.normalized.as_str())
+            && ![
+                "news", "series", "species", "means", "lots", "thanks", "politics",
+            ]
+            .contains(&n.normalized.as_str())
+        {
+            let r = if word(s, i + 1) == "is" {
+                "are"
+            } else {
+                "were"
+            };
+            fix(
+                edits,
+                i + 1,
+                r,
+                "grammar.there_agreement",
+                "After “there”, the verb agrees with the noun that follows.",
+            );
+            continue;
+        }
+        // "It is depends on": a stray "be" before a verb in "-s".
+        if ["is", "are", "am"].contains(&w)
+            && i > 0
+            && S_VERBS.contains(&word(s, i + 1))
+            && [
+                "on", "to", "that", "the", "a", "an", "in", "like", "it", "me", "you", "us",
+                "them", "him", "her", "my", "your", "our", "their", "his", "its", "upon",
+            ]
+            .contains(&word(s, i + 2))
+            && !["there", "here", "what", "which"].contains(&word(s, i - 1))
+        {
+            push(
+                req,
+                edits,
+                (s[i - 1].end_utf16, s[i].end_utf16),
+                String::new(),
+                "grammar.extra_be",
+                "This “be” does not belong before the verb.",
+                0.94,
+            );
+        }
+    }
+}
+/// Adjectives a writer often leaves without "-ly" before a verb ("was original built").
+const ADVERB_STEMS: &[&str] = &[
+    "easy",
+    "simple",
+    "quick",
+    "careful",
+    "original",
+    "current",
+    "recent",
+    "previous",
+    "final",
+    "actual",
+    "usual",
+    "general",
+    "typical",
+    "initial",
+    "absolute",
+    "entire",
+    "exact",
+    "slight",
+    "significant",
+    "successful",
+    "automatic",
+    "basic",
+    "specific",
+    "primary",
+    "frequent",
+    "extreme",
+    "relative",
+    "incredible",
+    "reasonable",
+    "particular",
+    "possible",
+    "proper",
+    "correct",
+    "official",
+    "eventual",
+    "subsequent",
+    "mere",
+    "sole",
+    "main",
+    "real",
+];
+fn adverb_of(adj: &str) -> Option<String> {
+    let adv = if let Some(stem) = adj.strip_suffix('y') {
+        format!("{stem}ily")
+    } else if let Some(stem) = adj.strip_suffix("le") {
+        format!("{stem}ly")
+    } else if adj.ends_with("ic") {
+        format!("{adj}ally")
+    } else {
+        format!("{adj}ly")
+    };
+    crate::spelling::known(&adv).then_some(adv)
+}
+/// "dependant on", "world renown", "I am interesting in", "can easy find", "was original built":
+/// the word's form, not its meaning, is wrong.
+fn word_form(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let fix = |edits: &mut Vec<Edit>, k: usize, r: String, id: &str, why: &str| {
+        push(
+            req,
+            edits,
+            span(s, k, k),
+            crate::match_case(&r, s[k].surface),
+            id,
+            why,
+            0.94,
+        );
+    };
+    for i in 0..s.len() {
+        let w = word(s, i);
+        let next = word(s, i + 1);
+        let prev = if i > 0 { word(s, i - 1) } else { "" };
+        if w == "dependant" && ["on", "upon"].contains(&next) {
+            fix(
+                edits,
+                i,
+                "dependent".into(),
+                "grammar.word_form",
+                "The adjective is “dependent”; a “dependant” is a person.",
+            );
+            continue;
+        }
+        // "whose renown for dubbing" is the noun.
+        if w == "renown"
+            && ![
+                "whose",
+                "his",
+                "her",
+                "their",
+                "its",
+                "our",
+                "my",
+                "your",
+                "the",
+                "of",
+                "great",
+                "international",
+                "worldwide",
+                "much",
+                "some",
+            ]
+            .contains(&prev)
+            // "gain renown for" is the noun: only after "be" or a degree word.
+            && [
+                "world", "internationally", "highly", "well", "widely", "is", "was", "are", "were",
+                "be", "been", "become", "became",
+            ]
+            .contains(&prev)
+        {
+            fix(
+                edits,
+                i,
+                "renowned".into(),
+                "grammar.word_form",
+                "Use the adjective “renowned”.",
+            );
+            continue;
+        }
+        // "I am interesting in", "We were exciting about": the feeling takes "-ed".
+        if [
+            "interesting",
+            "exciting",
+            "boring",
+            "confusing",
+            "tiring",
+            "disappointing",
+            "frightening",
+            "worrying",
+            "embarrassing",
+        ]
+        .contains(&w)
+            && ["in", "about", "with", "by", "to", "that", "for"].contains(&next)
+        {
+            let mut k = i - usize::from(i > 0);
+            if [
+                "very",
+                "really",
+                "so",
+                "quite",
+                "more",
+                "most",
+                "too",
+                "extremely",
+                "not",
+            ]
+            .contains(&word(s, k))
+                && k > 0
+            {
+                k -= 1;
+            }
+            let be = word(s, k);
+            let subject = if k > 0 { word(s, k - 1) } else { "" };
+            if (["am", "'m"].contains(&be) || ["i'm", "we're"].contains(&be))
+                || ["was", "were", "are", "felt", "feel", "get", "got", "became"].contains(&be)
+                    && ["i", "we"].contains(&subject)
+            {
+                let ed = morphology::verb(w).map_or_else(
+                    || format!("{}ed", w.strip_suffix("ing").unwrap_or(w)),
+                    |v| v.participle,
+                );
+                if crate::spelling::known(&ed) {
+                    fix(
+                        edits,
+                        i,
+                        ed,
+                        "grammar.participle_adjective",
+                        "A feeling takes the “-ed” form: “interested”, “excited”.",
+                    );
+                }
+                continue;
+            }
+        }
+        // "can easy find", "was original built", "is current being": an adjective between a
+        // helping verb and its verb is the adverb.
+        if ADVERB_STEMS.contains(&w)
+            && [
+                "can", "could", "will", "would", "should", "must", "may", "might", "to", "is",
+                "are", "was", "were", "be", "been", "has", "have", "had",
+            ]
+            .contains(&prev)
+            && let Some(t) = s.get(i + 1)
+            && (t.pos == "Verb" || t.pos.is_empty() && crate::spelling::flags(next) & 4 != 0)
+            && let Some(v) = morphology::verb(next)
+        {
+            let modal = [
+                "can", "could", "will", "would", "should", "must", "may", "might", "to",
+            ]
+            .contains(&prev);
+            // "would be easy talking to her" keeps the adjective before a gerund.
+            let fits = if modal {
+                next == v.base
+            } else {
+                next == v.participle && next != v.gerund
+            };
+            if fits && let Some(adv) = adverb_of(w) {
+                fix(
+                    edits,
+                    i,
+                    adv,
+                    "grammar.adverb_form",
+                    "Use the adverb to describe the verb.",
+                );
+            }
+        }
+    }
+}
+/// Verbs that take an object and then "in" ("put it in the box").
+pub(crate) const PUT_IN: &[&str] = &[
+    "put", "puts", "putting", "plug", "plugged", "fill", "filled", "turn", "turned", "hand",
+    "handed", "bring", "brought", "send", "sent", "type", "typed", "drop", "dropped", "pop",
+    "popped", "stick", "throw", "toss", "add", "added", "paste", "pasted", "copy", "copied",
+    "move", "moved", "save", "saved", "leave", "left", "set", "keep", "kept", "lock", "locked",
+    "factor", "mix", "load", "loaded", "write", "wrote", "pass", "passed", "feed", "fed",
+];
+/// Word slips that only one reading of the clause fits: "put in in the model" ("it in"), "let me
+/// no", "is of today", "borrow me your pen", "It just the part", "Each of the reports need", "as
+/// well costs", "Worse case".
+fn slips(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let fix = |edits: &mut Vec<Edit>, k: usize, r: &str, id: &str, why: &str| {
+        push(
+            req,
+            edits,
+            span(s, k, k),
+            crate::match_case(r, s[k].surface),
+            id,
+            why,
+            0.93,
+        );
+    };
+    for i in 0..s.len() {
+        let w = word(s, i);
+        let next = word(s, i + 1);
+        let prev = if i > 0 { word(s, i - 1) } else { "" };
+        // "Just put in in the model": the first "in" is a slip for "it".
+        // "should be put in in the box" is a passive: no "it".
+        if w == "in"
+            && next == "in"
+            && PUT_IN.contains(&prev)
+            && !(i >= 2
+                && [
+                    "be", "been", "being", "is", "are", "was", "were", "get", "got",
+                ]
+                .contains(&word(s, i - 2)))
+        {
+            fix(edits, i, "it", "grammar.it_in", "Did you mean “it in”?");
+            continue;
+        }
+        // "let me no your thoughts", "I don't no": the verb "know".
+        if w == "no"
+            && (["me", "us"].contains(&prev) && i >= 2 && word(s, i - 2) == "let"
+                || ["don't", "didn't", "doesn't", "dont", "didnt"].contains(&prev))
+            && ![
+                "longer", "more", "less", "one", "doubt", "matter", "way", "problem", "thanks",
+            ]
+            .contains(&next)
+        {
+            fix(edits, i, "know", "grammar.no_know", "Did you mean “know”?");
+            continue;
+        }
+        // "The meeting is of today": "off".
+        if w == "of"
+            && [
+                "is", "are", "was", "were", "be", "am", "i'm", "it's", "he's", "she's", "we're",
+                "they're",
+            ]
+            .contains(&prev)
+            && ["today", "tomorrow", "tonight", "work", "duty", "sick"].contains(&next)
+            && s.get(i + 2).is_none_or(|t| {
+                !t.is_word
+                    || ["and", "but", "so", "because", "for"].contains(&t.normalized.as_str())
+            })
+        {
+            fix(edits, i, "off", "grammar.of_off", "Did you mean “off”?");
+            continue;
+        }
+        // "Can you borrow me your pen?": you lend something to someone.
+        if w == "borrow" && ["me", "us", "him", "her", "them"].contains(&next) {
+            fix(
+                edits,
+                i,
+                "lend",
+                "grammar.lend_borrow",
+                "You lend something to someone; you borrow it from them.",
+            );
+            continue;
+        }
+        // "It just the part I need": "it's".
+        if (w == "it" && crate::clause_repairs::clause_start(s, i) || w == "that" && i == 0)
+            && [
+                "just",
+                "only",
+                "also",
+                "still",
+                "really",
+                "definitely",
+                "probably",
+                "actually",
+            ]
+            .contains(&next)
+            && [
+                "the", "a", "an", "my", "your", "our", "their", "his", "her", "not",
+            ]
+            .contains(&word(s, i + 2))
+        {
+            fix(
+                edits,
+                i,
+                if w == "it" { "it's" } else { "that's" },
+                "grammar.missing_copula",
+                "A form of “be” looks missing here.",
+            );
+            continue;
+        }
+        // "Each of the reports need": the verb agrees with "each".
+        if ["each", "one", "neither", "either"].contains(&w)
+            && crate::clause_repairs::clause_start(s, i)
+            && next == "of"
+            && [
+                "the", "these", "those", "my", "your", "our", "their", "his", "her", "them", "us",
+            ]
+            .contains(&word(s, i + 2))
+        {
+            let mut k = i + 3;
+            if word(s, i + 2) != "them" && word(s, i + 2) != "us" {
+                while s.get(k).is_some_and(|t| t.pos == "Adjective") && k < i + 5 {
+                    k += 1;
+                }
+                if !s
+                    .get(k)
+                    .is_some_and(|t| t.is_word && crate::spelling::flags(&t.normalized) & 16 != 0)
+                {
+                    continue;
+                }
+                k += 1;
+            }
+            let v = word(s, k);
+            let r = match v {
+                "have" => Some("has".to_owned()),
+                "are" => Some("is".to_owned()),
+                "were" => Some("was".to_owned()),
+                "do" => Some("does".to_owned()),
+                "don't" => Some("doesn't".to_owned()),
+                _ => morphology::verb(v)
+                    .filter(|x| {
+                        x.base == v
+                            && x.third != v
+                            && crate::spelling::flags(v) & 4 != 0
+                            && morphology::predicate(&x.base)
+                    })
+                    .map(|x| x.third),
+            };
+            if let Some(r) = r {
+                fix(
+                    edits,
+                    k,
+                    &r,
+                    "grammar.each_of_agreement",
+                    "After “each of” or “one of”, the verb is singular.",
+                );
+            }
+            continue;
+        }
+        // "as well costs": "as well as".
+        if w == "well"
+            && prev == "as"
+            && !(i >= 2 && ["may", "might", "could", "just"].contains(&word(s, i - 2)))
+            && s.get(i + 1).is_some_and(|t| {
+                [
+                    "the", "a", "an", "my", "your", "our", "their", "his", "her", "its", "this",
+                    "these", "those", "some", "other",
+                ]
+                .contains(&t.normalized.as_str())
+                    || t.pos == "Noun" && crate::spelling::flags(&t.normalized) & 16 != 0
+            })
+        {
+            push(
+                req,
+                edits,
+                (s[i].end_utf16, s[i].end_utf16),
+                " as".into(),
+                "grammar.as_well_as",
+                "Did you mean “as well as”?",
+                0.93,
+            );
+            continue;
+        }
+        // "Worse case scenario", "In the worse case,": "worst".
+        if w == "worse"
+            && next == "case"
+            && (word(s, i + 2) == "scenario"
+                || s.get(i + 2)
+                    .is_some_and(|t| [",", ":"].contains(&t.surface))
+                    && (i == 0 || ["the", "in"].contains(&prev)))
+        {
+            fix(
+                edits,
+                i,
+                "worst",
+                "grammar.worst_case",
+                "The phrase is “worst case”.",
+            );
         }
     }
 }

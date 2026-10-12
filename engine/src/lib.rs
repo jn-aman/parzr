@@ -662,7 +662,19 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
                 .contains(&tokens[index - 3].normalized.as_str()))
         // "that that": a demonstrative after the conjunction ("I know that that works") is meant;
         // a pronoun, article or plural noun after both is not.
+        // "put in in the model": the first "in" is "it", which the grammar pass restores.
+        && !(w == "in"
+            && before(2)
+            && crate::forms::PUT_IN.contains(&tokens[index - 2].normalized.as_str())
+            && !(before(3)
+                && ["be", "been", "being", "is", "are", "was", "were", "get", "got"]
+                    .contains(&tokens[index - 3].normalized.as_str()))
+            && tokens.get(index + 1).is_some_and(|n| n.is_word))
         && (w != "that"
+            // "what you mean by that that.": nothing follows to make it a demonstrative.
+            || tokens
+                .get(index + 1)
+                .is_none_or(|n| n.sentence != token.sentence || [".", "!", "?"].contains(&n.surface))
             || tokens.get(index + 1).is_some_and(|n| {
                 n.sentence == token.sentence
                     && ([
@@ -673,7 +685,11 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
                     .contains(&n.normalized.as_str())
                         || (n.pos == "Noun" || spelling::flags(&n.normalized) & 2 != 0)
                             && structure::plural(n) == Some(true)
-                            && !n.proper_name)
+                            && !n.proper_name
+                            // "the ethics that that implicates": a verb, not a plural noun.
+                            && !morphology::verb(&n.normalized).is_some_and(|v| {
+                                v.third == n.normalized && spelling::flags(&n.normalized) & 4 != 0
+                            }))
             }))
         // A capitalized double inside a sentence is a name ("Bora Bora", "Walla Walla").
         && !(token.surface.starts_with(char::is_uppercase)

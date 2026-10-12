@@ -817,7 +817,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             continue;
         }
         // "Each students has": the determiner, not the noun's ending, gives the number.
-        if i >= 2 && ["each", "every"].contains(&tokens[i - 2].normalized.as_str()) {
+        if i >= 2
+            && ["each", "every"].contains(&tokens[i - 2].normalized.as_str())
+            && plural(p) == Some(true)
+        {
             continue;
         }
         let Some(mut is_plural) = plural(p) else {

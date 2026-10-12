@@ -400,3 +400,76 @@ fn nouns_take_the_number_of_their_quantifier() {
         "Every clothes shop was closed.",
     ]);
 }
+
+#[test]
+fn clear_subjects_agree_and_word_forms_fit_their_slot() {
+    check(&[
+        ("My teacher have a car.", "My teacher has a car."),
+        (
+            "Everyone have a right to vote.",
+            "Everyone has a right to vote.",
+        ),
+        ("There is problems with it.", "There are problems with it."),
+        (
+            "It is depends on the weather.",
+            "It depends on the weather.",
+        ),
+        (
+            "He is dependant on his parents.",
+            "He is dependent on his parents.",
+        ),
+        (
+            "She is a world renown chef.",
+            "She is a world renowned chef.",
+        ),
+        ("I am interesting in art.", "I am interested in art."),
+        ("You can easy find it.", "You can easily find it."),
+        (
+            "Each of the reports need a review.",
+            "Each of the reports needs a review.",
+        ),
+    ]);
+    unchanged(&[
+        "My father and my mother have a car.",
+        "The team have won the cup.",
+        "The following have been released.",
+        "The singer, whose renown grew, sang.",
+        "It would be easy talking to her.",
+        "She would gain renown for her films.",
+        "It requires that an organization have proper tools.",
+        "You are boring with that story.",
+    ]);
+}
+
+#[test]
+fn everyday_slips_take_the_word_the_clause_needs() {
+    check(&[
+        ("Just put in in the model.", "Just put it in the model."),
+        (
+            "Please let me no your thoughts.",
+            "Please let me know your thoughts.",
+        ),
+        ("The meeting is of today.", "The meeting is off today."),
+        ("Can you borrow me your pen?", "Can you lend me your pen?"),
+        (
+            "I'm not sure what you mean by that that.",
+            "I'm not sure what you mean by that.",
+        ),
+        (
+            "It's important that that we finish.",
+            "It's important that we finish.",
+        ),
+        ("It just the part I need.", "It's just the part I need."),
+        (
+            "Worse case scenario, we wait.",
+            "Worst case scenario, we wait.",
+        ),
+    ]);
+    unchanged(&[
+        "The box should be put in the car.",
+        "Let me no longer wait.",
+        "The idea is of great value.",
+        "We may as well go home.",
+        "This is a worse case than last year.",
+    ]);
+}
