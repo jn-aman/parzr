@@ -840,6 +840,14 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
     // throughout only on longer words ("INITALIZED").
     for t in tokens.iter().filter(|_| !tone_only) {
+        // The writer's names and dictionary words (and links, code, file names) are never respelled.
+        if protected
+            .iter()
+            .chain(guard.iter())
+            .any(|r| overlaps(t.start_utf16, t.end_utf16, r))
+        {
+            continue;
+        }
         // "Wenesday", "Thurday": a capitalized slip of a day or month name.
         let day = spelling::calendar_slip(t);
         let Some(correction) = (t.is_word && t.surface.is_ascii())
@@ -1734,6 +1742,17 @@ mod tests {
         // Off by default: case is left alone mid-sentence.
         let text = "ask aman jain about it";
         assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
+    }
+    #[test]
+    fn the_writers_names_are_never_respelled_by_the_misspelling_list() {
+        assert_eq!(
+            fix_request(with_names("I read the projet today.", &[], false)),
+            "I read the project today."
+        );
+        assert_eq!(
+            fix_request(with_names("I read the projet today.", &["projet"], false)),
+            "I read the projet today."
+        );
     }
     #[test]
     fn a_capital_you_inside_a_sentence_is_lowercased_but_headings_keep_theirs() {

@@ -83,6 +83,17 @@ pub fn is_known_misspelling(word: &str) -> bool {
         || crate::rules::mined_typo(lower).is_some()
         || crate::spelling::calendar_word_slip(lower).is_some()
 }
+/// A misspelling from the hand-reviewed lists only (name typos, one-word phrase rules). Names the
+/// writer gives Parzr are dropped only for these: the mined list is broad ("projet" is someone's word).
+pub fn is_reviewed_misspelling(word: &str) -> bool {
+    let lower = fold(word);
+    let lower = base(&lower);
+    is_name_typo(lower)
+        || crate::rules::phrases()
+            .rules
+            .iter()
+            .any(|r| !r.source.contains(' ') && r.source == lower)
+}
 /// Unicode case folding used for every name comparison (matches `Token::normalized`).
 pub fn fold(s: &str) -> String {
     s.to_lowercase().replace('’', "'")
@@ -399,7 +410,7 @@ impl NameIndex {
         for word in &req.dictionary {
             index.dictionary.add(word, false);
         }
-        for name in req.names.iter().filter(|n| !is_known_misspelling(n)) {
+        for name in req.names.iter().filter(|n| !is_reviewed_misspelling(n)) {
             index.names.add(name, true);
         }
         index
