@@ -369,7 +369,11 @@ fn nominal(s: &[Token<'_>], i: usize, strict: bool) -> bool {
     let noun = |t: &Token<'_>| {
         let x = t.normalized.as_str();
         t.is_word
-            && t.pos == "Noun"
+            // Without a tagger hint, a dictionary noun that is no adjective.
+            && (t.pos == "Noun"
+                || t.pos.is_empty()
+                    && crate::spelling::flags(x) & 2 != 0
+                    && crate::spelling::flags(x) & 8 == 0)
             && !t.proper_name
             && !PREDICATE_ADJECTIVES.contains(&x)
             && ![
@@ -419,7 +423,7 @@ fn nominal(s: &[Token<'_>], i: usize, strict: bool) -> bool {
         return true;
     }
     // "of it's long history": an adjective and its noun.
-    s[i].pos == "Adjective" && !PREDICATE_ADJECTIVES.contains(&w) && after.is_some_and(|a| noun(a))
+    s[i].pos == "Adjective" && !PREDICATE_ADJECTIVES.contains(&w) && after.is_some_and(noun)
 }
 /// "it's" where only the possessive fits: "it's own", "it's name", "in it's place", "has it's".
 fn its_possessive(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
@@ -654,7 +658,9 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             k += 1;
         }
         let w = word(s, k);
-        let t = &s[k];
+        let Some(t) = s.get(k) else {
+            continue;
+        };
         if w.is_empty()
             || t.proper_name
             || t.surface.starts_with(char::is_uppercase)
@@ -674,15 +680,47 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         } else {
             continue;
         };
-        // "they are passes": after a plural "be" an "-s" word is a plural noun.
+        // "might be attributes": an "-s" word after "be" is mostly a plural noun; only "been
+        // resolves" is a sure slip. "is save" is "is safe" mistyped.
         if w == v.participle
             || v.base == "be"
-            || form == "third" && ["are", "were", "am"].contains(&be)
+            || form == "third" && be != "been"
+            || ["save", "lay", "lie", "found", "wound", "ground"].contains(&w)
             || !crate::spelling::known(&v.participle)
         {
             continue;
         }
         let next = word(s, k + 1);
+        // After "is" or "was" a bare verb is often a dropped "-ing" or "-s" ("is match with", "is
+        // want"): only a passive's usual next words count there ("was build in 1900").
+        if form == "base"
+            && ["is", "are", "was", "were", "am"].contains(&prev_be(s, k))
+            && !s.get(k + 1).is_none_or(|n| {
+                [".", ",", ";", ":", ")", "!", "?"].contains(&n.surface)
+                    || [
+                        "by", "in", "on", "at", "to", "as", "from", "into", "under", "during",
+                        "after", "before", "for", "using", "via", "through", "and", "or",
+                    ]
+                    .contains(&n.normalized.as_str())
+            })
+        {
+            continue;
+        }
+        // "are use more chemicals": an object after the verb makes it active ("was play with" or
+        // "be get" wanted "-ing"), except for verbs with two objects ("was given a medal").
+        if [
+            "the", "a", "an", "my", "your", "our", "their", "his", "her", "me", "us", "them",
+            "him", "it", "this", "these", "those", "some", "more", "any",
+        ]
+        .contains(&next)
+            && ![
+                "give", "send", "show", "tell", "offer", "award", "grant", "teach", "ask", "pay",
+                "promise", "deny", "lend", "call", "name", "elect", "appoint", "make", "consider",
+            ]
+            .contains(&v.base.as_str())
+        {
+            continue;
+        }
         // "is use of", "the step is build quality": a noun reading.
         if next == "of"
             || s.get(k + 1).is_some_and(|n| {
@@ -696,7 +734,13 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
-        if !prefers(word(s, k - 1), w, &v.participle, 20) {
+        // The participle must also beat the "-ing" form, or the writer may have meant a
+        // progressive ("he was play with" is "playing").
+        let prev = word(s, k - 1);
+        if !prefers(prev, w, &v.participle, 20)
+            || crate::context::count(prev, &v.participle)
+                < 3 * crate::context::count(prev, &v.gerund)
+        {
             continue;
         }
         push(
@@ -708,6 +752,15 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             "Use a past participle in this passive verb phrase.",
             0.94,
         );
+    }
+}
+/// The form of "be" before the verb at `k`, past one adverb.
+fn prev_be<'t>(s: &'t [Token<'_>], k: usize) -> &'t str {
+    let p = word(s, k - 1);
+    if MID_ADVERBS.contains(&p) && k >= 2 {
+        word(s, k - 2)
+    } else {
+        p
     }
 }
 /// "also know as", "best know for": the participle "known".
@@ -785,7 +838,8 @@ fn modal_gerund(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     ];
     for i in 0..s.len().saturating_sub(1) {
         let m = word(s, i);
-        if !MODALS.contains(&m) || s[i].surface.starts_with(char::is_uppercase) && i > 0 {
+        // "Should smoking be banned?": an opening modal asks a question about a gerund subject.
+        if !MODALS.contains(&m) || i == 0 || s[i].surface.starts_with(char::is_uppercase) {
             continue;
         }
         // "the will", "a can of", "his free will": a noun, not a modal.
@@ -829,7 +883,12 @@ fn modal_gerund(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         let Some(v) = morphology::verb(w) else {
             continue;
         };
-        if v.gerund != w || !crate::spelling::known(&v.base) {
+        // "can smoking be" or "will cooking help": a gerund subject of a question or clause.
+        if v.gerund != w
+            || !crate::spelling::known(&v.base)
+            || s.get(k + 1).is_some_and(crate::punctuation::finite)
+            || word(s, k + 1) == "be"
+        {
             continue;
         }
         push(

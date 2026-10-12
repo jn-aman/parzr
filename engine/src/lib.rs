@@ -481,8 +481,8 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
                 .contains(&tokens[index - 3].normalized.as_str()))
         // "that that": a demonstrative after the conjunction ("I know that that works") is meant;
         // a pronoun, article or plural noun after both is not.
-        && !(w == "that"
-            && !tokens.get(index + 1).is_some_and(|n| {
+        && (w != "that"
+            || tokens.get(index + 1).is_some_and(|n| {
                 n.sentence == token.sentence
                     && ([
                         "i", "you", "he", "she", "we", "they", "there", "the", "a", "an", "my",
@@ -490,7 +490,7 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
                         "those", "if", "when", "once",
                     ]
                     .contains(&n.normalized.as_str())
-                        || n.pos == "Noun"
+                        || (n.pos == "Noun" || spelling::flags(&n.normalized) & 2 != 0)
                             && structure::plural(n) == Some(true)
                             && !n.proper_name)
             }))

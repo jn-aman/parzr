@@ -517,6 +517,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && w == v.base
             // "is do bad" is a damaged "is so bad", not a passive.
             && !(w == "do" && tokens.get(i + 1).is_some_and(spelling::adjective))
+            // "All we need to do is build a wall": a pseudo-cleft takes the bare verb.
+            && !tokens[..prev].iter().any(|x| {
+                x.sentence == t.sentence
+                    && ["do", "does", "did", "done"].contains(&x.normalized.as_str())
+            })
             && (spelling::flags(w) & 8 == 0
                 || [
                     "deliver", "prepare", "repair", "invite", "attach", "assign", "publish",
