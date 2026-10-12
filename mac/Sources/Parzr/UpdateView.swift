@@ -179,6 +179,11 @@ final class UpdatePanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
+/// Whether an update of the panel takes the keyboard: only the first time after a request for focus.
+enum UpdateFocus {
+    static func take(requested: Bool, allowed: Bool, granted: Bool) -> Bool { requested && allowed && !granted }
+}
+
 /// Puts the panel under the menu-bar icon, keeps its top edge fixed as the content changes size, and never steals focus unless asked.
 @MainActor
 final class UpdatePresenter {
@@ -188,6 +193,9 @@ final class UpdatePresenter {
     private var host: NSHostingView<UpdatePanelView>?
     private var subscriptions: Set<AnyCancellable> = []
     private var announced: UpdatePhase?
+    /// Focus is taken once per request. Download progress republishes the phase many times a second, and
+    /// re-taking focus on each one pulled the keyboard away from whatever the writer was typing in.
+    private var focusGranted = false
     #if DEBUG
     var debugPanel: NSPanel? { panel }
     /// Off only for the debug update test, which must never take the keyboard from someone working.
@@ -201,15 +209,17 @@ final class UpdatePresenter {
     }
     private var motion: Bool { !Preferences.shared.reduceMotion && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private func update(phase: UpdatePhase, shown: Bool, focus: Bool) {
-        guard shown, phase != .idle else { hide(); return }
+        guard shown, phase != .idle else { focusGranted = false; hide(); return }
+        if !focus { focusGranted = false }
         let panel = self.panel ?? makePanel()
-        let wasVisible = panel.isVisible, focus = focus && allowsFocus
+        let wasVisible = panel.isVisible, takeFocus = UpdateFocus.take(requested: focus, allowed: allowsFocus, granted: focusGranted)
+        if takeFocus { focusGranted = true }
         resize(panel)
         if !wasVisible {
             if motion { panel.alphaValue = 0 }
-            if focus { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) } else { panel.orderFrontRegardless() }
+            if takeFocus { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) } else { panel.orderFrontRegardless() }
             if motion { NSAnimationContext.runAnimationGroup { $0.duration = 0.18; panel.animator().alphaValue = 1 } }
-        } else if focus, !panel.isKeyWindow { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
+        } else if takeFocus, !panel.isKeyWindow { NSApp.activate(ignoringOtherApps: true); panel.makeKeyAndOrderFront(nil) }
         announce(phase, on: panel)
     }
     private func makePanel() -> UpdatePanel {

@@ -5,7 +5,7 @@
                          [--prev-dir DIR] [--notes TEXT] [--git-range A..B] [--critical]
   make-appcast.py verify --appcast FILE_OR_URL [--version X.Y.Z] [--dir LOCAL_FILES]
 
-build: zips the notarized, stapled app (ditto), makes deltas from up to 3 previous update
+build: zips the notarized, stapled app (ditto), makes deltas from up to 8 previous update
 zips, signs everything (EdDSA key from $SPARKLE_ED_PRIVATE_KEY via stdin, or --key-file),
 writes ONE-item appcast.xml, then verifies its own output and exits non-zero on any mismatch.
 verify: re-checks a published appcast (URL or file): XML shape, URLs, lengths, and every
@@ -22,7 +22,7 @@ SPARKLE_VERSION = '2.9.5'
 SPARKLE_SHA256 = '015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc'
 SPARKLE_URL = f'https://github.com/sparkle-project/Sparkle/releases/download/{SPARKLE_VERSION}/Sparkle-{SPARKLE_VERSION}.tar.xz'
 MIN_OS = '13.0'
-MAX_DELTAS = 3
+MAX_DELTAS = 8
 NS = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
 SP = '{%s}' % NS['sparkle']
 

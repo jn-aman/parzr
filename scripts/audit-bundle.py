@@ -46,7 +46,7 @@ for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVer
 # Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, a daily check.
 feed, key = info.get('SUFeedURL', ''), info.get('SUPublicEDKey', '')
 if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) != 32: sys.exit('Info.plist needs an https SUFeedURL and a 32-byte SUPublicEDKey.')
-if info.get('SUEnableSystemProfiling') is not False or info.get('SUEnableAutomaticChecks') is not True or info.get('SUScheduledCheckInterval') != 86400: sys.exit('Update settings in Info.plist differ from the privacy decisions (no profile, daily automatic checks).')
+if info.get('SUEnableSystemProfiling') is not False or info.get('SUEnableAutomaticChecks') is not True or info.get('SUScheduledCheckInterval') != 3600: sys.exit('Update settings in Info.plist differ from the privacy decisions (no profile, hourly automatic checks).')
 # Every Mach-O in the bundle must carry a valid signature of its own (a deep verify alone would not name an unsigned helper).
 for path in sorted(app.rglob('*')):
     if path.is_symlink() or not path.is_file() or path.stat().st_size < 4: continue
