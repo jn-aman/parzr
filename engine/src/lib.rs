@@ -501,20 +501,6 @@ pub fn protected_spans(req: &Request) -> Vec<TextRange> {
 /// "-ing" g ("holdin", "billin") is never split into "hold in", it may only get its g back, and a
 /// marked one ("doin'") is left as typed.
 fn chat_forms(text: &str, edits: &mut Vec<Edit>) {
-    // The word with every run of three or more letters cut to `keep` letters.
-    let squeeze = |w: &str, keep: usize| {
-        let mut out = String::new();
-        let mut run = 0;
-        let mut last = None;
-        for c in w.to_lowercase().chars() {
-            run = if Some(c) == last { run + 1 } else { 1 };
-            last = Some(c);
-            if run <= keep {
-                out.push(c);
-            }
-        }
-        out
-    };
     edits.retain_mut(|e| {
         if !e.rule_id.starts_with("spelling.") || e.original.contains(char::is_whitespace) {
             return true;
@@ -522,7 +508,9 @@ fn chat_forms(text: &str, edits: &mut Vec<Edit>) {
         let word = e.original.as_str();
         if names::stretched(word) {
             let fixed = e.replacement.to_lowercase();
-            return fixed == squeeze(word, 1) || fixed == squeeze(word, 2);
+            let letters: Vec<char> = word.to_lowercase().chars().collect();
+            return (1..=2).any(|keep| fixed == names::squeeze(&letters, keep))
+                && spelling::known(&fixed);
         }
         let g_less =
             word.len() >= 4 && word.ends_with("in") && word.chars().all(|c| c.is_ascii_lowercase());
@@ -544,7 +532,19 @@ fn chat_forms(text: &str, edits: &mut Vec<Edit>) {
         if marked {
             return false;
         }
-        if e.replacement.to_lowercase() != format!("{} in", &word[..word.len() - 2]) {
+        // "the linkin my last message", "the guyin the shirt": "in" before a determiner is the
+        // preposition, and the split stands.
+        let next_word = byte_at(text, e.end_utf16)
+            .map(|b| text[b..].split_whitespace().next().unwrap_or(""))
+            .unwrap_or("")
+            .to_lowercase();
+        if e.replacement.to_lowercase() != format!("{} in", &word[..word.len() - 2])
+            || [
+                "the", "a", "an", "my", "your", "his", "her", "our", "their", "these", "those",
+                "its",
+            ]
+            .contains(&next_word.as_str())
+        {
             return true;
         }
         e.replacement = match_case(&full, &e.replacement);
@@ -1691,6 +1691,7 @@ mod tests {
     fn chat_words_lists_and_commands_are_left_as_typed() {
         for text in [
             "I'm sooo tired.",
+            "Yesss we did it!",
             "haha true",
             "idk... and idc either lmao",
             "his name is bullseye bc you see",

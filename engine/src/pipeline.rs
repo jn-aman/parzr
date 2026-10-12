@@ -118,6 +118,18 @@ fn name_score(_: &str, _: usize, _: usize) -> Option<f32> {
     None
 }
 
+/// An edit to a word stretched for emphasis ("sooo", "yesss") is only its plain form ("so", "yes").
+#[cfg(feature = "local-model")]
+fn stretch_kept(e: &Edit) -> bool {
+    let word = e.original.trim();
+    if word.contains(char::is_whitespace) || !crate::names::stretched(word) {
+        return true;
+    }
+    let letters: Vec<char> = word.to_lowercase().chars().collect();
+    let fixed = e.replacement.trim().to_lowercase();
+    (1..=2).any(|keep| fixed == crate::names::squeeze(&letters, keep))
+        && crate::spelling::known(&fixed)
+}
 /// The model's Fix pass keeps what people type on purpose: chat shorthand ("pls", "idk", "lmk"),
 /// repeated marks ("!!", "??"), a sign-off's comma ("All the best,"), contractions ("it's" stays,
 /// and "its" becomes "it's", never "it is"), and the shape of tokens: no code formatting added, no
@@ -652,7 +664,9 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     // The grammar model's corrections ride on top of the rules' plan (Fix mode only).
     #[cfg(feature = "local-model")]
     let (text, source_map, edits) = if req.gec && req.mode == Mode::Fix {
-        let merged = crate::gec::combine(req, &protected, edits.clone());
+        let mut merged = crate::gec::combine(req, &protected, edits.clone());
+        // "Yesss" to "Yess": a stretched word may only lose its stretch ("goood" to "good").
+        merged.retain(|e| !e.rule_id.starts_with("gector") || stretch_kept(e));
         match apply_edits(&req.text, &merged) {
             Ok((text, source_map)) => (text, source_map, merged),
             Err(_) => (text, source_map, edits),
@@ -789,6 +803,18 @@ mod tests {
             word("I talked to ritesh today", "ritesh", "rites").as_deref(),
             Some("ritesh")
         );
+    }
+    #[cfg(feature = "local-model")]
+    #[test]
+    fn stretched_words_only_lose_their_stretch() {
+        let gector = |text: &str, original: &str, replacement: &str| {
+            let mut e = edit(text, original, replacement, "Grammar");
+            e.rule_id = "gector.agreement".into();
+            e
+        };
+        assert!(!stretch_kept(&gector("Yesss we did it!", "Yesss", "Yess")));
+        assert!(stretch_kept(&gector("She's goood at it.", "goood", "good")));
+        assert!(stretch_kept(&gector("He go home.", "go", "goes")));
     }
     #[cfg(feature = "local-model")]
     #[test]

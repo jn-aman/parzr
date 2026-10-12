@@ -88,17 +88,16 @@ pub fn fold(s: &str) -> String {
 pub fn base(normalized: &str) -> &str {
     normalized.strip_suffix("'s").unwrap_or(normalized)
 }
-const SHORTHAND: [&str; 122] = [
+const SHORTHAND: [&str; 110] = [
     "u", "ur", "r", "k", "pls", "plz", "thx", "ty", "btw", "lol", "omg", "idk", "ok", "okk", "ya",
     "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb", "gtg", "ttyl", "lmk", "smh",
     "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk", "omw",
     "haha", "hahaha", "hahah", "hahahah", "hahahaha", "ahaha", "ahahaha", "ahah", "hehe", "hehehe",
-    "hihi", "tehe", "teehee", "lmfao", "rofl", "wtf", "ikr", "idc", "idek", "ily", "ilysm", "bae",
-    "bff", "bffs", "fr", "istg", "nvm", "irl", "dm", "dms", "tho", "thru", "tmr", "tomo", "yup",
-    "naw", "mhm", "hmm", "hmmm", "umm", "ugh", "aww", "awww", "woohoo", "kk", "okie", "lemme",
-    "gimme", "dunno", "yall", "coz", "bc", "thnx", "tysm", "atm", "eta", "wbu", "otw", "g2g",
-    "msg", "msgs", "convo", "pic", "pics", "vid", "vids", "mins", "secs", "hrs", "pfp", "lowkey",
-    "highkey", "bruh", "ofc", "ty4", "xoxo", "xo", "ttys", "bday", "gf", "bf",
+    "hihi", "tehe", "teehee", "lmfao", "rofl", "wtf", "ikr", "idc", "idek", "ily", "ilysm", "bff",
+    "bffs", "istg", "nvm", "irl", "dm", "dms", "thru", "tmr", "yup", "naw", "mhm", "hmm", "hmmm",
+    "umm", "aww", "awww", "woohoo", "kk", "okie", "lemme", "gimme", "dunno", "yall", "coz", "bc",
+    "thnx", "tysm", "atm", "wbu", "otw", "g2g", "msg", "msgs", "convo", "mins", "secs", "hrs",
+    "pfp", "lowkey", "highkey", "bruh", "ty4", "xoxo", "ttys", "bday", "gf", "bf",
 ];
 const CALENDAR: [&str; 19] = [
     "monday",
@@ -256,26 +255,53 @@ pub fn is_shorthand(lower: &str) -> bool {
 /// Chat acronyms ("fyi", "lmk", "idk", "btw"): a capital on the first letter only ("Fyi") is wrong,
 /// so a sentence start leaves them as typed.
 pub fn is_chat_acronym(lower: &str) -> bool {
-    const ACRONYMS: [&str; 50] = [
-        "afaik", "asap", "atm", "bc", "bff", "bffs", "brb", "btw", "dm", "dms", "eta", "fr", "fyi",
-        "g2g", "gtg", "hbu", "idc", "idek", "idk", "iirc", "ikr", "ily", "ilysm", "imho", "imo",
-        "irl", "istg", "jk", "lmao", "lmfao", "lmk", "lol", "ngl", "np", "nvm", "ofc", "omg",
-        "omw", "otw", "rn", "rofl", "smh", "tbh", "tmrw", "ttyl", "tysm", "wbu", "wtf", "wyd",
-        "yw",
+    const ACRONYMS: [&str; 47] = [
+        "afaik", "asap", "atm", "bc", "bff", "bffs", "brb", "btw", "dm", "dms", "fyi", "g2g",
+        "gtg", "hbu", "idc", "idek", "idk", "iirc", "ikr", "ily", "ilysm", "imho", "imo", "irl",
+        "istg", "jk", "lmao", "lmfao", "lmk", "lol", "ngl", "np", "nvm", "omg", "omw", "otw", "rn",
+        "rofl", "smh", "tbh", "tmrw", "ttyl", "tysm", "wbu", "wtf", "wyd", "yw",
     ];
     ACRONYMS.contains(&lower)
 }
 /// "pleaseee", "yesss", "sooo": a word stretched for emphasis, never a name.
-/// A run of three of a vowel anywhere ("pleeease") or of any letter at the end ("yesss"); three
-/// consonants inside a word are a slip ("plannnig", "willlose").
+/// A word stretched for emphasis ("sooo", "yesss", "pleeease", "hmmm"): a run of three letters
+/// at the end, or of a vowel inside a word of five letters or more, that collapses to a word
+/// people stretch.
+/// Short words with a tripled inner vowel ("eeek", "neeedd") and tripled consonants inside a word
+/// ("plannnig", "willlose") are slips.
 pub fn stretched(word: &str) -> bool {
     let c: Vec<char> = word.to_lowercase().chars().collect();
-    c.windows(3).enumerate().any(|(i, t)| {
+    let run = c.windows(3).enumerate().any(|(i, t)| {
         t[0].is_alphabetic()
             && t[0] == t[1]
             && t[1] == t[2]
-            && ("aeiouy".contains(t[0]) || i + 3 == c.len())
-    })
+            && (i + 3 == c.len() || "aeiouy".contains(t[0]) && c.len() >= 5)
+    });
+    run && (1..=2).any(|keep| EXPRESSIVE.contains(&squeeze(&c, keep).as_str()))
+}
+/// Words people stretch in chats ("sooo", "pleeease", "yesss"); a stretched "weee" or "feee" is a
+/// slip of "were" or "free".
+const EXPRESSIVE: [&str; 64] = [
+    "ah", "aw", "bad", "bored", "cold", "cool", "cute", "damn", "fun", "funny", "good", "gosh",
+    "great", "happy", "hello", "hey", "hi", "hm", "hmm", "hot", "hungry", "late", "lol", "long",
+    "love", "me", "mine", "much", "nice", "no", "nope", "now", "oh", "ok", "okay", "omg", "please",
+    "pretty", "real", "really", "sad", "so", "soon", "sorry", "sure", "thank", "thanks", "there",
+    "tired", "too", "ugh", "very", "what", "why", "wow", "yay", "yeah", "yep", "yes", "you", "yum",
+    "yummy", "yup", "zzz",
+];
+/// `word` with every run of a repeated letter cut to `keep` letters.
+pub fn squeeze(word: &[char], keep: usize) -> String {
+    let mut out = String::new();
+    let mut run = 0;
+    let mut last = None;
+    for &c in word {
+        run = if Some(c) == last { run + 1 } else { 1 };
+        last = Some(c);
+        if run <= keep {
+            out.push(c);
+        }
+    }
+    out
 }
 /// Days, months, chat shorthand and one or two lowercase letters are never name guesses, whatever
 /// a language tagger or a list says; only the user's own names and dictionary can claim them.

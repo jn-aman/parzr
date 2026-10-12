@@ -474,7 +474,7 @@ fn truncated(word: &str) -> Option<&'static str> {
 /// the apostrophe goes. "re" and "ll" are no words of their own, so the pair is always rejoined.
 fn split_pieces(req: &Request, tokens: &[Token<'_>], apostrophe: char, edits: &mut Vec<Edit>) {
     let text = req.text.as_str();
-    for pair in tokens.windows(2) {
+    for (i, pair) in tokens.windows(2).enumerate() {
         let (subject, piece) = (&pair[0], &pair[1]);
         if !subject.is_word
             || !["re", "ll"].contains(&piece.surface)
@@ -491,7 +491,23 @@ fn split_pieces(req: &Request, tokens: &[Token<'_>], apostrophe: char, edits: &m
             continue;
         }
         let full = format!("{}'{}", subject.normalized, piece.surface);
-        if !CONTRACTIONS.contains(&full.as_str())
+        let frame = Frame { tokens, index: i };
+        let next = frame.word(Some(i + 2));
+        let fits = match (subject.normalized.as_str(), piece.surface) {
+            // "you re send" is "you resend"; "there re" is "there are", not "there're".
+            ("there", _) => false,
+            (_, "re") if base_verb(next) && spelling::known(&format!("re{next}")) => false,
+            // "you we re right", "the flowers we re lovely": a split "were", unless "we" opens
+            // the clause; "clear and we ll organized" is "well".
+            ("we", "re") => frame.clause_start(false) && frame.prev() != "we",
+            ("we", "ll") | ("he", "ll") | ("she", "ll") => {
+                frame.clause_start(false) && (base_verb(next) || ADVERBS.contains(&next))
+            }
+            (_, "ll") => base_verb(next) || ADVERBS.contains(&next) || next.is_empty(),
+            _ => true,
+        };
+        if !fits
+            || !CONTRACTIONS.contains(&full.as_str())
             || subject.surface.chars().skip(1).any(char::is_uppercase)
         {
             continue;
@@ -808,6 +824,11 @@ mod tests {
             "The ll suffix is rare.",
             "Set x.you re to true.",
             "They re-sign with the team.",
+            "You were right, you we re right.",
+            "The flowers you sent we re beautiful.",
+            "Her talk was clear and we ll organized.",
+            "Can you re send the link?",
+            "I don't know if there re enough chairs.",
             "Tell'r it.",
         ] {
             assert_eq!(fixed(text), text, "{text}");
