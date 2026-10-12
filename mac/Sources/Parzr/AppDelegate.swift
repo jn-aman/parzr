@@ -44,7 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return true
     }
     /// AppKit asks this once after launch; the Studio (or, before setup is finished, the welcome guide) opens then, except under a fixture editor test, which must never put a Parzr window or the app's focus on the owner's screen.
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { if !Preferences.isFixtureTest { openStudio() }; return false }
+    /// With Show in Dock off, a launch (at login, or the relaunch after an update) stays in the menu bar: an opened window
+    /// would bring the Dock icon back and look like the setting was lost.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        if !Preferences.isFixtureTest, ActivationPolicy.opensWindowAtLaunch(setupFinished: Preferences.shared.setupFinished, showInDock: Preferences.shared.showInDock) { openStudio() }
+        return false
+    }
     func applicationWillTerminate(_ notification: Notification) { passive?.stop(); inline.stop() }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -897,4 +902,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 /// Which Dock policy the app needs: an accessory app never owns the menu bar, so an open Parzr window makes it regular whatever Show in Dock says. Pure so tests can check it without activating anything.
 enum ActivationPolicy {
     static func decide(showInDock: Bool, windowOpen: Bool) -> NSApplication.ActivationPolicy { showInDock || windowOpen ? .regular : .accessory }
+    /// The welcome guide always opens until setup is done; after that a launch opens the editor only when Parzr lives in the Dock.
+    static func opensWindowAtLaunch(setupFinished: Bool, showInDock: Bool) -> Bool { !setupFinished || showInDock }
 }

@@ -18,6 +18,9 @@ final class UIControlsWindowTests: OwnWindowCase {
         XCTAssertEqual(ActivationPolicy.decide(showInDock: false, windowOpen: true), .regular, "an open window gives the app its menus and menu bar")
         XCTAssertEqual(ActivationPolicy.decide(showInDock: true, windowOpen: false), .regular)
         XCTAssertEqual(ActivationPolicy.decide(showInDock: true, windowOpen: true), .regular)
+        XCTAssertFalse(ActivationPolicy.opensWindowAtLaunch(setupFinished: true, showInDock: false), "a launch with Show in Dock off stays in the menu bar")
+        XCTAssertTrue(ActivationPolicy.opensWindowAtLaunch(setupFinished: true, showInDock: true))
+        XCTAssertTrue(ActivationPolicy.opensWindowAtLaunch(setupFinished: false, showInDock: false), "the welcome guide always opens until setup is done")
     }
     /// Show in Dock off: opening the editor makes the app regular and gives it its menus, closing the last window returns it to menu-bar-only, reopening brings both back.
     func testAnOpenWindowGivesMenusAndClosingTheLastReturnsToMenuBarOnly() throws {
