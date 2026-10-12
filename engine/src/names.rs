@@ -449,6 +449,9 @@ pub fn capitalizations(
                     && !hinglish.contains(&(t.paragraph, t.sentence)))
             && !spelling::PARTICLES.contains(&b)
             && !spelling::hinglish(b)
+            // "i'm" is the pronoun, capitalized by its own rule ("I'm", not "I'M").
+            && b != "i"
+            && !b.starts_with("i'")
             && t.surface.chars().next().is_some_and(char::is_lowercase)
             && t.surface
                 .chars()

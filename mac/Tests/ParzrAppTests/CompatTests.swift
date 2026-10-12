@@ -158,3 +158,14 @@ final class CompatTests: XCTestCase {
         XCTAssertEqual(observer.monitorInstalls, passiveBefore + 1, "no reinstall without a change")
     }
 }
+
+/// Typing checks that leave sentence swaps for the model are followed by a few quiet re-checks.
+final class FollowUpTests: XCTestCase {
+    @MainActor func testPendingModelWorkFollowsUpAFewTimes() {
+        XCTAssertTrue(PassiveObserver.shouldFollowUp(warnings: ["context.pending"], done: 0))
+        XCTAssertTrue(PassiveObserver.shouldFollowUp(warnings: ["x", "context.pending"], done: PassiveObserver.maxFollowUps - 1))
+        XCTAssertFalse(PassiveObserver.shouldFollowUp(warnings: ["context.pending"], done: PassiveObserver.maxFollowUps))
+        XCTAssertFalse(PassiveObserver.shouldFollowUp(warnings: [], done: 0))
+        XCTAssertFalse(PassiveObserver.shouldFollowUp(warnings: nil, done: 0))
+    }
+}

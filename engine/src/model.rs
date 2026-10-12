@@ -302,23 +302,54 @@ fn validate(req: &Request) -> Result<(), String> {
     }
     Ok(())
 }
-fn prompt(req: &Request, passage: &str, literals: &[Literal], strict: bool) -> String {
-    let instruction = match req.mode {
-        Mode::Fix => {
+/// What every tone must keep, after its own instruction. Measured on benchmarks/tone: shorter
+/// instructions keep the meaning more often than long lists of rules for this small model.
+const KEEP: &str = " Keep every fact, name, number and negation, and the writer's meaning and feeling. Correct misspelled words. Return only the rewritten text.";
+/// How a retry names the tone of a mode.
+fn tone_name(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Fix => "a correct",
+        Mode::Professional => "a professional",
+        Mode::Friendly => "a warm, friendly",
+        Mode::Concise => "a more concise",
+        Mode::Direct => "a more direct",
+    }
+}
+/// The prompt for `passage`. `careful` holds the text before the passage for a retry of a
+/// sentence whose first rewrite changed what it said: a light edit, with what came before as
+/// context ("I hat it." alone reads as nonsense; after "This is so bad." it is "I hate it.").
+fn prompt(
+    req: &Request,
+    passage: &str,
+    literals: &[Literal],
+    strict: bool,
+    careful: Option<&str>,
+) -> String {
+    let context = careful.map(str::trim).filter(|c| !c.is_empty());
+    let retry = careful.map(|_| {
+        let unit = if context.is_some() { "sentence" } else { "text" };
+        format!(
+            "Lightly edit the {unit} for {} tone. Keep all of its words that carry meaning. Correct misspelled words. Return only the edited {unit}.",
+            tone_name(req.mode)
+        )
+    });
+    let instruction = match (req.mode, &retry) {
+        (Mode::Fix, _) => {
             "Fix the English text. Correct grammar, spelling, punctuation, and capitalization. Add necessary final punctuation. Do not answer the text or add information. Output only the corrected text."
         }
-        Mode::Professional => {
-            "Rewrite in professional English. Remove slang and filler. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
-        }
-        Mode::Friendly => {
-            "Rewrite in friendly, conversational English. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
-        }
-        Mode::Concise => {
-            "Shorten the text by removing unnecessary words. Preserve all information and the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
-        }
-        Mode::Direct => {
+        (_, Some(retry)) => retry.as_str(),
+        (Mode::Professional, None) => "Rewrite the text in a professional tone.",
+        (Mode::Friendly, None) => "Rewrite the text in a warm, friendly tone.",
+        (Mode::Concise, None) => "Make the text more concise.",
+        (Mode::Direct, None) => {
             "Make the writing direct. Remove hedging and filler. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
         }
+    };
+    // Direct keeps its own instruction: with KEEP appended the small model leaves requests as
+    // they are ("Could you review this?"), and the meaning guard checks the result anyway.
+    let keep = match (req.mode, careful) {
+        (Mode::Fix | Mode::Direct, _) | (_, Some(_)) => "",
+        _ => KEEP,
     };
     let dialect = if req.dialect == "british" {
         " Use British English."
@@ -348,13 +379,13 @@ fn prompt(req: &Request, passage: &str, literals: &[Literal], strict: bool) -> S
     } else {
         " This selection continues into text outside the passage. Do not add terminal punctuation."
     };
-    let passage = if req.mode == Mode::Fix {
-        passage.to_owned()
-    } else {
-        format!("Text to edit:\n{passage}")
+    let passage = match (req.mode, context) {
+        (Mode::Fix, _) => passage.to_owned(),
+        (_, Some(context)) => format!("Earlier text: {context}\nSentence to edit: {passage}"),
+        _ => format!("Text to edit:\n{passage}"),
     };
     format!(
-        "<|im_start|>system\n{instruction}{dialect}{boundary}{ending}{protection}<|im_end|>\n<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        "<|im_start|>system\n{instruction}{keep}{dialect}{boundary}{ending}{protection}<|im_end|>\n<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
 }
 /// One model call. Output that is blank or carries control tokens is not a suggestion.
@@ -378,14 +409,21 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     }
     Ok(result)
 }
-fn generate(req: &Request, passage: &str) -> Result<String, String> {
+fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
     let r = runtime()?;
-    let (masked, literals) = mask(passage, &protected_spans(req), &name_spans(req))?;
+    let (masked, literals) = mask(passage, &kept_spans(req), &name_spans(req))?;
     let mut result = String::new();
     // The first answer must keep every placeholder. If it does not, ask once more with the
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
-        let output = infer(r, &prompt(req, &masked, &literals, strict))?;
+        let output = infer(r, &prompt(req, &masked, &literals, strict, careful))?;
+        // The writer's own emoji are placeholders here; any emoji in the answer is the model's,
+        // and a tone rewrite only ever gets the one `pick_emoji` chooses.
+        let output = if req.mode == Mode::Fix {
+            output
+        } else {
+            limit_emoji(&output)
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -401,6 +439,176 @@ fn generate(req: &Request, passage: &str) -> Result<String, String> {
     Ok(format!("{prefix}{body}{suffix}"))
 }
 
+/// The spans the model must return untouched. A tone rewrite sees plain numbers as they are:
+/// behind placeholders this small model sometimes loses them or never stops writing, and the
+/// meaning check already rejects any sentence whose numbers change.
+fn kept_spans(req: &Request) -> Vec<crate::TextRange> {
+    let spans = protected_spans(req);
+    if req.mode == Mode::Fix {
+        return spans;
+    }
+    spans
+        .into_iter()
+        .filter(|r| {
+            let (Some(a), Some(b)) = (
+                byte_at(&req.text, r.start_utf16),
+                byte_at(&req.text, r.end_utf16),
+            ) else {
+                return true;
+            };
+            let text = &req.text[a..b];
+            !(text.chars().any(|c| c.is_ascii_digit())
+                && text
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || ".,:/-".contains(c)))
+        })
+        .collect()
+}
+fn emoji_regex() -> &'static regex::Regex {
+    static RE: OnceLock<regex::Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u{200D}\u{FE0F}\u{20E3}]+",
+        )
+        .expect("constant emoji regex")
+    })
+}
+/// Friendly may end a casual chat message with one emoji: the text comes from a chat app, is
+/// short (at most 280 characters and three sentences), ends where the selection ends, and has no
+/// emoji of its own and no code. Other modes never get one.
+fn emoji_allowed(req: &Request) -> bool {
+    let sentences = req.text.matches(['.', '!', '?']).count();
+    req.mode == Mode::Friendly
+        && req.casual
+        && req.sentence_end
+        && req.text.chars().count() <= 280
+        && sentences <= 3
+        && !emoji_regex().is_match(&req.text)
+        && !req.text.contains('`')
+        && !req.text.lines().any(|l| {
+            let l = l.trim_start();
+            l.starts_with("$ ") || l.starts_with("> ") || l.contains("();") || l.contains("=>")
+        })
+}
+/// Emoji a Friendly rewrite may end with: common, unambiguous chat emoji. Anything else the
+/// model suggests is not used.
+const EMOJI: &[&str] = &[
+    "😊", "🙂", "😄", "😁", "😅", "😂", "🤣", "🎉", "🥳", "🙏", "👍", "👏", "🙌", "❤️", "💪", "🔥",
+    "🚀", "✅", "✨", "😎", "🤗", "🤞", "👋", "😢", "😔", "😞", "😩", "😫", "😬", "😴", "😭", "😕",
+    "😤", "☕", "🍕", "🍔",
+];
+/// Words that carry a feeling an emoji can echo; a message without one gets no emoji.
+const FEELING: &[&str] = &[
+    "thanks",
+    "thank",
+    "thx",
+    "appreciate",
+    "great",
+    "awesome",
+    "amazing",
+    "nice",
+    "love",
+    "loved",
+    "congrats",
+    "congratulations",
+    "yay",
+    "excited",
+    "happy",
+    "glad",
+    "lol",
+    "haha",
+    "sorry",
+    "unfortunately",
+    "hate",
+    "bad",
+    "sad",
+    "ugh",
+    "oops",
+    "fun",
+    "enjoy",
+    "cheers",
+    "finally",
+    "asleep",
+    "tired",
+    "late",
+    "lunch",
+    "coffee",
+    "broken",
+    "wow",
+    "cool",
+    "perfect",
+    "fixed",
+];
+/// One emoji to end a casual Friendly message with, chosen by the model and kept only when it is
+/// a common chat emoji and the message carries a feeling. None far more often than not.
+fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
+    if !emoji_allowed(req) {
+        return None;
+    }
+    let tokens = crate::tokenizer::tokenize(text, &[]);
+    if !tokens
+        .iter()
+        .any(|t| FEELING.contains(&t.normalized.as_str()))
+    {
+        return None;
+    }
+    let r = runtime().ok()?;
+    let prompt = format!(
+        "<|im_start|>system\nAnswer with one emoji that fits the feeling of this chat message, or with the word none if no emoji fits.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+        text.trim()
+    );
+    let answer = infer(r, &prompt).ok()?;
+    let answer = answer.trim().trim_end_matches('\u{FE0F}');
+    EMOJI
+        .iter()
+        .find(|e| e.trim_end_matches('\u{FE0F}') == answer)
+        .copied()
+}
+/// Adds `emoji` at the end of the rewritten text, after its last word or mark.
+fn end_with(source: &str, mut changes: Vec<Edit>, emoji: &str) -> Vec<Edit> {
+    let end = source.trim_end().encode_utf16().count();
+    match changes.last_mut() {
+        Some(last) if last.end_utf16 == end => last.replacement.push_str(&format!(" {emoji}")),
+        _ => changes.push(Edit {
+            start_utf16: end,
+            end_utf16: end,
+            original: String::new(),
+            replacement: format!(" {emoji}"),
+            category: "Style".into(),
+            rule_id: "local-model".into(),
+            explanation: "Suggested rewrite".into(),
+            confidence: 1.0,
+            group_id: None,
+        }),
+    }
+    changes
+}
+/// Removes every emoji the model added. A removed emoji takes the spaces that would be left
+/// doubled or dangling.
+fn limit_emoji(output: &str) -> String {
+    let mut text = output.to_owned();
+    let found: Vec<_> = emoji_regex().find_iter(output).collect();
+    for m in found.iter().rev() {
+        let (mut a, mut b) = (m.start(), m.end());
+        let after = text[b..].trim_start_matches([' ', '\t']);
+        let spaces_after = text[b..].len() - after.len();
+        let before = text[..a].trim_end_matches([' ', '\t']);
+        if before.is_empty()
+            || after.is_empty()
+            || after.starts_with(|c: char| c.is_ascii_punctuation())
+            || after.starts_with('\n')
+        {
+            a = before.len();
+            if before.is_empty() {
+                b += spaces_after;
+            }
+        } else {
+            b += spaces_after;
+        }
+        text.replace_range(a..b, "");
+    }
+    text
+}
 const LOST: &str =
     "The model could not retain a protected editor element. This suggestion was withheld.";
 
@@ -881,7 +1089,7 @@ fn describe(original: &str, replacement: &str) -> (String, String) {
 }
 
 /// Edit distance counting an adjacent transposition as one edit.
-fn distance(a: &str, b: &str) -> usize {
+pub(crate) fn distance(a: &str, b: &str) -> usize {
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
     let mut rows: Vec<Vec<usize>> = (0..=a.len())
         .map(|i| {
@@ -1472,8 +1680,6 @@ fn widen_to_words(
 
 /// Character anchors preserve untouched rich-text runs and UTF-16 coordinates.
 fn edits(source: &str, target: &str, mode: Mode, protected: &[crate::TextRange]) -> Vec<Edit> {
-    // Preserve surviving character anchors across run boundaries (e.g. bold action words
-    // beside a deleted request prefix). The composer still groups grammar corrections.
     let diff = TextDiff::from_chars(source, target);
     let mut result = vec![];
     let mut offset = 0;
@@ -1485,30 +1691,6 @@ fn edits(source: &str, target: &str, mode: Mode, protected: &[crate::TextRange])
                  replacement: &mut String| {
         if original.is_empty() && replacement.is_empty() {
             return;
-        }
-        if mode != Mode::Fix
-            && let Some(split) = original
-                .rfind(char::is_whitespace)
-                .map(|i| i + original[i..].chars().next().unwrap().len_utf8())
-            && split < original.len()
-            && original[split..].to_lowercase() == replacement.to_lowercase()
-        {
-            let tail = original.split_off(split);
-            let prefix = std::mem::take(original);
-            let end = *offset + prefix.encode_utf16().count();
-            result.push(Edit {
-                start_utf16: *offset,
-                end_utf16: end,
-                original: prefix,
-                replacement: String::new(),
-                category: "Style".into(),
-                rule_id: "local-model".into(),
-                explanation: "Suggested rewrite".into(),
-                confidence: 1.,
-                group_id: None,
-            });
-            *offset = end;
-            *original = tail;
         }
         let end = *offset + original.encode_utf16().count();
         // Fix mode gets its real category and explanation once edits are widened to whole words.
@@ -1541,7 +1723,15 @@ fn edits(source: &str, target: &str, mode: Mode, protected: &[crate::TextRange])
         }
     }
     flush(&mut result, &mut offset, &mut original, &mut replacement);
-    let mut result = widen_to_words(source, result, mode, protected);
+    let mut result = if mode == Mode::Fix {
+        widen_to_words(source, result, mode, protected)
+    } else {
+        // A rewrite is shown in whole words ("hat" to "hate"), never as the character fragments
+        // of the diff ("hat" to "t"); the pipeline joins neighbouring words into phrases last.
+        crate::wording::keep_anchor(crate::wording::whole_words(
+            source, result, protected, false,
+        ))
+    };
     // Moved words must be accepted together, keeping protected names and grammar intact.
     for i in 0..result.len() {
         if !result[i].replacement.trim().is_empty()
@@ -1563,14 +1753,169 @@ fn edits(source: &str, target: &str, mode: Mode, protected: &[crate::TextRange])
     }
     result
 }
+/// Sentences whose rewrite failed the meaning check that are asked again, with a stricter prompt.
+const RETRIES: usize = 3;
+fn hints(text: &str) -> Vec<crate::TokenHint> {
+    linguistic_hints(text).unwrap_or_default()
+}
+/// Keeps the rewrite of each sentence that still says what the corrected sentence said; asks
+/// once more, more strictly, for a sentence that does not, and otherwise leaves that sentence
+/// as corrected. Linked edits stay together.
+fn meaning_guard(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    let mut kept = vec![];
+    let mut retries = 0;
+    for segment in crate::meaning::segments(&req.text, &all) {
+        let Some((source, output)) = crate::meaning::texts(&req.text, &segment, &all) else {
+            continue;
+        };
+        let elsewhere = outside(&req.text, segment.start, segment.end);
+        let verdict = crate::meaning::keeps_meaning(
+            req.mode,
+            &source,
+            &output,
+            &elsewhere,
+            &hints(&source),
+            &hints(&output),
+        );
+        if verdict.is_ok() {
+            kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
+        } else if retries < RETRIES {
+            retries += 1;
+            kept.extend(careful(req, &segment).unwrap_or_default());
+        }
+    }
+    kept.sort_by_key(|e| (e.start_utf16, e.end_utf16));
+    // A retried sentence's edits never reach into a neighbour's; drop any that would.
+    let mut end = 0;
+    let mut previous_start = None;
+    kept.retain(|e| {
+        let fits = e.start_utf16 >= end && previous_start != Some(e.start_utf16);
+        if fits {
+            end = e.end_utf16;
+            previous_start = Some(e.start_utf16);
+        }
+        fits
+    });
+    let lone: Vec<String> = kept
+        .iter()
+        .filter_map(|e| e.group_id.clone())
+        .filter(|g| {
+            kept.iter()
+                .filter(|e| e.group_id.as_ref() == Some(g))
+                .count()
+                != 2
+        })
+        .collect();
+    kept.retain(|e| !e.group_id.as_ref().is_some_and(|g| lone.contains(g)));
+    kept
+}
+/// The text around `start..end` (UTF-16), with a sentence break where that range was.
+fn outside(text: &str, start: usize, end: usize) -> String {
+    let (a, b) = (
+        byte_at(text, start).unwrap_or(0),
+        byte_at(text, end).unwrap_or(text.len()),
+    );
+    format!("{} . {}", &text[..a], &text[b..])
+}
+/// The part of `req` from `start` to `end` (UTF-16), as a request of its own.
+fn slice(req: &Request, start: usize, end: usize) -> Option<Request> {
+    let (a, b) = (byte_at(&req.text, start)?, byte_at(&req.text, end)?);
+    let length = req.text.encode_utf16().count();
+    let inside = |s: usize, e: usize| s >= start && e <= end;
+    let mut sub = req.clone();
+    sub.text = req.text.get(a..b)?.to_owned();
+    sub.protected_ranges = req
+        .protected_ranges
+        .iter()
+        .filter(|r| inside(r.start_utf16, r.end_utf16))
+        .map(|r| crate::TextRange {
+            start_utf16: r.start_utf16 - start,
+            end_utf16: r.end_utf16 - start,
+        })
+        .collect();
+    sub.tokens = req
+        .tokens
+        .iter()
+        .filter(|t| inside(t.start_utf16, t.end_utf16))
+        .map(|t| {
+            let mut t = t.clone();
+            t.start_utf16 -= start;
+            t.end_utf16 -= start;
+            t
+        })
+        .collect();
+    sub.sentence_start = start > 0 || req.sentence_start;
+    sub.sentence_end = end < length || req.sentence_end;
+    Some(sub)
+}
+/// One stricter rewrite of a single segment; its edits (in `req` coordinates) when they keep
+/// the meaning.
+fn careful(req: &Request, segment: &crate::meaning::Segment) -> Option<Vec<Edit>> {
+    let sub = slice(req, segment.start, segment.end)?;
+    // Up to about 300 bytes of what came before, starting at a word.
+    let before = &req.text[..byte_at(&req.text, segment.start)?];
+    let mut from = before.len().saturating_sub(300);
+    while !before.is_char_boundary(from) {
+        from += 1;
+    }
+    let context = &before[from..];
+    let context = if from > 0 {
+        context
+            .split_once(char::is_whitespace)
+            .map_or("", |(_, rest)| rest)
+    } else {
+        context
+    };
+    let text = generate(&sub, &sub.text, Some(context)).ok()?;
+    let protected = kept_spans(&sub);
+    let all = edits(&sub.text, &text, sub.mode, &protected);
+    let touches = |e: &Edit| {
+        protected.iter().any(|p| {
+            if e.start_utf16 == e.end_utf16 {
+                e.start_utf16 > p.start_utf16 && e.start_utf16 < p.end_utf16
+            } else {
+                overlaps(e.start_utf16, e.end_utf16, p)
+            }
+        })
+    };
+    if all.iter().any(touches) || apply_edits(&sub.text, &all).ok()?.0 != text {
+        return None;
+    }
+    let all = keep_names(&sub, all);
+    let output = apply_edits(&sub.text, &all).ok()?.0;
+    let elsewhere = outside(&req.text, segment.start, segment.end);
+    crate::meaning::keeps_meaning(
+        sub.mode,
+        &sub.text,
+        &output,
+        &elsewhere,
+        &hints(&sub.text),
+        &hints(&output),
+    )
+    .ok()?;
+    Some(
+        all.into_iter()
+            .map(|mut e| {
+                e.start_utf16 += segment.start;
+                e.end_utf16 += segment.start;
+                e
+            })
+            .collect(),
+    )
+}
 pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     validate(req)?;
     let started = Instant::now();
-    let protected = protected_spans(req);
+    let protected = kept_spans(req);
     let text = if req.text.trim().is_empty() {
         req.text.clone()
     } else {
-        generate(req, &req.text)?
+        // A tone rewrite that loses a protected element (a number, a link) or runs away is asked
+        // once more as a light edit before the request fails.
+        generate(req, &req.text, None).or_else(|error| match req.mode {
+            Mode::Fix => Err(error),
+            _ => generate(req, &req.text, Some("")),
+        })?
     };
     let all = edits(&req.text, &text, req.mode, &protected);
     if all.len() > 512 {
@@ -1594,7 +1939,11 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     let changes = if req.mode == Mode::Fix {
         guard(&req.text, all)
     } else {
-        all
+        meaning_guard(req, all)
+    };
+    let changes = match pick_emoji(req, &apply_edits(&req.text, &changes)?.0) {
+        Some(emoji) => end_with(&req.text, changes, emoji),
+        None => changes,
     };
     let (text, source_map) = apply_edits(&req.text, &changes)?;
     Ok(RewriteResult {
@@ -2067,6 +2416,123 @@ mod tests {
             ),
             "Thanks!"
         );
+    }
+    #[test]
+    fn tone_edits_are_whole_words() {
+        let a = "This is so bad. I hat it.";
+        let pairs = |b: &str, mode: Mode| -> Vec<(String, String)> {
+            let changes = edits(a, b, mode, &[]);
+            assert_eq!(apply_edits(a, &changes).unwrap().0, b);
+            changes
+                .into_iter()
+                .map(|e| (e.original, e.replacement))
+                .collect()
+        };
+        let p = |x: &str, y: &str| (x.to_owned(), y.to_owned());
+        assert_eq!(
+            pairs("This is so bad. I hate it.", Mode::Friendly),
+            [p("hat", "hate")]
+        );
+        // Never "hat" to "t" with "I" struck through: every edit is a whole word.
+        assert_eq!(
+            pairs("This is so bad. It is.", Mode::Concise),
+            [p("I hat", "It"), p("it", "is")]
+        );
+        // The pipeline then joins neighbouring words into one phrase for the card.
+        let joined = crate::wording::phrases(
+            a,
+            edits(a, "This is so bad. It is.", Mode::Concise, &[]),
+            &[],
+        );
+        assert_eq!(joined.len(), 1);
+        assert_eq!(
+            (joined[0].original.as_str(), joined[0].replacement.as_str()),
+            ("I hat it", "It is")
+        );
+    }
+    #[test]
+    fn model_emoji_are_removed_with_their_spaces() {
+        assert_eq!(limit_emoji("Thanks! 😊"), "Thanks!");
+        assert_eq!(limit_emoji("Great 🎉 job 🎉🎉!"), "Great job!");
+        assert_eq!(limit_emoji("🔥 Ship it."), "Ship it.");
+        assert_eq!(limit_emoji("Done 👍🏽\nNext"), "Done\nNext");
+        assert_eq!(limit_emoji("No emoji here."), "No emoji here.");
+    }
+    #[test]
+    fn only_a_short_casual_friendly_message_may_get_an_emoji() {
+        let req = |text: &str, mode: Mode, casual: bool| Request {
+            text: text.into(),
+            mode,
+            casual,
+            ..Request::default()
+        };
+        assert!(emoji_allowed(&req(
+            "Thanks, that fixed it!",
+            Mode::Friendly,
+            true
+        )));
+        for mode in [Mode::Fix, Mode::Professional, Mode::Concise, Mode::Direct] {
+            assert!(
+                !emoji_allowed(&req("Thanks, that fixed it!", mode, true)),
+                "{mode:?}"
+            );
+        }
+        assert!(!emoji_allowed(&req(
+            "Thanks, that fixed it!",
+            Mode::Friendly,
+            false
+        )));
+        assert!(!emoji_allowed(&req(
+            "Thanks, that fixed it! 🎉",
+            Mode::Friendly,
+            true
+        )));
+        assert!(!emoji_allowed(&req(
+            "Run `cargo test` again, thanks!",
+            Mode::Friendly,
+            true
+        )));
+        let long = "This sentence is long enough. ".repeat(10);
+        assert!(!emoji_allowed(&req(&long, Mode::Friendly, true)));
+        let mut partial = req("Thanks, that fixed it", Mode::Friendly, true);
+        partial.sentence_end = false;
+        assert!(!emoji_allowed(&partial));
+    }
+    #[test]
+    fn the_emoji_goes_after_the_last_word() {
+        let text = "Thanks, that fixed it!  ";
+        let added = end_with(text, vec![], "🎉");
+        assert_eq!(
+            apply_edits(text, &added).unwrap().0,
+            "Thanks, that fixed it! 🎉  "
+        );
+        // A change that already ends there carries the emoji, so two insertions never share a point.
+        let source = "thanks that fixed it";
+        let mut fix = edits(source, "thanks that fixed it!", Mode::Friendly, &[]);
+        fix = end_with(source, fix, "🎉");
+        assert_eq!(fix.len(), 1);
+        assert_eq!(
+            apply_edits(source, &fix).unwrap().0,
+            "thanks that fixed it! 🎉"
+        );
+    }
+    #[test]
+    fn numbers_reach_a_tone_rewrite_unmasked() {
+        let req = |mode: Mode| Request {
+            text: "We need 3 more days, see https://x.io/a".into(),
+            mode,
+            ..Request::default()
+        };
+        assert_eq!(
+            kept_spans(&req(Mode::Fix)).len(),
+            protected_spans(&req(Mode::Fix)).len()
+        );
+        let tone = kept_spans(&req(Mode::Professional));
+        assert_eq!(
+            tone.len(),
+            protected_spans(&req(Mode::Professional)).len() - 1
+        );
+        assert!(tone.iter().all(|r| r.end_utf16 - r.start_utf16 > 1));
     }
     #[test]
     fn prefix_removal_retains_the_styled_action_word_anchor() {

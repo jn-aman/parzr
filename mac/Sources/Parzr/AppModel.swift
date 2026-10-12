@@ -20,6 +20,10 @@ final class AppModel: ObservableObject {
     @Published var engineReady = false
     @Published var shortcutConflict = false
     @Published var selectionHint = false
+    /// The rewrite offered after a Fix check (the selection card only), in the tone that fits the app; written in the background.
+    @Published var suggestion: SuggestedVersion?
+    /// Set for the selection card: a Fix check of a few words or more also offers one rewrite.
+    var offersRewrite = false
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
     var didAnalyze: (() -> Void)?
@@ -27,6 +31,7 @@ final class AppModel: ObservableObject {
     /// Where Copy puts the corrected text; tests give it a private pasteboard so a run never touches the owner's clipboard.
     var pasteboard = NSPasteboard.general
     private var analysisTask: Task<Void, Never>?
+    private var suggestionTask: Task<Void, Never>?
     private var generation = 0
     private var clipboard: ClipboardTransaction?
     var chosenEdits: [WritingEdit] { result?.edits.filter { selectedEdits.contains($0.id) } ?? [] }
@@ -35,6 +40,11 @@ final class AppModel: ObservableObject {
     var focusedEdit: WritingEdit? { chosenEdits.first { $0.id == focusedEditID } ?? chosenEdits.first }
     var sentenceEdits: [WritingEdit] { focusedEdit.map { SentencePreview.edits(source: source, edits: chosenEdits, focused: $0) } ?? [] }
     var fixesSentence: Bool { (snapshot?.expectedSelection.length ?? 0) == 0 && sentenceEdits.count > 1 }
+    /// The offered rewrite is written, changes more than the fixes, and still belongs to this text.
+    var suggestionReady: Bool { suggestion.map { $0.source == source && SuggestedRewrite.worthOffering($0.result, fixed: result?.text ?? source) } ?? false }
+    /// Shown while it is written, and once written when it is worth offering; hidden when it came back empty or failed.
+    var showsSuggestion: Bool { mode == .fix && result != nil && suggestion.map { $0.source == source && (!$0.done || suggestionReady) } ?? false }
+    var canUseSuggestion: Bool { !busy && suggestionReady && (snapshot?.canPatch == true || snapshot?.copied == true) }
     func navigate(_ direction: Int) {
         let edits = chosenEdits
         guard !edits.isEmpty else { return }
@@ -53,7 +63,7 @@ final class AppModel: ObservableObject {
         inspector = snapshot.metadata(); mode = Preferences.shared.defaultMode; status = nil; analyze()
     }
     func select(_ snapshot: SelectionSnapshot, result: RewriteResult, focused: WritingEdit?) {
-        analysisTask?.cancel(); generation += 1
+        analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1
         selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = .fix; self.result = result
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
@@ -82,7 +92,7 @@ final class AppModel: ObservableObject {
         return chosenEdits.compactMap { change.shift($0) }
     }
     func analyze(debounce: Bool = false) {
-        analysisTask?.cancel(); generation += 1
+        analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1
         let current = generation; let original = source
         error = nil; status = nil
         // An explicit check clears the old answer and shows Checking at once; typing keeps its marks and only shows Checking if the wait is long.
@@ -91,7 +101,8 @@ final class AppModel: ObservableObject {
         let requestMode: RewriteMode = debounce ? .fix : mode
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
         let capitalize = Preferences.shared.capitalizeNames(for: snapshot?.app.bundleIdentifier)
-        let gec = Preferences.shared.smartGrammar && requestMode == .fix
+        // A tone rewrite starts with the same correction pass as Fix, so Smart grammar applies to it too; a chat app's Friendly rewrite may end with an emoji.
+        let (gec, casual) = (Preferences.shared.smartGrammar, SuggestedRewrite.isChat(snapshot?.app.bundleIdentifier))
         let (starts, ends, deep) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true, !debounce && (mode != .fix || Preferences.shared.contextRefinement))
         analysisTask = Task { @MainActor in
             var slow: Task<Void, Never>?
@@ -101,13 +112,14 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation()
                 if debounce { slow = Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); if !Task.isCancelled, current == generation { busy = true } } }
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
                 try Task.checkCancellation()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
                 self.status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
+                if !debounce, requestMode == .fix, offersRewrite, SuggestedRewrite.offered(for: original) { suggest(original, generation: current) }
                 didAnalyze?()
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
@@ -115,9 +127,47 @@ final class AppModel: ObservableObject {
             }
         }
     }
+    /// Writes the offered rewrite of `original` in the background, after the Fix result is already on the card; a new check or tone cancels it.
+    private func suggest(_ original: String, generation current: Int) {
+        let bundle = snapshot?.app.bundleIdentifier, tone = SuggestedRewrite.tone(for: bundle, text: original)
+        suggestion = SuggestedVersion(tone: tone, source: original)
+        let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
+        let (capitalize, gec, casual) = (Preferences.shared.capitalizeNames(for: bundle), Preferences.shared.smartGrammar, SuggestedRewrite.isChat(bundle))
+        let (starts, ends) = (snapshot?.startsSentence ?? true, snapshot?.endsSentence ?? true)
+        suggestionTask = Task { @MainActor in
+            var written: RewriteResult?
+            do {
+                let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
+                try Task.checkCancellation()
+                written = KnownNames.dropMacLearned(try await WritingEngine.shared.rewrite(request), from: original)
+            } catch {}
+            guard !Task.isCancelled, current == generation, source == original, suggestion?.source == original else { return }
+            suggestion?.result = written; suggestion?.done = true
+        }
+    }
+    /// Puts the offered rewrite on the card as that tone's result and applies all of it.
+    func useSuggestion() {
+        guard suggestionReady, !busy, let offered = suggestion, let written = offered.result else { return }
+        show(written, as: offered.tone)
+        if canApply { apply() }
+    }
+    /// A tone's finished result shown without a new check.
+    private func show(_ written: RewriteResult, as tone: RewriteMode) {
+        analysisTask?.cancel(); suggestionTask?.cancel(); generation += 1
+        mode = tone; result = written; suggestion = nil
+        selectedEdits = Set(written.edits.map(\.id)); focusedEditID = written.edits.first?.id
+        provisional = false; busy = false; error = nil
+        status = written.warnings?.isEmpty == false ? written.warnings?.joined(separator: " ") : nil
+    }
     /// Mode pickers bind here; a key-path binding avoids a Swift 6.3 IRGen crash in closure-built Bindings.
     var modeChoice: RewriteMode { get { mode } set { changeMode(newValue) } }
-    func changeMode(_ mode: RewriteMode) { guard self.mode != mode else { return }; self.mode = mode; analyze() }
+    /// Picking the tone the card already wrote shows that rewrite at once.
+    func changeMode(_ mode: RewriteMode) {
+        guard self.mode != mode else { return }
+        if suggestionReady, let offered = suggestion, offered.tone == mode, let written = offered.result { show(written, as: mode); return }
+        self.mode = mode; analyze()
+    }
     func toggle(_ edit: WritingEdit) {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
@@ -125,7 +175,7 @@ final class AppModel: ObservableObject {
     func copy() { guard !busy, !provisional, result != nil else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
-    func applyBest() { if fixesSentence { applySentence() } else { applyCurrent() } }
+    func applyBest() { if focusedEdit == nil, suggestionReady { useSuggestion() } else if fixesSentence { applySentence() } else { applyCurrent() } }
     func apply() { apply(edits: chosenEdits) }
     private func apply(edits: [WritingEdit]) {
         guard canApply, let snapshot else { return }
@@ -181,7 +231,15 @@ final class AppModel: ObservableObject {
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
         }
     }
-    func clearSession() { analysisTask?.cancel(); generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+}
+
+/// The rewrite a Fix check offers: its tone, the text it was written for, and the result once written (nil when it failed).
+struct SuggestedVersion {
+    let tone: RewriteMode
+    let source: String
+    var result: RewriteResult?
+    var done = false
 }
 
 /// Carries edit offsets across a text change (UTF-16, the engine's unit) so marks can stay put while a new check runs.
