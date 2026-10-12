@@ -452,7 +452,7 @@ fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         }
         if ["a", "an", "one"].contains(&w)
             && ![
-                "lot", "few", "couple", "number", "bunch", "variety", "total", "lot", "pair",
+                "lot", "few", "couple", "number", "bunch", "variety", "total", "lots", "pair",
                 "dozen",
             ]
             .contains(&word(s, k + 1))

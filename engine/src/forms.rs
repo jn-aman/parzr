@@ -577,6 +577,7 @@ pub fn check(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     known_as(req, s, edits);
     modal_gerund(req, s, edits);
     infinitive_base(req, s, edits);
+    noun_number(req, s, edits);
 }
 /// Adverbs that may stand between a helping verb and its participle ("was originally built").
 const MID_ADVERBS: &[&str] = &[
@@ -666,6 +667,10 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             || t.surface.starts_with(char::is_uppercase)
             || req.text[t.end_byte..].starts_with('-')
         {
+            continue;
+        }
+        // "This is mark from the design team": a lowercase name, not a verb.
+        if crate::names::is_bundled_name(w) || crate::names::name_word(w) {
             continue;
         }
         let Some(v) = morphology::verb(w) else {
@@ -941,5 +946,438 @@ fn infinitive_base(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             "Use the base verb after “to”.",
             0.94,
         );
+    }
+}
+/// Irregular plurals: (singular, plural).
+const IRREGULAR_PLURALS: &[(&str, &str)] = &[
+    ("man", "men"),
+    ("woman", "women"),
+    ("child", "children"),
+    ("foot", "feet"),
+    ("tooth", "teeth"),
+    ("mouse", "mice"),
+    ("goose", "geese"),
+    ("life", "lives"),
+    ("wife", "wives"),
+    ("knife", "knives"),
+    ("leaf", "leaves"),
+    ("half", "halves"),
+    ("shelf", "shelves"),
+    ("thief", "thieves"),
+    ("wolf", "wolves"),
+];
+/// Nouns whose singular also counts as a group or amount ("two dozen", "many a time").
+const NUMBERLESS: &[&str] = &[
+    "percent", "dozen", "hundred", "thousand", "million", "billion", "trillion", "staff", "data",
+    "family", "team", "group", "crowd", "public", "gang", "series", "species", "means", "news",
+    "fish", "sheep", "deer", "aircraft", "people", "police", "kind", "sort", "type", "part", "lot",
+    "bit", "couple", "pair", "number", "time", "way", "thing", "one", "other", "few", "more",
+    "most", "less", "much", "all", "each", "rest", "same", "next", "last", "first", "majority",
+    "minority", "half", "per", "cent", "degree", "story", "storey", "piece", "page", "point",
+];
+/// Nouns that are mostly uncountable or keep one form ("many anime", "various content").
+const MASS: &[&str] = &[
+    "music",
+    "anime",
+    "content",
+    "evidence",
+    "information",
+    "advice",
+    "equipment",
+    "furniture",
+    "software",
+    "hardware",
+    "research",
+    "knowledge",
+    "homework",
+    "luggage",
+    "baggage",
+    "news",
+    "traffic",
+    "money",
+    "water",
+    "weather",
+    "sigma",
+    "youth",
+    "feedback",
+    "stuff",
+    "staff",
+    "art",
+    "work",
+    "help",
+    "fun",
+    "health",
+    "media",
+    "following",
+    "favourite",
+    "favorite",
+];
+/// Units that also make compound modifiers ("a two year contract", "a two dollar bill"): plural
+/// only where the phrase plainly ends ("two year ago").
+const UNITS: &[&str] = &[
+    "metre",
+    "meter",
+    "pound",
+    "dollar",
+    "euro",
+    "year",
+    "month",
+    "week",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "mile",
+    "inch",
+    "foot",
+    "kilometer",
+    "kilometre",
+];
+fn noun_like(t: &Token<'_>) -> bool {
+    let w = t.normalized.as_str();
+    t.is_word
+        && !t.proper_name
+        // Without a tagger hint, any dictionary noun (its adjective flag is too generous to use).
+        && (t.pos == "Noun" || t.pos.is_empty() && crate::spelling::flags(w) & 2 != 0)
+}
+/// The plural of a singular count noun the dictionary knows as a plural ("problem" to "problems").
+fn plural_of(w: &str) -> Option<String> {
+    if let Some((_, p)) = IRREGULAR_PLURALS.iter().find(|(s, _)| *s == w) {
+        return Some((*p).to_owned());
+    }
+    let plural = |x: &str| crate::spelling::flags(x) & 16 != 0 && crate::spelling::ordinary(x);
+    let mut forms = vec![format!("{w}s"), format!("{w}es")];
+    if let Some(stem) = w.strip_suffix('y')
+        && !stem.ends_with(['a', 'e', 'i', 'o', 'u'])
+    {
+        forms.insert(0, format!("{stem}ies"));
+    }
+    forms.into_iter().find(|f| plural(f))
+}
+/// The singular of a plural noun the dictionary knows ("students" to "student").
+fn singular_of(w: &str) -> Option<String> {
+    if let Some((s, _)) = IRREGULAR_PLURALS.iter().find(|(_, p)| *p == w) {
+        return Some((*s).to_owned());
+    }
+    if crate::spelling::flags(w) & 16 == 0 {
+        return None;
+    }
+    let noun = |x: &str| {
+        crate::spelling::flags(x) & 2 != 0
+            && crate::spelling::flags(x) & 16 == 0
+            && crate::spelling::ordinary(x)
+    };
+    let mut forms = vec![];
+    if let Some(stem) = w.strip_suffix("ies") {
+        forms.push(format!("{stem}y"));
+    }
+    if let Some(stem) = w.strip_suffix("es") {
+        forms.push(stem.to_owned());
+    }
+    if let Some(stem) = w.strip_suffix('s')
+        && !stem.ends_with('s')
+    {
+        forms.push(stem.to_owned());
+    }
+    forms.into_iter().find(|f| noun(f))
+}
+/// Whether the noun at `i` plainly ends its phrase: a stop or a function word follows, never
+/// another noun or modifier ("two crew members", "a six speed manual").
+fn phrase_end(req: &Request, s: &[Token<'_>], i: usize) -> bool {
+    if req.text[s[i].end_byte..].starts_with(['-', '\'', '’', '/', '(']) {
+        return false;
+    }
+    s.get(i + 1).is_none_or(|n| {
+        [".", ",", ";", ":", "!", "?", ")"].contains(&n.surface)
+            || [
+                "of",
+                "in",
+                "on",
+                "at",
+                "for",
+                "with",
+                "from",
+                "to",
+                "by",
+                "but",
+                "that",
+                "which",
+                "who",
+                "are",
+                "were",
+                "have",
+                "had",
+                "will",
+                "would",
+                "can",
+                "could",
+                "should",
+                "may",
+                "might",
+                "must",
+                "do",
+                "did",
+                "ago",
+                "later",
+                "per",
+                "than",
+                "as",
+                "into",
+                "about",
+                "after",
+                "before",
+                "during",
+                "since",
+                "until",
+                "over",
+                "under",
+                "is",
+                "was",
+                "has",
+                "because",
+                "when",
+                "if",
+                "so",
+                "too",
+                "again",
+                "here",
+                "there",
+                "now",
+                "today",
+                "yesterday",
+                "every",
+                "each",
+                "left",
+                "remaining",
+            ]
+            .contains(&n.normalized.as_str())
+    })
+}
+/// "many problem", "two car", "one of the best player", "each students", "all kind of": a noun
+/// takes the number its quantifier gives it.
+fn noun_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
+    const MANY: &[&str] = &[
+        "many",
+        "several",
+        "various",
+        "numerous",
+        "few",
+        "multiple",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "twelve",
+        "twenty",
+        "hundreds",
+        "thousands",
+        "dozens",
+        "millions",
+    ];
+    const POSSESSIVE: &[&str] = &[
+        "the", "my", "your", "his", "her", "its", "our", "their", "these", "those",
+    ];
+    let fix = |edits: &mut Vec<Edit>, k: usize, r: String, why: &str| {
+        push(
+            req,
+            edits,
+            span(s, k, k),
+            crate::match_case(&r, s[k].surface),
+            "grammar.noun_number",
+            why,
+            0.94,
+        );
+    };
+    for i in 0..s.len().saturating_sub(1) {
+        let q = word(s, i);
+        // "all kind of", "different type of": a plural quantifier before "kind of".
+        if [
+            "all",
+            "different",
+            "many",
+            "various",
+            "several",
+            "both",
+            "numerous",
+            "these",
+            "those",
+        ]
+        .contains(&q)
+            && ["kind", "type", "sort"].contains(&word(s, i + 1))
+            && word(s, i + 2) == "of"
+            && !(q == "all" && i > 0 && ["at", "of"].contains(&word(s, i - 1)))
+            // "a different type of film" is one type.
+            && !(i > 0
+                && ["a", "an", "one", "each", "every", "this", "that", "any"]
+                    .contains(&word(s, i - 1)))
+        {
+            fix(
+                edits,
+                i + 1,
+                format!("{}s", word(s, i + 1)),
+                "Use the plural after a word for more than one.",
+            );
+            continue;
+        }
+        // "a lots of".
+        if q == "a" && word(s, i + 1) == "lots" && word(s, i + 2) == "of" {
+            fix(
+                edits,
+                i + 1,
+                "lot".into(),
+                "“A lot of” takes the singular “lot”.",
+            );
+            continue;
+        }
+        let mut k = i + 1;
+        if MANY.contains(&q) {
+            // "a few", "the many": both count; "many a time" and "few of" are no plural noun phrase.
+            // A noun before the number labels it ("chapter two"); a verb that is also a noun
+            // ("have") counts only with the tagger's word.
+            let labelled = i > 0
+                && noun_like(&s[i - 1])
+                && (!s[i - 1].pos.is_empty() || crate::spelling::flags(word(s, i - 1)) & 4 == 0);
+            if labelled && !["a", "the"].contains(&word(s, i - 1)) {
+                continue;
+            }
+            // "top ten list", "BBC Two drama", "lean six sigma", "best-of-seven format",
+            // "electric multiple unit": a number or quantifier inside a name or label.
+            if i > 0
+                && (["top", "bottom", "best", "worst", "first", "last", "next"]
+                    .contains(&word(s, i - 1))
+                    || s[i - 1].surface.starts_with(char::is_uppercase)
+                    || s[i - 1].pos == "Adjective"
+                    || req.text[..s[i].start_byte].ends_with('-'))
+            {
+                continue;
+            }
+            // "the two form a bond": a number standing for its noun.
+            if i > 0
+                && ["the", "these", "those", "other", "all"].contains(&word(s, i - 1))
+                && !["many", "few"].contains(&q)
+            {
+                continue;
+            }
+            // "several big problem"; after a number an adjective makes a compound ("three
+            // dimensional art").
+            if ["many", "several", "various", "numerous", "multiple"].contains(&q)
+                && s.get(k).is_some_and(|t| t.pos == "Adjective")
+                && s.get(k + 1).is_some_and(noun_like)
+            {
+                k += 1;
+            }
+            let Some(t) = s.get(k) else { continue };
+            let w = t.normalized.as_str();
+            let unit_ends = s.get(k + 1).is_none_or(|n| {
+                [".", ",", ";", "!", "?", ")"].contains(&n.surface)
+                    || ["ago", "later", "earlier", "long"].contains(&n.normalized.as_str())
+            });
+            let numeral =
+                !["many", "several", "various", "numerous", "multiple", "few"].contains(&q);
+            let next = word(s, k + 1);
+            if !noun_like(t)
+                || t.surface.starts_with(char::is_uppercase)
+                || NUMBERLESS.contains(&w)
+                || MASS.contains(&w)
+                || UNITS.contains(&w) && (!unit_ends || word(s, k + 1).is_empty() && s.get(k + 1).is_some_and(|n| n.surface == ","))
+                // "a six cylinder, water-cooled engine": a list of modifiers.
+                || numeral && s.get(k + 1).is_some_and(|n| n.surface == ",")
+                // "many feel that", "several minor to moderate injuries".
+                || crate::spelling::flags(w) & 4 != 0 && ["that", "it", "the", "a", "this", "them"].contains(&next)
+                || crate::spelling::flags(w) & 8 != 0 && ["to", "and", "or"].contains(&next)
+                || crate::spelling::flags(w) & 16 != 0
+                || crate::spelling::flags(w) & 4 != 0 && t.pos != "Noun"
+                || !phrase_end(req, s, k)
+            {
+                continue;
+            }
+            if let Some(p) = plural_of(w) {
+                fix(
+                    edits,
+                    k,
+                    p,
+                    "Use the plural noun after a word for more than one.",
+                );
+            }
+            continue;
+        }
+        // "each students", "every parts".
+        if ["each", "every"].contains(&q) {
+            let Some(t) = s.get(k) else { continue };
+            let w = t.normalized.as_str();
+            if !noun_like(t)
+                || t.surface.starts_with(char::is_uppercase)
+                || [
+                    "others",
+                    "news",
+                    "series",
+                    "species",
+                    "means",
+                    "sports",
+                    "thanks",
+                    "times",
+                    "clothes",
+                    "glasses",
+                    "pants",
+                    "jeans",
+                    "scissors",
+                    "goods",
+                    "arms",
+                    "savings",
+                    "headquarters",
+                    "premises",
+                ]
+                .contains(&w)
+                || !phrase_end(req, s, k)
+            {
+                continue;
+            }
+            if let Some(one) = singular_of(w) {
+                fix(edits, k, one, "“Each” and “every” take a singular noun.");
+            }
+            continue;
+        }
+        // "one of the best player".
+        // "phase one of the project", "reminds one of the sea": no "one of" a group.
+        if q == "one"
+            && word(s, i + 1) == "of"
+            && POSSESSIVE.contains(&word(s, i + 2))
+            && !(i > 0
+                && (noun_like(&s[i - 1])
+                    || s[i - 1].surface.starts_with(char::is_uppercase)
+                    || ["remind", "reminds", "reminded", "reminding"].contains(&word(s, i - 1))))
+        {
+            k = i + 3;
+            while s.get(k).is_some_and(|t| {
+                t.pos == "Adjective"
+                    || [
+                        "most", "best", "worst", "biggest", "largest", "greatest", "main", "few",
+                    ]
+                    .contains(&t.normalized.as_str())
+            }) && s.get(k + 1).is_some_and(|t| t.is_word)
+                && k < i + 6
+            {
+                k += 1;
+            }
+            let Some(t) = s.get(k) else { continue };
+            let w = t.normalized.as_str();
+            if !noun_like(t)
+                || t.surface.starts_with(char::is_uppercase)
+                || NUMBERLESS.contains(&w)
+                || MASS.contains(&w)
+                || crate::spelling::flags(w) & 16 != 0
+                || !phrase_end(req, s, k)
+            {
+                continue;
+            }
+            if let Some(p) = plural_of(w) {
+                fix(edits, k, p, "After “one of the”, use the plural noun.");
+            }
+        }
     }
 }

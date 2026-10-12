@@ -801,6 +801,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         if i >= 3 && tokens[i - 2].normalized == "that" && plural(&tokens[i - 3]) == Some(true) {
             continue;
         }
+        // "Each students has": the determiner, not the noun's ending, gives the number.
+        if i >= 2 && ["each", "every"].contains(&tokens[i - 2].normalized.as_str()) {
+            continue;
+        }
         let Some(mut is_plural) = plural(p) else {
             continue;
         };

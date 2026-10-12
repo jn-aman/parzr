@@ -366,3 +366,37 @@ fn verb_forms_after_be_modals_and_to() {
         "The door is open now.",
     ]);
 }
+
+#[test]
+fn nouns_take_the_number_of_their_quantifier() {
+    check(&[
+        (
+            "There are many problem with this.",
+            "There are many problems with this.",
+        ),
+        ("I have two car.", "I have two cars."),
+        ("Each students has a book.", "Each student has a book."),
+        (
+            "He is one of the best player in the team.",
+            "He is one of the best players in the team.",
+        ),
+        (
+            "We sell all kind of things.",
+            "We sell all kinds of things.",
+        ),
+        ("I saw him two year ago.", "I saw him two years ago."),
+    ]);
+    unchanged(&[
+        "Nine crew members were on board.",
+        "They sold two dollar bills.",
+        "She is one of the family.",
+        "We watch a different type of film.",
+        "Phase one of the project is done.",
+        "It reminds one of the sea.",
+        "Many people came.",
+        "Both music and art matter.",
+        "The two form a bond.",
+        "It was a top ten hit.",
+        "Every clothes shop was closed.",
+    ]);
+}
