@@ -531,6 +531,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && w == v.base
             // "is do bad" is a damaged "is so bad", not a passive.
             && !(w == "do" && tokens.get(i + 1).is_some_and(spelling::adjective))
+            // "All we need to do is build a wall": a pseudo-cleft takes the bare verb.
+            && !tokens[..prev].iter().any(|x| {
+                x.sentence == t.sentence
+                    && ["do", "does", "did", "done"].contains(&x.normalized.as_str())
+            })
             && (spelling::flags(w) & 8 == 0
                 || [
                     "deliver", "prepare", "repair", "invite", "attach", "assign", "publish",
@@ -809,6 +814,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         }
         // "actions that day were": the plural before "that" is the head of the subject.
         if i >= 3 && tokens[i - 2].normalized == "that" && plural(&tokens[i - 3]) == Some(true) {
+            continue;
+        }
+        // "Each students has": the determiner, not the noun's ending, gives the number.
+        if i >= 2
+            && ["each", "every"].contains(&tokens[i - 2].normalized.as_str())
+            && plural(p) == Some(true)
+        {
             continue;
         }
         let Some(mut is_plural) = plural(p) else {

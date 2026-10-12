@@ -304,6 +304,10 @@ fn object_position(s: &[Token<'_>], i: usize) -> bool {
 fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(1) {
         let d = word(s, i);
+        // "check that that directories": the doubled word is the slip, not the number.
+        if i > 0 && word(s, i - 1) == d {
+            continue;
+        }
         // One adjective may come first ("this cute puppies").
         let n = if spelling::flags(word(s, i + 1)) & 8 != 0
             && spelling::flags(word(s, i + 2)) & 2 != 0
@@ -452,7 +456,7 @@ fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         }
         if ["a", "an", "one"].contains(&w)
             && ![
-                "lot", "few", "couple", "number", "bunch", "variety", "total", "lot", "pair",
+                "lot", "few", "couple", "number", "bunch", "variety", "total", "lots", "pair",
                 "dozen",
             ]
             .contains(&word(s, k + 1))

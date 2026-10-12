@@ -1153,5 +1153,6 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         missing_copula(req, s, edits, sentence.question);
         missing_to(req, s, edits);
         crate::determiners::check(req, s, edits, sentence.question);
+        crate::forms::check(req, s, edits);
     }
 }
