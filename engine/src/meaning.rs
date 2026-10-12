@@ -387,6 +387,83 @@ const REPLY_OPENERS: &[&str] = &[
     "happy to help",
     "great question",
 ];
+/// "have" as the main verb ("You have Clickhouse available", "We have a meeting"), not the auxiliary of a
+/// perfect ("have sent", "has already been"): the sentence says someone has something, and a rewrite that drops it
+/// ("You and Clickhouse are now available") says something else.
+fn possessive_have(text: &str) -> bool {
+    const PARTICIPLES: &[&str] = &[
+        "been",
+        "done",
+        "gone",
+        "made",
+        "seen",
+        "got",
+        "gotten",
+        "taken",
+        "given",
+        "written",
+        "known",
+        "sent",
+        "built",
+        "put",
+        "set",
+        "had",
+        "left",
+        "found",
+        "told",
+        "said",
+        "heard",
+        "kept",
+        "brought",
+        "bought",
+        "thought",
+        "met",
+        "run",
+        "come",
+        "become",
+        "begun",
+        "read",
+        "paid",
+        "lost",
+        "won",
+        "sold",
+        "held",
+        "felt",
+        "to",
+        "spent",
+        "let",
+        "shut",
+        "cut",
+        "hit",
+        "hurt",
+        "understood",
+        "taught",
+        "caught",
+        "fought",
+        "sought",
+    ];
+    const BETWEEN: &[&str] = &[
+        "already", "just", "never", "not", "also", "recently", "ever", "still", "all", "both",
+        "finally", "now",
+    ];
+    let words: Vec<String> = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '\'' || c == '’'))
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_lowercase().replace('’', "'"))
+        .collect();
+    words.iter().enumerate().any(|(i, w)| {
+        let have = ["have", "has", "had", "having"].contains(&w.as_str()) || w.ends_with("'ve");
+        if !have {
+            return false;
+        }
+        let next = words[i + 1..]
+            .iter()
+            .find(|n| !BETWEEN.contains(&n.as_str()));
+        next.is_some_and(|n| {
+            !(PARTICIPLES.contains(&n.as_str()) || n.ends_with("ed") && n.len() > 3)
+        })
+    })
+}
 /// Hedging verbs ("I think", "I guess"): Direct and Concise may drop them.
 const HEDGES: &[&str] = &[
     "think", "guess", "believe", "suppose", "feel", "reckon", "seem",
@@ -1090,6 +1167,19 @@ pub(crate) fn keeps_meaning(
     if opener(output) && !opener(source) {
         return Err("answers the message instead of rewriting it".into());
     }
+    // Professional and Friendly keep the sentence's shape; Concise and Direct may recast it ("if you had a chance to
+    // look" is "did you check").
+    if matches!(mode, Mode::Professional | Mode::Friendly)
+        && possessive_have(source)
+        && !possessive_have(output)
+        && !["got", "own", "owns", "possess", "with"].iter().any(|w| {
+            output
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|o| o.eq_ignore_ascii_case(w))
+        })
+    {
+        return Err("drops “have”, so the sentence says something else".into());
+    }
     let negated = |w: &[Word]| w.iter().any(|w| w.kind == Kind::Negation);
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
     if negated(&src) != negated(&out) && (negated(&src) || !softened) {
@@ -1374,6 +1464,31 @@ mod tests {
         assert!(!ok(c, "Please send me the slides.", "Please send me."));
     }
 
+    #[test]
+    fn a_rewrite_keeps_who_has_what() {
+        let src = "Hey, You have Clickhouse available now!";
+        assert!(!ok(
+            Mode::Professional,
+            src,
+            "Hello, You and Clickhouse are now available!"
+        ));
+        assert!(ok(
+            Mode::Professional,
+            src,
+            "Hello, you now have Clickhouse available!"
+        ));
+        assert!(ok(
+            Mode::Friendly,
+            src,
+            "Hey, you've got Clickhouse available now!"
+        ));
+        // The auxiliary of a perfect is no possession: "I have sent it" may become "I sent it".
+        assert!(ok(
+            Mode::Concise,
+            "I have already sent the report.",
+            "I sent the report."
+        ));
+    }
     #[test]
     fn tones_soften_rudeness_but_never_answer_or_turn_a_question_around() {
         assert!(ok(
