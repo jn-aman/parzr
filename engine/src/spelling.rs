@@ -1289,6 +1289,163 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize) -> bool {
                 && t.normalized != "thik"
         })
 }
+/// Chat spellings people type on purpose ("lil", "wanna", "imma"): a register, not a slip, so Fix
+/// never respells them.
+pub(crate) fn chat(word: &str) -> bool {
+    [
+        "abt", "bday", "bruh", "cmon", "convo", "coz", "cya", "dunno", "gimme", "gonna", "gotta",
+        "ima", "imma", "kinda", "lemme", "lil", "luv", "nvm", "obvi", "outta", "probs", "sorta",
+        "srsly", "tho", "thru", "totes", "wanna", "whatcha", "yall", "yup",
+    ]
+    .contains(&word)
+}
+/// Negative contractions without their apostrophe and the positive word each one negates.
+const NEGATIVES: [(&str, &str, &str); 17] = [
+    ("cant", "can't", "can"),
+    ("dont", "don't", "do"),
+    ("didnt", "didn't", "did"),
+    ("doesnt", "doesn't", "does"),
+    ("isnt", "isn't", "is"),
+    ("arent", "aren't", "are"),
+    ("wasnt", "wasn't", "was"),
+    ("werent", "weren't", "were"),
+    ("havent", "haven't", "have"),
+    ("hasnt", "hasn't", "has"),
+    ("hadnt", "hadn't", "had"),
+    ("couldnt", "couldn't", "could"),
+    ("wouldnt", "wouldn't", "would"),
+    ("shouldnt", "shouldn't", "should"),
+    ("mustnt", "mustn't", "must"),
+    ("neednt", "needn't", "need"),
+    ("wont", "won't", "won"),
+];
+/// The negative contraction an unknown word is a slip of, when the same slip could also have come
+/// from the positive word ("canf": "cant" or "can"; "didn": "didnt" or "did"): reading it as the
+/// positive would silently reverse the sentence.
+fn kept_negation(word: &str) -> Option<String> {
+    if word.len() < 4 || known(word) {
+        return None;
+    }
+    // The negative must be at least as likely a slip: "cann" is a doubled key of "can".
+    NEGATIVES
+        .iter()
+        .find(|(bare, _, positive)| {
+            word != *bare
+                && word.starts_with(positive)
+                && distance_one(word, bare)
+                && distance_one(word, positive)
+                && typo_cost(word, bare) <= typo_cost(word, positive)
+        })
+        .map(|(_, negative, _)| (*negative).to_string())
+}
+/// Whether a result drops the negation the typed word carries ("didnt" read as "did").
+fn drops_negation(word: &str, result: &str) -> bool {
+    // A slip of a negative written without its apostrophe ("dosnt", "wouldnt") read as the
+    // positive it negates ("does", "would") when the negative is the likelier slip; "wesnt" read
+    // as "went" negates nothing, and "canj" is "can" with a neighbouring key.
+    NEGATIVES.iter().any(|(bare, _, positive)| {
+        (*bare == word || distance_one(word, bare))
+            && result == *positive
+            && typo_cost(word, bare) <= typo_cost(word, positive)
+    })
+}
+/// A common prefix on an ordinary word ("refax", "preschedule", "unshare", "multiuser"): a word
+/// formed on purpose, not a slip.
+fn prefixed(word: &str) -> bool {
+    [
+        "re", "pre", "non", "multi", "sub", "over", "under", "mis", "post", "anti", "inter",
+        "semi", "super", "self",
+    ]
+    .iter()
+    .any(|p| {
+        word.strip_prefix(p)
+            .is_some_and(|rest| rest.len() >= 3 && ordinary(rest) && frequency(rest) >= 300)
+    })
+}
+/// The day or month name (lowercase) that `word` is one or two cheap slips of ("wenesday",
+/// "thurday"); short words need cheaper slips, so names like "Junie" or "Monda" stay.
+pub(crate) fn calendar_word_slip(word: &str) -> Option<&'static str> {
+    const CALENDAR: [&str; 18] = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+        "january",
+        "february",
+        "march",
+        "april",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ];
+    if word.len() < 5 || !word.bytes().all(|b| b.is_ascii_lowercase()) || known(word) {
+        return None;
+    }
+    let near: Vec<&str> = CALENDAR
+        .iter()
+        .copied()
+        .filter(|day| {
+            osa_within(word.as_bytes(), day.as_bytes(), 2)
+                && typo_cost(word, day) <= 0.35 * word.len() as f64
+        })
+        .collect();
+    match near[..] {
+        [day] => Some(day),
+        _ => None,
+    }
+}
+/// A capitalized day or month name with one or two cheap slips ("Wenesday" is "Wednesday").
+pub(crate) fn calendar_slip(token: &Token<'_>) -> Option<String> {
+    let mut letters = token.surface.chars();
+    if token.system_known
+        || !letters.next().is_some_and(|c| c.is_ascii_uppercase())
+        || !letters.all(|c| c.is_ascii_lowercase())
+    {
+        return None;
+    }
+    let day = calendar_word_slip(&token.normalized)?;
+    let mut chars = day.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+}
+/// Acronyms, product codes and company names people type in lowercase ("aws", "hcl", "gcp"):
+/// sorted for binary search.
+const ACRONYMS: [&str; 136] = [
+    "aks", "api", "apis", "aws", "bba", "bcom", "bpo", "btech", "cad", "cdn", "ceo", "cfo", "cgpa",
+    "ci", "cicd", "cli", "cmo", "coo", "cpu", "crm", "css", "csv", "cto", "cv", "dba", "dbms",
+    "dm", "dns", "docx", "dpi", "ecs", "eks", "emi", "erp", "eta", "evp", "faq", "faqs", "ftp",
+    "gcp", "gdpr", "gke", "gmat", "gpa", "gpu", "gre", "grpc", "gst", "gui", "hcl", "hdd", "hdfc",
+    "hdmi", "hod", "hr", "html", "http", "https", "iaas", "iam", "ibm", "icici", "ide", "ielts",
+    "ifsc", "imap", "ios", "irctc", "isro", "jdk", "jre", "json", "jvm", "jwt", "kpmg", "llm",
+    "llms", "lms", "mba", "mcq", "mtech", "mvc", "mvp", "mysql", "neft", "nlp", "nosql", "npm",
+    "nvm", "oauth", "ocr", "okta", "orm", "paas", "pdf", "pdfs", "pnpm", "ppt", "pptx", "pwc",
+    "qa", "rds", "rpc", "rtgs", "saas", "sbi", "sdk", "sdks", "seo", "sftp", "smtp", "sns", "sql",
+    "sqs", "ssd", "ssh", "ssl", "svg", "svp", "tcp", "tcs", "tls", "toefl", "tsx", "udp", "ui",
+    "upi", "url", "urls", "usb", "ux", "vpc", "vpn", "wipro", "xlsx", "yaml",
+];
+/// A listed acronym, product code or company name typed in lowercase ("aws", "hcl", "gcp"):
+/// respelling one ("aws" to "as") breaks a name.
+pub(crate) fn acronym(word: &str) -> bool {
+    ACRONYMS.binary_search(&word).is_ok()
+}
+/// Whether a short word without a vowel ("hcl", "ppt", "frm") may become `choice`: only by
+/// adding letters or by a neighbouring key in place of a vowel, to make a frequent word ("frm" is
+/// "from", "thw" is "the", "cqll" is "call"), never by dropping a letter or changing one for a
+/// far key ("hcl" is no "cl", "jvm" no "jam").
+fn vowelless_slip(word: &str, choice: &str) -> bool {
+    let mut rest = choice.bytes();
+    let added = choice.len() > word.len() && word.bytes().all(|b| rest.any(|c| c == b));
+    let neighbour = choice.len() == word.len() && slip_cost(word, choice) <= 1.0;
+    (added || neighbour) && frequency(choice) >= 400
+}
 /// Words that must stay as typed: Roman Hindi, Indian English vocabulary, Latin and foreign
 /// phrases, "etc". A damaged spelling is never inferred from these.
 fn protected(word: &str) -> bool {
@@ -1299,9 +1456,10 @@ fn protected(word: &str) -> bool {
             "ipso", "naive", "priori", "sic", "vitro", "vivo",
         ]
         .contains(&word)
+        || acronym(word)
         // Everyday technical words the dictionary lacks ("cron" is not "corn").
         || [
-            "cron", "crontab", "env", "fullstack", "hotfix", "kpi", "kpis", "kubectl", "navbar",
+            "cron", "crontab", "env", "fullstack", "proto", "qi", "hotfix", "kpi", "kpis", "kubectl", "navbar",
             "nginx", "okr", "okrs", "pytest", "signup", "signups", "stderr", "stdin", "stdout",
             "sudo", "todos", "uat", "wifi",
         ]
@@ -1857,6 +2015,201 @@ fn slot_fit(prev: &str, word: &str, next: &str) -> f64 {
         (true, true) => zipf(word) - 9.0,
     }
 }
+/// How unlikely (in Zipf units, about log10) a writer who meant `intended` typed `typed`: a
+/// weighted edit distance whose costs were fitted on real misspellings (Wikipedia edits, GitHub
+/// typo fixes, Mitton's lists) against how often each kind of slip turns up. Dropped vowels and
+/// doubled letters are cheap, vowel and sound-alike swaps ("seperate", "simular") and adjacent
+/// swaps cost a little more, a letter typed in place of an unrelated one costs most, and a slip on
+/// the first or last letter costs extra: "determins" is "determines", not "determine".
+pub(crate) fn typo_cost(typed: &str, intended: &str) -> f64 {
+    let (t, w) = (typed.as_bytes(), intended.as_bytes());
+    let (n, m) = (t.len(), w.len());
+    let vowel = |c: u8| b"aeiou".contains(&c);
+    let sound = |a: u8, b: u8| {
+        [b"cs", b"sz", b"ck", b"iy", b"gj", b"td", b"mn"]
+            .iter()
+            .any(|p| **p == [a, b] || **p == [b, a])
+    };
+    const FIRST: f64 = 2.2;
+    const LAST: f64 = 2.2;
+    let mut d = vec![vec![f64::INFINITY; m + 1]; n + 1];
+    d[0][0] = 0.0;
+    for i in 0..=n {
+        for j in 0..=m {
+            if i == 0 && j == 0 {
+                continue;
+            }
+            let mut best = f64::INFINITY;
+            if i > 0 && j > 0 {
+                let (a, b) = (t[i - 1], w[j - 1]);
+                let cost = if a == b {
+                    0.0
+                } else {
+                    (if vowel(a) && vowel(b) {
+                        2.2
+                    } else if sound(a, b) {
+                        2.0
+                    } else if adjacent_keys(a, b) {
+                        2.7
+                    } else {
+                        4.5
+                    }) + if j == 1 { FIRST } else { 0.0 }
+                        + if i == n && j == m { LAST } else { 0.0 }
+                };
+                best = best.min(d[i - 1][j - 1] + cost);
+            }
+            if j > 0 {
+                // A letter of the intended word left out.
+                let b = w[j - 1];
+                let doubled = j > 1 && w[j - 2] == b || j < m && w[j] == b;
+                let final_e = b == b'e' && j == m;
+                let cost = if doubled {
+                    1.45
+                } else if final_e {
+                    2.1
+                } else if vowel(b) {
+                    1.2
+                } else if b == b'h' && j > 1 && b"cgstwr".contains(&w[j - 2]) {
+                    2.0
+                } else {
+                    1.6
+                } + if j == 1 { FIRST } else { 0.0 }
+                    + if j == m && !final_e { LAST } else { 0.0 };
+                best = best.min(d[i][j - 1] + cost);
+                // A repeated syllable written once ("competion", "maintaing").
+                for l in [2, 3] {
+                    if j >= 2 * l && w[j - l..j] == w[j - 2 * l..j - l] {
+                        best = best.min(d[i][j - l] + 2.2);
+                    }
+                }
+            }
+            if i > 0 {
+                // A letter typed that the intended word lacks.
+                let a = t[i - 1];
+                let cost = if i > 1 && t[i - 2] == a || i < n && t[i] == a {
+                    2.2
+                } else if i > 1 && adjacent_keys(t[i - 2], a) || i < n && adjacent_keys(t[i], a) {
+                    2.5
+                } else if vowel(a) {
+                    2.4
+                } else {
+                    3.0
+                } + if i == 1 { FIRST } else { 0.0 }
+                    + if i == n && j == m { LAST } else { 0.0 };
+                best = best.min(d[i - 1][j] + cost);
+            }
+            if i > 1
+                && j > 1
+                && t[i - 1] == w[j - 2]
+                && t[i - 2] == w[j - 1]
+                && t[i - 1] != t[i - 2]
+            {
+                let ie = [t[i - 1], t[i - 2]] == *b"ie" || [t[i - 1], t[i - 2]] == *b"ei";
+                let cost = if ie { 1.8 } else { 1.5 } + if j == 2 { FIRST } else { 0.0 };
+                best = best.min(d[i - 2][j - 2] + cost);
+            }
+            d[i][j] = best;
+        }
+    }
+    d[n][m]
+}
+/// Optimal string alignment distance (edits with adjacent swaps), stopping early past `limit`.
+fn osa_within(a: &[u8], b: &[u8], limit: usize) -> bool {
+    if a.len().abs_diff(b.len()) > limit {
+        return false;
+    }
+    let mut d = vec![vec![0usize; b.len() + 1]; a.len() + 1];
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
+    }
+    for (j, cell) in d[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let mut v = (d[i - 1][j] + 1)
+                .min(d[i][j - 1] + 1)
+                .min(d[i - 1][j - 1] + usize::from(a[i - 1] != b[j - 1]));
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                v = v.min(d[i - 2][j - 2] + 1);
+            }
+            d[i][j] = v;
+        }
+    }
+    d[a.len()][b.len()] <= limit
+}
+/// Frequent ordinary words (frequency prior 300 or more) at most two edits from `word`: every
+/// one-edit variant of the word, looked up in the one-deletion index of frequent words.
+fn within_two(word: &str) -> Vec<String> {
+    let lexicon = lexicon();
+    let mut variants: HashSet<String> = HashSet::new();
+    let bytes = word.as_bytes();
+    let text = |b: Vec<u8>| String::from_utf8(b).unwrap_or_default();
+    variants.insert(word.to_string());
+    for i in 0..bytes.len() {
+        let mut v = bytes.to_vec();
+        v.remove(i);
+        variants.insert(text(v));
+        if i + 1 < bytes.len() {
+            let mut v = bytes.to_vec();
+            v.swap(i, i + 1);
+            variants.insert(text(v));
+        }
+    }
+    for i in 0..=bytes.len() {
+        for c in b'a'..=b'z' {
+            let mut v = bytes.to_vec();
+            v.insert(i, c);
+            variants.insert(text(v));
+            if i < bytes.len() && bytes[i] != c {
+                let mut v = bytes.to_vec();
+                v[i] = c;
+                variants.insert(text(v));
+            }
+        }
+    }
+    let mut near: HashSet<&String> = HashSet::new();
+    for v in &variants {
+        if let Some((w, _)) = lexicon.words.get_key_value(v) {
+            near.insert(w);
+        }
+        if let Some(values) = lexicon.deletes.get(v) {
+            near.extend(values);
+        }
+    }
+    near.into_iter()
+        .filter(|c| {
+            lexicon.lowercase.contains(c.as_str())
+                && frequency(c) >= 300
+                && *c != word
+                && osa_within(bytes, c.as_bytes(), 2)
+        })
+        .cloned()
+        .collect()
+}
+/// How likely `candidate` is the word meant by the unknown `word` between `before` and `after`
+/// (either may be empty): its frequency less the cost of the slip (`typo_cost`), plus how well it
+/// fits its neighbours. The weights were fitted on real misspellings in context.
+fn typo_score(word: &str, candidate: &str, before: &str, after: &str) -> f64 {
+    let fit = if before.is_empty() && after.is_empty() {
+        0.0
+    } else {
+        slot_fit(before, candidate, after)
+    };
+    0.45 * (zipf(candidate) - typo_cost(word, candidate)) + 0.83 * fit
+}
+/// The words within two edits of an unknown `word`, best first by `typo_score`.
+fn typo_ranking(word: &str, before: &str, after: &str, dialect_flags: u8) -> Vec<(f64, String)> {
+    let mut ranked: Vec<(f64, String)> = within_two(word)
+        .into_iter()
+        // "rethrown" is no slip of "thrown": a whole word inside it is a word with an affix.
+        .filter(|c| flags(c) & dialect_flags != 0 && c != before && c != after)
+        .filter(|c| !word.starts_with(c.as_str()) && !word.ends_with(c.as_str()))
+        .map(|c| (typo_score(word, &c, before, after), c))
+        .collect();
+    ranked.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    ranked
+}
 /// The one candidate that the neighbouring words and the shape of the slip clearly favour, or
 /// None when context cannot decide (the runner-up is within `margin`, log10).
 fn context_choice<'c>(
@@ -2101,10 +2454,27 @@ pub fn suggest(
     // that usually label something ("plan b", "option c", "vitamin d", "x is 5") are left alone.
     let letter = word.len() == 1 && "fghjlmnopqstvw".contains(word.as_str());
     // A proper noun typed in lowercase ("lyft", "duolingo") is capitalized, never respelled.
-    if lexicon().lowercase.contains(word) && !letter || names::is_shorthand(word) {
+    if lexicon().lowercase.contains(word) && !letter || names::is_shorthand(word) || chat(word) {
         return None;
     }
     let proper_noun = crate::capitalization::proper_noun(names::base(word)).is_some();
+    // "i canf do it" is "can't", not "can": a slip that sits one edit from both a negative and
+    // its positive keeps the negation, since dropping it reverses what was meant.
+    // "aren 't" is a contraction typed with a space, not a slip.
+    let apostrophe_next = following_context
+        .first()
+        .is_some_and(|t| t.surface.starts_with(['\'', '’']));
+    if !apostrophe_next && let Some(negative) = kept_negation(word) {
+        return Some(negative);
+    }
+    // "bron bron": a word typed twice in a row is a nickname or a sound, not a slip.
+    if [previous, next]
+        .into_iter()
+        .flatten()
+        .any(|t| t.normalized == *word)
+    {
+        return None;
+    }
     // "dont" is "don't", whatever else it is one letter from ("done").
     if let Some(stem) = word.strip_suffix("nt")
         && [
@@ -2275,6 +2645,55 @@ pub fn suggest(
         // A slip into the neighbouring word would double it ("sai said").
         .filter(|candidate| *candidate != before && *candidate != after)
         .collect();
+    // "the eigth floor" is "eighth", "eigth apples" is "eight": a number and its ordinal one slip
+    // apart are told apart by the slot.
+    const ORDINALS: [(&str, &str); 7] = [
+        ("four", "fourth"),
+        ("six", "sixth"),
+        ("seven", "seventh"),
+        ("eight", "eighth"),
+        ("nine", "ninth"),
+        ("ten", "tenth"),
+        ("eleven", "eleventh"),
+    ];
+    if let Some((cardinal, ordinal)) = ORDINALS
+        .iter()
+        .find(|(c, o)| candidates.iter().any(|x| x == c) && candidates.iter().any(|x| x == o))
+    {
+        let ordinal_slot = [
+            "the", "his", "her", "its", "their", "our", "my", "your", "every", "each",
+        ]
+        .contains(&prev)
+            || [
+                "century",
+                "floor",
+                "grade",
+                "place",
+                "time",
+                "day",
+                "year",
+                "row",
+                "round",
+                "edition",
+                "anniversary",
+                "birthday",
+                "street",
+                "season",
+                "chapter",
+                "generation",
+                "largest",
+                "biggest",
+                "most",
+            ]
+            .contains(&following);
+        let drop = if ordinal_slot { cardinal } else { ordinal };
+        candidates.retain(|c| c != drop);
+    }
+    // "refax", "preschedule": a common prefix on an ordinary word is a word formed on purpose,
+    // unless one likely slip makes it another word ("reovation" is "renovation").
+    if prefixed(word) && candidates.iter().all(|c| typo_cost(word, c) > 4.0) {
+        return None;
+    }
     // Topic and argument preferences only rank unknown-word candidates; the context choice below
     // never overrides a ranking they decided ("cazes" near a bakery is "cakes").
     let topical = |candidate: &str| -> bool {
@@ -2602,6 +3021,25 @@ pub fn suggest(
     if let Some((split_score, split)) = split
         && candidates.first().is_none_or(|c| *split_score > score(c))
     {
+        // "befor" is "before", not "be for"; "restor" is "restore": a split with a piece of three
+        // letters or fewer gives way to one word a single cheap slip away (a dropped or doubled
+        // letter). A dropped final "g" ("talkin", "feelin") is a way of speaking, kept as typed.
+        // The neighbours decide between the two readings ("the plan is away", not "the plains").
+        let short_piece = split.split(' ').any(|p| p.len() <= 3);
+        let pieces: Vec<&str> = split.split(' ').collect();
+        let as_split = phrase_logp(&[&[before.as_str()], &pieces[..], &[after.as_str()]].concat());
+        if short_piece
+            && !accepted
+            && let Some((_, top)) = typo_ranking(word, &before, &after, dialect_flags)
+                .into_iter()
+                .find(|(_, c)| typo_cost(word, c) <= 2.2)
+            && phrase_logp(&[&before, &top, &after]) > as_split + 1.0
+        {
+            if word.ends_with("in") && top == format!("{word}g") {
+                return None;
+            }
+            return Some(top);
+        }
         return Some(split.clone());
     }
     // A spelling by sound ("nefew", "enuf", "shud") is no single edit from its word; it is
@@ -2680,6 +3118,62 @@ pub fn suggest(
     if word.len() <= 3 && (damaged(previous) || damaged(next)) {
         return None;
     }
+    // A one-edit pick that a likelier slip two edits away contradicts is a guess: "competion" is
+    // "competition" (a syllable written once), not "completion"; "containg" is "containing", not
+    // "contains". A clearly likelier word replaces it; a close one leaves the word as typed.
+    let likeliest = |choice: String| -> Option<String> {
+        if drops_negation(word, &choice) {
+            return None;
+        }
+        // A short word is respelled only into a real word with a vowel ("cl" is no word), and a
+        // dropped letter needs both neighbours to back the shorter word ("migrate to aws" is not
+        // "to as"); a doubled letter ("andd") is a clear slip.
+        let vowelless = !word.bytes().any(|b| b"aeiouy".contains(&b));
+        if word.len() <= 4 && vowelless && !vowelless_slip(word, &choice) {
+            return None;
+        }
+        if word.len() <= 4 {
+            let doubled = word.as_bytes().windows(2).any(|w| w[0] == w[1]);
+            let shorter = choice.len() < word.len();
+            // Four letters may drop a final "e" ("nowe") or a cheap extra key on their own; three
+            // letters only a neighbouring key before one of the most frequent words ("kon").
+            let cheap = word.len() == 4 && (word.ends_with('e') || slip_cost(word, &choice) <= 0.5)
+                || slip_cost(word, &choice) <= 1.0 && frequency(&choice) >= 600;
+            let backed = seen(&before, &choice) && seen(&choice, &after);
+            let dropped_ok = !shorter || doubled || cheap || backed;
+            if !choice.bytes().any(|b| b"aeiouy".contains(&b)) || !dropped_ok {
+                return None;
+            }
+        }
+        // Short words have many neighbours two edits away; the one-edit ranking stands for them.
+        if accepted || word.len() < 6 {
+            return Some(choice);
+        }
+        let mine = typo_score(word, &choice, &before, &after);
+        // Only a rival two edits away that is a clearly likelier slip ("containing" for
+        // "containg", not "wanted" for "watied"): between one-edit words the ranking above already
+        // weighed the neighbours and the slot.
+        if topical(&choice) {
+            return Some(choice);
+        }
+        let slip = typo_cost(word, &choice);
+        let rival = typo_ranking(word, &before, &after, dialect_flags)
+            .into_iter()
+            .find(|(_, c)| {
+                *c == choice || !distance_one(word, c) && typo_cost(word, c) + 1.0 <= slip
+            });
+        match rival.as_ref() {
+            Some((score, top))
+                if *top != choice
+                    && *score >= mine + TYPO_MARGIN
+                    && typo_cost(word, top) <= 0.35 * word.len() as f64 =>
+            {
+                Some(top.clone())
+            }
+            Some((score, top)) if *top != choice && *score > mine => None,
+            _ => Some(choice),
+        }
+    };
     if !tiny
         && let Some(best) = candidates
             .first()
@@ -2709,13 +3203,33 @@ pub fn suggest(
                     || seen(&choice, &after)
                     || score(&choice) + 100 >= score(best))
             {
-                return Some(choice);
+                return likeliest(choice);
             }
-            return Some(best.clone());
+            return likeliest(best.clone());
         }
     }
-    in_context()
+    if let Some(choice) = in_context() {
+        return likeliest(choice);
+    }
+    // No frequent word is one edit away ("competion", "maintaing" are two): the likeliest word
+    // within two edits, when it clearly beats the next one and the slips are cheap for the word's
+    // length. Two costly changes to a short word ("linguae", "decisis") are a foreign or rare
+    // word more often than a typo.
+    if !accepted && word.len() >= 6 && candidates.is_empty() {
+        let ranked = typo_ranking(word, &before, &after, dialect_flags);
+        if let Some((score, top)) = ranked.first()
+            && ranked
+                .get(1)
+                .is_none_or(|(next, _)| score - next >= TYPO_MARGIN)
+            && typo_cost(word, top) <= 0.35 * word.len() as f64
+        {
+            return Some(top.clone());
+        }
+    }
+    None
 }
+/// How far (log10-like `typo_score` units) the likeliest word must lead the next one.
+const TYPO_MARGIN: f64 = 1.0;
 /// A two-letter word that may be a slip of a frequent word: not glued to or after a number
 /// ("5th", "10 km"), which makes it a unit or an ordinal, and not beside another uncommon short
 /// word ("la si do", "fa so"), which makes it part of a sequence of syllables or codes.
@@ -2784,6 +3298,81 @@ mod tests {
             &tokens[..i],
             &tokens[i + 1..],
         )
+    }
+    #[test]
+    fn acronyms_and_codes_keep_their_letters() {
+        // Lowercase acronyms, brand codes and tech terms never lose a letter or become a word.
+        for (text, word) in [
+            ("VP in hcl salary", "hcl"),
+            ("migrate to aws", "aws"),
+            ("call the api over ssh", "api"),
+            ("the jvm crashed", "jvm"),
+            ("use the cli", "cli"),
+            ("joined tcs last year", "tcs"),
+            ("send the ppt", "ppt"),
+            ("gst is due", "gst"),
+            ("kpmg audit", "kpmg"),
+            ("he works at ibm", "ibm"),
+            ("we use gcp", "gcp"),
+            ("run npm install", "npm"),
+            ("the sql query", "sql"),
+            ("check the crm", "crm"),
+        ] {
+            assert_eq!(suggest_at(text, word, false), None, "{word}");
+        }
+        for word in ACRONYMS {
+            assert!(acronym(word), "{word}");
+        }
+        // Real three-letter slips are still fixed.
+        for (text, word, fixed) in [
+            ("adn then we left", "adn", "and"),
+            ("pet hte dog", "hte", "the"),
+            ("wht is this", "wht", "what"),
+            ("it wass broken", "wass", "was"),
+        ] {
+            assert_eq!(
+                suggest_at(text, word, false).as_deref(),
+                Some(fixed),
+                "{word}"
+            );
+        }
+    }
+    #[test]
+    fn likely_slips_beat_a_closer_rare_reading() {
+        // Two edits that a writer often makes beat one edit that they rarely make.
+        let mut wrong = vec![];
+        for (text, word, fixed) in [
+            ("A file containg the data.", "containg", "containing"),
+            ("Call me befor the meeting.", "befor", "before"),
+            ("The algotihms are fast.", "algotihms", "algorithms"),
+        ] {
+            let got = suggest_at(text, word, false);
+            if got.as_deref() != Some(fixed) {
+                wrong.push(format!("{word}: {got:?}"));
+            }
+        }
+        assert!(wrong.is_empty(), "{wrong:?}");
+        // A negation survives the slip; a prefixed word and a nickname stay as typed.
+        assert_eq!(
+            suggest_at("i canf do it", "canf", false).as_deref(),
+            Some("can't")
+        );
+        assert_eq!(suggest_at("Please refax the form.", "refax", false), None);
+        assert_eq!(suggest_at("hey bron bron", "bron", false), None);
+        assert_eq!(
+            suggest_at("It is on the eigth floor.", "eigth", false).as_deref(),
+            Some("eighth")
+        );
+        // Chat spellings and costly changes to short rare words stay as typed.
+        for (text, word) in [
+            ("come here lil bit", "lil"),
+            ("It is the plural linguae here.", "linguae"),
+            ("Stare decisis applies.", "decisis"),
+        ] {
+            assert_eq!(suggest_at(text, word, false), None, "{word}");
+        }
+        assert!(typo_cost("seperate", "separate") < typo_cost("seperate", "desperate"));
+        assert!(typo_cost("determins", "determines") < typo_cost("determins", "determine"));
     }
     #[test]
     fn words_the_system_checker_accepts_are_not_respelled() {
