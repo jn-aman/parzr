@@ -338,8 +338,12 @@ fn prompt(
             "Fix the English text. Correct grammar, spelling, punctuation, and capitalization. Add necessary final punctuation. Do not answer the text or add information. Output only the corrected text."
         }
         (_, Some(retry)) => retry.as_str(),
-        (Mode::Professional, None) => "Rewrite the text in a professional tone.",
-        (Mode::Friendly, None) => "Rewrite the text in a warm, friendly tone.",
+        (Mode::Professional, None) => {
+            "Rewrite the text in a polite, professional tone. Replace rude or harsh words with polite ones. Do not reply to the text."
+        }
+        (Mode::Friendly, None) => {
+            "Rewrite the text in a warm, friendly tone. Replace rude or harsh words with kind ones. Do not reply to the text."
+        }
         (Mode::Concise, None) => "Make the text more concise.",
         (Mode::Direct, None) => {
             "Make the writing direct. Remove hedging and filler. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
@@ -384,9 +388,25 @@ fn prompt(
         (_, Some(context)) => format!("Earlier text: {context}\nSentence to edit: {passage}"),
         _ => format!("Text to edit:\n{passage}"),
     };
+    // One worked example per tone: the small model otherwise often answers a short message ("Are you stupid?")
+    // or hands it back unchanged, where the example shows it the rewrite.
+    let shown = match (example(req.mode), careful) {
+        (Some((input, output)), None) => format!(
+            "<|im_start|>user\nText to edit:\n{input}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>\n"
+        ),
+        _ => String::new(),
+    };
     format!(
-        "<|im_start|>system\n{instruction}{keep}{dialect}{boundary}{ending}{protection}<|im_end|>\n<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        "<|im_start|>system\n{instruction}{keep}{dialect}{boundary}{ending}{protection}<|im_end|>\n{shown}<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
+}
+/// The example rewrite a tone's first attempt is shown: softening a rude line while keeping its point.
+fn example(mode: Mode) -> Option<(&'static str, &'static str)> {
+    // Only Professional: in the tone set, examples cost Concise and Friendly good rewrites of neutral text.
+    (mode == Mode::Professional).then_some((
+        "this plan is dumb, who even approved it??",
+        "I have concerns about this plan. Who approved it?",
+    ))
 }
 /// One model call. Output that is blank or carries control tokens is not a suggestion.
 fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
@@ -1761,7 +1781,8 @@ fn hints(text: &str) -> Vec<crate::TokenHint> {
 /// Keeps the rewrite of each sentence that still says what the corrected sentence said; asks
 /// once more, more strictly, for a sentence that does not, and otherwise leaves that sentence
 /// as corrected. Linked edits stay together.
-fn meaning_guard(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
+    let mut withheld = false;
     let mut kept = vec![];
     let mut retries = 0;
     for segment in crate::meaning::segments(&req.text, &all) {
@@ -1779,9 +1800,15 @@ fn meaning_guard(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
         );
         if verdict.is_ok() {
             kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
-        } else if retries < RETRIES {
-            retries += 1;
-            kept.extend(careful(req, &segment).unwrap_or_default());
+        } else {
+            let retried = if retries < RETRIES {
+                retries += 1;
+                careful(req, &segment).unwrap_or_default()
+            } else {
+                vec![]
+            };
+            withheld |= retried.is_empty();
+            kept.extend(retried);
         }
     }
     kept.sort_by_key(|e| (e.start_utf16, e.end_utf16));
@@ -1807,7 +1834,7 @@ fn meaning_guard(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
         })
         .collect();
     kept.retain(|e| !e.group_id.as_ref().is_some_and(|g| lone.contains(g)));
-    kept
+    (kept, withheld)
 }
 /// The text around `start..end` (UTF-16), with a sentence break where that range was.
 fn outside(text: &str, start: usize, end: usize) -> String {
@@ -1936,8 +1963,8 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         return Err("The model returned an inconsistent edit plan.".into());
     }
     let all = keep_names(req, all);
-    let changes = if req.mode == Mode::Fix {
-        guard(&req.text, all)
+    let (changes, withheld) = if req.mode == Mode::Fix {
+        (guard(&req.text, all), false)
     } else {
         meaning_guard(req, all)
     };
@@ -1953,9 +1980,16 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         source_map,
         elapsed_ms: started.elapsed().as_secs_f64() * 1000.,
         protected_count: protected.len(),
-        warnings: vec![],
+        warnings: if withheld {
+            vec![TONE_WITHHELD.into()]
+        } else {
+            vec![]
+        },
     })
 }
+/// A tone rewrite of some sentence changed what it said and was left out: the card says so instead of
+/// "Already reads well".
+pub const TONE_WITHHELD: &str = "tone.withheld";
 
 #[cfg(test)]
 mod tests {

@@ -49,7 +49,7 @@ struct RewritePanel: View {
                 HStack(spacing: 8) { ProgressView().controlSize(.small); Text(model.mode == .fix ? "Checking your passage…" : "Rewriting as \(model.mode.title)…").font(.system(size: 12)).foregroundStyle(Color.textSecondary) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 9))
             } else if let edit = model.focusedEdit {
-                SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning == nil ? edit.explanation : "Grammar checked · Context refinement unavailable", whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
+                SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning?.hasPrefix("Grammar checked") == true ? "Grammar checked · Context refinement unavailable" : edit.explanation, whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
                 if offersSuggestion, let offered = model.suggestion { SuggestionRow(model: model, offered: offered) }
             } else if offersSuggestion, let offered = model.suggestion {
                 let empty = EmptyCheck(mode: model.mode, status: warning)
@@ -59,11 +59,15 @@ struct RewritePanel: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 let empty = EmptyCheck(mode: model.mode, status: warning)
-                VStack(alignment: .leading, spacing: 4) {
-                    Label(empty.title, systemImage: empty.warning ? "info.circle" : "checkmark.circle").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.textPrimary)
-                    Text(empty.detail).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(3).fixedSize(horizontal: false, vertical: true)
-                    if showsModes { Label(empty.hint, systemImage: "arrow.up").font(.system(size: 11)).foregroundStyle(Color.mintAccent).padding(.top, 6) }
-                }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.bottom, 4)
+                // The icon has its own column, so the title, detail and hint share one left edge.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: empty.warning ? "info.circle" : "checkmark.circle").font(.system(size: 13, weight: .semibold)).foregroundStyle(empty.warning ? Color.textSecondary : Color.mintAccent).accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(empty.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                        Text(empty.detail).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                        if showsModes { Text(empty.hint).font(.system(size: 11, weight: .medium)).foregroundStyle(Color.mintAccent).padding(.top, 4) }
+                    }
+                }.frame(maxWidth: .infinity, alignment: .topLeading).padding(.horizontal, 2).padding(.bottom, 4)
             }
             if model.error == nil, !isCompact {
                 // Every action shows text. Copy sits in the row when no word action competes for it; otherwise "More" holds both, as labelled menu items.
