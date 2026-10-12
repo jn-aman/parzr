@@ -37,18 +37,18 @@ final class InlineSuggestions {
     var correctionSize: CGSize? { correction?.frame.size }
     var correctionView: NSView? { correction?.contentView }
     func markedView(for edit: WritingEdit) -> MarkElement? { overlay.element(for: edit.id) }
+    /// Ignores last while the writer stays in one field: a keystroke or a fresh check moves an edit's offsets, so an
+    /// ignore is remembered by what the edit changes (`IgnoreKey`), not by where it is.
     private struct IgnoreRevision: Equatable {
         let pid: pid_t
         let element: CFHashCode
-        let paragraph: Int
-        let textHash: Int
     }
     init(headless: Bool = false) {
         self.headless = headless
         model.dismiss = { [weak self] in self?.closeCard(); self?.dismissIfStale() }
         model.didAnalyze = { [weak self] in
             guard let self else { return }
-            self.model.selectedEdits.subtract(self.ignored)
+            self.model.selectedEdits.subtract(IgnoreKey.ids(in: self.model.result?.edits ?? [], ignored: self.ignored))
         }
         installMonitor()
         if !headless { Task { @MainActor [weak self] in try? await Task.sleep(for: .milliseconds(1500)); self?.prewarm() } }
@@ -118,7 +118,7 @@ final class InlineSuggestions {
         subscriptions.removeAll(); ignored = []; revision = nil
     }
     private func prepareRevision(_ snapshot: SelectionSnapshot) {
-        let next = IgnoreRevision(pid: snapshot.app.processIdentifier, element: CFHash(snapshot.element), paragraph: snapshot.selection.location, textHash: snapshot.text.hashValue)
+        let next = IgnoreRevision(pid: snapshot.app.processIdentifier, element: CFHash(snapshot.element))
         if revision != next { ignored = []; revision = next }
     }
     @discardableResult
@@ -129,7 +129,7 @@ final class InlineSuggestions {
         }
         reset(); prepareRevision(snapshot)
         guard snapshot.app == SelfTestTarget.watched, !snapshot.text.isEmpty else { overlay.clear(); return false }
-        let edits = result.edits.filter { !ignored.contains($0.id) }
+        let edits = result.edits.filter { !ignored.contains(IgnoreKey.of($0)) }
         shown = (snapshot, result, nil)
         if edits.isEmpty { overlay.clear(); return true }
         overflow = max(0, edits.count - maxMarks)
@@ -202,7 +202,7 @@ final class InlineSuggestions {
         do { try snapshot.validate() } catch { dismiss(); return false }
         prepareRevision(snapshot)
         model.select(snapshot, result: result, focused: focused)
-        model.selectedEdits.subtract(ignored)
+        model.selectedEdits.subtract(IgnoreKey.ids(in: result.edits, ignored: ignored))
         let panel = card()
         let root = RewritePanel(model: model, ignore: { [weak self] edit in self?.ignore(edit) }, showsModes: snapshot.expectedSelection.length > 0)
         setHost(root, in: panel)
@@ -236,7 +236,7 @@ final class InlineSuggestions {
     }
     private func ignore(_ edit: WritingEdit) {
         let related = EditPlan.related(to: edit, in: model.result?.edits ?? [edit])
-        ignored.formUnion(related.map(\.id)); model.toggle(edit)
+        ignored.formUnion(related.map(IgnoreKey.of)); model.toggle(edit)
         overlay.remove(owners: Set(related.map(\.id)))
         if model.chosenEdits.isEmpty { closeCard() }
     }
@@ -279,4 +279,11 @@ struct InlineCorrection: View {
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }
+}
+
+/// What an ignored suggestion changes, independent of its offsets: the same rule turning the same words into the same
+/// replacement stays ignored after more typing or another check.
+enum IgnoreKey {
+    static func of(_ edit: WritingEdit) -> String { "\(edit.rule_id)\u{1F}\(edit.original)\u{1F}\(edit.replacement)" }
+    static func ids(in edits: [WritingEdit], ignored: Set<String>) -> Set<String> { Set(edits.filter { ignored.contains(of($0)) }.map(\.id)) }
 }

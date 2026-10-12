@@ -44,7 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return true
     }
     /// AppKit asks this once after launch; the Studio (or, before setup is finished, the welcome guide) opens then, except under a fixture editor test, which must never put a Parzr window or the app's focus on the owner's screen.
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { if !Preferences.isFixtureTest { openStudio() }; return false }
+    /// With Show in Dock off, a launch (at login, or the relaunch after an update) stays in the menu bar: an opened window
+    /// would bring the Dock icon back and look like the setting was lost.
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        if !Preferences.isFixtureTest, ActivationPolicy.opensWindowAtLaunch(setupFinished: Preferences.shared.setupFinished, showInDock: Preferences.shared.showInDock) { openStudio() }
+        return false
+    }
     func applicationWillTerminate(_ notification: Notification) { passive?.stop(); inline.stop() }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -604,6 +609,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 guard !panelModel.busy, !panelModel.chosenEdits.isEmpty else { throw ParzrError.message("The snapshot's real passage check did not complete.") }
                 try render(RewritePanel(model: panelModel), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("rewrite.png"))
                 try render(RewritePanel(model: panelModel, showsModes: false), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("inline.png"))
+                // A tone with nothing to change, and a tone whose rewrite changed the meaning and was withheld.
+                let tone = AppModel(); tone.mode = .direct; tone.source = "Are you stupid?"
+                tone.result = try JSONDecoder().decode(RewriteResult.self, from: Data(#"{"version":"s","text":"Are you stupid?","edits":[],"source_map":[],"elapsed_ms":1,"protected_count":0}"#.utf8))
+                try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-empty.png"))
+                tone.status = EmptyCheck.toneWithheld
+                try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-withheld.png"))
                 try cardSnapshots(to: URL(fileURLWithPath: directory))
                 for route in [StudioRoute.general, .writing, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
@@ -897,4 +908,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 /// Which Dock policy the app needs: an accessory app never owns the menu bar, so an open Parzr window makes it regular whatever Show in Dock says. Pure so tests can check it without activating anything.
 enum ActivationPolicy {
     static func decide(showInDock: Bool, windowOpen: Bool) -> NSApplication.ActivationPolicy { showInDock || windowOpen ? .regular : .accessory }
+    /// The welcome guide always opens until setup is done; after that a launch opens the editor only when Parzr lives in the Dock.
+    static func opensWindowAtLaunch(setupFinished: Bool, showInDock: Bool) -> Bool { !setupFinished || showInDock }
 }

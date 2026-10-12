@@ -59,8 +59,13 @@ struct StatusPopover: View {
             }
             Rectangle().fill(Color.hairline).frame(height: 0.5)
             HStack { NativeButton(title: "Open editor", symbol: "square.and.pencil", label: "Open Parzr", action: editor); Spacer(); NativeButton(title: "Settings", symbol: "slider.horizontal.3", action: settings) }
-            HStack { NativeButton(title: "About Parzr", kind: .utility, action: about); Spacer(); UpdateCheckButton(model: updates) }
-            HStack { NativeButton(title: "Quit Parzr", kind: .utility, action: quit).fixedSize(); Spacer() }
+            // The app's own housekeeping: one quiet row under the main actions.
+            HStack(spacing: 0) {
+                NativeButton(title: "About", kind: .utility, label: "About Parzr", quiet: true, action: about).fixedSize()
+                UpdateCheckButton(model: updates, quiet: true)
+                Spacer(minLength: 4)
+                NativeButton(title: "Quit", kind: .utility, label: "Quit Parzr", quiet: true, action: quit).fixedSize()
+            }.padding(.horizontal, -8).padding(.top, -8)
         }.padding(18).frame(width: 318).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }
 }

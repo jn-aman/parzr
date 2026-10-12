@@ -42,6 +42,9 @@ fn judged_word(text: &str, e: &Edit) -> Option<String> {
         && !crate::spelling::known(word)
         // Known misspellings (freind, recieve) are always corrected; never ask the judge.
         && !crate::names::is_name_typo(word)
+        // A frequent word with one letter doubled, dropped or swapped ("giirls", "someonse")
+        // is a slip, not a name the model should vouch for.
+        && !crate::spelling::edit_shaped(word)
         && e.replacement.to_lowercase() != token
         && !edge(text[..a].chars().next_back())
         && !edge(text[b..].chars().next()))
@@ -115,6 +118,170 @@ fn name_score(_: &str, _: usize, _: usize) -> Option<f32> {
     None
 }
 
+/// An edit to a word stretched for emphasis ("sooo", "yesss") is only its plain form ("so", "yes").
+#[cfg(feature = "local-model")]
+fn stretch_kept(e: &Edit) -> bool {
+    let word = e.original.trim();
+    if word.contains(char::is_whitespace) || !crate::names::stretched(word) {
+        return true;
+    }
+    let letters: Vec<char> = word.to_lowercase().chars().collect();
+    let fixed = e.replacement.trim().to_lowercase();
+    (1..=2).any(|keep| fixed == crate::names::squeeze(&letters, keep))
+        && crate::spelling::known(&fixed)
+}
+/// The model's Fix pass keeps what people type on purpose: chat shorthand ("pls", "idk", "lmk"),
+/// repeated marks ("!!", "??"), a sign-off's comma ("All the best,"), contractions ("it's" stays,
+/// and "its" becomes "it's", never "it is"), and the shape of tokens: no code formatting added, no
+/// space removed after an @mention or between words into a non-word, none added around a slash.
+#[cfg(feature = "local-model")]
+fn keep_typed_voice(text: &str, edits: &mut Vec<Edit>) {
+    let word_char = |c: char| c.is_alphanumeric() || c == '\'' || c == '’';
+    let marks = |c: char| c == '!' || c == '?';
+    edits.retain_mut(|e| {
+        if !e.rule_id.contains("local-model") {
+            return true;
+        }
+        let (Some(a), Some(b)) = (byte_at(text, e.start_utf16), byte_at(text, e.end_utf16)) else {
+            return true;
+        };
+        let wa = text[..a]
+            .char_indices()
+            .rev()
+            .take_while(|(_, c)| word_char(*c))
+            .last()
+            .map_or(a, |(i, _)| i);
+        let wb = b + text[b..]
+            .char_indices()
+            .take_while(|(_, c)| word_char(*c))
+            .last()
+            .map_or(0, |(i, c)| i + c.len_utf8());
+        let old = &text[wa..wb];
+        let new = format!("{}{}{}", &text[wa..a], e.replacement, &text[b..wb]);
+        // "pls" to "Please", "idk" to "I'd", "lmk" to "LMK".
+        if !old.is_empty()
+            && !old.contains(char::is_whitespace)
+            && crate::names::is_shorthand(&old.to_lowercase())
+        {
+            return false;
+        }
+        // "!!" to "!", "??" to "?".
+        if !e.original.is_empty()
+            && e.original.chars().all(marks)
+            && e.replacement.chars().all(marks)
+            && text[..a].chars().rev().take_while(|c| marks(*c)).count()
+                + text[b..].chars().take_while(|c| marks(*c)).count()
+                + e.original.chars().count()
+                >= 2
+        {
+            return false;
+        }
+        // "pricing." to "pricing..": a mark doubled beside one already there.
+        if e.original.is_empty()
+            && !e.replacement.is_empty()
+            && e.replacement.chars().all(|c| ".!?".contains(c))
+            && (text[..a].ends_with(['.', '!', '?']) || text[b..].starts_with(['.', '!', '?']))
+        {
+            return false;
+        }
+        // "Run `git pull`": formatting the user did not type.
+        if ["`", "**", "__"]
+            .iter()
+            .any(|m| e.replacement.contains(m) && !e.original.contains(m))
+        {
+            return false;
+        }
+        // "credit /legal", "processing/ prioritizing".
+        if e.replacement.trim().is_empty()
+            && !e.replacement.is_empty()
+            && (text[b..].starts_with('/') || text[..a].ends_with('/'))
+        {
+            return false;
+        }
+        // "@alex I think" to "@alexI think", "ahahaha ive" to "ahahahaI've".
+        if e.original.contains(char::is_whitespace) && !e.replacement.contains(char::is_whitespace)
+        {
+            let ra = text[..a]
+                .char_indices()
+                .rev()
+                .take_while(|(_, c)| !c.is_whitespace())
+                .last()
+                .map_or(a, |(i, _)| i);
+            let rb = b + text[b..]
+                .char_indices()
+                .take_while(|(_, c)| !c.is_whitespace())
+                .last()
+                .map_or(0, |(i, c)| i + c.len_utf8());
+            let glued = format!("{}{}{}", &text[ra..a], e.replacement, &text[b..rb]);
+            let core = glued.trim_matches(|c: char| !c.is_alphanumeric());
+            if glued.starts_with(['@', '#']) || !crate::spelling::known(core) {
+                return false;
+            }
+        }
+        // "All the best," to "All the best.": a short closing line keeps its comma.
+        if e.original == ","
+            && (e.replacement == "." || e.replacement.is_empty())
+            && {
+                let rest = text[b..].trim_start_matches([' ', '\t']);
+                rest.is_empty() || rest.starts_with('\n')
+            }
+            && text[..a]
+                .rsplit('\n')
+                .next()
+                .is_some_and(|line| line.split_whitespace().count() <= 4)
+        {
+            return false;
+        }
+        // "it's" to "it is", "its" to "it is": the contraction stays (and gets its apostrophe).
+        if !old.is_empty() && !old.contains(char::is_whitespace) && new.split(' ').count() == 2 {
+            let joined = old.to_lowercase().replace(['\'', '’'], "");
+            if let Some(full) = crate::contractions::contraction(&joined)
+                && expansions(full).contains(&new.to_lowercase())
+            {
+                let apostrophe = if old.contains('’') { "’" } else { "'" };
+                let mut cased = full.replace('\'', apostrophe);
+                if full.starts_with("i'") || old.starts_with(char::is_uppercase) {
+                    cased = crate::upper_first(&cased);
+                }
+                if cased == old {
+                    return false;
+                }
+                e.start_utf16 = crate::utf16_at(text, wa);
+                e.end_utf16 = crate::utf16_at(text, wb);
+                e.original = old.to_string();
+                e.replacement = cased;
+            }
+        }
+        true
+    });
+}
+/// What a contraction stands for: "it's" is "it is" or "it has", "can't" is "cannot".
+#[cfg(feature = "local-model")]
+fn expansions(contraction: &str) -> Vec<String> {
+    match contraction {
+        "won't" => return vec!["will not".into()],
+        "can't" => return vec!["cannot".into(), "can not".into()],
+        "shan't" => return vec!["shall not".into()],
+        "let's" => return vec!["let us".into()],
+        _ => {}
+    }
+    if let Some(stem) = contraction.strip_suffix("n't") {
+        return vec![format!("{stem} not")];
+    }
+    let Some((stem, tail)) = contraction.split_once('\'') else {
+        return vec![];
+    };
+    let full: &[&str] = match tail {
+        "s" => &["is", "has"],
+        "re" => &["are"],
+        "ll" => &["will"],
+        "ve" => &["have"],
+        "d" => &["would", "had", "did"],
+        "m" => &["am"],
+        _ => &[],
+    };
+    full.iter().map(|f| format!("{stem} {f}")).collect()
+}
 #[derive(Clone)]
 struct Cell {
     ch: char,
@@ -307,6 +474,10 @@ impl Document {
          -> Result<(), String> {
             let a = byte_at(original, *cursor).ok_or("Invalid source anchor.")?;
             let b = byte_at(original, end).ok_or("Invalid source anchor.")?;
+            // Overlapping edits once left the cursor past the end here and the slice panicked.
+            if a > b {
+                return Err("The composed edit plan is inconsistent.".into());
+            }
             if original[a..b] != *replacement {
                 for (i, c) in self.causes.iter().enumerate() {
                     if (c.start_utf16 < end && c.end_utf16 > *cursor)
@@ -469,6 +640,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         masked.extend(name_guard_ranges(req));
         match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
             Ok(mut contextual) => {
+                keep_typed_voice(&document.text(), &mut contextual.edits);
                 // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
                 judge.screen(&document, &mut contextual.edits, &mut protected);
                 document.apply(&contextual.edits)?;
@@ -500,7 +672,9 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     // The grammar model's corrections ride on top of the rules' plan (Fix mode only).
     #[cfg(feature = "local-model")]
     let (text, source_map, edits) = if req.gec && req.mode == Mode::Fix {
-        let merged = crate::gec::combine(req, &protected, edits.clone());
+        let mut merged = crate::gec::combine(req, &protected, edits.clone());
+        // "Yesss" to "Yess": a stretched word may only lose its stretch ("goood" to "good").
+        merged.retain(|e| !e.rule_id.starts_with("gector") || stretch_kept(e));
         match apply_edits(&req.text, &merged) {
             Ok((text, source_map)) => (text, source_map, merged),
             Err(_) => (text, source_map, edits),
@@ -560,12 +734,18 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // The model gets no instructions about names, so every name candidate is masked.
     let mut masked = protected.clone();
     masked.extend(name_guard_ranges(req));
-    let mut contextual = crate::model::rewrite(&document.request(req, &masked, req.mode))?;
-    // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
-    judge.screen(&document, &mut contextual.edits, &mut protected);
-    document.apply(&contextual.edits)?;
-    grammar(&mut document, req, &mut protected, &mut judge)?;
-    warnings.extend(contextual.warnings);
+    // A rewrite the model cannot write safely (it changed protected text, a name or the meaning)
+    // leaves the corrected text, with a warning, instead of failing the whole check.
+    match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
+        Ok(mut contextual) => {
+            // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
+            judge.screen(&document, &mut contextual.edits, &mut protected);
+            document.apply(&contextual.edits)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+            warnings.extend(contextual.warnings);
+        }
+        Err(error) => warnings.push(format!("Kept the corrected text. {error}")),
+    }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);
     let (text, source_map) = apply_edits(&req.text, &edits)?;
     if text != document.text() {
@@ -617,6 +797,91 @@ mod tests {
         edit(text, original, replacement, "Spelling")
     }
 
+    #[test]
+    fn slips_of_frequent_words_never_reach_the_name_judge() {
+        let word = |text: &str, original: &str, replacement: &str| {
+            judged_word(text, &spelling(text, original, replacement))
+        };
+        assert_eq!(word("The giirls won.", "giirls", "girls"), None);
+        assert_eq!(
+            word("refer you to someonse who can", "someonse", "someone"),
+            None
+        );
+        assert_eq!(
+            word("I talked to ritesh today", "ritesh", "rites").as_deref(),
+            Some("ritesh")
+        );
+    }
+    #[cfg(feature = "local-model")]
+    #[test]
+    fn stretched_words_only_lose_their_stretch() {
+        let gector = |text: &str, original: &str, replacement: &str| {
+            let mut e = edit(text, original, replacement, "Grammar");
+            e.rule_id = "gector.agreement".into();
+            e
+        };
+        assert!(!stretch_kept(&gector("Yesss we did it!", "Yesss", "Yess")));
+        assert!(stretch_kept(&gector("She's goood at it.", "goood", "good")));
+        assert!(stretch_kept(&gector("He go home.", "go", "goes")));
+    }
+    #[cfg(feature = "local-model")]
+    #[test]
+    fn the_model_fix_pass_keeps_typed_voice() {
+        let model = |text: &str, original: &str, replacement: &str| {
+            let mut e = edit(text, original, replacement, "Style");
+            e.rule_id = "local-model".into();
+            e
+        };
+        let kept = |text: &str, e: Edit| {
+            let mut edits = vec![e];
+            keep_typed_voice(text, &mut edits);
+            edits
+        };
+        for (text, original, replacement) in [
+            ("pls review it", "pls", "Please"),
+            ("thx for that", "thx", "Thank"),
+            ("lmk if so", "lmk", "LMK"),
+            ("How was it??", "?", ""),
+            ("Run git pull now.", "git pull", "`git pull`"),
+            ("All the best,", ",", "."),
+        ] {
+            assert!(
+                kept(text, model(text, original, replacement)).is_empty(),
+                "{text}"
+            );
+        }
+        // "@alex I" to "@alexI": the space after a mention stays.
+        let text = "@alex I think so";
+        let start = text.find(' ').unwrap();
+        let mut e = model(text, " ", "");
+        e.start_utf16 = start;
+        e.end_utf16 = start + 1;
+        assert!(kept(text, e).is_empty());
+        // "its" to "it is" becomes "it's"; "it's" to "it is" is dropped.
+        let text = "I think its broken";
+        let at = text.find("its").unwrap() + 2;
+        let mut e = model(text, "s", " is");
+        e.start_utf16 = at;
+        e.end_utf16 = at + 1;
+        let out = kept(text, e);
+        assert_eq!(out[0].replacement, "it's");
+        let text = "I think it's broken";
+        let at = text.find("'s").unwrap();
+        let mut e = model(text, "'s", " is");
+        e.start_utf16 = at;
+        e.end_utf16 = at + 2;
+        assert!(kept(text, e).is_empty());
+        // "pricing." to "pricing..": no mark doubled beside another.
+        let text = "See it. It works";
+        let at = text.find('.').unwrap() + 1;
+        let mut e = model(text, "See", "See");
+        (e.start_utf16, e.end_utf16, e.original, e.replacement) =
+            (at, at, String::new(), ".".into());
+        assert!(kept(text, e).is_empty());
+        // A real fix still goes through.
+        let text = "I has a question";
+        assert_eq!(kept(text, model(text, "has", "have")).len(), 1);
+    }
     #[test]
     fn only_respelled_unknown_lowercase_words_are_judged() {
         let word = |text: &str, original: &str, replacement: &str| {
@@ -694,15 +959,16 @@ mod tests {
 
     #[test]
     fn each_word_is_asked_once_per_request() {
-        // "mangaer" is a typo that is not on the always-correct list, so the judge is consulted.
-        let text = "zqarav said zqarav and mangaer mangaer";
+        // "wqzkr" is an unknown word that is not on the always-correct list and no slip of a
+        // frequent word, so the judge is consulted.
+        let text = "zqarav said zqarav and wqzkr wqzkr";
         let document = Document::new(text);
         let mut judge = Judge::new(true, fake);
         let before = queries();
         for _ in 0..3 {
             let mut edits = vec![
                 spelling(text, "zqarav", "zebra"),
-                spelling(text, "mangaer", "manager"),
+                spelling(text, "wqzkr", "work"),
             ];
             judge.screen(&document, &mut edits, &mut vec![]);
             assert_eq!(edits.len(), 1);

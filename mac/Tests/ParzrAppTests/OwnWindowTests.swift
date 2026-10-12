@@ -108,7 +108,8 @@ final class EditorTypingWindowTests: OwnWindowCase {
         sampler.cancel()
         let rewrites = edits - typed.count - 4
         try await settled(2)
-        XCTAssertGreaterThan(samples, 100, "the sampler barely ran")
+        // At least one look per keystroke, whatever the machine's load (a busy CI runner samples far less than 4 ms apart).
+        XCTAssertGreaterThanOrEqual(samples, typed.count + 4, "the sampler barely ran")
         XCTAssertEqual(editor.string, expected); XCTAssertEqual(caretMoved, 0, "the caret moved while typing"); XCTAssertEqual(rewrites, 0, "the text view was rewritten")
         XCTAssertEqual(missingMarks, 0, "marks vanished while typing"); XCTAssertEqual(busy, 0, "Checking showed while typing")
         XCTAssertEqual(checkDisabled, 0, "Check passage was disabled while typing"); XCTAssertEqual(copyDisabled, 0, "Copy was disabled while typing")
