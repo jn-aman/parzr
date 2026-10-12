@@ -13,8 +13,10 @@ listed misspelling is not a word people write on purpose.
 
 A pair is kept when every check below passes; each one guards a kind of false alarm:
   * the misspelling is ASCII letters, 4+ long, not a word or name in Parzr's lexicon or bundled names, not
-    chat shorthand, and seen fewer than 3 times in all corrected (reference) text of the corpora, where
-    names, code words and rare valid words show up;
+    chat shorthand, and seen in the corrected (reference) text of the corpora, where names, code words and
+    rare valid words show up, fewer than 3 times or under a quarter as often as it is corrected (references
+    keep the typos their own edit did not touch);
+  * a single natural edit is enough only for a misspelling of 5+ letters that keeps the word's ending;
   * the correction is made of lexicon words valid in both British and American English, and at most 2 edits
     away (3 for corrections of 8+ letters; a run-together pair must be the same letters with spaces), so
     renames and rewrites ("Orissa" -> "Odisha") are not typos;
@@ -85,7 +87,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--exclude-half', choices=['A', 'B'])
     ap.add_argument('--output', default=str(RULES / 'typos.txt'))
-    ap.add_argument('--min-natural', type=int, default=2)
+    ap.add_argument('--min-natural', type=int, default=1)
     a = ap.parse_args()
     mining = data_root() / 'dist/mining'
 
@@ -140,11 +142,11 @@ def main():
         # "remove") and is no run-together pair ("timeson"); otherwise two edits or a curated list are needed.
         endings = ('s', 'ed', 'ing', 'ly', 'er')
         alike = ' ' not in target and all(o.endswith(e) == target.endswith(e) for e in endings)
-        need = 2 if proper else (1 if alike and a.min_natural <= 1 else max(2, a.min_natural))
+        need = 2 if proper else (1 if alike and len(o) >= 5 and a.min_natural <= 1 else max(2, a.min_natural))
         checks = [
             ('shape', o.isascii() and len(o) >= 4 and o != target),
             ('word', o not in flags and o not in names and o not in SHORTHAND and o not in taken),
-            ('written', refs[o] < 3),
+            ('written', refs[o] < 3 or refs[o] * 4 <= total),
             ('target', all(flags.get(w, 0) & 192 == 192 for w in words) and not dialect(o, target)),
             ('distance', target.replace(' ', '') == o if ' ' in target
              else osa(o, target) <= (3 if len(target) >= 8 else 2)),

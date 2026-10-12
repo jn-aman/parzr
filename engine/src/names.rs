@@ -78,7 +78,7 @@ pub fn is_known_misspelling(word: &str) -> bool {
             .filter(|s| !s.contains(' '))
             .collect()
     });
-    is_name_typo(lower) || sources.contains(lower)
+    is_name_typo(lower) || sources.contains(lower) || crate::rules::mined_typo(lower).is_some()
 }
 /// Unicode case folding used for every name comparison (matches `Token::normalized`).
 pub fn fold(s: &str) -> String {

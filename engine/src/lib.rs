@@ -617,6 +617,56 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             edits.push(e);
         }
     }
+    // Misspellings mined from real corrections, matched word by word ("Febuary", "existant").
+    // A capital inside a sentence may be a name ("Siller", "Princip"): only a misspelt proper noun
+    // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
+    // throughout only on longer words ("INITALIZED").
+    for t in tokens.iter().filter(|_| !tone_only) {
+        let Some(correction) = (t.is_word && t.surface.is_ascii())
+            .then(|| rules::mined_typo(&t.normalized))
+            .flatten()
+        else {
+            continue;
+        };
+        let original = t.surface;
+        let mut letters = original.chars();
+        let capital = letters.next().is_some_and(|c| c.is_ascii_uppercase());
+        let rest_lower = letters.clone().all(|c| !c.is_ascii_uppercase());
+        let all_caps = letters.all(|c| !c.is_ascii_lowercase());
+        let allowed = if !capital {
+            rest_lower
+        } else if rest_lower {
+            starts_sentence(&req.text, t.start_byte, req)
+                || correction.starts_with(|c: char| c.is_ascii_uppercase()) && !t.system_known
+        } else {
+            all_caps && original.len() >= 6 && !t.system_known
+        };
+        if !allowed {
+            continue;
+        }
+        let mut replacement = typo_capital(
+            match_case(correction, original),
+            original,
+            starts_sentence(&req.text, t.start_byte, req),
+        );
+        if starts_sentence(&req.text, t.start_byte, req)
+            && req.text.trim_end().ends_with(['.', '!', '?'])
+        {
+            replacement = upper_first(&replacement);
+        }
+        if let Some(e) = make_edit(
+            &req.text,
+            t.start_utf16,
+            t.end_utf16,
+            replacement,
+            "Spelling",
+            "spelling.common_misspelling",
+            "This is a common misspelling.",
+            0.95,
+        ) {
+            edits.push(e);
+        }
+    }
     for (compiled, hit) in rules::contextual().iter().zip(rules::candidates(&req.text)) {
         let rule = &compiled.rule;
         if !hit
