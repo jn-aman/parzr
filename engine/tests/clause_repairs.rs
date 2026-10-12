@@ -473,3 +473,21 @@ fn everyday_slips_take_the_word_the_clause_needs() {
         "This is a worse case than last year.",
     ]);
 }
+
+#[test]
+fn a_pronoun_subject_is_not_said_twice() {
+    check(&[
+        (
+            "We all of us already have the code.",
+            "We all already have the code.",
+        ),
+        ("I think we all of us agree.", "I think we all agree."),
+        ("They both of them came late.", "They both came late."),
+    ]);
+    unchanged(&[
+        "We, all of us, already have it.",
+        "Thank you all of you for coming.",
+        "All of us already have the code.",
+        "Tell them all of them are welcome.",
+    ]);
+}

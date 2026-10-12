@@ -1938,6 +1938,31 @@ fn slips(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             fix(edits, i, "it", "grammar.it_in", "Did you mean “it in”?");
             continue;
         }
+        // "We all of us already have": the pronoun is said twice; "We, all of us," with commas
+        // is an aside and stays.
+        if let Some(object) = match w {
+            "we" => Some("us"),
+            "you" => Some("you"),
+            "they" => Some("them"),
+            _ => None,
+        } && ["all", "both", "each"].contains(&next)
+            && word(s, i + 2) == "of"
+            && word(s, i + 3) == object
+            && s.get(i + 4).is_some_and(|t| t.is_word)
+            // "Thank you all of you" has "you" as an object: only a subject counts.
+            && (w != "you" || crate::clause_repairs::clause_start(s, i))
+        {
+            push(
+                req,
+                edits,
+                (s[i + 1].end_utf16, s[i + 3].end_utf16),
+                String::new(),
+                "grammar.pronoun_twice",
+                "The pronoun is already the subject: “we all”, not “we all of us”.",
+                0.95,
+            );
+            continue;
+        }
         // "let me no your thoughts", "I don't no": the verb "know".
         if w == "no"
             && (["me", "us"].contains(&prev) && i >= 2 && word(s, i - 2) == "let"
