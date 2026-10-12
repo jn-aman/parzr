@@ -20,7 +20,9 @@ A pair is kept when every check below passes; each one guards a kind of false al
   * the correction is made of lexicon words valid in both British and American English, and at most 2 edits
     away (3 for corrections of 8+ letters; a run-together pair must be the same letters with spaces), so
     renames and rewrites ("Orissa" -> "Odisha") are not typos;
-  * at least 90% of the edits of the misspelling go to the same correction;
+  * at least 90% of the edits of the misspelling go to the same correction, and no other frequent word is
+    one slip away from it ("revies": "reviews" or "revise") unless five natural edits agree on a word of
+    six letters or more;
   * a natural source has it (or a curated list does); a correction that is a proper noun needs two natural
     edits; it is not already a phrase rule or a reviewed misspelling.
 
@@ -79,6 +81,13 @@ def dialect(o, c):
     return False
 
 
+def edits1(word):
+    letters = 'abcdefghijklmnopqrstuvwxyz'
+    splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+    return ({a + b[1:] for a, b in splits if b} | {a + b[1] + b[0] + b[2:] for a, b in splits if len(b) > 1}
+            | {a + c + b[1:] for a, b in splits if b for c in letters} | {a + c + b for a, b in splits for c in letters})
+
+
 def listed(path):
     return {line.split()[0].lower() for line in path.read_text().splitlines() if line.strip() and not line.startswith('#')}
 
@@ -95,6 +104,7 @@ def main():
     for w, f in json.loads((RULES / 'lexicon.json').read_text()):
         flags[w.lower()] |= f
     ordinary = {w for w, _ in json.loads((RULES / 'lexicon.json').read_text()) if w == w.lower()}
+    freq = dict(json.loads((RULES / 'frequency.json').read_text())['entries'])
     names = listed(RULES / 'names.txt')
     taken = listed(RULES / 'misspellings.txt') | {
         r['source'].lower() for r in json.loads((RULES / 'phrases.json').read_text()) if ' ' not in r['source']}
@@ -153,6 +163,10 @@ def main():
             ('agreement', n >= 0.9 * total),
             ('evidence', natural >= need or curated >= 1 and not proper and (alike or natural >= 1)),
         ]
+        # Another frequent word one slip away ("revies": "reviews" or "revise") leaves the choice to
+        # the sentence, unless the edits agree often enough to settle it.
+        rivals = [w for w in edits1(o) if w != target and w in ordinary and freq.get(w, 0) >= 300]
+        checks.append(('ambiguous', not rivals or natural >= 5 and len(o) >= 6))
         failed = next((name for name, ok in checks if not ok), None)
         if failed:
             why[failed] += 1

@@ -803,9 +803,12 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
     // throughout only on longer words ("INITALIZED").
     for t in tokens.iter().filter(|_| !tone_only) {
+        // "Wenesday", "Thurday": a capitalized slip of a day or month name.
+        let day = spelling::calendar_slip(t);
         let Some(correction) = (t.is_word && t.surface.is_ascii())
             .then(|| rules::mined_typo(&t.normalized))
             .flatten()
+            .or(day.as_deref())
         else {
             continue;
         };

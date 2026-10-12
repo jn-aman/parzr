@@ -523,10 +523,24 @@ fn split_word(req: &Request, tokens: &[Token<'_>], i: usize) -> Option<String> {
     if capital(b) || capital(a) && a.surface != "I" && !starts_sentence(text, a.start_byte, req) {
         return None;
     }
-    if whole(&a.normalized) && whole(&b.normalized) {
+    let joined = format!("{}{}", a.normalized, b.normalized);
+    // "ab out", "be fore": two words that are never seen together, one of them rare, that make a
+    // frequent word are that word with a space typed inside it.
+    let rare_pair = a.normalized.len() >= 2
+        && b.normalized.len() >= 2
+        && spelling::ordinary(&joined)
+        && spelling::frequency(&joined) >= 450
+        && crate::context::count(&a.normalized, &b.normalized) == 0
+        && spelling::frequency(&a.normalized).min(spelling::frequency(&b.normalized)) < 410
+        // "in deed", "a head": a preposition or determiner before a noun reads as typed.
+        && ![
+            "a", "an", "the", "in", "on", "at", "of", "for", "to", "by", "with", "my", "your",
+            "his", "her", "our", "their", "its", "no", "some", "any",
+        ]
+        .contains(&a.normalized.as_str());
+    if whole(&a.normalized) && whole(&b.normalized) && !rare_pair {
         return None;
     }
-    let joined = format!("{}{}", a.normalized, b.normalized);
     let bare = joined.replace('\'', "");
     // "do nt", "it s", "I'l l", "d on't": a contraction, with its apostrophe restored.
     if let Some(contraction) = contractions::contraction(&bare)

@@ -263,6 +263,8 @@ mod tests {
                 "He moved to Britain last year.",
             ),
             ("Seperate the files please.", "Separate the files please."),
+            ("The competion was fierce.", "The competition was fierce."),
+            ("See you on Wenesday.", "See you on Wednesday."),
         ] {
             assert_eq!(fix(input), expected);
         }
