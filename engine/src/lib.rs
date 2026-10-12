@@ -762,11 +762,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         let dotted_abbreviation = req.text[token.end_byte..]
             .strip_prefix('.')
             .is_some_and(|rest| rest.starts_with(char::is_alphabetic));
-        if token.normalized == "i" && token.surface == "i" && !dotted_abbreviation {
+        // "i'm", "i’ll": the contracted pronoun takes its capital too, and only its first letter.
+        let contracted_i = ["i'm", "i've", "i'll", "i'd"].contains(&token.normalized.as_str())
+            && token.surface.starts_with('i')
+            && token.surface[1..].chars().all(|c| !c.is_uppercase());
+        if (token.normalized == "i" && token.surface == "i" || contracted_i) && !dotted_abbreviation
+        {
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
-                token.end_utf16,
+                token.start_utf16 + 1,
                 "I".into(),
                 "Capitalization",
                 "grammar.personal_pronoun",
@@ -1415,6 +1420,19 @@ mod tests {
             fix_request(with_names("send it to aman", &["Aman"], true)),
             "send it to Aman"
         );
+    }
+    #[test]
+    fn contracted_i_gets_one_capital_and_possessive_names_do_not_crash() {
+        assert_eq!(
+            fix_request(with_names("i'm here and i've done it", &[], true)),
+            "I'm here and I've done it"
+        );
+        // The pipeline once panicked here, splitting the name's capital from its apostrophe.
+        let req = Request {
+            gec: true,
+            ..with_names("I like noahs life.", &[], true)
+        };
+        assert!(pipeline::rewrite(&req).is_ok());
     }
     #[test]
     fn capitalize_names_adds_one_case_only_edit() {

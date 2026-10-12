@@ -364,6 +364,11 @@ impl Document {
                     && let Some(p) = prev_cause
                     && p != i
                     && !replacement.is_empty()
+                    // "noahs" to "Noah's": an apostrophe put inside the capitalized name is part
+                    // of the same word, and a split there would end before the cursor.
+                    && !within(&self.causes[i], &self.causes[p])
+                    && !within(&self.causes[p], &self.causes[i])
+                    && self.causes[p].end_utf16 >= cursor
                     && (self.causes[p].rule_id == "names.capitalize"
                         || self.causes[i].rule_id == "names.capitalize")
                 {
@@ -405,6 +410,11 @@ impl Document {
         }
         Ok(edits)
     }
+}
+
+/// `inner` lies inside the source span of `outer`.
+fn within(inner: &Edit, outer: &Edit) -> bool {
+    inner.start_utf16 >= outer.start_utf16 && inner.end_utf16 <= outer.end_utf16
 }
 
 fn grammar(
