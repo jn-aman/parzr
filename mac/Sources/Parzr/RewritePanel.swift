@@ -13,8 +13,10 @@ struct RewritePanel: View {
     private var copied: Bool { model.status == "Copied to clipboard" }
     /// Engine warnings only; "Copied to clipboard" is feedback, not a degraded check.
     private var warning: String? { copied ? nil : model.status }
-    /// Errors and empty results shrink to their content; a result or a running check keeps the full card so it never jumps.
-    var isCompact: Bool { model.error != nil || !model.busy && model.result != nil && model.focusedEdit == nil }
+    /// The rewrite a Fix check offers in the tone that fits the app (selection cards only).
+    private var offersSuggestion: Bool { showsModes && model.showsSuggestion }
+    /// Errors and empty results shrink to their content; a result, a running check or an offered rewrite keeps the full card so it never jumps.
+    var isCompact: Bool { model.error != nil || !model.busy && model.result != nil && model.focusedEdit == nil && !offersSuggestion }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -48,6 +50,13 @@ struct RewritePanel: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 9))
             } else if let edit = model.focusedEdit {
                 SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning == nil ? edit.explanation : "Grammar checked · Context refinement unavailable", whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
+                if offersSuggestion, let offered = model.suggestion { SuggestionRow(model: model, offered: offered) }
+            } else if offersSuggestion, let offered = model.suggestion {
+                let empty = EmptyCheck(mode: model.mode, status: warning)
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(empty.title, systemImage: empty.warning ? "info.circle" : "checkmark.circle").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                    SuggestionPreview(model: model, offered: offered)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 let empty = EmptyCheck(mode: model.mode, status: warning)
                 VStack(alignment: .leading, spacing: 4) {
@@ -81,6 +90,9 @@ struct RewritePanel: View {
                 Spacer(minLength: 0)
                 if more { moreMenu }
                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); if let ignore { ignore(edit) } else { model.toggle(edit) } }).fixedSize()
+            } else if offersSuggestion, let offered = model.suggestion {
+                NativeButton(title: "\(SuggestedRewrite.action(offered.tone))  ⏎", kind: .primary, label: SuggestedRewrite.action(offered.tone), key: "\r", enabled: model.canUseSuggestion, action: { model.useSuggestion() }).fixedSize().help("Replace the selection with this \(offered.tone.title) version · Return")
+                Spacer(minLength: 0); if more { moreMenu }
             } else { Spacer(minLength: 0); if more { moreMenu } }
             if !more, showsModes { copyButton }
             if model.snapshot?.canPatch == false && model.snapshot?.copied != true && preferences.clipboardFallback {
@@ -90,6 +102,47 @@ struct RewritePanel: View {
     }
     private var copyButton: some View {
         NativeButton(title: copied ? "Copied" : "Copy", kind: .utility, symbol: copied ? "checkmark" : "doc.on.doc", label: "Copy corrected passage", enabled: !model.busy && model.result != nil, action: model.copy).fixedSize().help("Copy the corrected passage · Command+C")
+    }
+}
+
+/// The offered rewrite in full, for a selection with nothing to fix: a spinner while it is written, then the passage with the rewritten words in mint.
+struct SuggestionPreview: View {
+    @ObservedObject var model: AppModel
+    let offered: SuggestedVersion
+    var body: some View {
+        Group {
+            if let written = offered.result, model.suggestionReady, let first = written.edits.first {
+                VStack(alignment: .leading, spacing: 6) {
+                    ScrollView {
+                        Text(SentencePreview.diff(source: model.source, edits: written.edits, focused: first, whole: true)).font(.system(size: 13)).foregroundStyle(Color.textPrimary).lineSpacing(3)
+                            .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                    }.accessibilityLabel("\(offered.tone.title) version preview")
+                    Label("\(offered.tone.title) version · \(offered.tone.detail)", systemImage: offered.tone.symbol).font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.correctionInk).lineLimit(1)
+                }
+            } else {
+                HStack(spacing: 8) { ProgressView().controlSize(.small); Text(SuggestedRewrite.working(offered.tone)).font(.system(size: 12)).foregroundStyle(Color.textSecondary) }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }.padding(10).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 9))
+    }
+}
+
+/// One line under the fixes: the offered rewrite, or a spinner while it is written. Use applies the whole rewrite, fixes included.
+struct SuggestionRow: View {
+    @ObservedObject var model: AppModel
+    let offered: SuggestedVersion
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: offered.tone.symbol).font(.system(size: 10)).foregroundStyle(Color.mintAccent).accessibilityHidden(true)
+            if let written = offered.result, model.suggestionReady {
+                (Text("\(offered.tone.title): ").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.textPrimary) + Text(written.text.trimmingCharacters(in: .whitespacesAndNewlines)).font(.system(size: 11)).foregroundColor(Color.textSecondary))
+                    .lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading).help(written.text)
+                NativeButton(title: "Use", kind: .utility, label: SuggestedRewrite.action(offered.tone), enabled: model.canUseSuggestion, action: { model.useSuggestion() }).fixedSize().help("Replace the selection with this \(offered.tone.title) version, fixes included")
+            } else {
+                ProgressView().controlSize(.mini)
+                Text(SuggestedRewrite.working(offered.tone)).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }.padding(.horizontal, 8).frame(height: 26).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
