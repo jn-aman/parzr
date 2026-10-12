@@ -1613,6 +1613,26 @@ mod tests {
         assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
     }
     #[test]
+    fn a_capital_you_inside_a_sentence_is_lowercased_but_headings_keep_theirs() {
+        let fix = |t: &str| fix_request(with_names(t, &[], true));
+        assert_eq!(
+            fix("Hey, You have Clickhouse available now!"),
+            "Hey, you have Clickhouse available now!"
+        );
+        assert_eq!(
+            fix("Thanks, Your help was great."),
+            "Thanks, your help was great."
+        );
+        assert_eq!(
+            fix("Everything You Need To Know About Rust"),
+            "Everything You Need To Know About Rust"
+        );
+        assert_eq!(
+            fix("You did it. You really did."),
+            "You did it. You really did."
+        );
+    }
+    #[test]
     fn file_names_and_domains_are_never_capitalized() {
         for text in [
             "aman.png",
