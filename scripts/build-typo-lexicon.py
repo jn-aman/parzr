@@ -164,6 +164,8 @@ def main():
             ('agreement', n >= 0.9 * total),
             # "untelevised" -> "televised" drops a negative prefix: an edit of meaning, not a typo.
             ('negation', not any(o == p + target for p in ('un', 'in', 'im', 'il', 'ir', 'non', 'dis', 'a'))),
+            # "rethrown" -> "thrown": a prefixed word is a word, not a typo of its stem.
+            ('prefix', not any(o == p + target for p in ('re', 'pre', 'de', 'co', 'mis', 'sub', 'over', 'under', 'out'))),
             ('evidence', natural >= need or curated >= 1 and not proper and (alike or natural >= 1)),
         ]
         # Another frequent word one slip away ("revies": "reviews" or "revise") leaves the choice to

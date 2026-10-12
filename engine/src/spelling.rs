@@ -1414,6 +1414,33 @@ pub(crate) fn calendar_slip(token: &Token<'_>) -> Option<String> {
         .next()
         .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
 }
+/// Acronyms, product codes and company names people type in lowercase ("aws", "hcl", "gcp"):
+/// sorted for binary search.
+const ACRONYMS: [&str; 138] = [
+    "aks", "api", "apis", "aws", "bba", "bcom", "bpo", "btech", "cad", "cdn", "ceo", "cfo", "cgpa",
+    "ci", "cicd", "cli", "cmo", "coo", "cpu", "crm", "css", "csv", "cto", "cv", "dba", "dbms",
+    "dm", "dns", "docx", "dpi", "ecs", "eks", "emi", "erp", "eta", "evp", "faq", "faqs", "ftp",
+    "gcp", "gdpr", "gke", "gmat", "gpa", "gpu", "gre", "grpc", "gst", "gui", "hcl", "hdd", "hdfc",
+    "hdmi", "hod", "hr", "html", "http", "https", "iaas", "iam", "ibm", "icici", "ide", "ielts",
+    "ifsc", "iit", "imap", "ios", "irctc", "isro", "jdk", "jre", "json", "jvm", "jwt", "kpmg",
+    "llm", "llms", "lms", "mba", "mcq", "mtech", "mvc", "mvp", "mysql", "neft", "nlp", "nosql",
+    "npm", "nvm", "oauth", "ocr", "okta", "orm", "paas", "pdf", "pdfs", "pnpm", "ppt", "pptx",
+    "pwc", "qa", "rds", "rpc", "rtgs", "saas", "sbi", "sdk", "sdks", "seo", "sftp", "smtp", "sns",
+    "sql", "sqs", "ssd", "ssh", "ssl", "sso", "svg", "svp", "tcp", "tcs", "tls", "toefl", "tsx",
+    "udp", "ui", "upi", "url", "urls", "usb", "ux", "vpc", "vpn", "wipro", "xlsx", "yaml",
+];
+/// A listed acronym, product code or company name typed in lowercase ("aws", "hcl", "gcp"):
+/// respelling one ("aws" to "as") breaks a name.
+pub(crate) fn acronym(word: &str) -> bool {
+    ACRONYMS.binary_search(&word).is_ok()
+}
+/// Whether a short word without a vowel ("hcl", "ppt", "frm") may become `choice`: only by
+/// adding letters to make a very frequent word ("frm" is "from", "thn" is "then"), never by
+/// dropping or changing one ("hcl" is no "cl", "jvm" no "jam").
+fn vowelless_slip(word: &str, choice: &str) -> bool {
+    let mut rest = choice.bytes();
+    word.bytes().all(|b| rest.any(|c| c == b)) && frequency(choice) >= 400
+}
 /// Words that must stay as typed: Roman Hindi, Indian English vocabulary, Latin and foreign
 /// phrases, "etc". A damaged spelling is never inferred from these.
 fn protected(word: &str) -> bool {
@@ -1424,6 +1451,7 @@ fn protected(word: &str) -> bool {
             "ipso", "naive", "priori", "sic", "vitro", "vivo",
         ]
         .contains(&word)
+        || acronym(word)
         // Everyday technical words the dictionary lacks ("cron" is not "corn").
         || [
             "cron", "crontab", "env", "fullstack", "proto", "qi", "hotfix", "kpi", "kpis", "kubectl", "navbar",
@@ -3092,6 +3120,27 @@ pub fn suggest(
         if drops_negation(word, &choice) {
             return None;
         }
+        // A short word is respelled only into a real word with a vowel ("cl" is no word), and a
+        // dropped letter needs both neighbours to back the shorter word ("migrate to aws" is not
+        // "to as"); a doubled letter ("andd") is a clear slip.
+        let vowelless = !word.bytes().any(|b| b"aeiouy".contains(&b));
+        if word.len() <= 4 && vowelless && !vowelless_slip(word, &choice) {
+            return None;
+        }
+        if word.len() <= 4 {
+            let doubled = word.as_bytes().windows(2).any(|w| w[0] == w[1]);
+            let shorter = choice.len() < word.len();
+            // Four letters may drop a final "e" ("nowe") or a cheap extra key on their own.
+            let cheap = word.len() == 4 && (word.ends_with('e') || slip_cost(word, &choice) <= 0.5);
+            if !choice.bytes().any(|b| b"aeiouy".contains(&b))
+                || shorter
+                    && !doubled
+                    && !cheap
+                    && !(seen(&before, &choice) && seen(&choice, &after))
+            {
+                return None;
+            }
+        }
         // Short words have many neighbours two edits away; the one-edit ranking stands for them.
         if accepted || word.len() < 6 {
             return Some(choice);
@@ -3245,6 +3294,44 @@ mod tests {
             &tokens[..i],
             &tokens[i + 1..],
         )
+    }
+    #[test]
+    fn acronyms_and_codes_keep_their_letters() {
+        // Lowercase acronyms, brand codes and tech terms never lose a letter or become a word.
+        for (text, word) in [
+            ("VP in hcl salary", "hcl"),
+            ("migrate to aws", "aws"),
+            ("call the api over ssh", "api"),
+            ("the jvm crashed", "jvm"),
+            ("use the cli", "cli"),
+            ("joined tcs last year", "tcs"),
+            ("send the ppt", "ppt"),
+            ("gst is due", "gst"),
+            ("kpmg audit", "kpmg"),
+            ("he works at ibm", "ibm"),
+            ("we use gcp", "gcp"),
+            ("run npm install", "npm"),
+            ("the sql query", "sql"),
+            ("check the crm", "crm"),
+        ] {
+            assert_eq!(suggest_at(text, word, false), None, "{word}");
+        }
+        for word in ACRONYMS {
+            assert!(acronym(word), "{word}");
+        }
+        // Real three-letter slips are still fixed.
+        for (text, word, fixed) in [
+            ("adn then we left", "adn", "and"),
+            ("pet hte dog", "hte", "the"),
+            ("wht is this", "wht", "what"),
+            ("it wass broken", "wass", "was"),
+        ] {
+            assert_eq!(
+                suggest_at(text, word, false).as_deref(),
+                Some(fixed),
+                "{word}"
+            );
+        }
     }
     #[test]
     fn likely_slips_beat_a_closer_rare_reading() {

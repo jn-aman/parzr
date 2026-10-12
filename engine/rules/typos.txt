@@ -9098,7 +9098,6 @@ decyipher decipher
 decypher decipher
 decyphered deciphered
 decyphering deciphering
-dedark dark
 dedcaited dedicated
 dedciated dedicated
 dedcicated dedicated
@@ -9261,7 +9260,6 @@ dektop desktop
 delagates delegates
 delagating delegating
 delagation delegation
-delamination lamination
 delapatated dilapidated
 delapidated dilapidated
 delarative declarative
@@ -9428,7 +9426,6 @@ demostrator demonstrator
 demostrats demonstrates
 dempnstrates demonstrates
 dempolished demolished
-demultiplexing multiplexing
 denaminator denominator
 denarcate demarcate
 dendendences dependencies
@@ -20891,7 +20888,6 @@ miscommuncation miscommunication
 misconseption misconception
 miscroscope microscope
 misdemeandor misdemeanor
-misdesigned designed
 misearbly miserably
 miserlyness miserliness
 misicians musicians
@@ -26694,7 +26690,6 @@ readio radio
 readmition readmission
 readon reason
 readressing readdressing
-readvancing advancing
 readyness readiness
 reafirms reaffirms
 reagant reagent
@@ -27160,7 +27155,6 @@ reeturns returns
 refactory refectory
 refator refactor
 refears refers
-refeatured featured
 refedendum referendum
 refeenced referenced
 refeer refer
@@ -27418,7 +27412,6 @@ reinitialze reinitialize
 reinmbursed reimbursed
 reinstal reinstall
 reinstatment reinstatement
-reinstituted instituted
 reinterated reiterated
 reirection redirection
 reirement retirement
@@ -27760,7 +27753,6 @@ repercusions repercussions
 repercutions repercussions
 reperesent represent
 reperesentation representation
-reperformed performed
 reperoire repertoire
 repersentation representation
 repersenting representing
@@ -27826,7 +27818,6 @@ reponsive responsive
 repoository repository
 repopen reopen
 repoprtedly reportedly
-repopularized popularized
 reporduce reproduce
 reporesntation representation
 reporetdly reportedly
@@ -28454,7 +28445,6 @@ retalition retaliation
 retalliation retaliation
 retangle rectangle
 reteurns returns
-rethrown thrown
 retiering retiring
 retification ratification
 retireing retiring
