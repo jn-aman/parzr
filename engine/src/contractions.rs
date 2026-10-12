@@ -228,6 +228,76 @@ const ADVERBS: [&str; 17] = [
     "definitely",
     "probably",
 ];
+/// Words people write with an apostrophe they never take.
+const NEVER_POSSESSIVE: [(&str, &str); 4] = [
+    ("thank's", "thanks"),
+    ("congrat's", "congrats"),
+    ("congratulation's", "congratulations"),
+    ("regard's", "regards"),
+];
+/// Words that follow "it's" and never the possessive "its" ("its a mess", "its not", "its been").
+const IT_IS_NEXT: [&str; 44] = [
+    "a",
+    "about",
+    "actually",
+    "almost",
+    "already",
+    "alright",
+    "also",
+    "always",
+    "an",
+    "been",
+    "cause",
+    "definitely",
+    "getting",
+    "going",
+    "gonna",
+    "him",
+    "how",
+    "kinda",
+    "like",
+    "literally",
+    "me",
+    "my",
+    "never",
+    "not",
+    "obviously",
+    "okay",
+    "our",
+    "probably",
+    "quite",
+    "raining",
+    "really",
+    "snowing",
+    "so",
+    "sorta",
+    "still",
+    "such",
+    "them",
+    "too",
+    "totally",
+    "us",
+    "what",
+    "where",
+    "you",
+    "your",
+];
+/// Predicates that close "it's ..." ("its fine.", "its live now", "its broken lol"); before a
+/// noun they would describe the possessive's noun ("its broken handle"), so a clause end must follow.
+const IT_IS_PREDICATES: [&str; 51] = [
+    "amazing", "awesome", "bad", "broken", "cheap", "closed", "cold", "cool", "crazy", "done",
+    "down", "early", "easy", "empty", "fine", "finished", "fixed", "free", "full", "fun", "funny",
+    "gone", "good", "great", "hard", "here", "hot", "late", "lit", "live", "nice", "off", "ok",
+    "on", "open", "out", "over", "perfect", "possible", "ready", "real", "right", "safe", "there",
+    "true", "up", "urgent", "weird", "working", "worth", "wrong",
+];
+/// Words that may follow such a predicate and still close the clause, or that a predicate
+/// adjective takes and a noun's adjective never does ("its ready for review", "its hard to say").
+const IT_IS_AFTER_PREDICATE: [&str; 25] = [
+    "again", "already", "and", "anyway", "at", "because", "but", "by", "enough", "for", "from",
+    "haha", "if", "in", "lol", "now", "so", "tho", "though", "to", "today", "too", "when", "with",
+    "yet",
+];
 /// Predicates after "we're" that "were" cannot take at a sentence start.
 const WE_ARE: [&str; 20] = [
     "ready", "done", "sorry", "glad", "happy", "excited", "late", "close", "back", "home", "good",
@@ -302,6 +372,61 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
             SUBJECTS.contains(&prev) && (verb_after || next.is_empty())
                 || f.clause_start(false) && base_verb(next)
         }
+        // "its fine", "@sam its ready", "its a good idea": no possessive takes these.
+        "its" => {
+            let glued = f
+                .tokens
+                .get(f.index + 2)
+                .is_some_and(|t| t.surface == "-" || t.surface == "'" || t.surface == "’");
+            let ends = |t: Option<&Token<'_>>| {
+                t.is_none_or(|t| {
+                    !t.is_word
+                        && t.surface.chars().all(|c| c.is_ascii_punctuation())
+                        && !["-", "'"].contains(&t.surface)
+                        || t.paragraph != token.paragraph
+                        || IT_IS_AFTER_PREDICATE.contains(&t.normalized.as_str())
+                })
+            };
+            // "on its back", "in its prime": after a preposition "its" owns the noun.
+            let owned = [
+                "on", "in", "of", "for", "with", "from", "to", "at", "by", "into", "onto", "about",
+                "under", "over", "through", "within", "without", "and", "all", "since", "after",
+                "before", "behind", "during", "until", "upon", "despite", "against", "like",
+            ]
+            .contains(&prev);
+            // "its A330s": the next word is a plain lowercase word, not part of a code or model.
+            let plain = f.tokens.get(f.index + 1).is_some_and(|t| {
+                t.surface.chars().all(char::is_lowercase)
+                    && text[t.end_byte..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| !c.is_alphanumeric())
+            });
+            !glued
+                && !owned
+                && plain
+                && (IT_IS_NEXT.contains(&next)
+                    // "its in the docs", "its on the shelf": a preposition and its determiner.
+                    || [
+                        "on", "in", "at", "from", "with", "by", "near", "behind", "inside", "under",
+                    ]
+                    .contains(&next)
+                        && [
+                            "the", "a", "an", "my", "your", "our", "their", "his", "her", "this",
+                            "that",
+                        ]
+                        .contains(&f.after_next())
+                    // "its taking up space", "its working now": a gerund followed by a particle,
+                    // an object or the clause's end is a verb ("its growing popularity" is not).
+                    || gerund(next)
+                        && [
+                            "up", "down", "out", "off", "a", "an", "the", "my", "your", "his",
+                            "her", "our", "their", "me", "you", "him", "us", "them", "it", "so",
+                            "too", "now", "again", "here", "there", "well", "fine",
+                        ]
+                        .contains(&f.after_next())
+                    || IT_IS_PREDICATES.contains(&next) && ends(f.tokens.get(f.index + 2)))
+        }
         "ill" => f.clause_start(false) && AFTER_I_WILL.contains(&next),
         "id" => f.clause_start(false) && AFTER_I_WOULD.contains(&next),
         // "Were just parking now": no question opens this way.
@@ -360,6 +485,71 @@ fn one_edit(a: &str, b: &str) -> bool {
     }
     let (short, long) = if a.len() < b.len() { (a, b) } else { (b, a) };
     (0..long.len()).any(|i| long[..i] == short[..i] && long[i + 1..] == short[i..])
+}
+/// "you'r" is "you're", "I'l" is "I'll", "we'v" is "we've": a contraction cut one letter short.
+fn truncated(word: &str) -> Option<&'static str> {
+    let (stem, tail) = word.split_once('\'')?;
+    let full = match tail {
+        "r" => format!("{stem}'re"),
+        "l" => format!("{stem}'ll"),
+        "v" => format!("{stem}'ve"),
+        _ => return None,
+    };
+    CONTRACTIONS.iter().find(|c| **c == full).copied()
+}
+/// "you re", "we ll", "I ll": a pronoun and the rest of its contraction split by a space where
+/// the apostrophe goes. "re" and "ll" are no words of their own, so the pair is always rejoined.
+fn split_pieces(req: &Request, tokens: &[Token<'_>], apostrophe: char, edits: &mut Vec<Edit>) {
+    let text = req.text.as_str();
+    for (i, pair) in tokens.windows(2).enumerate() {
+        let (subject, piece) = (&pair[0], &pair[1]);
+        if !subject.is_word
+            || !["re", "ll"].contains(&piece.surface)
+            || &text[subject.end_byte..piece.start_byte] != " "
+            || text[..subject.start_byte]
+                .chars()
+                .next_back()
+                .is_some_and(|c| "._/@#\\-'’".contains(c) || c.is_alphanumeric())
+            || text[piece.end_byte..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_alphanumeric() || "_/@:'’-".contains(c))
+        {
+            continue;
+        }
+        let full = format!("{}'{}", subject.normalized, piece.surface);
+        let frame = Frame { tokens, index: i };
+        let next = frame.word(Some(i + 2));
+        let fits = match (subject.normalized.as_str(), piece.surface) {
+            // "you re send" is "you resend"; "there re" is "there are", not "there're".
+            ("there", _) => false,
+            (_, "re") if base_verb(next) && spelling::known(&format!("re{next}")) => false,
+            // "you we re right", "the flowers we re lovely": a split "were", unless "we" opens
+            // the clause; "clear and we ll organized" is "well".
+            ("we", "re") => frame.clause_start(false) && frame.prev() != "we",
+            ("we", "ll") | ("he", "ll") | ("she", "ll") => {
+                frame.clause_start(false) && (base_verb(next) || ADVERBS.contains(&next))
+            }
+            (_, "ll") => base_verb(next) || ADVERBS.contains(&next) || next.is_empty(),
+            _ => true,
+        };
+        if !fits
+            || !CONTRACTIONS.contains(&full.as_str())
+            || subject.surface.chars().skip(1).any(char::is_uppercase)
+        {
+            continue;
+        }
+        if let Some(replacement) = cased(&full, subject.surface, apostrophe) {
+            push(
+                req,
+                edits,
+                subject.start_byte,
+                piece.end_byte,
+                replacement,
+                "A space was typed where this contraction's apostrophe goes.",
+            );
+        }
+    }
 }
 fn cased(contraction: &str, surface: &str, apostrophe: char) -> Option<String> {
     let letters: Vec<char> = surface.chars().filter(|c| c.is_alphabetic()).collect();
@@ -445,6 +635,22 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         let piece_after = tokens.get(index + 1).is_some_and(|t| {
             t.is_word && t.normalized.len() == 1 && !["a", "i"].contains(&t.normalized.as_str())
         });
+        // "you'r", "I'l", "we'v": the contraction's last letter left off.
+        if !piece_after
+            && let Some(full) = truncated(normalized)
+            && token.surface.chars().skip(1).all(|c| !c.is_uppercase())
+            && let Some(replacement) = cased(full, token.surface, apostrophe)
+        {
+            push(
+                req,
+                edits,
+                token.start_byte,
+                token.end_byte,
+                replacement,
+                "This contraction is missing a letter.",
+            );
+            continue;
+        }
         if contraction(&joined).is_none()
             && !piece_after
             && let Some(full) = slipped(normalized)
@@ -521,6 +727,22 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 token.end_byte + trailing.unwrap_or(0),
                 replacement,
                 "Add the apostrophe to this contraction.",
+            );
+        }
+    }
+    split_pieces(req, tokens, apostrophe, edits);
+    // "Thank's for your help", "Congrat's!": an apostrophe in a word that is no possessive.
+    for t in tokens {
+        if let Some((_, fixed)) = NEVER_POSSESSIVE.iter().find(|(w, _)| *w == t.normalized)
+            && let Some(replacement) = cased(fixed, t.surface, apostrophe)
+        {
+            push(
+                req,
+                edits,
+                t.start_byte,
+                t.end_byte,
+                replacement,
+                "This word takes no apostrophe.",
             );
         }
     }
@@ -613,6 +835,92 @@ mod tests {
             "Lets you pick a colour.",
             "Im Jae-won joined today.",
             "Jony Ive spoke first.",
+        ] {
+            assert_eq!(fixed(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn contractions_split_by_a_space_or_cut_short_are_rejoined() {
+        for (input, output) in [
+            (
+                "Let me know when you re back.",
+                "Let me know when you're back.",
+            ),
+            ("we re late", "we're late"),
+            ("They re here.", "They're here."),
+            ("I ll call you.", "I'll call you."),
+            ("i ll call you", "I'll call you"),
+            ("you ll see", "you'll see"),
+            ("It ll work.", "It'll work."),
+            ("That ll do.", "That'll do."),
+            ("You'r right.", "You're right."),
+            ("they'r here", "they're here"),
+            ("I'l be there.", "I'll be there."),
+            ("We'v done it.", "We've done it."),
+            ("Thank's for your help.", "Thanks for your help."),
+            ("Congrat's on the promotion!", "Congrats on the promotion!"),
+        ] {
+            assert_eq!(fixed(input), output, "{input}");
+        }
+        for text in [
+            "Re: the invoice",
+            "Fwd: you re: the invoice",
+            "The ll suffix is rare.",
+            "Set x.you re to true.",
+            "They re-sign with the team.",
+            "You were right, you we re right.",
+            "The flowers you sent we re beautiful.",
+            "Her talk was clear and we ll organized.",
+            "Can you re send the link?",
+            "I don't know if there re enough chairs.",
+            "Tell'r it.",
+        ] {
+            assert_eq!(fixed(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn its_becomes_it_is_only_where_no_possessive_fits() {
+        for (input, output) in [
+            ("its fine", "it's fine"),
+            ("@sam its ready for review", "@sam it's ready for review"),
+            ("Its been a long day.", "It's been a long day."),
+            ("Its a good idea.", "It's a good idea."),
+            ("i think its broken", "i think it's broken"),
+            (
+                "the link is live, its live now",
+                "the link is live, it's live now",
+            ),
+            ("Its not my fault.", "It's not my fault."),
+            ("Its so cold outside.", "It's so cold outside."),
+            (
+                "Delete the backup, its taking up space.",
+                "Delete the backup, it's taking up space.",
+            ),
+            ("Its on the shelf.", "It's on the shelf."),
+            ("Its in the docs folder.", "It's in the docs folder."),
+        ] {
+            assert_eq!(fixed(input), output, "{input}");
+        }
+        for text in [
+            "The company changed its logo.",
+            "Its handle broke.",
+            "This is its very nature.",
+            "It found its own way.",
+            "The dog wagged its tail.",
+            "The door and its broken handle.",
+            "Its so-called victory was brief.",
+            "It lost its appeal.",
+            "We like its good side.",
+            "The app and its free tier.",
+            "A shark with a fin on its back, such as this one.",
+            "The airline got its A330s last year.",
+            "The city and its in-house team.",
+            "The court ruled on its taking of the land.",
+            "The app owes its growing popularity to word of mouth.",
+            "Its founding members met in 1990.",
+            "Since its founding, the school has grown.",
+            "Its on air moniker is Cat Country.",
+            "The fame of Southwell is its late 13th century chapter house.",
         ] {
             assert_eq!(fixed(text), text, "{text}");
         }
