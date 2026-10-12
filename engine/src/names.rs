@@ -244,6 +244,7 @@ const ADDRESS_WORDS: [&str; 113] = [
 pub fn address_word(lower: &str) -> bool {
     let lower = base(lower);
     ADDRESS_WORDS.binary_search(&lower).is_ok()
+        || is_shorthand(lower)
         // A contraction ("there's", "that's", "it'll") is a clause, never a name.
         || lower.split_once('\'').is_some_and(|(stem, _)| stem.chars().count() > 2)
 }

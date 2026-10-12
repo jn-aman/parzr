@@ -176,6 +176,14 @@ fn keep_typed_voice(text: &str, edits: &mut Vec<Edit>) {
         {
             return false;
         }
+        // "pricing." to "pricing..": a mark doubled beside one already there.
+        if e.original.is_empty()
+            && !e.replacement.is_empty()
+            && e.replacement.chars().all(|c| ".!?".contains(c))
+            && (text[..a].ends_with(['.', '!', '?']) || text[b..].starts_with(['.', '!', '?']))
+        {
+            return false;
+        }
         // "Run `git pull`": formatting the user did not type.
         if ["`", "**", "__"]
             .iter()
@@ -862,6 +870,13 @@ mod tests {
         let mut e = model(text, "'s", " is");
         e.start_utf16 = at;
         e.end_utf16 = at + 2;
+        assert!(kept(text, e).is_empty());
+        // "pricing." to "pricing..": no mark doubled beside another.
+        let text = "See it. It works";
+        let at = text.find('.').unwrap() + 1;
+        let mut e = model(text, "See", "See");
+        (e.start_utf16, e.end_utf16, e.original, e.replacement) =
+            (at, at, String::new(), ".".into());
         assert!(kept(text, e).is_empty());
         // A real fix still goes through.
         let text = "I has a question";

@@ -228,6 +228,13 @@ const ADVERBS: [&str; 17] = [
     "definitely",
     "probably",
 ];
+/// Words people write with an apostrophe they never take.
+const NEVER_POSSESSIVE: [(&str, &str); 4] = [
+    ("thank's", "thanks"),
+    ("congrat's", "congrats"),
+    ("congratulation's", "congratulations"),
+    ("regard's", "regards"),
+];
 /// Words that follow "it's" and never the possessive "its" ("its a mess", "its not", "its been").
 const IT_IS_NEXT: [&str; 44] = [
     "a",
@@ -704,6 +711,21 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         }
     }
     split_pieces(req, tokens, apostrophe, edits);
+    // "Thank's for your help", "Congrat's!": an apostrophe in a word that is no possessive.
+    for t in tokens {
+        if let Some((_, fixed)) = NEVER_POSSESSIVE.iter().find(|(w, _)| *w == t.normalized)
+            && let Some(replacement) = cased(fixed, t.surface, apostrophe)
+        {
+            push(
+                req,
+                edits,
+                t.start_byte,
+                t.end_byte,
+                replacement,
+                "This word takes no apostrophe.",
+            );
+        }
+    }
     // "I;m", "don\"t", "That;s": another key where the apostrophe belongs.
     static WRONG_MARK: OnceLock<Regex> = OnceLock::new();
     let wrong_mark = WRONG_MARK.get_or_init(|| {
@@ -815,6 +837,8 @@ mod tests {
             ("they'r here", "they're here"),
             ("I'l be there.", "I'll be there."),
             ("We'v done it.", "We've done it."),
+            ("Thank's for your help.", "Thanks for your help."),
+            ("Congrat's on the promotion!", "Congrats on the promotion!"),
         ] {
             assert_eq!(fixed(input), output, "{input}");
         }

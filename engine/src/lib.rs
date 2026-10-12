@@ -285,7 +285,7 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|(?i:\b(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|(?i:\b(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*| ?(?:[:;=8][-^o']?[)(\]\[dDpPoO3/\\|*]+|[)(][-^']?[:;]|<3+|\^_?\^|\bxD\b|:'\()(?:\s|$)|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
 }
 /// Command-line tools typed lowercase; "go", "make" and "node" are English words first.
 const TOOLS: [&str; 26] = [
@@ -1703,6 +1703,11 @@ mod tests {
             "The bug is in src/main.rs line 42.",
             "The error is coming from utils/date_helpers.py.",
             "fyi the build is green",
+            "see you there :)",
+            "I was just saying (: do you need to talk",
+            "thanks ;) see you",
+            "love you <3",
+            "hey ppl can u text me",
         ] {
             assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
         }
