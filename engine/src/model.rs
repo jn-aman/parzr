@@ -939,6 +939,11 @@ fn restore(
         };
         result = result.replace(&l.marker, &text);
     }
+    // Any piece of a placeholder left over ("… by 5pm. ZXQPARZRKEEP", a marker the model cut short or made up)
+    // must never reach the writer's text.
+    if result.to_ascii_lowercase().contains("zxqparzr") {
+        return Err(LOST.into());
+    }
     Ok(result)
 }
 
@@ -2669,6 +2674,9 @@ mod tests {
         assert!(restore(&masked, "Could you send the file?", &aman, false).is_err());
         let link = [literal(marker, "https://a.b/c", false, false)];
         assert!(restore(&masked, "Could you send the file?", &link, true).is_err());
+        // A cut-short or invented placeholder never reaches the text.
+        let leaked = format!("Could you send the file, {marker}? ZXQPARZRKEEP");
+        assert!(restore(&masked, &leaked, &aman, true).is_err());
         // A repeated name keeps its first copy.
         assert_eq!(
             restore(
