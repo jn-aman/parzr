@@ -35,7 +35,8 @@ from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = Path("/Users/aman/Desktop/parzr")
+# The checkout whose dist/ holds the batch tools and the model runtime (a worktree can point at the main one).
+MAIN = Path(os.environ.get("PARZR_ROOT", ROOT))
 DEFAULT_NATIVE = MAIN / "dist/batches/tools/native"
 DEFAULT_RUNTIME = MAIN / "dist/final/libparzr_model.dylib"
 DEFAULT_MODEL = Path("/Applications/Parzr.app/Contents/Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf")
