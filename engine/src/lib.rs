@@ -285,7 +285,7 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|(?i:\b[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b[\w.-]*[\w-]/[\w.-]*\w(?:/[\w.-]+)*|(?i:\b[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
 }
 fn protected_ranges(req: &Request) -> Vec<TextRange> {
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
@@ -1410,6 +1410,9 @@ mod tests {
             "rename it to aman.png",
             "send AMAN.PNG and priya_notes.docx",
             "see parzr.app and github.com",
+            "Message in devops-general",
+            "post in aman-notes please",
+            "using jn-aman/m365-agent-gateway: a local gateway",
         ] {
             assert_eq!(
                 fix_request(with_names(text, &["Aman", "Priya"], true)),
@@ -1419,6 +1422,10 @@ mod tests {
         assert_eq!(
             fix_request(with_names("send it to aman", &["Aman"], true)),
             "send it to Aman"
+        );
+        assert_eq!(
+            fix_request(with_names("send it to jean-luc", &["Jean-Luc"], true)),
+            "send it to Jean-Luc"
         );
     }
     #[test]
