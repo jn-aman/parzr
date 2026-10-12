@@ -341,10 +341,14 @@ fn prompt(
         (Mode::Professional, None) => "Rewrite the text in a professional tone.",
         (Mode::Friendly, None) => "Rewrite the text in a warm, friendly tone.",
         (Mode::Concise, None) => "Make the text more concise.",
-        (Mode::Direct, None) => "Make the text more direct: remove hedging and filler.",
+        (Mode::Direct, None) => {
+            "Make the writing direct. Remove hedging and filler. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
+        }
     };
+    // Direct keeps its own instruction: with KEEP appended the small model leaves requests as
+    // they are ("Could you review this?"), and the meaning guard checks the result anyway.
     let keep = match (req.mode, careful) {
-        (Mode::Fix, _) | (_, Some(_)) => "",
+        (Mode::Fix | Mode::Direct, _) | (_, Some(_)) => "",
         _ => KEEP,
     };
     let dialect = if req.dialect == "british" {
