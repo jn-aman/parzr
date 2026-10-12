@@ -49,7 +49,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     }
     sentence_boundaries(req, edits);
     clause_commas(req, edits);
-    dates_and_adverbs(req, edits);
+    linking_adverbs(req, edits);
     crate::marks::check(req, edits);
     crate::clauses::check(req, edits);
 }
@@ -181,20 +181,6 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
     }
 }
 
-const MONTH_NAMES: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
 /// Adverbs that link a clause to the one before; after a semicolon they take a comma ("; however,
 /// the plan").
 const LINKING: [&str; 8] = [
@@ -211,10 +197,10 @@ const AUX: [&str; 20] = [
     "am", "is", "are", "was", "were", "has", "have", "had", "do", "does", "did", "can", "could",
     "will", "would", "should", "may", "might", "must", "shall",
 ];
-/// Commas that are not a matter of style: inside a US date ("October 20, 1861"), around
-/// "however" between a subject or auxiliary and its verb ("The police, however, have said",
-/// "He did, however, make"), and after a linking adverb that follows a semicolon.
-fn dates_and_adverbs(req: &Request, edits: &mut Vec<Edit>) {
+/// Commas that are not a matter of style: around "however" between a subject or auxiliary and
+/// its verb ("The police, however, have said", "He did, however, make"), and after a linking
+/// adverb that follows a semicolon.
+fn linking_adverbs(req: &Request, edits: &mut Vec<Edit>) {
     let text = &req.text;
     let tokens = tokenizer::tokenize(text, &req.tokens);
     let gap = |a: &Token<'_>, b: &Token<'_>| &text[a.end_byte..b.start_byte];
@@ -238,42 +224,6 @@ fn dates_and_adverbs(req: &Request, edits: &mut Vec<Edit>) {
     };
     for i in 0..tokens.len() {
         let t = &tokens[i];
-        // "October 20 1861" is "October 20, 1861".
-        if MONTH_NAMES.contains(&t.surface)
-            && let (Some(day), Some(year)) = (tokens.get(i + 1), tokens.get(i + 2))
-            && spaced(t, day)
-            && spaced(day, year)
-            && day
-                .surface
-                .trim_end_matches(['s', 't', 'n', 'd', 'r', 'h'])
-                .parse::<u32>()
-                .is_ok_and(|d| (1..=31).contains(&d))
-            && day.surface.len() <= 4
-            && year.surface.len() == 4
-            && year
-                .surface
-                .parse::<u32>()
-                .is_ok_and(|y| (1000..=2099).contains(&y))
-            && text[year.end_byte..].chars().next().is_none_or(|c| {
-                c.is_whitespace() || ",;)!?\u{2013}\u{2014}\"'".contains(c)
-                    || c == '.' && !text[year.end_byte + 1..].starts_with(|d: char| d.is_ascii_digit())
-            })
-            // "March 3 1500 troops": a count, not a year.
-            && !tokens.get(i + 3).is_some_and(|n| {
-                n.is_word
-                    && spaced(year, n)
-                    && n.surface.starts_with(char::is_lowercase)
-                    && n.normalized.ends_with('s')
-                    && crate::spelling::flags(&n.normalized) & 2 != 0
-            })
-        {
-            comma(
-                edits,
-                day,
-                "punctuation.date_comma",
-                "Separate the day from the year with a comma.",
-            );
-        }
         if !LINKING.contains(&t.surface) || i == 0 {
             continue;
         }

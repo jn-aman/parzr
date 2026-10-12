@@ -1744,16 +1744,8 @@ mod tests {
         }
     }
     #[test]
-    fn dates_asides_and_stray_marks() {
+    fn asides_and_stray_marks() {
         for (input, expected) in [
-            (
-                "Hirsch (June 17 1923 – January 28 2004) was a player.",
-                "Hirsch (June 17, 1923 – January 28, 2004) was a player.",
-            ),
-            (
-                "On June 15 2008 the service started.",
-                "On June 15, 2008 the service started.",
-            ),
             (
                 "The police however have said nothing.",
                 "The police, however, have said nothing.",
@@ -1787,7 +1779,6 @@ mod tests {
             assert_eq!(fix(input), expected, "{input}");
         }
         for text in [
-            "On March 3 1500 troops landed.",
             "I'll do it however you like.",
             "You can do it however hard it is.",
             "In addition to the fee we pay tax.",

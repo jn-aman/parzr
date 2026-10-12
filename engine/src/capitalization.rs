@@ -403,6 +403,14 @@ mod tests {
                 "The flight from Los angeles landed.",
                 "The flight from Los Angeles landed.",
             ),
+            (
+                "Many protestant and islamic groups met at the olympic games.",
+                "Many Protestant and Islamic groups met at the Olympic games.",
+            ),
+            (
+                "Most muslims and hindus agreed.",
+                "Most Muslims and Hindus agreed.",
+            ),
         ] {
             assert_eq!(fixed(input), output, "{input}");
         }
