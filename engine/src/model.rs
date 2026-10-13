@@ -344,7 +344,9 @@ fn prompt(
         (Mode::Friendly, None) => {
             "Rewrite the text in a warm, friendly tone. Replace rude or harsh words with kind ones. Do not reply to the text."
         }
-        (Mode::Concise, None) => "Make the text more concise.",
+        (Mode::Concise, None) => {
+            "Make the text more concise: cut filler, hedging words and wordy phrases."
+        }
         (Mode::Direct, None) => {
             "Make the writing direct. Remove hedging and filler. Preserve the meaning. Correct grammar, spelling and punctuation. Return only the rewritten text, without explanations."
         }
@@ -365,7 +367,15 @@ fn prompt(
     } else {
         " This is part of a sentence. Preserve its initial case and do not add sentence punctuation to a fragment."
     };
-    let protection = if literals.is_empty() {
+    // A tone rewrite's first answer about names gets no copying instruction: told to copy the
+    // placeholders, this small model copies the whole passage ("by ZXQPARZRKEEP0QXZ" stays as
+    // it is in 9 of 10 masked sentences). It keeps the placeholders anyway; an answer that loses
+    // one is asked again with the instruction and the list, and a light edit always gets it.
+    // Links, code and emoji keep the instruction: the model reads a bare placeholder for one as
+    // a word ("ZXQPARZRKEEP0QXZ the message" became "… is the message").
+    let first_tone_answer =
+        req.mode != Mode::Fix && !strict && careful.is_none() && literals.iter().all(|l| l.name);
+    let protection = if literals.is_empty() || first_tone_answer {
         String::new()
     } else {
         let mut text = " Preserve names, numbers, links, code, emojis and formatting markers exactly. Copy every ZXQPARZRKEEP token exactly once, without changing it.".to_owned();
@@ -437,12 +447,25 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
         let output = infer(r, &prompt(req, &masked, &literals, strict, careful))?;
-        // The writer's own emoji are placeholders here; any emoji in the answer is the model's,
-        // and a tone rewrite only ever gets the one `pick_emoji` chooses.
+        // The writer's own emoji are placeholders here; any emoji in the answer is the model's
+        // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
+        // gets the one `pick_emoji` chooses.
+        let output = limit_emoji(&output);
+        // Behind a placeholder a name reads like a noun, and the model may put an article in
+        // front of it ("from the Priya"): an article the passage did not have there goes.
         let output = if req.mode == Mode::Fix {
             output
         } else {
-            limit_emoji(&output)
+            drop_new_articles(&masked, &output, &literals)
+        };
+        // An answer that announces itself ("Here is the edited text:") loses the announcement.
+        let output = match crate::meaning::preamble(&output) {
+            Some(head) if crate::meaning::preamble(&masked).is_none() => output
+                .trim_start()
+                .strip_prefix(head)
+                .and_then(|rest| rest.strip_prefix(':'))
+                .map_or(output.clone(), |rest| rest.trim_start().to_owned()),
+            _ => output,
         };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
@@ -459,9 +482,79 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
     Ok(format!("{prefix}{body}{suffix}"))
 }
 
+/// `output` without the articles it puts right before a name placeholder where `masked` has
+/// none ("the ZXQPARZRKEEP0QXZ" for a name the passage wrote bare).
+fn drop_new_articles(masked: &str, output: &str, literals: &[Literal]) -> String {
+    let mut text = output.to_owned();
+    // Names only, not acronyms ("the PR" may be the model's word for "my PR").
+    for l in literals
+        .iter()
+        .filter(|l| l.name && l.text.chars().any(char::is_lowercase))
+    {
+        for article in ["the", "a", "an"] {
+            for written in [article.to_owned(), capitalize_first(article)] {
+                let phrase = format!("{written} {}", l.marker);
+                let had = masked.to_lowercase().contains(&phrase.to_lowercase());
+                if !had && text.contains(&phrase) {
+                    text = text.replace(&phrase, &l.marker);
+                }
+            }
+        }
+    }
+    text
+}
+fn capitalize_first(word: &str) -> String {
+    let mut chars = word.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + chars.as_str()
+    })
+}
+/// Whether `e` changes only the spaces between two protected spans.
+fn between_kept(text: &str, protected: &[crate::TextRange], e: &Edit) -> bool {
+    protected.iter().any(|a| {
+        protected.iter().any(|b| {
+            a.end_utf16 <= e.start_utf16
+                && e.end_utf16 <= b.start_utf16
+                && a.end_utf16 < b.start_utf16
+                && byte_at(text, a.end_utf16)
+                    .zip(byte_at(text, b.start_utf16))
+                    .and_then(|(x, y)| text.get(x..y))
+                    .is_some_and(|gap| gap.chars().all(|c| c == ' ' || c == '\u{a0}'))
+        })
+    })
+}
+/// Days and months: a tone rewrite sees them as they are. Behind a placeholder the model reads
+/// "by Friday" as "by someone" and copies the sentence unchanged, and it never respells them.
+const CALENDAR: &[&str] = &[
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "january",
+    "february",
+    "march",
+    "april",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+];
+fn calendar(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    CALENDAR.contains(&lower.as_str())
+        || lower
+            .strip_suffix('s')
+            .is_some_and(|day| CALENDAR[..7].contains(&day))
+}
 /// The spans the model must return untouched. A tone rewrite sees plain numbers as they are:
 /// behind placeholders this small model sometimes loses them or never stops writing, and the
-/// meaning check already rejects any sentence whose numbers change.
+/// meaning check already rejects any sentence whose numbers change. Days and months too.
 fn kept_spans(req: &Request) -> Vec<crate::TextRange> {
     let spans = protected_spans(req);
     if req.mode == Mode::Fix {
@@ -477,10 +570,11 @@ fn kept_spans(req: &Request) -> Vec<crate::TextRange> {
                 return true;
             };
             let text = &req.text[a..b];
-            !(text.chars().any(|c| c.is_ascii_digit())
+            let number = text.chars().any(|c| c.is_ascii_digit())
                 && text
                     .chars()
-                    .all(|c| c.is_ascii_digit() || ".,:/-".contains(c)))
+                    .all(|c| c.is_ascii_digit() || ".,:/-".contains(c));
+            !number && !calendar(text)
         })
         .collect()
 }
@@ -510,66 +604,98 @@ fn emoji_allowed(req: &Request) -> bool {
             l.starts_with("$ ") || l.starts_with("> ") || l.contains("();") || l.contains("=>")
         })
 }
-/// Emoji a Friendly rewrite may end with: common, unambiguous chat emoji. Anything else the
-/// model suggests is not used.
-const EMOJI: &[&str] = &[
-    "😊", "🙂", "😄", "😁", "😅", "😂", "🤣", "🎉", "🥳", "🙏", "👍", "👏", "🙌", "❤️", "💪", "🔥",
-    "🚀", "✅", "✨", "😎", "🤗", "🤞", "👋", "😢", "😔", "😞", "😩", "😫", "😬", "😴", "😭", "😕",
-    "😤", "☕", "🍕", "🍔",
+/// The feelings a Friendly chat message may end on, each with the words that carry it and the
+/// common chat emoji that echo it, the most fitting first. A message with none of these words
+/// gets no emoji; thanks get a thank-you emoji, never a party ("🥳" is for good news).
+const FEELINGS: &[(&[&str], &[&str])] = &[
+    (
+        &[
+            "thanks",
+            "thank",
+            "thx",
+            "ty",
+            "appreciate",
+            "appreciated",
+            "cheers",
+        ],
+        &["🙏", "😊", "🙌", "🤗", "❤️", "👍"],
+    ),
+    (
+        &[
+            "congrats",
+            "congratulations",
+            "yay",
+            "finally",
+            "great",
+            "awesome",
+            "amazing",
+            "nice",
+            "love",
+            "loved",
+            "cool",
+            "perfect",
+            "fixed",
+            "wow",
+            "excited",
+            "happy",
+            "glad",
+            "fun",
+            "enjoy",
+            "shipped",
+        ],
+        &[
+            "🎉", "🥳", "🙌", "👏", "🚀", "🔥", "😄", "😁", "😊", "✨", "💪", "❤️", "😎", "👍",
+            "🤗",
+        ],
+    ),
+    (
+        &["sorry", "unfortunately", "oops", "late"],
+        &["🙏", "😅", "😬", "😔", "😞", "😕"],
+    ),
+    (
+        &["hate", "bad", "sad", "ugh", "broken", "tired", "asleep"],
+        &[
+            "😩", "😫", "😢", "😔", "😞", "😤", "😭", "😕", "😴", "😬", "😅",
+        ],
+    ),
+    (&["lol", "haha"], &["😂", "🤣", "😅", "😄"]),
+    (&["lunch", "coffee"], &["☕", "🍕", "🍔", "😋", "😊"]),
 ];
-/// Words that carry a feeling an emoji can echo; a message without one gets no emoji.
-const FEELING: &[&str] = &[
-    "thanks",
-    "thank",
-    "thx",
-    "appreciate",
-    "great",
-    "awesome",
-    "amazing",
-    "nice",
-    "love",
-    "loved",
-    "congrats",
-    "congratulations",
-    "yay",
-    "excited",
-    "happy",
-    "glad",
-    "lol",
-    "haha",
-    "sorry",
-    "unfortunately",
-    "hate",
-    "bad",
-    "sad",
-    "ugh",
-    "oops",
-    "fun",
-    "enjoy",
-    "cheers",
-    "finally",
-    "asleep",
-    "tired",
-    "late",
-    "lunch",
-    "coffee",
-    "broken",
-    "wow",
-    "cool",
-    "perfect",
-    "fixed",
-];
-/// One emoji to end a casual Friendly message with, chosen by the model and kept only when it is
-/// a common chat emoji and the message carries a feeling. None far more often than not.
-fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
-    if !emoji_allowed(req) {
+/// The emoji of each feeling `text` carries, the most fitting first.
+fn felt(text: &str) -> Vec<&'static [&'static str]> {
+    let tokens = crate::tokenizer::tokenize(text, &[]);
+    FEELINGS
+        .iter()
+        .filter(|(words, _)| {
+            tokens
+                .iter()
+                .any(|t| words.contains(&t.normalized.as_str()))
+        })
+        .map(|(_, emoji)| *emoji)
+        .collect()
+}
+/// The emoji to end `text` with when the model answered `answer`: the model's own choice when it
+/// echoes a feeling the text carries, else that feeling's own emoji ("🥳" for a thank-you becomes
+/// "🙏"); none when the model saw no fitting emoji or the text carries no feeling.
+fn fitting_emoji(text: &str, answer: &str) -> Option<&'static str> {
+    let felt = felt(text);
+    let answer = answer.trim().trim_end_matches('\u{FE0F}');
+    if felt.is_empty() || !emoji_regex().is_match(answer) {
         return None;
     }
-    let tokens = crate::tokenizer::tokenize(text, &[]);
-    if !tokens
-        .iter()
-        .any(|t| FEELING.contains(&t.normalized.as_str()))
-    {
+    felt.iter()
+        .find_map(|emoji| {
+            emoji
+                .iter()
+                .find(|e| e.trim_end_matches('\u{FE0F}') == answer)
+        })
+        .or_else(|| felt.first().and_then(|emoji| emoji.first()))
+        .copied()
+}
+/// One emoji to end a casual Friendly message with, chosen by the model (see `fitting_emoji`).
+/// None far more often than not.
+fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
+    if !emoji_allowed(req) || felt(text).is_empty() {
         return None;
     }
     let r = runtime().ok()?;
@@ -577,12 +703,7 @@ fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
         "<|im_start|>system\nAnswer with one emoji that fits the feeling of this chat message, or with the word none if no emoji fits.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
         text.trim()
     );
-    let answer = infer(r, &prompt).ok()?;
-    let answer = answer.trim().trim_end_matches('\u{FE0F}');
-    EMOJI
-        .iter()
-        .find(|e| e.trim_end_matches('\u{FE0F}') == answer)
-        .copied()
+    fitting_emoji(text, &infer(r, &prompt).ok()?)
 }
 /// Adds `emoji` at the end of the rewritten text, after its last word or mark.
 fn end_with(source: &str, mut changes: Vec<Edit>, emoji: &str) -> Vec<Edit> {
@@ -698,7 +819,7 @@ fn name_spans(req: &Request) -> Vec<(crate::TextRange, bool)> {
     let tokens = crate::tokenizer::tokenize(&req.text, &req.tokens);
     fixed_words(req, &tokens)
         .into_iter()
-        .filter(|&(_, _, hidden)| hidden)
+        .filter(|&(i, _, hidden)| hidden && (req.mode == Mode::Fix || !calendar(tokens[i].surface)))
         .map(|(i, lower, _)| {
             (
                 crate::TextRange {
@@ -1802,7 +1923,11 @@ fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
             &elsewhere,
             &hints(&source),
             &hints(&output),
-        );
+        )
+        .and_then(|()| match example(req.mode) {
+            Some((input, _)) => crate::meaning::borrows(input, &source, &output),
+            None => Ok(()),
+        });
         if verdict.is_ok() {
             kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
         } else {
@@ -1939,34 +2064,45 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     validate(req)?;
     let started = Instant::now();
     let protected = kept_spans(req);
-    let text = if req.text.trim().is_empty() {
-        req.text.clone()
-    } else {
-        // A tone rewrite that loses a protected element (a number, a link) or runs away is asked
-        // once more as a light edit before the request fails.
-        generate(req, &req.text, None).or_else(|error| match req.mode {
-            Mode::Fix => Err(error),
-            _ => generate(req, &req.text, Some("")),
-        })?
+    let attempt = |careful: Option<&str>| -> Result<(String, Vec<Edit>), String> {
+        let text = if req.text.trim().is_empty() {
+            req.text.clone()
+        } else {
+            generate(req, &req.text, careful)?
+        };
+        let all = edits(&req.text, &text, req.mode, &protected);
+        if all.len() > 512 {
+            return Err("This passage has too many changes. Select a shorter passage.".into());
+        }
+        if all.iter().any(|e| {
+            protected.iter().any(|p| {
+                if e.start_utf16 == e.end_utf16 {
+                    e.start_utf16 > p.start_utf16 && e.start_utf16 < p.end_utf16
+                } else {
+                    overlaps(e.start_utf16, e.end_utf16, p)
+                }
+            })
+        }) {
+            return Err("The model changed protected text. This suggestion was withheld.".into());
+        }
+        if apply_edits(&req.text, &all)?.0 != text {
+            return Err("The model returned an inconsistent edit plan.".into());
+        }
+        // Two placeholders side by side ("3 PRs", "10 MB") read as a list to a larger model,
+        // which joins them ("3, PRs", "10 and MB"): nothing is ever inserted between two
+        // protected spans that only a space separates.
+        let all = all
+            .into_iter()
+            .filter(|e| !between_kept(&req.text, &protected, e))
+            .collect();
+        Ok((text, all))
     };
-    let all = edits(&req.text, &text, req.mode, &protected);
-    if all.len() > 512 {
-        return Err("This passage has too many changes. Select a shorter passage.".into());
-    }
-    if all.iter().any(|e| {
-        protected.iter().any(|p| {
-            if e.start_utf16 == e.end_utf16 {
-                e.start_utf16 > p.start_utf16 && e.start_utf16 < p.end_utf16
-            } else {
-                overlaps(e.start_utf16, e.end_utf16, p)
-            }
-        })
-    }) {
-        return Err("The model changed protected text. This suggestion was withheld.".into());
-    }
-    if apply_edits(&req.text, &all)?.0 != text {
-        return Err("The model returned an inconsistent edit plan.".into());
-    }
+    // A tone rewrite that loses or moves a protected element (a number, a link, a name) or runs
+    // away is asked once more as a light edit before the request fails.
+    let (_, all) = attempt(None).or_else(|error| match req.mode {
+        Mode::Fix => Err(error),
+        _ => attempt(Some("")),
+    })?;
     let all = keep_names(req, all);
     let (changes, withheld) = if req.mode == Mode::Fix {
         (guard(&req.text, all), false)
@@ -2536,6 +2672,21 @@ mod tests {
         let mut partial = req("Thanks, that fixed it", Mode::Friendly, true);
         partial.sentence_end = false;
         assert!(!emoji_allowed(&partial));
+    }
+    #[test]
+    fn the_emoji_echoes_the_feeling_of_the_message() {
+        // A thank-you gets a thank-you emoji, never a party.
+        let thanks = "Thanks for the help yesterday, really appreciate it!";
+        assert_eq!(fitting_emoji(thanks, "🥳"), Some("🙏"));
+        assert_eq!(fitting_emoji(thanks, "😊"), Some("😊"));
+        assert_eq!(fitting_emoji(thanks, "none"), None);
+        // Good news may get a party.
+        let news = "We shipped 3 features this week, nice work everyone!";
+        assert_eq!(fitting_emoji(news, "🎉"), Some("🎉"));
+        assert_eq!(fitting_emoji(news, "🥳"), Some("🥳"));
+        assert_eq!(fitting_emoji("I almost fell asleep.", "😴"), Some("😴"));
+        // A message without a feeling word gets none, whatever the model says.
+        assert_eq!(fitting_emoji("Can you check the server?", "👍"), None);
     }
     #[test]
     fn the_emoji_goes_after_the_last_word() {
