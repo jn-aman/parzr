@@ -241,6 +241,20 @@ fn keep_typed_voice(text: &str, edits: &mut Vec<Edit>) {
             && !old.eq_ignore_ascii_case(&new)
             && !crate::spelling::known(old.trim_matches('\''))
             && !crate::spelling::known(new.trim_matches('\''))
+            // "betwde en": a word split by a space is repaired in two steps.
+            && !text[wb..]
+                .strip_prefix(' ')
+                .and_then(|r| r.split(|c: char| !c.is_alphabetic()).next())
+                .is_some_and(|piece| {
+                    (1..=3).contains(&piece.len())
+                        && ![
+                            "to", "a", "an", "in", "on", "at", "of", "is", "it", "be", "by", "or",
+                            "as", "we", "i", "so", "up", "my", "me", "us", "do", "go", "no", "if",
+                            "for", "the", "and", "but", "are", "was", "you", "can", "not", "our",
+                            "has", "had", "his", "her", "all", "any", "out", "off", "too", "now",
+                        ]
+                        .contains(&piece.to_lowercase().as_str())
+                })
         {
             return false;
         }
