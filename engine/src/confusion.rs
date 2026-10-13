@@ -224,7 +224,9 @@ fn edits(word: &str) -> Vec<String> {
 pub fn candidates(word: &str) -> Vec<String> {
     let mut out: Vec<String> = vec![];
     let typed = spelling::frequency(word);
+    // "nit: rename this", "pls", "np": chat and code-review shorthand is meant as typed.
     if word.len() >= 2
+        && !crate::names::is_shorthand(word)
         && word.bytes().all(|b| b.is_ascii_lowercase())
         && spelling::ordinary(word)
         && typed >= TYPED_FLOOR
