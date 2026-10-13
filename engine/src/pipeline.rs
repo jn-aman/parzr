@@ -618,6 +618,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     if req.mode != Mode::Fix {
         return tone(req, start);
     }
+    check(req, start, req.deep)
+}
+/// The check itself. `contextual` runs the model's context pass over the whole passage (an
+/// explicit Fix check); a tone rewrite's correction pass skips it, as the tone model corrects
+/// the passage again anyway.
+#[cfg_attr(not(feature = "local-model"), allow(unused_variables))]
+fn check(req: &Request, start: Instant, contextual: bool) -> Result<RewriteResult, String> {
     let mut first = rewrite_once(req, false)?.edits;
     // No edit leaves the text as it was, so the confirmation pass below would only repeat this one.
     let unchanged = first.is_empty() && req.mode == Mode::Fix;
@@ -634,7 +641,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     #[allow(unused_mut)]
     let mut warnings = vec![];
     #[cfg(feature = "local-model")]
-    if req.deep {
+    if contextual {
         // The model gets no instructions about names, so every name candidate is masked.
         let mut masked = protected.clone();
         masked.extend(name_guard_ranges(req));
@@ -716,16 +723,23 @@ const VERSION: &str = if cfg!(feature = "local-model") {
 } else {
     concat!("parzr-", env!("CARGO_PKG_VERSION"), "/rules-3")
 };
-/// A tone rewrite: the full explicit check corrects the passage first (rules, Smart grammar when
-/// on, the model's context pass and sentence swaps), then the model rewrites the corrected text
+/// A tone rewrite: the explicit check corrects the passage first (rules, Smart grammar when on
+/// and sentence swaps, without the model's context pass), then the model rewrites the corrected text
 /// sentence by sentence under the meaning guard, and the rules check the result once more.
 #[cfg(feature = "local-model")]
 fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
-    let fixed = rewrite(&Request {
-        mode: Mode::Fix,
-        deep: true,
-        ..req.clone()
-    })?;
+    // The rules and Smart grammar correct the passage first; the model's own context pass is
+    // left out, as the tone model corrects spelling itself. It cost 150 to 450 ms a request, and
+    // with a larger model it joined placeholders ("3, PRs") and answered requests in the text.
+    let fixed = check(
+        &Request {
+            mode: Mode::Fix,
+            deep: true,
+            ..req.clone()
+        },
+        start,
+        false,
+    )?;
     let mut warnings = fixed.warnings;
     let mut protected = protected_ranges(req);
     let mut document = Document::new(&req.text);

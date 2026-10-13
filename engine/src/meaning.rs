@@ -243,6 +243,9 @@ const FUNCTION: &[&str] = &[
 /// sentence says. Greetings, thanks and courtesy words belong here too, as a tone may add or
 /// drop them.
 const FILLER: &[&str] = &[
+    "approximately",
+    "roughly",
+    "approx",
     "really",
     "very",
     "just",
@@ -488,6 +491,24 @@ const PADDING: &[&str] = &[
     "for all intents and purposes",
     "it is important to note that",
     "please note that",
+    "it would be great if",
+    "it would be nice if",
+    "it would be helpful if",
+    "would be great if",
+    "would be nice if",
+    "would be helpful if",
+    "would be much appreciated",
+    "would be appreciated",
+    "i'd appreciate it if",
+    "i would appreciate it if",
+    "a good idea to",
+    "if it's not too much trouble",
+    "if it is not too much trouble",
+    "if it's no trouble",
+    "if you don't mind",
+    "if you do not mind",
+    "in my opinion",
+    "sorry to bother you",
     "i was wondering if",
     "i was wondering whether",
     "i was hoping",
@@ -519,6 +540,10 @@ const PADDING: &[&str] = &[
     "hope all is well",
     "checking in",
     "check in",
+    "check if",
+    "check whether",
+    "see if",
+    "see whether",
     "kind of",
     "sort of",
     "a little",
@@ -545,8 +570,25 @@ const PADDING: &[&str] = &[
 ];
 /// Words that turn a statement into its opposite. A rewrite must keep the same polarity.
 const NEGATION: &[&str] = &[
-    "not", "no", "never", "nothing", "nobody", "none", "nowhere", "neither", "nor", "cannot",
-    "without", "unable", "nope", "nah",
+    "not",
+    "no",
+    "never",
+    "nothing",
+    "nobody",
+    "none",
+    "nowhere",
+    "neither",
+    "nor",
+    "cannot",
+    "without",
+    "unable",
+    "nope",
+    "nah",
+    "unsure",
+    "uncertain",
+    "unclear",
+    "unaware",
+    "unavailable",
 ];
 const NUMBERS: &[(&str, &str)] = &[
     ("zero", "0"),
@@ -587,6 +629,7 @@ const POSITIVE: &[&str] = &[
     "happy",
     "glad",
     "pleased",
+    "pleasure",
     "delighted",
     "perfect",
     "best",
@@ -644,6 +687,17 @@ const TIMES: &[&str] = &[
     "friday",
     "saturday",
     "sunday",
+    "january",
+    "february",
+    "march",
+    "april",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
     "tmrw",
     "tmr",
     "eod",
@@ -725,6 +779,7 @@ const SYNONYMS: &[&str] = &[
     "great excellent wonderful fantastic amazing awesome brilliant",
     "bad poor terrible awful horrible",
     "hate dislike detest loathe",
+    "hope wish",
     "love adore enjoy",
     "happy glad pleased delighted",
     "sad unhappy upset",
@@ -812,7 +867,7 @@ const SYNONYMS: &[&str] = &[
     "pending outstanding",
     "attend come join",
     "cancel drop",
-    "postpone delay reschedule move push",
+    "postpone delay reschedule move push wait",
     "concern worry issue",
     "deliver ship release",
     "finish complete",
@@ -960,6 +1015,14 @@ fn keys(word: &str, lemma: &str) -> Vec<String> {
     {
         push(stem.to_owned());
     }
+    // "stated" is "state", "sharing" is "share", whatever the paradigm lookup found.
+    for suffix in ["ed", "ing"] {
+        if let Some(stem) = bare.strip_suffix(suffix)
+            && stem.chars().count() >= 3
+        {
+            push(format!("{stem}e"));
+        }
+    }
     if let Some(stem) = bare.strip_suffix("ily") {
         push(format!("{stem}y"));
     }
@@ -970,23 +1033,14 @@ fn keys(word: &str, lemma: &str) -> Vec<String> {
     }
     out
 }
-fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
-    let tokens: Vec<_> = tokenizer::tokenize(text, hints)
-        .into_iter()
-        .filter(|t| {
-            t.is_word
-                || t.surface.chars().any(|c| c.is_ascii_digit())
-                || [".", "!", "?"].contains(&t.surface)
-        })
-        .collect();
-    let all_keys: Vec<Vec<String>> = tokens
-        .iter()
-        .map(|t| keys(&t.normalized, &t.lemma))
-        .collect();
+/// Which tokens belong to padding phrases, and the one word a phrasal verb at a token means
+/// ("take care of" is "handle"; the rest of the phrase counts as padding).
+fn phrases(all_keys: &[Vec<String>]) -> (Vec<bool>, Vec<Option<&'static str>>) {
+    let n = all_keys.len();
     // A phrase matches when each of its words is a form of the token at its place ("heard back").
     let found = |phrase: &str| -> Vec<usize> {
         let parts: Vec<&str> = phrase.split(' ').collect();
-        (0..tokens.len().saturating_sub(parts.len() - 1))
+        (0..n.saturating_sub(parts.len() - 1))
             .filter(|&i| {
                 parts
                     .iter()
@@ -995,24 +1049,43 @@ fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
             })
             .collect()
     };
-    let mut padding = vec![false; tokens.len()];
+    let mut padding = vec![false; n];
     for phrase in PADDING {
-        let n = phrase.split(' ').count();
+        let len = phrase.split(' ').count();
         for i in found(phrase) {
-            padding[i..i + n].iter_mut().for_each(|p| *p = true);
+            padding[i..i + len].iter_mut().for_each(|p| *p = true);
         }
     }
-    // A phrasal verb counts as the one word it means ("take care of" is "handle").
-    let mut meaning: Vec<Option<&str>> = vec![None; tokens.len()];
+    let mut meaning: Vec<Option<&'static str>> = vec![None; n];
     for (phrase, word) in PHRASAL {
-        let n = phrase.split(' ').count();
+        let len = phrase.split(' ').count();
         for i in found(phrase) {
-            if padding[i..i + n].iter().all(|p| !p) {
+            if padding[i..i + len].iter().all(|p| !p) {
                 meaning[i] = Some(word);
-                padding[i + 1..i + n].iter_mut().for_each(|p| *p = true);
+                padding[i + 1..i + len].iter_mut().for_each(|p| *p = true);
             }
         }
     }
+    (padding, meaning)
+}
+/// The tokens the meaning check reads: words, numbers and sentence ends.
+fn content_tokens<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<tokenizer::Token<'a>> {
+    tokenizer::tokenize(text, hints)
+        .into_iter()
+        .filter(|t| {
+            t.is_word
+                || t.surface.chars().any(|c| c.is_ascii_digit())
+                || [".", "!", "?"].contains(&t.surface)
+        })
+        .collect()
+}
+fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
+    let tokens = content_tokens(text, hints);
+    let all_keys: Vec<Vec<String>> = tokens
+        .iter()
+        .map(|t| keys(&t.normalized, &t.lemma))
+        .collect();
+    let (padding, meaning) = phrases(&all_keys);
     let mut out = vec![];
     let mut first = true;
     for (i, t) in tokens.iter().enumerate() {
@@ -1029,7 +1102,13 @@ fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
             Kind::Filler
         } else if meaning[i].is_some() {
             Kind::Content
-        } else if TIMES.contains(&w) {
+        } else if TIMES.contains(&w)
+            || ["end", "beginning", "start", "middle", "early", "late"].contains(&w)
+                && tokens.get(i + 1).is_some_and(|t| t.normalized == "of")
+                && tokens
+                    .get(i + 2)
+                    .is_some_and(|t| TIMES.contains(&t.normalized.as_str()))
+        {
             Kind::Time
         } else if negative(w) {
             Kind::Negation
@@ -1072,6 +1151,547 @@ fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
     out
 }
 
+/// Who does what a clause says: the writer ("I", "we", a chat message's dropped "I"), the reader
+/// ("you", an instruction) or someone else.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Person {
+    Speaker,
+    Addressee,
+    /// "someone", "anyone": not the reader ("can someone review" is not "could you review").
+    Anyone,
+    Other,
+}
+/// When it happens. A perfect ("has shipped") fits both a past and a present rewrite; a future,
+/// a modal and an instruction count as present.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Tense {
+    Past,
+    Perfect,
+    Present,
+}
+/// The finite verb of one clause: what it means (its forms), its tense and its subject.
+#[derive(Debug)]
+struct Clause {
+    keys: Vec<String>,
+    tense: Option<Tense>,
+    person: Option<Person>,
+}
+/// Auxiliaries and modals: a clause's tense comes from the first of them.
+const AUXILIARY: &[&str] = &[
+    "am", "is", "are", "was", "were", "be", "been", "do", "does", "did", "have", "has", "had",
+    "will", "would", "shall", "should", "can", "could", "may", "might", "must",
+];
+/// Words that open a new clause.
+const CLAUSE_BREAK: &[&str] = &[
+    "and", "but", "so", "or", "if", "when", "before", "after", "because", "while", "unless",
+    "until", "although", "though", "since", "whether", "once", "cuz", "bc", "who", "which",
+    "where",
+];
+/// Verbs whose subject a chat message drops when it is the writer ("need it by noon", "hope
+/// you're well"); any other bare verb at the start of a clause is an instruction.
+const STATIVE: &[&str] = &[
+    "need",
+    "want",
+    "hope",
+    "wish",
+    "think",
+    "guess",
+    "love",
+    "like",
+    "hate",
+    "know",
+    "agree",
+    "mean",
+    "miss",
+    "appreciate",
+    "believe",
+    "feel",
+    "suppose",
+    "prefer",
+    "understand",
+    "wonder",
+    "apologize",
+    "apologise",
+    "owe",
+    "doubt",
+];
+/// Words a clause may start with before its subject: they say nothing about who acts.
+const OPENERS: &[&str] = &[
+    "thank",
+    "thanks",
+    "thx",
+    "please",
+    "pls",
+    "plz",
+    "kindly",
+    "sorry",
+    "just",
+    "also",
+    "then",
+    "now",
+    "honestly",
+    "unfortunately",
+    "fortunately",
+    "lol",
+    "oh",
+    "hey",
+    "hi",
+    "hello",
+    "ok",
+    "okay",
+    "yes",
+    "yeah",
+    "no",
+    "not",
+];
+fn person_of(word: &str) -> Option<Person> {
+    let head = word.split(['\'', '’']).next().unwrap_or(word);
+    match head {
+        "i" | "we" | "me" | "us" | "im" | "ive" | "myself" | "ourselves" => Some(Person::Speaker),
+        _ if word == "let's" || word == "lets" => Some(Person::Speaker),
+        "you" | "u" | "ya" | "youre" | "yourself" | "yourselves" => Some(Person::Addressee),
+        "someone" | "anyone" | "somebody" | "anybody" | "everyone" | "everybody" => {
+            Some(Person::Anyone)
+        }
+        _ => None,
+    }
+}
+/// The tense a contraction's verb gives ("I'm", "we've", "it's"), when the word is one.
+fn contracted(word: &str) -> Option<Tense> {
+    let (head, tail) = word.split_once('\'')?;
+    if head.is_empty() || tail.contains('\'') {
+        return None;
+    }
+    match tail {
+        "m" | "re" | "s" | "ll" | "d" => Some(Tense::Present),
+        "ve" => Some(Tense::Perfect),
+        "t" => Some(match head {
+            "didn" | "wasn" | "weren" | "hadn" => Tense::Past,
+            "haven" | "hasn" => Tense::Perfect,
+            _ => Tense::Present,
+        }),
+        _ => None,
+    }
+    .filter(|_| {
+        tail != "s"
+            || [
+                "it", "that", "there", "here", "what", "who", "he", "she", "let",
+            ]
+            .contains(&head)
+    })
+}
+/// An auxiliary, a modal, or a contraction or negation of one ("I'm", "didn't", "dont").
+fn auxiliary(word: &str) -> bool {
+    const BARE: [&str; 16] = [
+        "dont", "cant", "wont", "isnt", "didnt", "doesnt", "wasnt", "arent", "werent", "couldnt",
+        "wouldnt", "shouldnt", "havent", "hasnt", "aint", "cannot",
+    ];
+    AUXILIARY.contains(&word) || contracted(word).is_some() || BARE.contains(&word)
+}
+/// The tense a lone verb form gives: "pushed" and "sent" are past, "gone" a perfect; None for
+/// a form that is both base and past ("cut", "put").
+fn form_tense(word: &str) -> Option<Tense> {
+    match word {
+        "was" | "were" | "did" | "had" | "didnt" | "wasnt" | "werent" | "hadnt" => {
+            return Some(Tense::Past);
+        }
+        "been" | "havent" | "hasnt" => return Some(Tense::Perfect),
+        _ => {}
+    }
+    match crate::morphology::verb(word) {
+        Some(v) if word == v.base && (v.past == v.base || v.participle == v.base) => None,
+        Some(v) if word == v.past && word != v.third => Some(Tense::Past),
+        Some(v) if word == v.participle => Some(Tense::Perfect),
+        _ => Some(Tense::Present),
+    }
+}
+/// The finite verb of each clause of `text`, with its tense and subject. Padding ("I wanted
+/// to", "I think") is skipped, so its verb never counts as the clause's.
+fn clauses(text: &str, hints: &[TokenHint]) -> Vec<Clause> {
+    let tokens: Vec<_> = content_tokens(text, hints);
+    let all_keys: Vec<Vec<String>> = tokens
+        .iter()
+        .map(|t| keys(&t.normalized, &t.lemma))
+        .collect();
+    let (padding, meaning) = phrases(&all_keys);
+    let tagged = tokens.iter().any(|t| !t.pos.is_empty());
+    // Where each clause starts: sentence ends, commas and the words that open a clause.
+    let mut starts = vec![0];
+    for (i, t) in tokens.iter().enumerate() {
+        let after = &text[t.end_byte..];
+        if [".", "!", "?"].contains(&t.surface)
+            || after
+                .trim_start_matches(' ')
+                .starts_with([',', ';', ':', '—', '–'])
+        {
+            starts.push(i + 1);
+        } else if CLAUSE_BREAK.contains(&t.normalized.as_str()) {
+            starts.push(i);
+        }
+    }
+    starts.push(tokens.len());
+    starts.dedup();
+    let is_verb = |i: usize| {
+        let t = &tokens[i];
+        let w = t.normalized.as_str();
+        if auxiliary(w) {
+            return true;
+        }
+        // The tagger calls "please" a verb; courtesy words never carry the clause.
+        if OPENERS.contains(&w) {
+            return false;
+        }
+        if tagged {
+            return t.pos == "Verb";
+        }
+        // Untagged text (tests): a known verb form that does not follow a determiner.
+        let before = if i == 0 {
+            ""
+        } else {
+            tokens[i - 1].normalized.as_str()
+        };
+        !FUNCTION.contains(&w)
+            && (!FILLER.contains(&w) || STATIVE.contains(&w))
+            && crate::morphology::verb(w).is_some()
+            && (!FUNCTION.contains(&before)
+                || auxiliary(before)
+                || person_of(before).is_some()
+                || ["it", "they", "he", "she", "this", "that", "to"].contains(&before))
+    };
+    let mut out = vec![];
+    let mut previous: Option<Person> = None;
+    for pair in starts.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        // "I'm running late and will start without you": the second clause's subject is the
+        // first one's.
+        let joined = a < b && ["and", "but", "or"].contains(&tokens[a].normalized.as_str());
+        let opens = a == 0 || [".", "!", "?"].contains(&tokens[a - 1].surface);
+        if a > 0 && [".", "!", "?"].contains(&tokens[a - 1].surface) {
+            previous = None;
+        }
+        let mut i = a;
+        // Skip what opens the clause without acting: clause words, courtesy and padding.
+        while i < b {
+            let w = tokens[i].normalized.as_str();
+            if [".", "!", "?"].contains(&w)
+                || CLAUSE_BREAK.contains(&w)
+                || OPENERS.contains(&w)
+                || padding[i]
+                || tokens[i].pos == "Interjection"
+            {
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        let first = i;
+        // "would you mind taking", "feel free to start": a wrapper says who acts, not the verb.
+        let wrapped = (a..first).any(|k| padding[k]);
+        // The finite verb: the first verb that is neither padding nor an infinitive.
+        // The tagger often calls a clause-opening instruction a noun ("Ship 3 features",
+        // "cache the results"): a verb's base form before an object counts as a verb there.
+        let instruction = |k: usize| {
+            let w = tokens[k].normalized.as_str();
+            k == first
+                && k + 1 < b
+                && crate::morphology::verb(w).is_some_and(|v| v.base == w)
+                && crate::spelling::known(w)
+                && (["Determiner", "Number"].contains(&tokens[k + 1].pos.as_str())
+                    || tokens[k + 1].pos == "Noun"
+                        && (k == 0 || [".", "!", "?"].contains(&tokens[k - 1].surface))
+                        && tokens[k].surface.starts_with(char::is_uppercase)
+                    || [
+                        "the", "a", "an", "this", "that", "these", "those", "it", "them", "me",
+                        "us", "your", "my", "our", "his", "her", "their", "all", "some", "any",
+                    ]
+                    .contains(&tokens[k + 1].normalized.as_str())
+                    || tokens[k + 1]
+                        .surface
+                        .starts_with(|c: char| c.is_ascii_digit()))
+        };
+        let Some(v) = (first..b).find(|&k| {
+            (is_verb(k) || instruction(k))
+                && !padding[k]
+                && !(k > 0 && tokens[k - 1].normalized == "to")
+        }) else {
+            continue;
+        };
+        let w = tokens[v].normalized.as_str();
+        // The verb chain: auxiliaries, adverbs, a negation and (in a question) the subject,
+        // up to the main verb.
+        let mut main = v;
+        let mut k = v + 1;
+        let mut inverted = None;
+        let leads = auxiliary(w);
+        while leads && k < b {
+            let t = &tokens[k];
+            let x = t.normalized.as_str();
+            if is_verb(k) && !padding[k] {
+                main = k;
+                if !AUXILIARY.contains(&x) {
+                    break;
+                }
+            } else if v == first
+                && inverted.is_none()
+                && (t.pos == "Pronoun"
+                    || person_of(x).is_some()
+                    || [
+                        "it", "they", "he", "she", "someone", "anyone", "this", "that",
+                    ]
+                    .contains(&x))
+            {
+                inverted = Some(k);
+            } else if !(t.pos == "Adverb" || FILLER.contains(&x) || negative(x) || padding[k]) {
+                break;
+            }
+            k += 1;
+        }
+        // Tense: from the first verb, unless a perfect follows ("has shipped", "'ve sent").
+        let mut tense = contracted(w).or_else(|| form_tense(w));
+        // A participle after "have": any verb form but the base, "-s" and "-ing" forms (the
+        // paradigms do not list every irregular one, such as "arisen").
+        let m = tokens[main].normalized.as_str();
+        let participle = main != v
+            && crate::morphology::verb(m).is_none_or(|f| {
+                m == f.participle || ![&f.base, &f.third, &f.gerund].contains(&&m.to_owned())
+            });
+        let perfect = [
+            "have", "has", "having", "haven't", "hasn't", "havent", "hasnt",
+        ]
+        .contains(&w)
+            || w.ends_with("'ve");
+        if perfect {
+            tense = Some(if participle {
+                Tense::Perfect
+            } else {
+                Tense::Present
+            });
+        }
+        if w.ends_with("'s") && tokens[main].normalized == "been" {
+            tense = Some(Tense::Perfect);
+        }
+        if (w == "had" || w.ends_with("'d")) && participle {
+            tense = Some(Tense::Past);
+        }
+        // Subject: the words before the verb, the pronoun after an opening auxiliary, the
+        // pronoun inside a contraction; none means a dropped subject.
+        let subject: Vec<&str> = match inverted {
+            Some(s) => vec![tokens[s].normalized.as_str()],
+            None => (first..v)
+                .filter(|&k| {
+                    !padding[k]
+                        && tokens[k].pos != "Adverb"
+                        && !FILLER.contains(&tokens[k].normalized.as_str())
+                })
+                .map(|k| tokens[k].normalized.as_str())
+                .collect(),
+        };
+        let own = w
+            .contains('\'')
+            .then(|| person_of(w))
+            .flatten()
+            .or_else(|| {
+                (w.contains('\'') && contracted(w).is_some() && !negative(w))
+                    .then_some(Person::Other)
+            });
+        // "We should move it", "can we move it?" and "let's move it" propose what the reader
+        // may do as well: an instruction ("Move it") keeps that.
+        const PROPOSE: &[&str] = &[
+            "should", "could", "can", "must", "might", "need", "let's", "lets", "we'd", "shall",
+        ];
+        let inclusive = (subject.iter().any(|s| ["we", "us"].contains(s))
+            || w == "let's"
+            || w == "lets"
+            || w == "we'd")
+            && PROPOSE.contains(&w);
+        // "Find attached the slides" is the writer attaching them, whatever its grammar says.
+        let formula = meaning[main] == Some("attach");
+        let person = if inclusive || formula || (wrapped && subject.is_empty() && own.is_none()) {
+            None
+        } else if let Some(p) = own {
+            Some(p)
+        } else if !subject.is_empty() {
+            Some(
+                subject
+                    .iter()
+                    .rev()
+                    .find_map(|s| person_of(s))
+                    .unwrap_or(Person::Other),
+            )
+        } else {
+            // A dropped subject: "pushed the fix" and "running late" are the writer's, "start
+            // without me" and "don't forget" the reader's, "looks good" someone else's.
+            let base = tokens[main].lemma.to_lowercase();
+            let lemma = if base.is_empty() {
+                crate::morphology::verb(&tokens[main].normalized)
+                    .map(|v| v.base)
+                    .unwrap_or_default()
+            } else {
+                base
+            };
+            let m = tokens[main].normalized.as_str();
+            match crate::morphology::verb(m) {
+                _ if ["do", "don't", "dont"].contains(&w) && main != v => Some(Person::Addressee),
+                _ if leads && joined => previous,
+                _ if leads => None,
+                _ if STATIVE.contains(&lemma.as_str()) => Some(Person::Speaker),
+                Some(f) if m == f.base => Some(Person::Addressee),
+                Some(f) if m == f.third => Some(Person::Other),
+                // "Running late" opens a message; "before starting" says nothing of who.
+                Some(_) if opens && first == a => Some(Person::Speaker),
+                Some(_) => None,
+                None => None,
+            }
+        };
+        // "I am disappointed": the describing word after "be" is what the clause says, so its
+        // tense and subject are compared ("We were disappointed" is another statement).
+        let copula = all_keys[main].iter().any(|k| k == "be");
+        let described = (main + 1..b.min(main + 4))
+            .take_while(|&k| !is_verb(k) || tokens[k].pos == "Adjective")
+            .find(|&k| tokens[k].pos == "Adjective");
+        let keys = match (meaning[main], described) {
+            (Some(word), _) => keys(word, ""),
+            (None, Some(k)) if copula => all_keys[k].clone(),
+            _ => all_keys[main].clone(),
+        };
+        if person.is_some() {
+            previous = person;
+        }
+        out.push(Clause {
+            keys,
+            tense,
+            person,
+        });
+    }
+    out
+}
+/// Ok when every clause verb the output keeps keeps its tense and its subject: "Just pushed the
+/// fix" is not "Just push the fix", and "start without me" is not "I'm starting without me".
+fn same_frames(source: &[Clause], output: &[Clause]) -> Result<(), String> {
+    // "have" stays: "You have Clickhouse" is not "I have Clickhouse".
+    const LIGHT: &[&str] = &["be", "do", "get", "go", "make", "let"];
+    for s in source {
+        if s.keys.iter().any(|k| {
+            LIGHT.contains(&k.as_str())
+                || AUXILIARY.contains(&k.as_str()) && !["have", "has", "had"].contains(&k.as_str())
+        }) {
+            continue;
+        }
+        let exact = |a: &Clause, b: &Clause| a.keys.iter().any(|k| b.keys.contains(k));
+        // A synonym only stands in for a verb that no other clause of the source has as is
+        // ("send" is not the "share" of "so I can share it").
+        let same: Vec<&Clause> = output
+            .iter()
+            .filter(|o| {
+                exact(s, o)
+                    || synonyms(&s.keys, &o.keys)
+                        && !source.iter().any(|t| !std::ptr::eq(t, s) && exact(t, o))
+            })
+            .collect();
+        if same.is_empty() {
+            continue;
+        }
+        let tense = |o: &&Clause| {
+            !matches!(
+                (s.tense, o.tense),
+                (Some(Tense::Past), Some(Tense::Present))
+                    | (Some(Tense::Present), Some(Tense::Past))
+            )
+        };
+        let person = |o: &&Clause| {
+            !matches!(
+                (s.person, o.person),
+                (Some(Person::Speaker), Some(Person::Addressee))
+                    | (Some(Person::Addressee), Some(Person::Speaker))
+                    | (
+                        Some(Person::Anyone),
+                        Some(Person::Addressee | Person::Speaker)
+                    )
+            )
+        };
+        if !same.iter().any(tense) {
+            return Err(format!("changes the tense of “{}”", s.keys[0]));
+        }
+        if !same.iter().any(|o| tense(o) && person(o)) {
+            return Err(format!("changes who does “{}”", s.keys[0]));
+        }
+    }
+    Ok(())
+}
+/// Words that state a hope or wish rather than a fact.
+const WISH: &[&str] = &[
+    "hope",
+    "hoping",
+    "hoped",
+    "hopes",
+    "hopefully",
+    "wish",
+    "wishing",
+    "wished",
+];
+/// Words a rewrite of a hope may use instead.
+const WANT: &[&str] = &[
+    "hope",
+    "hoping",
+    "hopefully",
+    "wish",
+    "want",
+    "wants",
+    "like",
+    "love",
+    "forward",
+    "eager",
+    "excited",
+    "keen",
+    "wanted",
+    "wondering",
+    "wonder",
+];
+/// Words that say the writer is not sure of what follows.
+const UNSURE: &[&str] = &["unsure", "uncertain", "doubt", "doubtful", "unclear"];
+/// Ok when a hope stays a hope: "I hope we can work together again" is not "We can work
+/// together again", and a plain statement does not become a hope.
+fn same_mood(source: &str, output: &str) -> Result<(), String> {
+    let wishes = |text: &str| -> (bool, bool) {
+        let tokens = content_tokens(text, &[]);
+        let all_keys: Vec<Vec<String>> = tokens.iter().map(|t| keys(&t.normalized, "")).collect();
+        let (padding, _) = phrases(&all_keys);
+        let wish = tokens
+            .iter()
+            .zip(&padding)
+            .any(|(t, p)| !p && WISH.contains(&t.normalized.as_str()));
+        // "I was wondering if" and "I was hoping" are padding, but a wish all the same.
+        let want = tokens.iter().any(|t| WANT.contains(&t.normalized.as_str()));
+        (wish, want)
+    };
+    let ((source_wish, source_want), (output_wish, output_want)) = (wishes(source), wishes(output));
+    if source_wish && !output_want {
+        return Err("turns a hope into a statement".into());
+    }
+    if output_wish && !source_want {
+        return Err("turns a statement into a hope".into());
+    }
+    // "I'm not sure the design works" is not "The design doesn't work".
+    let unsure = |text: &str| {
+        let tokens = content_tokens(text, &[]);
+        tokens.iter().enumerate().any(|(i, t)| {
+            let w = t.normalized.as_str();
+            UNSURE.contains(&w)
+                || (["sure", "certain"].contains(&w)
+                    && tokens[i.saturating_sub(2)..i]
+                        .iter()
+                        .any(|p| negative(&p.normalized)))
+        })
+    };
+    if unsure(source) != unsure(output) {
+        return Err(if unsure(source) {
+            "turns a doubt into a statement".into()
+        } else {
+            "turns a statement into a doubt".into()
+        });
+    }
+    Ok(())
+}
 fn synonyms(a: &[String], b: &[String]) -> bool {
     SYNONYMS.iter().any(|row| {
         let group: Vec<&str> = row.split(' ').collect();
@@ -1128,6 +1748,146 @@ fn budget(mode: Mode, n: usize) -> (usize, usize) {
     }
 }
 
+/// Verbs that take something away and verbs that add or keep it: a rewrite never turns one into
+/// the other ("drops support for iOS 15" is not "brings support for iOS 15").
+const REMOVES: &[&str] = &[
+    "drop",
+    "remove",
+    "delete",
+    "cut",
+    "discontinue",
+    "deprecate",
+    "lose",
+    "disable",
+    "stop",
+    "end",
+    "cancel",
+    "withdraw",
+    "reduce",
+    "decrease",
+    "lower",
+];
+const ADDS: &[&str] = &[
+    "add",
+    "bring",
+    "include",
+    "introduce",
+    "gain",
+    "enable",
+    "start",
+    "keep",
+    "extend",
+    "launch",
+    "increase",
+    "raise",
+    "restore",
+    "offer",
+];
+fn direction(w: &Word) -> i8 {
+    if w.keys.iter().any(|k| REMOVES.contains(&k.as_str())) {
+        -1
+    } else if w.keys.iter().any(|k| ADDS.contains(&k.as_str())) {
+        1
+    } else {
+        0
+    }
+}
+/// Words that make a statement less certain.
+const HEDGED: &[&str] = &[
+    "appears",
+    "appear",
+    "appeared",
+    "seems",
+    "seem",
+    "seemed",
+    "might",
+    "likely",
+    "apparently",
+    "presumably",
+    "supposedly",
+];
+/// The kinds of approximation before each number of `text`, sorted: "about 2,000" is not
+/// "2,000", and "at least 5" is not "about 5".
+fn approximations(text: &str) -> Vec<u8> {
+    const KINDS: &[(&str, u8)] = &[
+        ("about", 1),
+        ("around", 1),
+        ("approximately", 1),
+        ("roughly", 1),
+        ("nearly", 1),
+        ("almost", 1),
+        ("approx", 1),
+        ("least", 2),
+        ("over", 2),
+        ("most", 3),
+        ("under", 3),
+    ];
+    let tokens = tokenizer::tokenize(text, &[]);
+    let mut out: Vec<u8> = tokens
+        .windows(2)
+        .filter(|w| number(&w[1].normalized).is_some() || w[1].normalized == "one")
+        .filter_map(|w| KINDS.iter().find(|(k, _)| *k == w[0].normalized))
+        .map(|(_, kind)| *kind)
+        .collect();
+    out.sort_unstable();
+    out
+}
+/// The sentences of `text`.
+fn sentences(text: &str) -> Vec<&str> {
+    let tokens = tokenizer::tokenize(text, &[]);
+    let mut out = vec![];
+    let mut start = 0;
+    for (i, t) in tokens.iter().enumerate() {
+        if tokens.get(i + 1).is_none_or(|n| n.sentence != t.sentence) {
+            out.push(&text[start..t.end_byte]);
+            start = t.end_byte;
+        }
+    }
+    out
+}
+/// The currency signs of `text`, sorted: "$1,200" keeps its "$".
+fn currencies(text: &str) -> Vec<char> {
+    let mut signs: Vec<char> = text.chars().filter(|c| "$€£¥₹".contains(*c)).collect();
+    signs.sort_unstable();
+    signs
+}
+/// A first line or phrase that announces the answer ("Here is the edited text:", "Rewritten:")
+/// rather than belonging to it.
+pub(crate) fn preamble(text: &str) -> Option<&str> {
+    let text = text.trim_start();
+    let head = text.split_once(':')?.0;
+    let words = head.split_whitespace().count();
+    let lower = head.to_lowercase();
+    let announces = [
+        "here",
+        "edited",
+        "rewritten",
+        "revised",
+        "rewrite",
+        "version",
+        "text",
+    ]
+    .iter()
+    .any(|w| lower.split(|c: char| !c.is_alphanumeric()).any(|x| x == *w));
+    (words <= 8 && !head.contains('\n') && announces).then_some(head)
+}
+/// The words of a tone's worked example that a rewrite of other text has no reason to use: the
+/// example's content words absent from `source`. A small model sometimes copies the example
+/// ("Who approved it?") into an unrelated rewrite.
+pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), String> {
+    let (ex, src, out) = (words(example, &[]), words(source, &[]), words(output, &[]));
+    match ex.iter().find(|e| {
+        e.kind == Kind::Content
+            && e.surface.chars().count() >= 4
+            && !src.iter().any(|s| matches(s, e))
+            && out
+                .iter()
+                .any(|o| o.keys.iter().any(|k| e.keys.contains(k)))
+    }) {
+        Some(e) => Err(format!("copies “{}” from the worked example", e.surface)),
+        None => Ok(()),
+    }
+}
 /// Ok when `output` says what `source` says, as far as `mode` allows: the same negation, numbers
 /// and names in every mode; Concise may drop filler and redundant words but keeps the content
 /// words (only a third may go, in a sentence with three or more); Professional, Friendly and
@@ -1156,8 +1916,12 @@ pub(crate) fn keeps_meaning(
     }
     // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
     // an instruction), and it never answers the message ("Sure, I'd love to take a look!").
-    if mode != Mode::Direct && source.trim_end().ends_with('?') && !output.trim_end().ends_with('?')
-    {
+    // An emoji after the question mark ("Free for lunch? ☕") still ends a question.
+    let ends = |t: &str| {
+        t.trim_end_matches(|c: char| c.is_whitespace() || !c.is_ascii() && !c.is_alphanumeric())
+            .ends_with('?')
+    };
+    if mode != Mode::Direct && ends(source) && !ends(output) {
         return Err("turns a question into a statement".into());
     }
     let opener = |t: &str| {
@@ -1180,14 +1944,52 @@ pub(crate) fn keeps_meaning(
     {
         return Err("drops “have”, so the sentence says something else".into());
     }
-    let negated = |w: &[Word]| w.iter().any(|w| w.kind == Kind::Negation);
+    // Negations are counted: "start without me" is not "will not start without help".
+    let negations = |w: &[Word]| w.iter().filter(|w| w.kind == Kind::Negation).count();
+    let (src_negations, out_negations) = (negations(&src), negations(&out));
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
-    if negated(&src) != negated(&out) && (negated(&src) || !softened) {
-        return Err(if negated(&src) {
-            "drops a negation".into()
-        } else {
-            "adds a negation".into()
-        });
+    if out_negations < src_negations {
+        return Err("drops a negation".into());
+    }
+    if out_negations > src_negations && !(softened && out_negations == src_negations + 1) {
+        return Err("adds a negation".into());
+    }
+    // A plain statement does not gain a hedge ("It is blocking" is not "It appears to be").
+    let hedged = |w: &[Word]| {
+        w.iter().any(|w| {
+            w.kind != Kind::Filler && HEDGED.contains(&w.surface.as_str())
+                || ["perhaps", "possibly", "probably", "potentially"].contains(&w.surface.as_str())
+        })
+    };
+    // Any hedge in the source ("I guess we could maybe") lets the rewrite hedge its own way.
+    let unsure = |w: &[Word]| {
+        hedged(w)
+            || w.iter().any(|w| {
+                ["maybe", "kinda", "sorta"].contains(&w.surface.as_str())
+                    || w.keys.iter().any(|k| HEDGES.contains(&k.as_str()))
+            })
+    };
+    if hedged(&out) && !unsure(&src) {
+        return Err("adds a hedge".into());
+    }
+    if approximations(source) != approximations(output) {
+        return Err("changes how exact a number is".into());
+    }
+    // Every sentence of the rewrite comes from the original: one whose content words all are
+    // new ("I was hoping to discuss this matter.") was made up.
+    // A softened insult may be said anew ("This is garbage" as "This needs more work").
+    for sentence in sentences(output).into_iter().filter(|_| !softened) {
+        let content: Vec<Word> = words(sentence, &[])
+            .into_iter()
+            .filter(|w| w.kind == Kind::Content)
+            .collect();
+        let kept = content
+            .iter()
+            .filter(|o| src.iter().any(|s| matches(s, o)))
+            .count();
+        if content.len() >= 2 && kept == 0 || content.len() >= 4 && kept <= 1 {
+            return Err(format!("adds “{}”", sentence.trim()));
+        }
     }
     let numbers = |w: &[Word]| {
         let mut n: Vec<String> = w
@@ -1224,11 +2026,46 @@ pub(crate) fn keeps_meaning(
     {
         return Err(format!("drops the name “{}”", name.surface));
     }
+    // A name stays what it was: "You have Clickhouse" is not "You have the Clickhouse token".
+    for (i, o) in out.iter().enumerate() {
+        let Some(next) = out.get(i + 1) else { break };
+        if o.name
+            && next.kind == Kind::Content
+            && !next.name
+            && src.iter().any(|s| s.surface == o.surface)
+            && !src.iter().any(|s| matches(s, next))
+        {
+            return Err(format!(
+                "turns “{}” into “{} {}”",
+                o.surface, o.surface, next.surface
+            ));
+        }
+    }
+    if currencies(source) != currencies(output) {
+        return Err("changes a currency".into());
+    }
+    if let Some(head) = preamble(output)
+        && preamble(source).is_none()
+    {
+        return Err(format!("adds “{head}:” before the text"));
+    }
     let times =
         |w: &[Word]| -> Vec<Word> { w.iter().filter(|w| w.kind == Kind::Time).cloned().collect() };
     let (src_times, out_times) = (times(&src), times(&out));
-    if src_times.iter().any(|s| !out.iter().any(|o| matches(s, o)))
-        || out_times.iter().any(|o| !src.iter().any(|s| matches(s, o)))
+    // Days and times match by their own forms only ("end of June" is not "completed").
+    let same_time = |a: &Word, b: &Word| {
+        a.keys.iter().any(|k| b.keys.contains(k))
+            || (a.kind != Kind::Function
+                && b.kind != Kind::Function
+                && same_word(&a.surface, &b.surface))
+            || (synonyms(&a.keys, &b.keys) && a.kind == b.kind)
+    };
+    if src_times
+        .iter()
+        .any(|s| !out.iter().any(|o| same_time(s, o)))
+        || out_times
+            .iter()
+            .any(|o| !src.iter().any(|s| same_time(s, o)))
     {
         return Err("changes a day or time".into());
     }
@@ -1238,6 +2075,11 @@ pub(crate) fn keeps_meaning(
             .cloned()
             .collect()
     };
+    same_mood(source, output)?;
+    same_frames(
+        &clauses(source, source_hints),
+        &clauses(output, output_hints),
+    )?;
     let (src_content, out_content) = (content(&src), content(&out));
     let hedge = |w: &Word| {
         matches!(mode, Mode::Direct | Mode::Concise)
@@ -1252,11 +2094,26 @@ pub(crate) fn keeps_meaning(
         .filter(|o| !src.iter().any(|s| matches(s, o)))
         .map(|o| o.surface.as_str())
         .collect();
-    if let Some(w) = lost.iter().find(|w| polarity(w) != 0) {
+    // A feeling word may give way to another of the same feeling ("a pleasure" to "a
+    // wonderful experience"), never vanish.
+    if let Some(w) = lost.iter().find(|w| {
+        let p = polarity(w);
+        p != 0
+            && !out
+                .iter()
+                .any(|o| polarity(o) == p && !src.iter().any(|s| matches(s, o)))
+    }) {
         return Err(format!(
             "drops “{}”, which carries the sentiment",
             w.surface
         ));
+    }
+    let moves: Vec<i8> = src.iter().map(direction).filter(|d| *d != 0).collect();
+    if let Some(w) = out.iter().find(|o| {
+        let d = direction(o);
+        d != 0 && moves.contains(&-d) && !moves.contains(&d) && !src.iter().any(|s| matches(s, o))
+    }) {
+        return Err(format!("adds “{}”, which reverses what happens", w.surface));
     }
     let feeling: Vec<i8> = src.iter().map(polarity).filter(|p| *p != 0).collect();
     if let Some(w) = out_content.iter().find(|o| {
@@ -1545,6 +2402,164 @@ mod tests {
                 mode,
                 "I love the new design.",
                 "I dislike the new design."
+            ));
+        }
+    }
+
+    #[test]
+    fn the_main_verb_keeps_its_tense_and_its_subject() {
+        for mode in TONES {
+            // Past is not an instruction, an instruction is not the writer's own plan.
+            assert!(!ok(mode, "Just pushed the fix.", "Just push the fix."));
+            assert!(!ok(
+                mode,
+                "I sent the invoice.",
+                "I am sending the invoice."
+            ));
+            assert!(!ok(mode, "Start without me.", "I'm starting without me."));
+            assert!(!ok(
+                mode,
+                "Please send me the report.",
+                "I will send you the report."
+            ));
+            assert!(ok(mode, "Just pushed the fix.", "I just pushed the fix."));
+            assert!(ok(
+                mode,
+                "I have reviewed the contract.",
+                "I reviewed the contract."
+            ));
+            assert!(ok(mode, "Start without me.", "Please start without me."));
+            assert!(ok(
+                mode,
+                "We should move the meeting to Friday.",
+                "Let's move the meeting to Friday."
+            ));
+        }
+        assert!(ok(Mode::Direct, "Could you review this?", "Review this."));
+        assert!(ok(
+            Mode::Direct,
+            "Could you review this?",
+            "Please review this."
+        ));
+        assert!(ok(
+            Mode::Direct,
+            "We should move the meeting to Friday.",
+            "Move the meeting to Friday."
+        ));
+    }
+
+    #[test]
+    fn what_happens_to_a_thing_and_who_has_it_stay() {
+        for mode in TONES {
+            assert!(!ok(
+                mode,
+                "Version 2.4.1 drops support for iOS 15.",
+                "Version 2.4.1 brings support for iOS 15."
+            ));
+            assert!(ok(
+                mode,
+                "Version 2.4.1 drops support for iOS 15.",
+                "Version 2.4.1 removes support for iOS 15."
+            ));
+            assert!(!ok(
+                mode,
+                "You have Clickhouse available now!",
+                "You have the Clickhouse token available now!"
+            ));
+            assert!(!ok(
+                mode,
+                "You have Clickhouse available now!",
+                "I have Clickhouse available now!"
+            ));
+            assert!(!ok(
+                mode,
+                "The payment of $1,200 was refunded.",
+                "The payment of 1,200 was refunded."
+            ));
+            assert!(!ok(
+                mode,
+                "The report is ready.",
+                "Here is the edited text: The report is ready."
+            ));
+            assert!(ok(
+                mode,
+                "I'm not sure the design works.",
+                "I'm unsure the design works."
+            ));
+        }
+        for mode in TONES {
+            for (a, b) in [
+                (
+                    "I'm running late, start without me.",
+                    "I am running late and will not start without my assistance.",
+                ),
+                (
+                    "It is blocking the deploy.",
+                    "It appears to be blocking the deployment.",
+                ),
+                (
+                    "That meeting was so long, I almost fell asleep.",
+                    "I was hoping to discuss this matter. It was a long meeting, and I almost fell asleep.",
+                ),
+                (
+                    "Can someone review my changes?",
+                    "Could you review my changes?",
+                ),
+                (
+                    "The system handles about 2,000 requests.",
+                    "The system handles 2,000 requests.",
+                ),
+                (
+                    "We will deliver by the end of June.",
+                    "We will deliver by June.",
+                ),
+                (
+                    "I appreciate your feedback and will share it with the team.",
+                    "Appreciate your feedback and share it with the team.",
+                ),
+            ] {
+                assert!(!ok(mode, a, b), "{mode:?}: {b}");
+            }
+            assert!(ok(
+                mode,
+                "Can someone review my changes?",
+                "Can someone please review my changes?"
+            ));
+            assert!(ok(
+                mode,
+                "The system handles about 2,000 requests.",
+                "The system handles approximately 2,000 requests."
+            ));
+        }
+        let example = "this plan is dumb, who even approved it??";
+        assert!(borrows(example, "This is garbage.", "This plan needs work.").is_err());
+        assert!(borrows(example, "This plan is late.", "This plan is delayed.").is_ok());
+        assert_eq!(preamble("Edited text: Hi."), Some("Edited text"));
+        assert_eq!(preamble("Note: the build is red."), None);
+    }
+
+    #[test]
+    fn a_hope_stays_a_hope() {
+        for mode in TONES {
+            assert!(!ok(
+                mode,
+                "I hope we can work together again.",
+                "We can work together again."
+            ));
+            assert!(!ok(
+                mode,
+                "We will deliver by Friday.",
+                "We hope to deliver by Friday."
+            ));
+            assert!(ok(
+                mode,
+                "I hope we can work together again.",
+                "I really hope we can work together again."
+            ));
+            assert!(ok(
+                mode,
+                "Hope you're doing well! The report is ready.",
+                "The report is ready."
             ));
         }
     }
