@@ -547,10 +547,14 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
             .filter(|x| x.is_word)
             .take(4)
             .collect();
-        if opening.len() >= 3
+        let paragraph_start = start == 0 || tokens[start - 1].paragraph != tokens[start].paragraph;
+        if paragraph_start
             && opening
                 .iter()
-                .filter(|x| x.surface.starts_with(char::is_uppercase))
+                .filter(|x| {
+                    x.surface.starts_with(char::is_uppercase)
+                        && crate::spelling::ordinary(&x.normalized)
+                })
                 .count()
                 >= 3
         {
