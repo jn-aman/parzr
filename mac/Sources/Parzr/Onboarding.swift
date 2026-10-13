@@ -1,9 +1,10 @@
 import Combine
 import Contacts
+import ParzrCore
 import SwiftUI
 
 enum OnboardingStep: Int, CaseIterable {
-    case welcome, accessibility, contacts, login, tryIt, done
+    case welcome, accessibility, models, contacts, login, tryIt, done
     var next: OnboardingStep? { Self(rawValue: rawValue + 1) }
     var previous: OnboardingStep? { Self(rawValue: rawValue - 1) }
 }
@@ -17,6 +18,7 @@ enum OnboardingFlow {
     /// A returning user who still lacks Accessibility lands straight on that step; everyone else starts at the welcome.
     static func firstStep(completed: Bool, granted: Bool) -> OnboardingStep { completed && !granted ? .accessibility : .welcome }
     /// Accessibility is the one step that waits: Next stays off until macOS reports the grant. There is no skip; setup is mandatory.
+    /// The models step never waits: the download carries on in the background, offline or not.
     static func canAdvance(from step: OnboardingStep, granted: Bool) -> Bool { step.next != nil && (step != .accessibility || granted) }
     static func contactsState(_ status: CNAuthorizationStatus) -> ContactsState { status == .authorized ? .allowed : status == .denied || status == .restricted ? .denied : .notAsked }
 }
@@ -26,17 +28,21 @@ final class OnboardingModel: ObservableObject {
     @Published var step: OnboardingStep
     @Published var draft = OnboardingFlow.sample
     let preferences: Preferences
+    /// The model pack the download step shows (snapshots pass a preview).
+    let models: ModelCenter
     /// Runs the live "Try it" field; separate from the editor window's model so the two never share a draft.
     let editor = AppModel()
     /// Snapshots only: pretend Accessibility is (not) granted without touching macOS.
     var previewGranted: Bool?
     var granted: Bool { previewGranted ?? preferences.permissionGranted }
     var canAdvance: Bool { OnboardingFlow.canAdvance(from: step, granted: granted) }
-    init(preferences: Preferences = .shared, step: OnboardingStep? = nil) {
-        self.preferences = preferences
+    init(preferences: Preferences = .shared, step: OnboardingStep? = nil, models: ModelCenter = .app) {
+        self.preferences = preferences; self.models = models
         self.step = step ?? OnboardingFlow.firstStep(completed: preferences.onboardingCompleted, granted: preferences.permissionGranted)
     }
     func next() { if canAdvance, let next = step.next { step = next } }
+    /// The download starts when the guide reaches its step (and carries on whatever the user does next).
+    func arrived(at step: OnboardingStep) { if step == .models, ModelCenter.downloadsAllowed { models.startIfNeeded() } }
     func back() { if let previous = step.previous { step = previous } }
     /// Start writing on the last step. Closing the window any other way leaves setup unfinished.
     func complete() { preferences.onboardingCompleted = true }

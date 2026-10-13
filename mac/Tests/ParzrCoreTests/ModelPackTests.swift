@@ -315,6 +315,12 @@ final class ModelCenterTests: XCTestCase {
         let center = center(fake())
         XCTAssertEqual(center.explain(["Grammar checked; context refinement unavailable. \(ModelCenter.engineMissing)", "other"]), ["Smart grammar is downloading. Checked with the rules for now.", "other"])
         XCTAssertEqual(center.explain(["context.pending"]), ["context.pending"])
+        XCTAssertEqual(center.explain(["Kept the corrected text. \(ModelCenter.engineMissing)"]), [ModelCenter.toneWaiting])
+        let empty = EmptyCheck(mode: .professional, status: ModelCenter.toneWaiting)
+        XCTAssertEqual(empty.title, "Professional needs the models"); XCTAssertTrue(empty.warning)
+        center.remove()
+        XCTAssertEqual(center.explain(["Kept the corrected text. \(ModelCenter.engineMissing)"]), [ModelCenter.toneMissing])
+        XCTAssertEqual(center.models.map(\.name), ["writer.gguf", "gector/weights/weight.bin"])
         XCTAssertNil(center.explain(nil))
     }
 }

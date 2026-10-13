@@ -45,6 +45,11 @@ final class AppModel: ObservableObject {
     /// Shown while it is written, and once written when it is worth offering; hidden when it came back empty or failed.
     var showsSuggestion: Bool { mode == .fix && result != nil && suggestion.map { $0.source == source && (!$0.done || suggestionReady) } ?? false }
     var canUseSuggestion: Bool { !busy && suggestionReady && (snapshot?.canPatch == true || snapshot?.copied == true) }
+    /// The engine's warnings as the card shows them: a missing model reads as "Smart grammar is downloading" (or how to get it).
+    static func statusText(_ warnings: [String]?) -> String? {
+        let shown = ModelCenter.app.explain(warnings) ?? []
+        return shown.isEmpty ? nil : shown.joined(separator: " ")
+    }
     func navigate(_ direction: Int) {
         let edits = chosenEdits
         guard !edits.isEmpty else { return }
@@ -68,7 +73,7 @@ final class AppModel: ObservableObject {
         inspector = snapshot.metadata(); mode = .fix; self.result = result
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
         provisional = false; busy = false; engineReady = true; error = nil; status = nil
-        status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
+        status = Self.statusText(result.warnings)
     }
     func playground(_ text: String, debounce: Bool = false) {
         let old = source
@@ -118,7 +123,7 @@ final class AppModel: ObservableObject {
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
-                self.status = result.warnings?.isEmpty == false ? result.warnings?.joined(separator: " ") : nil
+                self.status = Self.statusText(result.warnings)
                 if !debounce, requestMode == .fix, offersRewrite, SuggestedRewrite.offered(for: original) { suggest(original, generation: current) }
                 didAnalyze?()
             } catch {
@@ -158,7 +163,7 @@ final class AppModel: ObservableObject {
         mode = tone; result = written; suggestion = nil
         selectedEdits = Set(written.edits.map(\.id)); focusedEditID = written.edits.first?.id
         provisional = false; busy = false; error = nil
-        status = written.warnings?.isEmpty == false ? written.warnings?.joined(separator: " ") : nil
+        status = Self.statusText(written.warnings)
     }
     /// Mode pickers bind here; a key-path binding avoids a Swift 6.3 IRGen crash in closure-built Bindings.
     var modeChoice: RewriteMode { get { mode } set { changeMode(newValue) } }

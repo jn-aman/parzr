@@ -49,7 +49,7 @@ struct RewritePanel: View {
                 HStack(spacing: 8) { ProgressView().controlSize(.small); Text(model.mode == .fix ? "Checking your passage…" : "Rewriting as \(model.mode.title)…").font(.system(size: 12)).foregroundStyle(Color.textSecondary) }
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 9))
             } else if let edit = model.focusedEdit {
-                SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning?.hasPrefix("Grammar checked") == true ? "Grammar checked · Context refinement unavailable" : edit.explanation, whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
+                SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning?.hasPrefix("Grammar checked") == true ? "Grammar checked · Context refinement unavailable" : warning?.hasPrefix("Smart grammar is downloading") == true ? "Checked with the rules · Smart grammar is downloading" : warning?.hasPrefix("Smart grammar isn") == true ? "Checked with the rules · Smart grammar isn’t downloaded" : edit.explanation, whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
                 if offersSuggestion, let offered = model.suggestion { SuggestionRow(model: model, offered: offered) }
             } else if offersSuggestion, let offered = model.suggestion {
                 let empty = EmptyCheck(mode: model.mode, status: warning)

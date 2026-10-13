@@ -82,6 +82,13 @@ public struct EmptyCheck: Equatable, Sendable {
             detail = "Parzr’s rewrite changed what you meant, so your words stay as they are."
             return
         }
+        if mode != .fix, let status, status.hasPrefix("Tone rewrites") {
+            // The models are not on this Mac yet: no rewrite was written, the rules corrected the text.
+            warning = true
+            title = "\(mode.title) needs the models"
+            detail = status
+            return
+        }
         warning = status != nil
         title = mode == .fix ? (status == nil ? "Looks good" : "No changes found") : "Already reads well in \(mode.title)"
         detail = status ?? (mode == .fix ? "No grammar or spelling changes in this selection." : "No changes suggested.")

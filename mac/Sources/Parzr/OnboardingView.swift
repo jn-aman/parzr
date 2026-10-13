@@ -1,5 +1,6 @@
 import AppKit
 import Contacts
+import ParzrCore
 import SwiftUI
 
 struct OnboardingView: View {
@@ -26,6 +27,7 @@ struct OnboardingView: View {
         }
         .frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary).tint(Color.mintAccent)
         .onAppear { if !renderingSnapshot { preferences.refreshPermission(); if !granted { preferences.watchPermission() } } }
+        .onChange(of: model.step) { step in if !renderingSnapshot { model.arrived(at: step) } }
     }
     private func go(_ change: () -> Void) { withAnimation(animate ? .easeOut(duration: 0.18) : nil, change) }
     // MARK: Chrome
@@ -53,6 +55,7 @@ struct OnboardingView: View {
         switch model.step {
         case .welcome: welcome
         case .accessibility: accessibility
+        case .models: models
         case .contacts: contacts
         case .login: login
         case .tryIt: tryIt
@@ -128,9 +131,25 @@ struct OnboardingView: View {
             }
         }
     }
+    private var models: some View {
+        page("STEP 3 · SMART GRAMMAR", "Download the models", "Smart grammar and rewrites run on two models on your Mac. Parzr downloads them once, \(model.models.sizeText), and checks with its rules in the meantime.") {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(spacing: 0) {
+                    row("cpu", model.models.pack?.title ?? "Smart grammar and rewrites", "GECToR catches grammar as you type. Qwen3.5 checks and rewrites what you select.") { EmptyView() }
+                    divider
+                    ModelStatus(center: model.models).padding(.horizontal, 16).padding(.vertical, 12)
+                }.graphiteSurface()
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "lock").foregroundStyle(Color.mintAccent)
+                    Text("A plain download from GitHub. It carries nothing about you or your writing.").foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }.font(.system(size: 11))
+                Text("You can continue now. The download carries on in the background, and Settings, Models shows it.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
     private var contactsState: OnboardingFlow.ContactsState { OnboardingFlow.contactsState(CNContactStore.authorizationStatus(for: .contacts)) }
     private var contacts: some View {
-        page("STEP 3 · OPTIONAL", "Know your names", "Names from your contacts are never corrected. Names stay on this Mac.") {
+        page("STEP 4 · OPTIONAL", "Know your names", "Names from your contacts are never corrected. Names stay on this Mac.") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(spacing: 0) {
                     row("person.crop.circle", "Use names from Contacts", "Only first names, last names, nicknames and companies are read.") { Toggle("Use names from Contacts", isOn: $preferences.contactsChoice).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize() }
@@ -151,7 +170,7 @@ struct OnboardingView: View {
         }
     }
     private var login: some View {
-        page("STEP 4 · OPTIONAL", "Start at login", "Parzr is light and quiet. Starting with your Mac keeps it ready the moment you write.") {
+        page("STEP 5 · OPTIONAL", "Start at login", "Parzr is light and quiet. Starting with your Mac keeps it ready the moment you write.") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(spacing: 0) {
                     row("power", "Start with your Mac", "Keep Parzr ready in the menu bar.") { Toggle("Launch at login", isOn: $preferences.launchAtLoginChoice).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize() }
@@ -169,7 +188,7 @@ struct OnboardingView: View {
         }
     }
     private var tryIt: some View {
-        page("STEP 5 · TRY IT", "See it work", "Parzr underlines mistakes in red. Click an underlined word to fix it.") {
+        page("STEP 6 · TRY IT", "See it work", "Parzr underlines mistakes in red. Click an underlined word to fix it.") {
             VStack(alignment: .leading, spacing: 14) {
                 OnboardingTryField(model: model, preferences: preferences, renderingSnapshot: renderingSnapshot)
                 HStack(spacing: 8) {

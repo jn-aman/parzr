@@ -164,12 +164,36 @@ public final class ModelCenter: ObservableObject {
         }
     }
     /// Replaces the engine's "model not downloaded" warning with the plain status above; other warnings pass through.
+    /// A tone rewrite that could not run says so; the text it returns was corrected by the rules.
     public func explain(_ warnings: [String]?) -> [String]? {
         guard let warnings else { return nil }
-        let missing = warnings.contains { $0.contains(Self.engineMissing) }
-        let rest = warnings.filter { !$0.contains(Self.engineMissing) }
-        guard missing else { return warnings }
-        return [unavailableNote ?? "Smart grammar is getting ready. Checked with the rules for now."] + rest
+        return warnings.map { warning in
+            guard warning.contains(Self.engineMissing) else { return warning }
+            let waiting = state.isWorking || (state == .missing && !removedByUser)
+            if warning.hasPrefix("Kept the corrected text.") { return waiting ? Self.toneWaiting : Self.toneMissing }
+            return unavailableNote ?? "Smart grammar is getting ready. Checked with the rules for now."
+        }
+    }
+    public static let toneWaiting = "Tone rewrites use the models Parzr is still downloading. Your text was corrected with the rules."
+    public static let toneMissing = "Tone rewrites need the models. Download them in Settings, Models. Your text was corrected with the rules."
+    /// Snapshots and previews only: shows a state without downloading anything.
+    public func preview(_ state: ModelPackState, removed: Bool = false) {
+        generation += 1; download = nil; self.state = state
+        if removed { defaults.set(true, forKey: Self.removedKey) } else { defaults.removeObject(forKey: Self.removedKey) }
+    }
+    /// The pack's models for Settings: one line per top-level item (a file, or a folder such as gector/), with its size, version, license and purpose.
+    public var models: [(name: String, bytes: Int64, version: String, license: String, purpose: String)] {
+        guard let pack else { return [] }
+        var order: [String] = [], groups: [String: [ModelFile]] = [:]
+        for file in pack.files {
+            let key = String(file.path.split(separator: "/").first ?? "")
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(file)
+        }
+        return order.compactMap { key in
+            guard let files = groups[key], let main = files.max(by: { $0.bytes < $1.bytes }) else { return nil }
+            return (main.name, files.reduce(0) { $0 + $1.bytes }, main.version, main.license, main.purpose)
+        }
     }
     /// The engine's text for a missing writing model (engine/src/model.rs MODEL_MISSING).
     public static let engineMissing = "The writing model is not downloaded yet."

@@ -4,13 +4,14 @@ import ParzrCore
 import Pow
 
 enum StudioRoute: String, CaseIterable, Identifiable {
-    case playground = "Editor", general = "General", writing = "Writing", appearance = "Appearance", apps = "Apps", privacy = "Privacy", compatibility = "Integrations", about = "About"
+    case playground = "Editor", general = "General", writing = "Writing", models = "Models", appearance = "Appearance", apps = "Apps", privacy = "Privacy", compatibility = "Integrations", about = "About"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .playground: "square.and.pencil"
         case .general: "slider.horizontal.3"
         case .writing: "textformat"
+        case .models: "cpu"
         case .appearance: "circle.lefthalf.filled"
         case .apps: "square.grid.2x2"
         case .privacy: "lock"
@@ -23,6 +24,7 @@ enum StudioRoute: String, CaseIterable, Identifiable {
         case .playground: "Write naturally. Catch the details."
         case .general: "Ready when you need it. Quiet when you don’t."
         case .writing: "Your voice. Your words. Your preferences."
+        case .models: "On-device models, downloaded once."
         case .appearance: "A writing space that feels like yours."
         case .apps: "Choose where Parzr lends a hand."
         case .privacy: "Local by design. In your control."
@@ -36,6 +38,7 @@ struct StudioView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var preferences = Preferences.shared
     @ObservedObject var updates = UpdateModel.shared
+    @ObservedObject var models: ModelCenter = .app
     var route: StudioRoute?
     var renderingSnapshot: Bool
     @State private var draft: String
@@ -180,7 +183,7 @@ struct StudioView: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.hairline, lineWidth: 0.7)).padding(.horizontal, 28)
             if let error = model.error {
                 HStack { Text(error).font(.system(size: 11)).foregroundStyle(Color.errorInk); Spacer(); NativeButton(title: "Retry", action: { model.playground(draft) }).fixedSize() }.padding(.horizontal, 28).padding(.top, 10)
-            } else if let warning = model.result?.warnings?.first { Text(warning).font(.system(size: 10)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 28).padding(.top, 8) }
+            } else if let warning = models.explain(model.result?.warnings)?.first(where: { $0 != "context.pending" }) ?? (preferences.smartGrammar ? models.unavailableNote : nil) { Text(warning).font(.system(size: 10)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 28).padding(.top, 8) }
             HStack {
                 Text("Select text anywhere · \(preferences.shortcutDisplay)")
                 Spacer()
@@ -242,9 +245,9 @@ struct StudioView: View {
                         VStack(alignment: .trailing, spacing: 4) { Slider(value: $preferences.checkingDelay, in: 40...700).frame(width: 130).accessibilityLabel("Checking delay"); Text("\(Int(preferences.boundedCheckingDelay)) ms").font(.system(size: 10, design: .monospaced)).foregroundStyle(Color.textSecondary) }
                     }
                     divider
-                    settingRow("Context refinement", detail: "Use the larger bundled model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
+                    settingRow("Context refinement", detail: "Use the larger on-device model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
                     divider
-                    settingRow("Smart grammar (on-device model)", detail: "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. Nothing leaves your Mac.") { toggle("Smart grammar", $preferences.smartGrammar) }
+                    settingRow("Smart grammar (on-device model)", detail: models.isReady ? "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. Nothing leaves your Mac." : "A small model on your Mac's Neural Engine catches grammar the rules miss. \(models.unavailableNote ?? "")") { toggle("Smart grammar", $preferences.smartGrammar) }
                 }
                 group("PERSONAL DICTIONARY") {
                     VStack(alignment: .leading, spacing: 12) {
@@ -268,6 +271,8 @@ struct StudioView: View {
                     }.padding(16)
                 }
                 notice("Grammar, spelling, and punctuation are checked in every mode. The model unloads after 30 seconds of inactivity.", symbol: "leaf")
+            case .models:
+                ModelsSettings(center: models)
             case .appearance:
                 group("LOOK & FEEL") {
                     settingRow("Appearance", detail: "Graphite, Paper, or your Mac’s appearance.") { ChoiceStrip(label: "Appearance", choices: [("Graphite", "graphite"), ("Paper", "paper"), ("System", "system")], selection: $preferences.appearance) }
@@ -303,6 +308,7 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your words stay on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
                         Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary, learned names and preferences are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Parzr makes two kinds of request, both to GitHub and both carrying nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
                 group("CLIPBOARD & SESSION") {
@@ -341,9 +347,9 @@ struct StudioView: View {
                     divider
                     settingRow("Help and discussion", detail: "github.com/jn-aman/parzr/issues") { NativeButton(title: "Open issues", kind: .utility, action: { NSWorkspace.shared.open(Support.issues) }).fixedSize() }
                     divider
-                    settingRow("Open-source licenses", detail: "Credits for the libraries and local model bundled with Parzr.") { NativeButton(title: "View notices", action: { if let url = Bundle.main.resourceURL?.appendingPathComponent("THIRD_PARTY_NOTICES") { NSWorkspace.shared.open(url) } }).fixedSize() }
+                    settingRow("Open-source licenses", detail: "Credits for the libraries bundled with Parzr and the models it downloads.") { NativeButton(title: "View notices", action: { if let url = Bundle.main.resourceURL?.appendingPathComponent("THIRD_PARTY_NOTICES") { NSWorkspace.shared.open(url) } }).fixedSize() }
                 }
-                notice("Fast grammar checks use the Parzr engine and Apple NaturalLanguage. Passage refinement and tone rewrites use bundled Qwen3.5-0.8B. No model download is needed after installation.", symbol: "cpu")
+                notice("Fast grammar checks use the Parzr engine and Apple NaturalLanguage. Smart grammar uses GECToR, and passage refinement and tone rewrites use Qwen3.5-0.8B; Parzr downloads both once (Settings, Models) and runs them on this Mac.", symbol: "cpu")
             case .playground: EmptyView()
             }
         }

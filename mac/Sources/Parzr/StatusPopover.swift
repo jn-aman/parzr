@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
+import ParzrCore
 
 struct StatusPopover: View {
     @ObservedObject var preferences = Preferences.shared
     @ObservedObject var updates = UpdateModel.shared
+    @ObservedObject var models: ModelCenter = .app
     let engineReady: Bool
     let sourceApp: NSRunningApplication?
     /// The app holding secure input, when it keeps Parzr from checking (see `SecureInput`).
@@ -18,6 +20,7 @@ struct StatusPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 15) {
             UpdateRow(model: updates)
+            if !models.isReady { ModelStatus(center: models, compact: true).padding(12).graphiteSurface() }
             HStack { Brand(); Spacer(); Circle().fill(engineReady ? Color.mintAccent : Color.textSecondary).frame(width: 6, height: 6) }
             HStack(spacing: 6) { Image(systemName: "lock"); Text("Local writing assistant"); Spacer(); Text("v\(Support.version)") }.font(.system(size: 10)).foregroundStyle(Color.textSecondary)
             VStack(spacing: 10) {
