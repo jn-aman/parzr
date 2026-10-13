@@ -52,6 +52,75 @@ pub struct Gates {
     /// A held-back tag also holds the verb-form and agreement tags this many words around it
     /// ("Did you eat" to "Have you eaten" must not become "Did you eaten").
     pub verb_window: usize,
+    /// How sure the detector must be that the sentence has an error at all (its most likely wrong
+    /// word) before a tag of a class that clean prose often draws gets applied. Calibrated on the
+    /// corrected sentences of the mined corpora against the fixes on their dev pairs.
+    pub evidence: Evidence,
+    /// Commas only close a sentence's introduction, and no quote mark is added: elsewhere a comma
+    /// is the writer's style (published prose leaves out most of the ones the model adds), and an
+    /// added quote mark is nearly always wrong.
+    pub context: bool,
+}
+/// Floors on the sentence's detection probability per tag class (see `Gates::evidence`).
+#[derive(Clone, Copy)]
+pub struct Evidence {
+    /// A comma after an introduction ("For example, the form...").
+    pub comma: f32,
+    /// A verb form ("go" to "went", "work" to "works", "eat" to "eaten").
+    pub verb: f32,
+    /// "the", "a" or "an" taken out: most of the model's deletions in clean text drop a "the"
+    /// the writer wanted ("in the late 1990s").
+    pub article_delete: f32,
+    /// One preposition for another ("on" for "in").
+    pub preposition: f32,
+    /// Any other word or mark taken out, or a word added that is not an article or preposition.
+    pub other_word: f32,
+}
+impl Evidence {
+    #[cfg(test)]
+    const NONE: Evidence = Evidence {
+        comma: 0.0,
+        verb: 0.0,
+        article_delete: 0.0,
+        preposition: 0.0,
+        other_word: 0.0,
+    };
+    fn floor(&self, label: &str, token: &str) -> f32 {
+        let lower = token.to_lowercase();
+        let preposition = |w: &str| PREPOSITIONS.contains(&w.to_lowercase().as_str());
+        let article = ["the", "a", "an"].contains(&lower.as_str());
+        if label == "$APPEND_," {
+            self.comma
+        } else if label.starts_with("$TRANSFORM_VERB_") {
+            self.verb
+        } else if label == "$DELETE" {
+            if article {
+                self.article_delete
+            } else if preposition(token) {
+                0.0
+            } else {
+                self.other_word
+            }
+        } else if let Some(to) = label.strip_prefix("$REPLACE_") {
+            if preposition(to) && preposition(token) {
+                self.preposition
+            } else {
+                0.0
+            }
+        } else if let Some(w) = label.strip_prefix("$APPEND_") {
+            let w = w.to_lowercase();
+            if w.chars().any(char::is_alphanumeric)
+                && !preposition(&w)
+                && !["the", "a", "an"].contains(&w.as_str())
+            {
+                self.other_word
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        }
+    }
 }
 impl Gates {
     #[cfg(test)]
@@ -63,6 +132,8 @@ impl Gates {
         quantity: 0.0,
         append_word: 0.0,
         verb_window: 0,
+        evidence: Evidence::NONE,
+        context: false,
     };
     pub const PRODUCTION: Gates = Gates {
         detection: 0.3,
@@ -72,6 +143,14 @@ impl Gates {
         quantity: 0.7,
         append_word: 0.8,
         verb_window: 2,
+        evidence: Evidence {
+            comma: 0.85,
+            verb: 0.85,
+            article_delete: 0.9,
+            preposition: 0.85,
+            other_word: 0.8,
+        },
+        context: true,
     };
     /// The probability a tag on `token` needs; MIN_PROBABILITY unless its class has its own floor.
     fn floor(&self, label: &str, token: &str) -> f32 {
@@ -231,6 +310,7 @@ impl Gec {
             return None;
         }
         let mut worst = 0f32;
+        let mut incs: Vec<f32> = vec![];
         let mut tags = vec![];
         let mut held: Vec<usize> = vec![];
         let g = self.gates;
@@ -250,6 +330,7 @@ impl Gec {
             let (a, b) = (detect[p * 2], detect[p * 2 + 1]);
             let incorrect = 1.0 / (1.0 + (a - b).exp());
             worst = worst.max(incorrect);
+            incs.push(incorrect);
             if best_p <= keep_p + KEEP_CONFIDENCE {
                 tags.push((self.keep, 1.0));
                 continue;
@@ -262,6 +343,29 @@ impl Gec {
                 continue;
             }
             tags.push((at, best_p));
+        }
+        // Classes that clean prose draws need a sentence the detector is sure is wrong somewhere,
+        // and a comma only closes an introduction.
+        // A misspelled word is the rules' to fix and says nothing about the grammar around it.
+        let evidence = (1..incs.len())
+            .filter(|&i| {
+                let t = tokens.get(i).map_or("", String::as_str);
+                !t.chars().all(char::is_alphabetic) || spelling::known(t)
+            })
+            .map(|i| incs[i])
+            .fold(0f32, f32::max);
+        for (i, tag) in tags.iter_mut().enumerate() {
+            let label = self.labels.get(tag.0).map_or("", String::as_str);
+            let token = tokens.get(i).map_or("", String::as_str);
+            if tag.0 == self.keep || label.is_empty() {
+                continue;
+            }
+            if evidence.max(incs.get(i).copied().unwrap_or(0.0)) < g.evidence.floor(label, token) {
+                held.push(i);
+                *tag = (self.keep, 1.0);
+            } else if g.context && !in_context(tokens, i, label) {
+                *tag = (self.keep, 1.0);
+            }
         }
         // Corrections lean on their neighbours: a held-back tag takes the verb-form tags near it along.
         for h in held {
@@ -398,6 +502,203 @@ impl Gec {
     }
 }
 
+/// Phrases that open a sentence and take a comma after them ("For example, ...").
+const INTRODUCTIONS: [&str; 71] = [
+    "for example",
+    "for instance",
+    "in addition",
+    "as a result",
+    "in fact",
+    "on the other hand",
+    "in other words",
+    "of course",
+    "by the way",
+    "in conclusion",
+    "in my opinion",
+    "in general",
+    "in particular",
+    "above all",
+    "after all",
+    "first of all",
+    "at first",
+    "in short",
+    "in summary",
+    "in contrast",
+    "as you know",
+    "as you may know",
+    "just so you know",
+    "to be honest",
+    "in the end",
+    "at the same time",
+    "in this case",
+    "in that case",
+    "on the contrary",
+    "in my view",
+    "to sum up",
+    "all in all",
+    "in the meantime",
+    "for this reason",
+    "on the one hand",
+    "in the past",
+    "in the future",
+    "these days",
+    "as far as i know",
+    "to conclude",
+    "firstly",
+    "secondly",
+    "thirdly",
+    "finally",
+    "lastly",
+    "also",
+    "besides",
+    "furthermore",
+    "moreover",
+    "nowadays",
+    "however",
+    "therefore",
+    "thus",
+    "hence",
+    "instead",
+    "unfortunately",
+    "fortunately",
+    "actually",
+    "basically",
+    "currently",
+    "meanwhile",
+    "otherwise",
+    "consequently",
+    "nevertheless",
+    "nonetheless",
+    "additionally",
+    "similarly",
+    "likewise",
+    "personally",
+    "honestly",
+    "overall",
+];
+/// Words that open an introductory clause ("If you like animals, ...").
+const OPENERS: [&str; 11] = [
+    "if", "when", "while", "although", "though", "because", "unless", "once", "whenever",
+    "whereas", "whether",
+];
+/// Words that open a clause or a plain phrase ("After he left" or "After the war"); only the clause
+/// (a pronoun or an "-ing" word next) takes the comma.
+const TIME_OPENERS: [&str; 4] = ["after", "before", "since", "until"];
+const PRONOUNS: [&str; 7] = ["i", "you", "he", "she", "we", "they", "it"];
+/// Words ending in "-ing" that are no verb ("In the morning").
+const ING_NOUNS: [&str; 14] = [
+    "morning",
+    "evening",
+    "spring",
+    "something",
+    "nothing",
+    "anything",
+    "everything",
+    "building",
+    "wedding",
+    "meeting",
+    "beginning",
+    "ending",
+    "during",
+    "following",
+];
+/// Auxiliaries and modals and their other tense ("has" and "had", "can" and "could").
+const TENSE_PAIRS: [(&str, &str); 16] = [
+    ("has", "had"),
+    ("have", "had"),
+    ("is", "was"),
+    ("are", "were"),
+    ("do", "did"),
+    ("does", "did"),
+    ("can", "could"),
+    ("will", "would"),
+    ("may", "might"),
+    ("isn't", "wasn't"),
+    ("aren't", "weren't"),
+    ("don't", "didn't"),
+    ("doesn't", "didn't"),
+    ("can't", "couldn't"),
+    ("won't", "wouldn't"),
+    ("hasn't", "hadn't"),
+];
+/// Words that pin a sentence to a time, so its verbs have to follow ("last night", "tomorrow").
+const TIME_WORDS: [&str; 13] = [
+    "yesterday",
+    "ago",
+    "last",
+    "earlier",
+    "previously",
+    "tomorrow",
+    "tonight",
+    "today",
+    "now",
+    "next",
+    "currently",
+    "nowadays",
+    "soon",
+];
+/// Whether a tag fits where it stands. A comma only closes the sentence's introduction; no quote
+/// mark is added; no article opens a sentence ("Weather looks nice" is how people write chat); and
+/// a verb moves to another tense only when the sentence names a time ("what he has to say" is the
+/// writer's tense, "Last year I choose" is not).
+fn in_context(tokens: &[String], at: usize, label: &str) -> bool {
+    let token = tokens.get(at).map_or("", String::as_str).to_lowercase();
+    if label == "$APPEND_," {
+        return introduction(tokens, at);
+    }
+    if ["$APPEND_\"", "$APPEND_'"].contains(&label) {
+        return false;
+    }
+    if at == 0
+        && label
+            .strip_prefix("$APPEND_")
+            .is_some_and(|w| ["the", "a", "an"].contains(&w.to_lowercase().as_str()))
+    {
+        return false;
+    }
+    let tense = label.strip_prefix("$REPLACE_").is_some_and(|to| {
+        let (a, b) = (token.replace('’', "'"), to.to_lowercase());
+        TENSE_PAIRS
+            .iter()
+            .any(|(x, y)| (a == *x && b == *y) || (a == *y && b == *x))
+    }) || [
+        "$TRANSFORM_VERB_VB_VBD",
+        "$TRANSFORM_VERB_VBZ_VBD",
+        "$TRANSFORM_VERB_VBD_VB",
+        "$TRANSFORM_VERB_VBD_VBZ",
+    ]
+    .contains(&label);
+    !tense
+        || tokens
+            .iter()
+            .any(|t| TIME_WORDS.contains(&t.to_lowercase().as_str()))
+}
+/// Whether a comma after word `at` (of `$START` and the words) closes the sentence's introduction:
+/// a set phrase ("In addition"), a clause ("If you like animals"), or an infinitive or "-ing"
+/// phrase ("To reset your password", "Before deploying"). A comma anywhere else, or after a plain
+/// phrase of time or place ("In 2007", "After the war"), is left to the writer.
+fn introduction(tokens: &[String], at: usize) -> bool {
+    let Some(words) = tokens.get(1..=at) else {
+        return false;
+    };
+    if words.is_empty() || words.iter().any(|w| !w.chars().any(char::is_alphanumeric)) {
+        return false;
+    }
+    let lower: Vec<String> = words.iter().map(|w| w.to_lowercase()).collect();
+    let phrase = lower.join(" ");
+    let gerund = |w: &str| w.len() > 5 && w.ends_with("ing") && !ING_NOUNS.contains(&w);
+    INTRODUCTIONS.contains(&phrase.as_str())
+        || phrase.starts_with("according to ")
+        || lower.len() >= 2
+            && (OPENERS.contains(&lower[0].as_str())
+                || lower[0] == "to"
+                || gerund(&lower[0])
+                || TIME_OPENERS.contains(&lower[0].as_str())
+                    && PRONOUNS.contains(&lower[1].as_str())
+                || (PREPOSITIONS.contains(&lower[0].as_str())
+                    || TIME_OPENERS.contains(&lower[0].as_str()))
+                    && gerund(&lower[1]))
+}
 /// $TRANSFORM_AGREEMENT_SINGULAR drops the final "s". "Its so good" is read as "It is", and the
 /// word meant there is "it's", not "it".
 fn singular_of(token: &str) -> String {
@@ -736,6 +1037,67 @@ fn sentence_initial(text: &str, at: usize) -> bool {
         || before.ends_with(['.', '!', '?', '\n', ':'])
             && !before.ends_with("..")
             && !before.ends_with('…')
+}
+/// "but ill watch it": an "ill" that opens a clause has no subject before it and stands for "I'll",
+/// so "will" is no fix ("Our team ill review" is "will").
+fn ill_for_i_will(text: &str, at: usize, original: &str, replacement: &str) -> bool {
+    if !original.trim().eq_ignore_ascii_case("ill") || replacement.trim() == "I'll" {
+        return false;
+    }
+    let before = text[..at].trim_end();
+    let last = before
+        .rsplit(|c: char| !c.is_alphanumeric() && c != '\'')
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    before.is_empty()
+        || before.ends_with([',', '.', '!', '?', ';', ':'])
+        || [
+            "but", "and", "so", "or", "then", "because", "if", "when", "maybe", "ok", "okay",
+            "yes", "sure",
+        ]
+        .contains(&last.as_str())
+}
+/// Set phrases of office mail that go without articles ("by end of day").
+const ARTICLELESS: [&str; 8] = [
+    "end of day",
+    "end of business",
+    "close of business",
+    "end of week",
+    "end of month",
+    "end of quarter",
+    "end of year",
+    "end of play",
+];
+/// An article added inside or right before one of the ARTICLELESS phrases.
+fn articleless(text: &str, edit: Span, replacement: &str) -> bool {
+    let added = replacement.trim().to_lowercase();
+    if edit.0 != edit.1 || !["the", "a", "an"].contains(&added.as_str()) {
+        return false;
+    }
+    let lower = text.to_lowercase();
+    ARTICLELESS.iter().any(|p| {
+        lower
+            .match_indices(p)
+            .any(|(at, _)| at <= edit.0 + 1 && edit.0 <= at + p.len())
+    })
+}
+/// Quoted words and asides in parentheses: titles, citations and names the writer copied as they are.
+fn quoted_spans(text: &str) -> Vec<Span> {
+    let mut out = vec![];
+    let mut open: Option<(usize, char)> = None;
+    for (i, c) in text.char_indices() {
+        match (open, c) {
+            (None, '"' | '“' | '(') => open = Some((i, c)),
+            (Some((a, '"')), '"') | (Some((a, '“')), '”') | (Some((a, '(')), ')') => {
+                out.push((a, i + c.len_utf8()));
+                open = None;
+            }
+            (_, '\n') => open = None,
+            _ => {}
+        }
+    }
+    out
 }
 fn overlaps(text: &str, a: Span, b: Span) -> bool {
     // The same gap written either side of a space is one position.
@@ -1097,6 +1459,7 @@ fn merge(
             .filter_map(|r| span(r.start_utf16, r.end_utf16)),
     );
     let tokens = crate::tokenizer::tokenize(text, &req.tokens);
+    let quoted = quoted_spans(text);
     let mut capitalized: Vec<Span> = vec![];
     let mut unknown: Vec<Span> = vec![];
     // Lowercase words that are also given names ("will", "mark"): written lowercase they may be names.
@@ -1147,16 +1510,21 @@ fn merge(
         // The writer's choices, not errors: one or many after a determiner, which article, the part of speech.
         // A verb-form tag inflects a verb ("This app crash" to "crashes"): no noun was made plural.
         // Right after a determiner the word is a noun whatever the tag ("reading the document").
-        let as_verb = e.verb
-            && spelling::flags(original.trim()) & 4 != 0
-            && !DETERMINERS.contains(
-                &text[..edit.0]
-                    .split_whitespace()
-                    .next_back()
-                    .unwrap_or("")
-                    .to_lowercase()
-                    .as_str(),
-            );
+        // "the requested detail": after a determiner and a participle the word is a noun too.
+        let back: Vec<String> = text[..edit.0]
+            .split_whitespace()
+            .rev()
+            .take(2)
+            .map(str::to_lowercase)
+            .collect();
+        let after_determiner = back
+            .first()
+            .is_some_and(|w| DETERMINERS.contains(&w.as_str()))
+            || back.first().is_some_and(|w| w.ends_with("ed"))
+                && back
+                    .get(1)
+                    .is_some_and(|w| DETERMINERS.contains(&w.as_str()));
+        let as_verb = e.verb && spelling::flags(original.trim()) & 4 != 0 && !after_determiner;
         let writers_choice = !as_verb
             && pluralizes_after_determiner(text, edit.0, original, &e.replacement)
             || verb_form_after_determiner(text, edit.0, original, &e.replacement);
@@ -1167,7 +1535,10 @@ fn merge(
             || touches(edit, &capitalized)
             || (original != e.replacement
                 && original.to_lowercase() == e.replacement.to_lowercase()
-                && !sentence_initial(text, edit.0))
+                && (!sentence_initial(text, edit.0) || !original.starts_with(char::is_lowercase)))
+            || articleless(text, edit, &e.replacement)
+            || ill_for_i_will(text, edit.0, original, &e.replacement)
+            || touches(edit, &quoted)
             || harmful(original, &e.replacement)
                 && (touches(edit, &unknown) || touches(edit, &nameish))
             || writers_choice
@@ -1493,9 +1864,54 @@ mod tests {
             )
             .is_empty()
         );
+        // A sentence start may take its capital, but never lose it ("Want to try" stays).
         assert_eq!(
             guarded("she went home.", &[("she", "She")], vec![], &[]),
             ["she>She"]
+        );
+        assert!(guarded("Want to try a nap.", &[("Want", "want")], vec![], &[]).is_empty());
+        // Nothing changes inside quotes or parentheses; a sentence break in the text comes through.
+        let stop = |text: &str, at: usize| {
+            let req = Request {
+                text: text.into(),
+                ..Request::default()
+            };
+            let raw = Raw {
+                start: at,
+                end: at,
+                replacement: ".".into(),
+                confidence: 0.9,
+                verb: false,
+            };
+            merge(&req, &[], vec![], vec![(0, text.len(), raw)]).len()
+        };
+        assert_eq!(stop("Sign the form we need it.", 13), 1);
+        assert!(
+            guarded(
+                "He wrote \"the cat go home\" in 1990.",
+                &[("go", "goes")],
+                vec![],
+                &[]
+            )
+            .is_empty()
+        );
+        assert!(
+            guarded(
+                "It (the cat go home) works.",
+                &[("go", "goes")],
+                vec![],
+                &[]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            guarded(
+                "He wrote \"cats\" and go home.",
+                &[("go", "goes")],
+                vec![],
+                &[]
+            ),
+            ["go>goes"]
         );
         // A word the rules do not know may not be rewritten, and neither may a lowercase given name.
         assert!(guarded("She wents to qzxv now.", &[("qzxv", "quartz")], vec![], &[]).is_empty());
@@ -1582,6 +1998,91 @@ mod tests {
         assert_eq!(g.floor("$REPLACE_in", "on"), 0.83);
         assert_eq!(g.floor("$DELETE", "the"), MIN_PROBABILITY);
         assert_eq!(Gates::NONE.floor("$REPLACE_are", "is"), MIN_PROBABILITY);
+        // Classes clean prose draws need a sentence the detector is sure is wrong somewhere.
+        let e = g.evidence;
+        assert_eq!(e.floor("$APPEND_,", "example"), 0.85);
+        assert_eq!(e.floor("$TRANSFORM_VERB_VB_VBZ", "work"), 0.85);
+        assert_eq!(e.floor("$DELETE", "The"), 0.9);
+        assert_eq!(e.floor("$DELETE", "to"), 0.0);
+        assert_eq!(e.floor("$DELETE", ","), 0.8);
+        assert_eq!(e.floor("$REPLACE_in", "on"), 0.85);
+        assert_eq!(e.floor("$REPLACE_are", "is"), 0.0);
+        assert_eq!(e.floor("$APPEND_been", "has"), 0.8);
+        assert_eq!(e.floor("$APPEND_the", "of"), 0.0);
+        assert_eq!(e.floor("$APPEND_to", "listen"), 0.0);
+    }
+    #[test]
+    fn commas_only_close_an_introduction() {
+        let at = |s: &str, word: &str| {
+            let t: Vec<String> = std::iter::once("$START".to_owned())
+                .chain(s.split(' ').map(str::to_owned))
+                .collect();
+            let k = t.iter().position(|w| w == word).unwrap();
+            introduction(&t, k)
+        };
+        for (s, w) in [
+            ("For example the form asks twice .", "example"),
+            ("According to the report revenue is up .", "report"),
+            ("If you like animals you will enjoy it .", "animals"),
+            ("To reset your password click the link .", "password"),
+            ("Before deploying make sure it runs .", "deploying"),
+            ("However the castle stood .", "However"),
+        ] {
+            assert!(at(s, w), "{s}");
+        }
+        for (s, w) in [
+            ("In 2007 Perez was chosen .", "2007"),
+            ("After the war he returned .", "war"),
+            ("In the morning we left .", "morning"),
+            ("I moved here from Austin Texas last year .", "Austin"),
+            ("So , to conclude we agree .", "conclude"),
+            ("She came and he left .", "came"),
+        ] {
+            assert!(!at(s, w), "{s}");
+        }
+    }
+    #[test]
+    fn tags_fit_their_place() {
+        let t = |s: &str| -> Vec<String> {
+            std::iter::once("$START".to_owned())
+                .chain(s.split(' ').map(str::to_owned))
+                .collect()
+        };
+        let what = t("I want to hear what he has to say .");
+        assert!(!in_context(&what, 7, "$REPLACE_had"));
+        assert!(in_context(&what, 7, "$REPLACE_have"));
+        let last = t("Last year I choose the wrong option .");
+        assert!(in_context(&last, 4, "$TRANSFORM_VERB_VB_VBD"));
+        assert!(!in_context(
+            &t("I choose the wrong option ."),
+            2,
+            "$TRANSFORM_VERB_VB_VBD"
+        ));
+        assert!(!in_context(&t("Weather looks nice ."), 0, "$APPEND_The"));
+        assert!(in_context(&t("I went to store ."), 3, "$APPEND_the"));
+        assert!(!in_context(&t("the teams work ."), 2, "$APPEND_'"));
+        // Chat and office phrasing keeps its missing articles; "ill" may be "I'll".
+        let insert = |text: &str, at: usize| {
+            let req = Request {
+                text: text.into(),
+                ..Request::default()
+            };
+            let raw = Raw {
+                start: at,
+                end: at,
+                replacement: "the ".into(),
+                confidence: 0.9,
+                verb: false,
+            };
+            merge(&req, &[], vec![], vec![(0, text.len(), raw)]).len()
+        };
+        assert_eq!(insert("We need to decide by end of day.", 21), 0);
+        assert_eq!(insert("We need to go to store today.", 17), 1);
+        assert!(guarded("but ill watch it", &[("ill", "will")], vec![], &[]).is_empty());
+        assert_eq!(
+            guarded("Our team ill review it.", &[("ill", "will")], vec![], &[]),
+            ["ill>will"]
+        );
     }
     #[test]
     fn guards_keep_meaning_number_and_the_rules_intact() {
@@ -1602,6 +2103,10 @@ mod tests {
             merge(&req, &[], vec![], vec![(0, text.len(), raw)]).len()
         };
         assert_eq!(verb("This app crash often.", "crash", "crashes"), 1);
+        assert_eq!(
+            verb("It includes the requested detail.", "detail", "details"),
+            0
+        );
         assert_eq!(
             verb("She read the document today.", "document", "documents"),
             0
