@@ -52,11 +52,11 @@ Score it through the app's own path (ParzrCore's `WritingEngine` with Apple Natu
 swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \
   scripts/heldout-native.swift -o dist/qa/heldout-native
 PARZR_ENGINE_PATH=$PWD/engine/target/release/libparzr_engine.dylib \
-PARZR_MODEL_RUNTIME=$PWD/dist/model/libparzr_model.dylib PARZR_MODEL_PATH=$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf \
+PARZR_MODEL_RUNTIME=$PWD/dist/model/libparzr_model.dylib PARZR_MODELS_DIR=$PWD/dist/models \
   python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split dev --layers rules,gec,deep
 ```
 
-Layers: `rules` (rules only), `gec` (rules and Smart grammar, what runs while typing) and `deep` (Option+Space: rules, Smart grammar and the bundled language model). Each error item is **fixed** (output equals the reference or an accepted alternative), **flagged** (every error span is touched), **wrong** or **missed**; a clean item that changes is a **false alarm**. Results go to `dist/qa/heldout/` (summary.md, per-item JSONL and false alarms).
+Layers: `rules` (rules only), `gec` (rules and Smart grammar, what runs while typing) and `deep` (Option+Space: rules, Smart grammar and the language model). The models come from `python3 scripts/model-pack.py fetch` (into `dist/models`). Each error item is **fixed** (output equals the reference or an accepted alternative), **flagged** (every error span is touched), **wrong** or **missed**; a clean item that changes is a **false alarm**. Results go to `dist/qa/heldout/` (summary.md, per-item JSONL and false alarms).
 
 Test split, v0.3.6 against the build that added this set:
 

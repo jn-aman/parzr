@@ -1,0 +1,138 @@
+{
+  "schema": 1,
+  "packs": [
+    {
+      "id": "essential",
+      "version": "1",
+      "title": "Smart grammar and rewrites",
+      "purpose": "Smart grammar while you type (GECToR on the Neural Engine) and Option+Space checks and tone rewrites (Qwen3.5-0.8B). Without it Parzr checks with its rules only.",
+      "license": "Qwen3.5: Apache-2.0. GECToR weights: non-commercial use only (see THIRD_PARTY_NOTICES).",
+      "provides": {
+        "writing_model": "Qwen3.5-0.8B-Q5_K_M.gguf",
+        "grammar_model": "gector"
+      },
+      "files": [
+        {
+          "path": "Qwen3.5-0.8B-Q5_K_M.gguf",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/Qwen3.5-0.8B-Q5_K_M.gguf",
+          "bytes": 592636704,
+          "sha256": "7c4692492a3f74a4678ee31f9ab15e14341a1fea4bf9aca975c73f7f5b3884a4",
+          "name": "Qwen3.5-0.8B Q5_K_M",
+          "version": "ggml-org/Qwen3.5-0.8B-GGUF@8fea620810c4afa23dd6443f999a48574c1611a3, llama-quantize Q5_K_M",
+          "license": "Apache-2.0",
+          "purpose": "Option+Space checks, tone rewrites and whole-sentence word slips"
+        },
+        {
+          "path": "gector/manifest.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.manifest.json",
+          "bytes": 2108,
+          "sha256": "2eb70f85bfb3c3831693d6cd1a03416f741ba75dba20bbe6b601e2fd0740f385",
+          "name": "GECToR manifest.json",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/added_tokens.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.added_tokens.json",
+          "bytes": 22,
+          "sha256": "91266acf7dfd68850611fe5a7be7f7345fbf480e85ee497e70c4d2a80754b351",
+          "name": "GECToR added_tokens.json",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/gector.mlmodelc/analytics/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.gector.mlmodelc.analytics.coremldata.bin",
+          "bytes": 243,
+          "sha256": "cbf77fe83d69d98704cccf034b9bd0132aa0dabaeca08af9481cc1cd07180e11",
+          "name": "GECToR roberta-base 5k (Core ML int8)",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Non-commercial (model card); vocabularies Apache-2.0 / MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/gector.mlmodelc/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.gector.mlmodelc.coremldata.bin",
+          "bytes": 406,
+          "sha256": "07c000c5b38abe2dd6382b3d9ad17421d1e8473d15818527268e87a81d6e0c27",
+          "name": "GECToR roberta-base 5k (Core ML int8)",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Non-commercial (model card); vocabularies Apache-2.0 / MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/gector.mlmodelc/metadata.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.gector.mlmodelc.metadata.json",
+          "bytes": 2345,
+          "sha256": "17966c327ff280f1b4256ac6d19fb299690809e508baeb2b5c11b2995b332903",
+          "name": "GECToR roberta-base 5k (Core ML int8)",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Non-commercial (model card); vocabularies Apache-2.0 / MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/gector.mlmodelc/model.mil",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.gector.mlmodelc.model.mil",
+          "bytes": 189753,
+          "sha256": "455cdc349540a0c50b3ed9ea2a2c093633fac13c2e15742bdb01cc3f7c9452ed",
+          "name": "GECToR roberta-base 5k (Core ML int8)",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Non-commercial (model card); vocabularies Apache-2.0 / MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/gector.mlmodelc/weights/weight.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.gector.mlmodelc.weights.weight.bin",
+          "bytes": 128447040,
+          "sha256": "2001097edf2886ab2d7a04461d88d344a94e622c78c749645b98ffad1bc5dcca",
+          "name": "GECToR roberta-base 5k (Core ML int8)",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Non-commercial (model card); vocabularies Apache-2.0 / MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/labels.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.labels.txt",
+          "bytes": 80457,
+          "sha256": "ccea109c057b8fbe785a2eea9c2df47101dec376c8e6ea7033701e0c29d715b8",
+          "name": "GECToR labels.txt",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/merges.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.merges.txt",
+          "bytes": 456356,
+          "sha256": "fe36cab26d4f4421ed725e10a2e9ddb7f799449c603a96e7f29b5a3c82a95862",
+          "name": "GECToR merges.txt",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "MIT",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/verb-form-vocab.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.verb-form-vocab.txt",
+          "bytes": 4390076,
+          "sha256": "5906804ec8a1acd8cbfc2918522bf429ce5edded8bbc46ffc2be861d280d3abf",
+          "name": "GECToR verb-form-vocab.txt",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Smart grammar while you type"
+        },
+        {
+          "path": "gector/vocab.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-1/gector.vocab.json",
+          "bytes": 798293,
+          "sha256": "ed19656ea1707df69134c4af35c8ceda2cc9860bf2c3495026153a133670ab5e",
+          "name": "GECToR vocab.json",
+          "version": "gotutiyan/gector-roberta-base-5k@adaac6fb919431fb5a038b1e449055ae638613a4, gector-v1 int8",
+          "license": "MIT",
+          "purpose": "Smart grammar while you type"
+        }
+      ]
+    }
+  ]
+}

@@ -26,9 +26,10 @@ final class OnboardingTests: XCTestCase {
         }
     }
     func testStepOrderAndBounds() {
-        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .accessibility, .contacts, .login, .tryIt, .done])
+        XCTAssertEqual(OnboardingStep.allCases, [.welcome, .accessibility, .models, .contacts, .login, .tryIt, .done])
         XCTAssertNil(OnboardingStep.welcome.previous); XCTAssertNil(OnboardingStep.done.next)
-        XCTAssertEqual(OnboardingStep.contacts.previous, .accessibility); XCTAssertEqual(OnboardingStep.contacts.next, .login)
+        XCTAssertEqual(OnboardingStep.models.previous, .accessibility, "the download step follows the permissions"); XCTAssertEqual(OnboardingStep.models.next, .contacts)
+        XCTAssertEqual(OnboardingStep.contacts.previous, .models); XCTAssertEqual(OnboardingStep.contacts.next, .login)
     }
     func testModelNavigationFollowsTheLiveGrant() throws {
         let (prefs, cleanup) = try prefs(); defer { cleanup() }
@@ -38,8 +39,9 @@ final class OnboardingTests: XCTestCase {
         model.next(); XCTAssertEqual(model.step, .accessibility)
         XCTAssertFalse(model.canAdvance); model.next(); XCTAssertEqual(model.step, .accessibility, "Next does nothing without the grant")
         prefs.permissionGranted = true // the watcher or trust notification flips this while the window is open
-        XCTAssertTrue(model.canAdvance); model.next(); XCTAssertEqual(model.step, .contacts)
-        model.back(); XCTAssertEqual(model.step, .accessibility)
+        XCTAssertTrue(model.canAdvance); model.next(); XCTAssertEqual(model.step, .models)
+        XCTAssertTrue(model.canAdvance, "the download never blocks setup, offline or not"); model.next(); XCTAssertEqual(model.step, .contacts)
+        model.back(); model.back(); XCTAssertEqual(model.step, .accessibility)
         prefs.permissionGranted = false
         model.step = .accessibility; model.next(); XCTAssertEqual(model.step, .accessibility, "a revoked grant blocks Next again; there is no skip")
         model.step = .done; model.next(); XCTAssertEqual(model.step, .done)

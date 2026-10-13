@@ -401,6 +401,10 @@ fn remember(sentence: &str, verdict: Option<(Swap, f64)>, complete: bool) {
 /// The rules' (and grammar model's) plan plus the language model's swaps, which never touch an edit
 /// of theirs, a protected range, a name or a user dictionary word.
 pub fn combine(req: &Request, protected: &[TextRange], plan: Vec<Edit>) -> Vec<Edit> {
+    // Before the model pack is downloaded there is nothing to wait for: no pending follow-ups.
+    if !crate::model::model_available() {
+        return plan;
+    }
     combine_with(req, protected, plan, native)
 }
 /// Scores a sentence and caches its verdict. Explicit checks call it directly; typing runs it in

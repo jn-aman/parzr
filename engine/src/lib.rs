@@ -20,6 +20,8 @@ mod meaning;
 mod model;
 mod morphology;
 mod names;
+#[cfg_attr(not(feature = "local-model"), allow(dead_code))]
+pub mod packs;
 mod pipeline;
 mod punctuation;
 mod real_word;
@@ -164,6 +166,15 @@ pub extern "C" fn parzr_gec_warm() -> i32 {
         return 1;
     }
     0
+}
+
+/// The pinned model manifest compiled into this engine (`engine/models.json`), as JSON. The app
+/// downloads and verifies what it lists. Free the returned string with `parzr_string_free`.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_model_manifest() -> *mut c_char {
+    CString::new(packs::MANIFEST_JSON)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
 }
 
 fn yes() -> bool {

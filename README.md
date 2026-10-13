@@ -32,7 +32,7 @@
 
 Parzr underlines mistakes as you write, in the apps you already use. Click the flagged word and the card shows the **whole corrected sentence**; press Return and every error in it is fixed. Select any passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct.
 
-Everything runs on your Mac. No account, no cloud, no telemetry, no extension. Your writing never leaves it; the app's only network request is an hourly check for a new version, which you can turn off.
+Everything runs on your Mac. No account, no cloud, no telemetry, no extension. Your writing never leaves it. The app makes two kinds of network request, both plain downloads from GitHub that carry nothing about you or your writing: an hourly check for a new version (you can turn it off), and a one-time download of its two models (727 MB) when you set it up.
 
 > **Public beta.** Signed and notarized by Apple. English coverage is growing and Parzr will not catch every error. Please [tell us what you find](https://github.com/jn-aman/parzr/issues).
 
@@ -91,7 +91,7 @@ Fix keeps your voice. Professional, Friendly, Concise and Direct rewrite deliber
 <td valign="top">
 
 **Private by construction**<br>
-Writing stays in memory on your Mac. Both models ship inside the app; no model downloads at runtime and nothing is logged.
+Writing stays in memory on your Mac. The two models download once from GitHub, are checked against pinned hashes and then run offline; nothing is logged.
 
 </td>
 </tr>
@@ -107,7 +107,7 @@ Writing stays in memory on your Mac. Both models ship inside the app; no model d
 
 1. [Download **Parzr.dmg**](https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg), the newest release (each [release](https://github.com/jn-aman/parzr/releases/latest) also has it as `Parzr-x.y.z.dmg`, with checksums in `SHA256SUMS`).
 2. Drag **Parzr** to **Applications** and open it.
-3. The welcome guide asks for **Accessibility** (required) and, if you like, **Contacts**. No restart needed.
+3. The welcome guide asks for **Accessibility** (required), downloads the two models (727 MB, once; Parzr checks with its rules until they arrive) and, if you like, asks for **Contacts**. No restart needed.
 
 Parzr updates itself from 0.3 on, so if you have 0.2.x, install 0.3 once by hand. From then on it checks GitHub once an hour, downloads a new version quietly and installs it when you quit Parzr or after five idle minutes, with a 10 second countdown you can cancel. Turn either off in **Settings, General, Updates**; **Check for Updates** in the menu bar and About works any time.
 
@@ -142,12 +142,12 @@ Step by step instructions, what was tested and the from-source routes are in [in
 
 ## How it works
 
-<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, then asks the GECToR grammar model (gec.rs) about sentences it has not seen, and gets back minimal UTF-16 edits. A native runtime runs GECToR through Core ML on the Apple Neural Engine, always loaded, about 2 ms per sentence, and Qwen3.5-0.8B through llama.cpp on Metal only for Option+Space and tones. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Google Docs, which draws on a canvas, is read through its hidden braille text area with words placed from the caret, and fixes are typed after selecting. Everything stays inside the Mac while checking text, with no network. The one request Parzr makes is the hourly update check: Sparkle fetches the signed appcast from GitHub over HTTPS, sends nothing about you or your writing, and can be turned off."></p>
+<p align="center"><img src="docs/media/architecture.png" width="900" alt="Parzr architecture. Text in Safari, Chrome, Slack, Mail or Word is read through macOS Accessibility (AXValue, AXSelectedTextRange, AXBoundsForRange) by the Swift app. The app sends a JSON request over a C FFI to a Rust engine that runs a tokenizer, a name index, phrase and contextual rules, punctuation and structure checks, spelling and a fixed-point pipeline, then asks the GECToR grammar model (gec.rs) about sentences it has not seen, and gets back minimal UTF-16 edits. A native runtime runs GECToR through Core ML on the Apple Neural Engine, always loaded, about 2 ms per sentence, and Qwen3.5-0.8B through llama.cpp on Metal only for Option+Space and tones. Results come back as red and blue underlines and a correction card, and fixes are written back through Accessibility. Google Docs, which draws on a canvas, is read through its hidden braille text area with words placed from the caret, and fixes are typed after selecting. Everything stays inside the Mac while checking text, with no network. Parzr makes two kinds of request, both to GitHub over HTTPS and sending nothing about you or your writing: the hourly update check (Sparkle fetches the signed appcast, and it can be turned off), and the one-time download of the two models, checked against pinned SHA-256 hashes."></p>
 
 - **As you type:** after a short pause (35 ms at the default setting, at once after a space or punctuation) Parzr reads the focused field through Accessibility, takes the paragraph you are in and sends it to a Rust engine (tokenizer, protected spans for links, code and names, phrase and context rules, verb morphology, frequency-ranked spelling, keyboard slips that land on a real word ("this os bad" to "this is bad", only when the words on both sides clearly agree), minimal UTF-16 edits that keep your formatting and Undo). Names come from your Contacts (opt-in), your document and the system spell checker. The rules answer first, in well under a millisecond for a chat message.
 - **Smart grammar:** the engine then asks GECToR, a RoBERTa-base grammar tagger (method by Grammarly, Omelianchuk et al. 2020), about each sentence it has not seen before. The model tags words (keep, replace, append, verb form, plural) instead of rewriting, runs as Core ML int8 on the Apple Neural Engine in about 2 ms per sentence, uses about 18 MB of memory, stays loaded and is prewarmed in the background after launch. Answers are cached per sentence, so typing only pays for the sentence you are editing. Its edits pass Parzr's own guards: names, links and code are never touched, case is never changed, an unknown word is never respelled, code-mixed and Hinglish sentences are left alone, edits that belong together stand or fall together, and your choices (one or many, which article, "thanks for") are not second-guessed. A rule's edit always wins over the model's.
-- **On demand:** explicit checks (Option+Space) and tone rewrites add the bundled Qwen3.5-0.8B (593 MB, offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The same model, read as a plain language model, also catches short-word slips only the whole sentence can decide ("I'll be on the office", "Got your note form Priya", "I think the already shipped it"): on explicit checks, and while you type with Smart grammar on once it is loaded (a typing check never waits more than 80 ms for it, and a cold model loads in the background). The model loads when needed and is released after 30 seconds idle, or three minutes after the last typing check.
-- **Private by construction:** the app, engine and both models make no network requests while checking text. The models ship inside the app; no model downloads at runtime. The app's only network request is an hourly check for a new version (a plain request to GitHub for a small signed update file); it sends nothing about you or your writing, GitHub sees what any download shows (your IP address and the app version), and Settings can turn it off.
+- **On demand:** explicit checks (Option+Space) and tone rewrites add Qwen3.5-0.8B (593 MB, downloaded once, then offline, llama.cpp on Metal), followed by another grammar pass; a Fix check also runs Smart grammar, tones do not. Names and links are masked from the model, guards keep it to plausible corrections (no quote or dash straightening, no optional or date commas, no mid-sentence recasing, no respelling one known word as another), and a name judge stops it from respelling a name. The same model, read as a plain language model, also catches short-word slips only the whole sentence can decide ("I'll be on the office", "Got your note form Priya", "I think the already shipped it"): on explicit checks, and while you type with Smart grammar on once it is loaded (a typing check never waits more than 80 ms for it, and a cold model loads in the background). The model loads when needed and is released after 30 seconds idle, or three minutes after the last typing check.
+- **Private by construction:** the app, engine and both models make no network requests while checking text. The app makes two kinds of request, both plain HTTPS GETs from GitHub that send nothing about you or your writing (GitHub sees what any download shows: your IP address): an hourly check for a new version (a small signed update file; Settings can turn it off), and the one-time download of the model pack, whose files are pinned by SHA-256 in the app and checked before use (Settings, Models shows them and can remove them). Until the models arrive, Parzr checks with its rules.
 - See the [detailed diagrams](docs/architecture.md) of the typing path and the explicit path, and [grammar coverage](docs/grammar-coverage.md).
 
 ## Measured, in the open
@@ -183,7 +183,7 @@ The English challenge was authored for Parzr's rules, so it shows regressions ra
 <details>
 <summary><b>Build from source</b></summary>
 
-Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, Python 3.11+ and Node 22 for the integration tests. Dependencies download at build time, including the converted GECToR model (the `gector-v1` GitHub pre-release, hash-checked by `scripts/prepare-model.py`; `scripts/convert-gector.py` rebuilds it); writing analysis always runs offline.
+Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, CMake, Python 3.11+ and Node 22 for the integration tests. The app contains no model weights: it downloads the pinned model pack (`engine/models.json`) on first use into `~/Library/Application Support/Parzr/Models`. For tests and development, `scripts/model-pack.py fetch` puts the same pack, hash-checked, in `dist/models` (`--derive-fallback` rebuilds it from the pinned upstream sources if the pack's release is unreachable; `scripts/convert-gector.py` rebuilds GECToR itself).
 
 ```sh
 python3 scripts/build.py         # dist/Parzr.app (ad-hoc signed)
@@ -199,9 +199,10 @@ python3 scripts/check-release-version.py
 cargo fmt --manifest-path engine/Cargo.toml --check
 cargo clippy --locked --manifest-path engine/Cargo.toml --all-targets -- -D warnings
 cargo test --locked --manifest-path engine/Cargo.toml
-python3 scripts/prepare-model.py
+python3 scripts/prepare-model.py               # the native runtime: dist/model/libparzr_model.dylib
+python3 scripts/model-pack.py fetch            # the models: dist/models/essential/1
 cargo build --release --locked --manifest-path engine/Cargo.toml
-export PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf"
+export PARZR_MODELS_DIR="$PWD/dist/models"     # or PARZR_MODEL_PATH=<file.gguf> (GECToR is then read from gector/ beside it)
 export PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib"
 python3 scripts/run-name-benchmark.py          # add --gec to include Smart grammar
 PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
@@ -226,4 +227,4 @@ One click: **Actions → Release → Run workflow** (or `gh workflow run release
 
 Issues and pull requests are welcome. New rules should come with error and valid-context fixtures, provenance, intent preservation and editor safety checks; see [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
-Parzr's code is licensed under [Apache-2.0](LICENSE). The bundled GECToR weights are for non-commercial use only (see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)); Parzr is free and non-commercial. Other third-party components are listed there too.
+Parzr's code is licensed under [Apache-2.0](LICENSE). The GECToR weights Parzr downloads are for non-commercial use only (see [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)); Parzr is free and non-commercial. Other third-party components are listed there too.

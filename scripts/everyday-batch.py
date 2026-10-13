@@ -39,7 +39,10 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = Path(os.environ.get("PARZR_ROOT", ROOT))
 DEFAULT_NATIVE = MAIN / "dist/batches/tools/native"
 DEFAULT_RUNTIME = MAIN / "dist/final/libparzr_model.dylib"
-DEFAULT_MODEL = Path("/Applications/Parzr.app/Contents/Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf")
+# The installed app's downloaded model pack (apps up to 0.4.12 bundled it in Resources/Model).
+DEFAULT_MODEL = next((p for p in [Path.home() / "Library/Application Support/Parzr/Models/essential/1/Qwen3.5-0.8B-Q5_K_M.gguf",
+                                  Path("/Applications/Parzr.app/Contents/Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf")] if p.exists()),
+                     MAIN / "dist/models/essential/1/Qwen3.5-0.8B-Q5_K_M.gguf")
 PATHS = {
     "typing": {"gec": True, "capitalize_names": True},
     "deep": {"gec": True, "deep": True, "capitalize_names": True},

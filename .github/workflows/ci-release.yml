@@ -69,24 +69,33 @@ jobs:
           cargo clippy --locked --manifest-path engine/Cargo.toml --all-targets -- -D warnings
           cargo test --locked --manifest-path engine/Cargo.toml
           cargo test --locked --manifest-path engine/Cargo.toml --no-default-features
+      - name: Restore the pinned model pack
+        # The app downloads its models on demand; the tests use the same pinned pack (engine/models.json),
+        # cached by the manifest's hash so a run downloads it only when the pins change.
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: dist/models
+          key: model-pack-${{ hashFiles('engine/models.json') }}
       - name: Build engine and test native bridge
         run: |
           python3 scripts/prepare-model.py
+          # Verified against the manifest's SHA-256s; before the pack's release is published, rebuilt from its pinned upstream sources.
+          python3 scripts/model-pack.py fetch --models-dir dist/models --derive-fallback
           cargo build --release --locked --manifest-path engine/Cargo.toml
-          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
-          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
       - name: Everyday-error quality gate
         # The held-out test split (benchmarks/heldout, never used for tuning) through the app's own path. Fails when
         # what runs while typing fixes less, or changes more correct text, than the last measured build allows.
         run: |
           swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift scripts/heldout-native.swift -o dist/qa/heldout-native
-          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
             --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
       - name: Keystroke-typo quality gate
         # benchmarks/typo-fuzz test set: every keystroke slip type on 200 sentences written after the fixes.
         run: |
-          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/test.jsonl --clean benchmarks/typo-fuzz/test-clean.jsonl \
             --split all --layers rules,gec --output dist/qa/typo-fuzz \
             --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03
@@ -94,8 +103,8 @@ jobs:
         run: |
           npm ci
           npx playwright install chromium
-          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:editors
-          PARZR_MODEL_PATH="$PWD/dist/model/Qwen3.5-0.8B-Q5_K_M.gguf" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:browser
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:editors
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:browser
       - name: Package the optional extensions
         run: python3 scripts/package-extensions.py
       - name: Build and package local development DMG
@@ -103,6 +112,7 @@ jobs:
           python3 scripts/build.py
           dist/Parzr.app/Contents/MacOS/parzr --health-check
           python3 scripts/package.py
+          du -sh dist/Parzr.app dist/Parzr-*-local.dmg
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         # The audit upload is a record, not a check: a GitHub artifact outage must not block a release.
@@ -178,7 +188,7 @@ jobs:
           cp -c dist/extensions/parzr-browser-extension-*.zip dist/latest/parzr-browser-extension.zip
           (cd dist/latest && shasum -a 256 Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip >> ../SHA256SUMS)
       - name: Fetch previous update zips for delta updates
-        # Up to 8 earlier releases that carry an update zip (a delta is a few MB; the full app is ~730 MB); releases without one (0.2.x) are skipped.
+        # Up to 8 earlier releases that carry an update zip (a delta is a few MB; the app is about 80 MB without its models); releases without one (0.2.x) are skipped.
         env:
           GH_TOKEN: ${{ github.token }}
           PARZR_RELEASE_TAG: ${{ github.ref_name }}

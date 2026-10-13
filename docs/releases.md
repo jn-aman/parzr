@@ -63,9 +63,42 @@ If the default branch is protected against direct pushes, allow the GitHub Actio
 
 The fixture-editor tests (`--paste-test`, `--typing-test`, `--grammar-typing-test`, `--integration-test`) need Accessibility but show nothing on screen and take no focus; installed-browser and editor UI checks require a real desktop session and are not established by headless CI alone. Track compatibility evidence in [integrations](integrations.md). Required hosted checks and a protected release environment should enforce the final acceptance gate.
 
+## Model packs
+
+The app ships no model weights. It downloads the pack pinned in [`engine/models.json`](../engine/models.json) (name, version, URL, SHA-256, size, license and purpose of every file) on first use; see [architecture](architecture.md#models). The files are assets of a dedicated GitHub release per pack version, `models-1` for the current `essential` pack (Qwen3.5-0.8B Q5_K_M and GECToR, 12 files, 727 MB). That release is a pre-release and never "latest", so `releases/latest` (the update feed and the download links) keeps pointing at the newest app release, and app releases stay small.
+
+**Publish `models-1`** (once, before the first app release built without bundled models: until it exists, that app works with the rules and retries the download every hour). With the GitHub CLI signed in as the owner:
+
+```sh
+git switch main && git pull
+# Stage the 12 assets in dist/model-pack, each checked against the pinned size and SHA-256.
+# Either from an installed Parzr that still bundles the models (0.4.12 or older):
+python3 scripts/model-pack.py stage --from-app /Applications/Parzr.app
+# or rebuilt from the pinned upstream sources (Qwen3.5 Q8_0 GGUF from Hugging Face, quantized with llama.cpp, and the gector-v1 zip; needs CMake):
+python3 scripts/model-pack.py stage --derive
+python3 scripts/model-pack.py publish --dry-run     # shows the gh command
+python3 scripts/model-pack.py publish               # gh release create models-1 --prerelease --latest=false, with notes listing every file
+python3 scripts/model-pack.py fetch --models-dir "$(mktemp -d)" --verify   # downloads it back from GitHub and checks every hash
+```
+
+`publish` refuses to touch a tag that exists: a published pack is immutable (consider turning on immutable releases in the repository settings). Check that `https://github.com/jn-aman/parzr/releases/latest` still shows the app release.
+
+**A new pack version** (Phase 2's fine-tuned Qwen3.5-2B, the slip detector, the tone classifier): put the files in a new pack version in `engine/models.json` (new `version`, URLs under a new tag such as `models-2`, hashes, sizes, licenses, purposes, and `provides` naming what the engine looks up), stage them with `--from-dir`, publish, and only then release the app that pins them. On their first launch, updated apps download the new version beside the old one and delete the old one only after the new one verifies. Never re-upload an asset under an existing tag.
+
+**CI** downloads the pinned pack into `dist/models` (cached by the hash of `engine/models.json`) and runs every model test against it through `PARZR_MODELS_DIR`; before the pack's release exists it rebuilds the pack from the pinned upstream sources with the same hash checks. The bundle audit (`scripts/audit-bundle.py`) fails the build if any model file (by name, format or pinned hash) is in the app, or if the app is over 100 MB.
+
+**Check the download end to end** in a built app, without the release:
+
+```sh
+python3 scripts/model-pack.py stage --from-app /Applications/Parzr.app      # or --from-dir dist/models/essential/1
+PARZR_MODELS_DIR="$(mktemp -d)" PARZR_MODELS_BASE_URL="file://$PWD/dist/model-pack/" dist/Parzr.app/Contents/MacOS/parzr --models-test dist/qa/models
+```
+
+It checks with the rules first (and expects "Smart grammar is downloading"), downloads and verifies the pack, then requires a Smart grammar correction while typing and a Qwen tone rewrite on Option+Space, and writes `dist/qa/models/models-test.json`. Leave out `PARZR_MODELS_BASE_URL` to test against the published release.
+
 ## Automatic updates
 
-From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no updater, so they install 0.3 by hand once. Its only network request is the update check: a plain GET of the feed from GitHub every hour (`SUScheduledCheckInterval` 3600, started only after the welcome guide is finished), sending nothing about the user or their writing (`SUEnableSystemProfiling` is off; GitHub sees an IP address and the app version, like any download).
+From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no updater, so they install 0.3 by hand once. Apart from the one-time model download ([Model packs](#model-packs)), its only network request is the update check: a plain GET of the feed from GitHub every hour (`SUScheduledCheckInterval` 3600, started only after the welcome guide is finished), sending nothing about the user or their writing (`SUEnableSystemProfiling` is off; GitHub sees an IP address and the app version, like any download).
 
 **What the user sees.** The defaults are on (`SUEnableAutomaticChecks`, `SUAutomaticallyUpdate`): a new version downloads quietly in the background and installs when the user quits Parzr, or after five minutes without keyboard or mouse use and with no Parzr window or card open (15 seconds for a critical update), after a 10 second countdown that any input cancels (the next attempt waits 30 minutes). A scheduled update panel waits for a 4 second pause in typing so it never lands mid-sentence. Settings, General, Updates has two switches: **Check for updates automatically** and **Download and install automatically** (unavailable while checks are off). With only checking on, Parzr offers the update in its own panel and the user installs it. Every state of that panel has a way out: checking and downloading offer **Hide** (the panel goes, the update carries on) and **Cancel**, preparing and installing offer **Hide** only (Sparkle cannot cancel an extraction), and About and the status popover keep showing the progress line while the panel is hidden. The panel can be dragged by its background and keeps the spot the user chose while it changes state; the next time it appears after being hidden it is back under the menu-bar icon. When a delta cannot be applied to the installed copy (a locally built or modified Parzr with the same build number as a release), Sparkle falls back to the full zip: the panel then reads "Downloading the full update" with the real size and progress, and Cancel works, instead of sitting on "Preparing". The welcome guide has the same check switch, and **Check for Updates** in the menu bar, the status popover and About works at any time. After an update the updater installed (on quit, on restart, or after the countdown), a short "Updated to X" note appears once. It never appears after a manual install (a DMG dragged to Applications): Parzr records the version Sparkle is about to install in the `updateInstalledVersion` default and the next launch shows the note only if it is the running version, then clears the record.
 
@@ -79,7 +112,7 @@ From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no up
 | `Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip` | Fixed-name copies of the DMG and extensions for direct links through `releases/latest/download/` (website, README, docs) |
 | `parzr-vscode-X.Y.Z.vsix`, `parzr-browser-extension-X.Y.Z.zip` | The optional VS Code and browser extensions, for [manual install](integrations.md#install-the-optional-extensions). Not part of the update feed; their lower-case names keep them out of the `Parzr-*.zip` update globs |
 | `Parzr-X.Y.Z.zip` | The update archive: the notarized, stapled `Parzr.app` made with `ditto -c -k --sequesterRsrc --keepParent` |
-| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (small next to the zip, because the bundled models are identical between releases; the 0.2.2 DMG is 731 MB) |
+| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (small next to the zip; since the models moved out of the app, the app itself is about 80 MB instead of 773 MB, and the first release without them deltas to a removal) |
 | `appcast.xml` | One item: `sparkle:version` is the build number (CFBundleVersion, which `bump-version.py` increments), `sparkle:shortVersionString` is X.Y.Z, minimum macOS 13.0, arm64 only, the zip and delta enclosures with EdDSA signatures and lengths, the notes, and either `phasedRolloutInterval` or `criticalUpdate` |
 
 **Notes format.** The item's `<description sparkle:format="markdown">` holds a CDATA Markdown bullet list (`- first point`, `- second point`, at most 6 lines of 160 characters). Sparkle exposes it as `itemDescription` with `itemDescriptionFormat == "markdown"`.

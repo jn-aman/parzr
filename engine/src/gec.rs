@@ -10,7 +10,7 @@ use crate::{
 use regex::Regex;
 use std::{
     collections::{HashMap, VecDeque},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -996,19 +996,28 @@ fn remember(piece: &str, edits: Arc<Vec<Raw>>) {
     }
 }
 
-static MODEL: OnceLock<Option<Gec>> = OnceLock::new();
-/// The loaded model files, once. None when the directory or the native runtime is missing.
+/// The loaded vocabularies per model folder (one per pack version, so at most a few per process).
+static MODELS: Mutex<Vec<(PathBuf, Option<&'static Gec>)>> = Mutex::new(Vec::new());
+/// The model files of the installed pack, loaded once per folder. None while the pack is not on
+/// this Mac (it is downloaded after launch, so a later check tries again), or when the folder or
+/// the native runtime cannot load (remembered, so a broken folder is not retried on every check).
 fn shared() -> Option<&'static Gec> {
-    MODEL
-        .get_or_init(|| {
-            let dir = model::gec_dir()?;
-            // Prepare first: a missing runtime or directory ends here without reading the vocabularies.
-            if !model::gec_prepare(&dir) {
-                return None;
-            }
-            Gec::load(&dir).ok()
-        })
-        .as_ref()
+    let dir = model::gec_dir()?;
+    if !dir.is_dir() {
+        return None;
+    }
+    let mut models = MODELS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, loaded)) = models.iter().find(|(d, _)| *d == dir) {
+        // Prepare again: the native runtime may have released the model under memory pressure.
+        return loaded.filter(|_| model::gec_prepare(&dir));
+    }
+    // Prepare first: a missing runtime or directory ends here without reading the vocabularies.
+    let loaded = (model::gec_prepare(&dir))
+        .then(|| Gec::load(&dir).ok())
+        .flatten()
+        .map(|g| &*Box::leak(Box::new(g)));
+    models.push((dir, loaded));
+    loaded
 }
 /// Loads everything now so the first check does not pay for it (the app calls this in the background).
 pub fn warm() -> bool {

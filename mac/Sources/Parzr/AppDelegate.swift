@@ -160,6 +160,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--models-test"), CommandLine.arguments.indices.contains(index + 1) {
+            Task { @MainActor in
+                do { try await runModelsTest(reportDirectory: CommandLine.arguments[index + 1]); print("Model download end-to-end check passed."); NSApp.terminate(nil) }
+                catch { fputs("Model download check failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
@@ -238,6 +245,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // The grammar model compiles for the Neural Engine on first use (seconds): do it in the background once setup is finished, never during launch.
         Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
             .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar() } }.store(in: &subscriptions)
+        // Models are downloaded on demand (ModelCenter): until they arrive Parzr checks with its rules. Smart grammar warms the moment they do.
+        let models = ModelCenter.app
+        models.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } } }
+        if ModelCenter.downloadsAllowed {
+            models.watchNetwork()
+            // A finished welcome guide (an existing user after an update, or a returning one) downloads in the background without showing anything;
+            // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
+            Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in try? await Task.sleep(for: .seconds(2)); models.startIfNeeded() } }.store(in: &subscriptions)
+        }
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
@@ -321,7 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return main
     }
     @objc private func activated() {
-        Preferences.shared.refreshPermission()
+        Preferences.shared.refreshPermission(); ModelCenter.app.refresh()
         if let app = NSWorkspace.shared.frontmostApplication, let snapshot = panelModel.snapshot, app.processIdentifier != snapshot.app.processIdentifier && app.bundleIdentifier != Bundle.main.bundleIdentifier { closePanel() }
         passive?.attach()
     }
@@ -590,10 +606,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
         }
     }
+    /// The model download in every state: the welcome guide's step, Settings, Models, and the menu-bar popover. No network: the states are previews.
+    private func modelSnapshots(to directory: URL, onboarding: OnboardingModel) throws {
+        let models = ModelCenter.app, total = models.totalBytes
+        let states: [(String, ModelPackState, Bool)] = [("downloading", .downloading(received: total * 42 / 100, total: total), false), ("verifying", .verifying, false), ("ready", .ready, false),
+                                                       ("offline", .failed(.offline), false), ("disk-full", .failed(.diskFull(needed: total + 50_000_000)), false), ("removed", .missing, true), ("waiting", .missing, false)]
+        onboarding.step = .models; onboarding.previewGranted = true
+        for (name, state, removed) in states {
+            models.preview(state, removed: removed)
+            try render(OnboardingView(model: onboarding, renderingSnapshot: true), size: OnboardingView.size, to: directory.appendingPathComponent("onboarding-models-\(name).png"))
+            try render(StudioView(model: studioModel, route: .models, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: directory.appendingPathComponent("models-\(name).png"))
+            if !state.isReady { try render(StatusPopover(engineReady: true, sourceApp: nil, check: {}, editor: {}, settings: {}, about: {}, quit: {}), size: NSSize(width: 318, height: 400), to: directory.appendingPathComponent("menu-models-\(name).png")) }
+        }
+        // The editor while the models download: the rules check, and the line under the draft says so.
+        models.preview(.downloading(received: total / 3, total: total))
+        try render(StudioView(model: studioModel, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: directory.appendingPathComponent("playground-models-downloading.png"))
+        models.preview(.ready)
+    }
     private func snapshot(to directory: String) {
         Task { @MainActor in
             do {
                 try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                // Every surface below shows the models as downloaded unless it is about the download itself.
+                let models = ModelCenter.app; models.preview(.ready)
                 // Widest footer: Fix sentence, This word, the name button and Ignore must all fit the 360 pt card. Needs no engine.
                 let nameSource = "i met Aman Jain yestarday."
                 let nameEdits = [WritingEdit(start: 6, end: 10, replacement: "Amen", original: "Aman", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling."), WritingEdit(start: 16, end: 25, replacement: "yesterday", original: "yestarday", category: "Spelling", ruleID: "spelling", explanation: "Possible misspelling.")]
@@ -616,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 tone.status = EmptyCheck.toneWithheld
                 try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-withheld.png"))
                 try cardSnapshots(to: URL(fileURLWithPath: directory))
-                for route in [StudioRoute.general, .writing, .appearance, .privacy, .about] {
+                for route in [StudioRoute.general, .writing, .models, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))
@@ -651,7 +686,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 welcome.step = .accessibility; welcome.previewGranted = true
                 try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-2-granted.png"))
                 welcome.step = .done; welcome.previewGranted = false
-                try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-6-skipped.png"))
+                try render(OnboardingView(model: welcome, renderingSnapshot: true), size: OnboardingView.size, to: URL(fileURLWithPath: directory).appendingPathComponent("onboarding-\(OnboardingStep.done.rawValue + 1)-skipped.png"))
+                try modelSnapshots(to: URL(fileURLWithPath: directory), onboarding: welcome)
                 print("Saved native UI snapshots to \(directory)"); NSApp.terminate(nil)
             } catch { fputs("Native snapshots failed: \(error.localizedDescription)\n", stderr); exit(1) }
         }

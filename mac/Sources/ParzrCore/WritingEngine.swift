@@ -71,6 +71,16 @@ public actor WritingEngine {
             return false
         }.value
     }
+    /// The pinned model manifest compiled into the engine (engine/models.json), or nil when the engine cannot load.
+    public nonisolated static func modelManifest() -> Data? {
+        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]) {
+            guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let manifest = dlsym(handle, "parzr_model_manifest"), let free = dlsym(handle, "parzr_string_free") else { continue }
+            guard let text = unsafeBitCast(manifest, to: (@convention(c) () -> UnsafeMutablePointer<CChar>?).self)() else { return nil }
+            defer { unsafeBitCast(free, to: (@convention(c) (UnsafeMutablePointer<CChar>?) -> Void).self)(text) }
+            return Data(String(cString: text).utf8)
+        }
+        return nil
+    }
     private nonisolated static let misspellingCheck: (@convention(c) (UnsafePointer<CChar>?) -> Int32)? = {
         for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]) {
             if let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let check = dlsym(handle, "parzr_is_known_misspelling") { return unsafeBitCast(check, to: (@convention(c) (UnsafePointer<CChar>?) -> Int32).self) }

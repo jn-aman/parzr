@@ -323,7 +323,7 @@
           <svg class="off"><use href="#i-wifi"/></svg>
         </div>
         <h3 class="bt-t">Sent from your Mac.</h3>
-        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. Both models ship inside the app: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds. The only request the app makes is an hourly check for a new version, which carries nothing about you or your writing and can be turned off in Settings.</p>
+        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. The two models download once from GitHub when you set Parzr up, are checked against pinned hashes, then run on your Mac: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds. Besides that download, the app's only request is an hourly check for a new version. Neither carries anything about you or your writing, and you can turn the update check off in Settings.</p>
       </article>
 
       <article class="bt bt-src">
@@ -398,7 +398,7 @@
     <div class="open-copy">
       <p class="eyebrow">Open source</p>
       <h2 id="open-h" class="h2"><span class="nw">Read every line.</span></h2>
-      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and two local models, all in one public repository. Every rule ships with a positive and a negative example, and its provenance. The bundled GECToR weights are for non-commercial use, and Parzr is free.</p>
+      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and two local models, all in one public repository. Every rule ships with a positive and a negative example, and its provenance. The GECToR weights Parzr downloads are for non-commercial use, and Parzr is free.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/jn-aman/parzr" data-link="repo" data-rybbit-event="GitHub opened" data-rybbit-prop-placement="Open source section" rel="noopener"><svg aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
         <details class="build" id="build">

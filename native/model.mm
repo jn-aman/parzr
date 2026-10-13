@@ -597,6 +597,9 @@ struct Gec {
     std::mutex mutex;
     MLModel *model = nil;
     std::string directory;
+    // The folder the engine last prepared (the downloaded pack's, which no path beside this library
+    // can name). Kept when memory pressure releases the model, so the next forward reloads it.
+    std::string remembered;
     dispatch_source_t pressure = nullptr;
 };
 Gec &gec() { static auto *value = new Gec; return *value; }
@@ -604,9 +607,10 @@ void gecRelease(Gec &g) {
     g.model = nil; g.directory.clear();
     malloc_zone_pressure_relief(nullptr, 0);
 }
-// PARZR_GEC_DIR, else `gector` beside the Qwen model file (PARZR_MODEL_PATH), else beside this library (dist/model) or in the app's Resources/Model.
-std::string gecDirectory(const char *given) {
+// The folder the engine names (the downloaded pack's), else the last one it named, else PARZR_GEC_DIR, else `gector` beside the Qwen model file (PARZR_MODEL_PATH), else beside this library (dist/model).
+std::string gecDirectory(const char *given, const std::string &remembered) {
     if (given && *given) return given;
+    if (!remembered.empty()) return remembered;
     if (const char *env = std::getenv("PARZR_GEC_DIR"); env && *env) return env;
     NSFileManager *files = NSFileManager.defaultManager;
     NSMutableArray<NSString *> *candidates = [NSMutableArray array];
@@ -615,13 +619,12 @@ std::string gecDirectory(const char *given) {
     if (dladdr(reinterpret_cast<const void *>(&gecDirectory), &info) && info.dli_fname) {
         NSString *library = [@(info.dli_fname) stringByDeletingLastPathComponent];
         [candidates addObject:[library stringByAppendingPathComponent:@"gector"]];
-        [candidates addObject:[library stringByAppendingPathComponent:@"../Resources/Model/gector"]];
     }
     for (NSString *path in candidates) if ([files fileExistsAtPath:[path stringByAppendingPathComponent:@"gector.mlmodelc"]]) return path.UTF8String;
     return candidates.count ? candidates.firstObject.UTF8String : "";
 }
 int32_t gecPrepare(Gec &g, const char *given) {
-    const std::string directory = gecDirectory(given);
+    const std::string directory = gecDirectory(given, g.remembered);
     if (g.model && g.directory == directory) return 0;
     if (directory.empty()) return 1;
     @autoreleasepool {
@@ -632,7 +635,7 @@ int32_t gecPrepare(Gec &g, const char *given) {
         NSError *error = nil;
         MLModel *model = [MLModel modelWithContentsOfURL:url configuration:configuration error:&error];
         if (!model) return 3;
-        g.model = model; g.directory = directory;
+        g.model = model; g.directory = directory; g.remembered = directory;
         if (!g.pressure) {
             g.pressure = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
             dispatch_source_set_event_handler(g.pressure, ^{ auto &now = gec(); std::lock_guard lock(now.mutex); gecRelease(now); });

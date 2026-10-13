@@ -88,19 +88,22 @@ corrections and kept by scripts/build-typo-lexicon.py:
   Wikipedia:Lists of common misspellings/For machines, CC BY-SA 4.0.
 Pairs from non-commercial learner corpora are never included.
 
-Local model and runtime
+Local models and runtime
+The models are not part of the app: Parzr downloads them once from the
+jn-aman/parzr GitHub release named in engine/models.json, which records each
+file's version, license, size and SHA-256.
 Qwen3.5-0.8B: Copyright Alibaba/Qwen contributors. Apache License 2.0.
 https://huggingface.co/Qwen/Qwen3.5-0.8B
-The app bundles a text-only Q5_K_M GGUF derived from ggml-org's pinned Q8_0
-conversion; source revisions, SHA-256 hashes and conversion are recorded
-in its Model/manifest.json. The full model license is included in
+Parzr downloads a text-only Q5_K_M GGUF derived from ggml-org's pinned Q8_0
+conversion (revision 8fea620810c4afa23dd6443f999a48574c1611a3, quantized
+with llama-quantize Q5_K_M). The full model license is included in
 resources/ThirdParty/Qwen3.5-LICENSE.txt.
 
 llama.cpp: Copyright Georgi Gerganov and contributors. MIT license.
 https://github.com/ggml-org/llama.cpp
 Revision dd266785c2595775001c1c714bd9d92b3ef34cde. The native runtime is
 built from source with embedded Metal for Apple Silicon arm64 only.
-The app includes the upstream license in Model/llama-LICENSE.txt.
+The app includes the upstream license in ThirdParty/llama-LICENSE.txt.
 
 GECToR grammatical error correction model
 Weights: gotutiyan/gector-roberta-base-5k, revision
@@ -110,16 +113,16 @@ Parzr is free software distributed without charge and uses these weights only
 on that basis; anyone who redistributes or sells a build must check that
 condition for themselves. The model implements GECToR: Omelianchuk, Atrasevych,
 Chernodub, Skurzhanskyi, "GECToR: Grammatical Error Correction: Tag, Not
-Rewrite" (BEA 2020), a Grammarly project. The app bundles a Core ML conversion
+Rewrite" (BEA 2020), a Grammarly project. Parzr downloads a Core ML conversion
 (static 80 token input, fp16 or int8 weight-only) made by scripts/convert-gector.py;
-revisions, versions and SHA-256 hashes are in Model/gector/manifest.json.
+revisions, versions and SHA-256 hashes are in the pack's gector/manifest.json.
 roberta-base: Copyright Facebook AI Research. MIT license. https://huggingface.co/roberta-base
 Its byte level BPE vocabulary (vocab.json, merges.txt) ships with the model.
 Output label vocabulary and verb form vocabulary (verb-form-vocab.txt):
 grammarly/gector, commit 4ad259f25c6bb408a99788d468cd8958845e647e,
 https://github.com/grammarly/gector. Copyright Grammarly, Inc. Apache License 2.0
 (resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt).
-The model runs entirely on the device; nothing is downloaded or sent.
+The model runs entirely on the device; nothing is sent.
 
 The engine tokenizes sentences for the model as spaCy 3.8 does. Its English tokenizer rules
 (engine/rules/gec-tokenizer.json: prefix, suffix and infix patterns and the special-case table)

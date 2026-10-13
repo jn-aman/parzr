@@ -25,7 +25,9 @@ type SwapScores = unsafe extern "C" fn(
     *mut f64,
     *mut f64,
 ) -> i32;
-struct Runtime {
+/// The native runtime's entry points, loaded once per process.
+#[derive(Clone, Copy)]
+struct Api {
     generate: Generate,
     free: Free,
     cancel: Cancel,
@@ -34,43 +36,68 @@ struct Runtime {
     name_log_odds: Option<NameLogOdds>,
     /// Absent in a runtime built before sentence swaps existed: the swap checker then stays off.
     swap_scores: Option<SwapScores>,
+}
+/// The runtime and the writing model file to run it on, found again on every call: the model is
+/// downloaded after launch (or removed, or replaced by a newer pack) while the engine runs.
+struct Runtime {
+    generate: Generate,
+    free: Free,
+    name_log_odds: Option<NameLogOdds>,
+    swap_scores: Option<SwapScores>,
     model: PathBuf,
 }
-static RUNTIME: OnceLock<Result<Runtime, String>> = OnceLock::new();
+static LIBRARY: OnceLock<Result<Api, String>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 #[link(name = "System")]
 unsafe extern "C" {
     fn dlopen(path: *const c_char, mode: i32) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }
-/// The runtime library and the Qwen model file next to the executable (or from the environment).
-fn locations() -> Result<(PathBuf, PathBuf), String> {
-    let executable = std::env::current_exe().map_err(|_| "Could not locate the bundled model.")?;
+/// The engine's answer while the writing model is not on this Mac (the app downloads it).
+pub const MODEL_MISSING: &str = "The writing model is not downloaded yet.";
+/// The native runtime library: PARZR_MODEL_RUNTIME, else the app's Frameworks folder beside the executable.
+fn library_path() -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("PARZR_MODEL_RUNTIME") {
+        return Ok(PathBuf::from(path));
+    }
+    let executable = std::env::current_exe().map_err(|_| "Could not locate the model runtime.")?;
     let directory = executable
         .parent()
-        .ok_or("Could not locate the bundled model.")?;
-    let library = std::env::var_os("PARZR_MODEL_RUNTIME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| directory.join("../Frameworks/libparzr_model.dylib"));
-    let model = std::env::var_os("PARZR_MODEL_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| directory.join("../Resources/Model/Qwen3.5-0.8B-Q5_K_M.gguf"));
-    Ok((library, model))
+        .ok_or("Could not locate the model runtime.")?;
+    Ok(directory.join("../Frameworks/libparzr_model.dylib"))
 }
-fn runtime() -> Result<&'static Runtime, String> {
-    RUNTIME
-        .get_or_init(|| {
-            let (library, model) = locations()?;
-            if !model.is_file() {
-                return Err("The bundled writing model is missing. Reinstall Parzr.".into());
-            }
-            load(&library, model)
-        })
+/// The writing model: PARZR_MODEL_PATH (development and tests), else the downloaded pack's file.
+pub fn model_file() -> Option<PathBuf> {
+    std::env::var_os("PARZR_MODEL_PATH")
+        .filter(|p| !p.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| crate::packs::installed("writing_model"))
+}
+/// True when the writing model is on this Mac (a cheap file check; nothing loads).
+pub fn model_available() -> bool {
+    model_file().is_some_and(|m| m.is_file())
+}
+fn library() -> Result<&'static Api, String> {
+    LIBRARY
+        .get_or_init(|| load(&library_path()?))
         .as_ref()
         .map_err(Clone::clone)
 }
+fn runtime() -> Result<Runtime, String> {
+    let api = library()?;
+    let model = model_file()
+        .filter(|m| m.is_file())
+        .ok_or_else(|| MODEL_MISSING.to_string())?;
+    Ok(Runtime {
+        generate: api.generate,
+        free: api.free,
+        name_log_odds: api.name_log_odds,
+        swap_scores: api.swap_scores,
+        model,
+    })
+}
 #[cfg(target_os = "macos")]
-fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
+fn load(path: &Path) -> Result<Api, String> {
     use std::os::unix::ffi::OsStrExt;
     let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| "Invalid runtime path.")?;
     // SAFETY: verified NUL-terminated names; retain the handle for the process lifetime.
@@ -88,7 +115,7 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
         if generate.is_null() || free.is_null() || cancel.is_null() || hints.is_null() {
             return Err("The bundled model runtime is incompatible.".into());
         }
-        Ok(Runtime {
+        Ok(Api {
             generate: std::mem::transmute::<*mut c_void, Generate>(generate),
             free: std::mem::transmute::<*mut c_void, Free>(free),
             cancel: std::mem::transmute::<*mut c_void, Cancel>(cancel),
@@ -97,12 +124,12 @@ fn load(path: &Path, model: PathBuf) -> Result<Runtime, String> {
                 .then(|| std::mem::transmute::<*mut c_void, NameLogOdds>(judge)),
             swap_scores: (!swaps.is_null())
                 .then(|| std::mem::transmute::<*mut c_void, SwapScores>(swaps)),
-            model,
         })
     }
 }
+/// Token hints from the macOS tagger in the native runtime; needs no model file.
 pub fn linguistic_hints(text: &str) -> Result<Vec<crate::TokenHint>, String> {
-    let r = runtime()?;
+    let r = library()?;
     let input = CString::new(text).map_err(|_| "Invalid passage.")?;
     // SAFETY: input lives through the call; returned owned JSON is freed exactly once.
     let output = unsafe { (r.hints)(input.as_ptr()) };
@@ -191,7 +218,7 @@ pub fn swap_scores(
     }
 }
 #[cfg(not(target_os = "macos"))]
-fn load(_: &Path, _: PathBuf) -> Result<Runtime, String> {
+fn load(_: &Path) -> Result<Api, String> {
     Err("The bundled model runtime requires macOS.".into())
 }
 type GecPrepare = unsafe extern "C" fn(*const c_char) -> i32;
@@ -209,7 +236,7 @@ fn gec_api() -> Option<&'static GecApi> {
         // PARZR_GEC_RUNTIME points development runs at a separate build of the grammar model's runtime.
         let library = std::env::var_os("PARZR_GEC_RUNTIME")
             .map(PathBuf::from)
-            .or_else(|| Some(locations().ok()?.0))?;
+            .or_else(|| library_path().ok())?;
         let path = CString::new(library.as_os_str().as_bytes()).ok()?;
         // SAFETY: NUL-terminated names; the handle is kept for the process lifetime.
         unsafe {
@@ -231,11 +258,16 @@ fn gec_api() -> Option<&'static GecApi> {
 fn gec_api() -> Option<&'static GecApi> {
     GEC.get_or_init(|| None).as_ref()
 }
-/// Where the grammar model's files live: PARZR_GEC_DIR, else `gector` beside the Qwen model file.
+/// Where the grammar model's files live: PARZR_GEC_DIR, else `gector` beside PARZR_MODEL_PATH
+/// (development), else the downloaded pack's folder. None while the pack is not on this Mac.
 pub fn gec_dir() -> Option<PathBuf> {
-    std::env::var_os("PARZR_GEC_DIR")
-        .map(PathBuf::from)
-        .or_else(|| Some(locations().ok()?.1.parent()?.join("gector")))
+    if let Some(dir) = std::env::var_os("PARZR_GEC_DIR").filter(|d| !d.is_empty()) {
+        return Some(PathBuf::from(dir));
+    }
+    if let Some(model) = std::env::var_os("PARZR_MODEL_PATH").filter(|p| !p.is_empty()) {
+        return Some(PathBuf::from(model).parent()?.join("gector"));
+    }
+    crate::packs::installed("grammar_model")
 }
 /// Loads (or compiles) the resident grammar model. Idempotent; false when it is unavailable.
 pub fn gec_prepare(directory: &Path) -> bool {
@@ -266,7 +298,7 @@ pub fn gec_forward(ids: &[i32]) -> Option<(Vec<f32>, Vec<f32>)> {
     (status == 0).then_some((labels, detect))
 }
 pub fn cancel() {
-    if let Some(Ok(r)) = RUNTIME.get() {
+    if let Some(Ok(r)) = LIBRARY.get() {
         // SAFETY: function pointer from the retained runtime library.
         unsafe { (r.cancel)() };
     }
@@ -446,7 +478,7 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
     // The first answer must keep every placeholder. If it does not, ask once more with the
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
-        let output = infer(r, &prompt(req, &masked, &literals, strict, careful))?;
+        let output = infer(&r, &prompt(req, &masked, &literals, strict, careful))?;
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -703,7 +735,7 @@ fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
         "<|im_start|>system\nAnswer with one emoji that fits the feeling of this chat message, or with the word none if no emoji fits.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
         text.trim()
     );
-    fitting_emoji(text, &infer(r, &prompt).ok()?)
+    fitting_emoji(text, &infer(&r, &prompt).ok()?)
 }
 /// Adds `emoji` at the end of the rewritten text, after its last word or mark.
 fn end_with(source: &str, mut changes: Vec<Edit>, emoji: &str) -> Vec<Edit> {
