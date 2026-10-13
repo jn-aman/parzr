@@ -1396,7 +1396,12 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             })
     };
     let exempt = |e: &Edit, r: &TextRange| {
-        (raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r)
+        // "Hi again,Ken": a space put before a protected word leaves the word as typed.
+        e.start_utf16 == e.end_utf16
+            && e.start_utf16 == r.start_utf16
+            && !e.replacement.is_empty()
+            && e.replacement.chars().all(char::is_whitespace)
+            || (raises_case(e) || contraction(e) || apostrophe_only(e)) && tagged(r)
             || slip(e) && first_word_guess(r)
             || tagger_piece(e, r)
     };

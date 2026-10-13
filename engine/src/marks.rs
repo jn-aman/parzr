@@ -1315,7 +1315,13 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 QUANTIFIERS.contains(&p.normalized.as_str())
                     || p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
             });
-            if noun && (plural_verb || counted) {
+            // "these PA's", "all ENA's products": an acronym keeps its apostrophe unless a number
+            // counts it ("two PR's").
+            let numbered = prev.is_some_and(|p| {
+                p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
+                    || NUMBERS.contains(&p.normalized.as_str())
+            });
+            if noun && (plural_verb || counted) && (!acronym || numbered) {
                 let possessive_next = next.is_some_and(|n| {
                     n.is_word
                         && spelling::flags(&n.normalized) & 2 != 0
@@ -1744,8 +1750,56 @@ mod tests {
         }
     }
     #[test]
+    fn british_dates_take_no_comma() {
+        let out = crate::pipeline::rewrite(&Request {
+            text: "It opened on June 15 2008 and on 20 October 1861.".into(),
+            dialect: "british".into(),
+            ..Request::default()
+        })
+        .unwrap()
+        .text;
+        assert_eq!(out, "It opened on June 15 2008 and on 20 October 1861.");
+    }
+    #[test]
+    fn everyday_writing_keeps_its_commas_and_capitals() {
+        for text in [
+            "I'll be home by 9, don't wait up.",
+            "I lost my keys again, can you let me in?",
+            "That's a great idea, let's do it.",
+            "Some people got their orders refunded, whereas others got theirs shipped.",
+            "It is very helpful if employees can destroy old documents, return supplies to a central location and leave the desk clean.",
+            "This is the list of the business teams within ENA I received Tuesday from accounting.",
+            "I was hoping you'd make it to the reunion last year.",
+            "No specifics were discussed.",
+            "As per our previous discussion, these folks will provide all ENA's products.",
+            "Special Offers - Travel To Hawaii This Fall!",
+            "I will need their e:mail addresses to do so.",
+            "We need an admin for the Corp. application.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        for (input, expected) in [
+            ("Hi again,Ken", "Hi again, Ken"),
+            (
+                "hey can u text me ur names cuz i got a new phone",
+                "hey can u text me ur names cuz I got a new phone",
+            ),
+            ("Two PR's are open.", "Two PRs are open."),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
     fn asides_and_stray_marks() {
         for (input, expected) in [
+            (
+                "Hirsch (June 17 1923 – January 28 2004) was a player.",
+                "Hirsch (June 17, 1923 – January 28, 2004) was a player.",
+            ),
+            (
+                "On June 15 2008 the service started.",
+                "On June 15, 2008 the service started.",
+            ),
             (
                 "The police however have said nothing.",
                 "The police, however, have said nothing.",
@@ -1779,6 +1833,7 @@ mod tests {
             assert_eq!(fix(input), expected, "{input}");
         }
         for text in [
+            "On March 3 1500 troops landed.",
             "I'll do it however you like.",
             "You can do it however hard it is.",
             "In addition to the fee we pay tax.",
