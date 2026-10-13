@@ -160,6 +160,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--models-test"), CommandLine.arguments.indices.contains(index + 1) {
+            Task { @MainActor in
+                do { try await runModelsTest(reportDirectory: CommandLine.arguments[index + 1]); print("Model download end-to-end check passed."); NSApp.terminate(nil) }
+                catch { fputs("Model download check failed: \(error.localizedDescription)\n", stderr); exit(1) }
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }

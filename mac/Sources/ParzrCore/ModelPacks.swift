@@ -202,8 +202,8 @@ public struct ModelStore: Sendable {
                 if Self.size(target) == file.bytes, try Self.sha256(of: target) == file.sha256 { finished += file.bytes; continue }
                 try? files.removeItem(at: target)
                 try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                let base = finished
-                update(.downloading(received: base, total: total))
+                let base = finished, resumed = min(file.bytes, Self.size(staging.appendingPathComponent(file.path + ".partial")) ?? 0)
+                update(.downloading(received: base + resumed, total: total))
                 try await fetch(file, to: target) { update(.downloading(received: base + $0, total: total)) }
                 finished += file.bytes
             }
