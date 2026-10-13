@@ -188,7 +188,7 @@ jobs:
           cp -c dist/extensions/parzr-browser-extension-*.zip dist/latest/parzr-browser-extension.zip
           (cd dist/latest && shasum -a 256 Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip >> ../SHA256SUMS)
       - name: Fetch previous update zips for delta updates
-        # Up to 8 earlier releases that carry an update zip (a delta is a few MB; the full app is ~730 MB); releases without one (0.2.x) are skipped.
+        # Up to 8 earlier releases that carry an update zip (a delta is a few MB; the app is about 80 MB without its models); releases without one (0.2.x) are skipped.
         env:
           GH_TOKEN: ${{ github.token }}
           PARZR_RELEASE_TAG: ${{ github.ref_name }}
