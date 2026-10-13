@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify required runtime contents and reject embedded build-machine home paths."""
+"""Verify required runtime contents, that no model weights ship in the app, and reject embedded build-machine home paths."""
 import argparse
 import base64
 import hashlib
@@ -16,10 +16,8 @@ args = parser.parse_args()
 app = args.app
 required = ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Resources/LICENSE', 'Contents/Resources/THIRD_PARTY_NOTICES', 'Contents/Resources/PrivacyInfo.xcprivacy', 'Contents/Resources/Integrations/extensions/browser/manifest.json', 'Contents/Resources/Integrations/extensions/vscode/package.json']
 required += ['Contents/Resources/ThirdParty/EnglishFrequency-data.json', 'Contents/Resources/ThirdParty/EnglishFrequency-NOTICES.md', 'Contents/Resources/ThirdParty/EnglishFrequency-LICENSE.txt']
-required += ['Contents/Frameworks/libparzr_model.dylib', 'Contents/Resources/Model/manifest.json', 'Contents/Resources/Model/llama-LICENSE.txt', 'Contents/Resources/ThirdParty/Qwen3.5-LICENSE.txt']
+required += ['Contents/Frameworks/libparzr_model.dylib', 'Contents/Resources/ThirdParty/llama-LICENSE.txt', 'Contents/Resources/ThirdParty/Qwen3.5-LICENSE.txt']
 required += ['Contents/Resources/ThirdParty/Pow-LICENSE.txt', 'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt']
-gector = 'Contents/Resources/Model/gector/'
-required += [gector+name for name in ['manifest.json', 'vocab.json', 'merges.txt', 'added_tokens.json', 'labels.txt', 'verb-form-vocab.txt', 'gector.mlmodelc/coremldata.bin', 'gector.mlmodelc/model.mil', 'gector.mlmodelc/weights/weight.bin']]
 required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Contents/Resources/Integrations/extensions/browser/content.js', 'Contents/Resources/Integrations/extensions/browser/background.js']
 for name in required:
     if not (app/name).is_file():
@@ -53,18 +51,25 @@ for path in sorted(app.rglob('*')):
     with path.open('rb') as stream: magic = stream.read(4)
     if magic in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe') and subprocess.run(['codesign','--verify','--strict',str(path)],capture_output=True).returncode != 0:
         sys.exit('Unsigned or invalidly signed nested code: '+str(path.relative_to(app)))
-model_info = json.loads((app/'Contents/Resources/Model/manifest.json').read_text())
-model_path = app/'Contents/Resources/Model'/model_info['file']
-with model_path.open('rb') as stream:
-    if hashlib.file_digest(stream, 'sha256').hexdigest() != model_info['sha256']:
-        sys.exit('Bundled model hash verification failed.')
-gector_info = json.loads((app/gector/'manifest.json').read_text())
-for name, expected in gector_info['files'].items():
-    with (app/gector/name).open('rb') as stream:
-        if hashlib.file_digest(stream, 'sha256').hexdigest() != expected:
-            sys.exit('Bundled GECToR file hash verification failed: '+name)
-if len((app/gector/'labels.txt').read_text().splitlines()) != 5002:
-    sys.exit('Bundled GECToR labels.txt must have 5002 lines.')
+# Model weights are downloaded on demand (engine/models.json), never bundled: no Model folder, no file the
+# manifest pins (by name or by hash), no model format and no large opaque blob anywhere in the app.
+if (app/'Contents/Resources/Model').exists(): sys.exit('Contents/Resources/Model must not exist: model weights are downloaded, not bundled.')
+manifest = json.loads((pathlib.Path(__file__).resolve().parent.parent/'engine/models.json').read_text())
+pinned = {f['sha256'] for pack in manifest['packs'] for f in pack['files']}
+names = {pathlib.PurePosixPath(f['path']).name for pack in manifest['packs'] for f in pack['files'] if f['bytes'] > 1_000_000}
+weights = []
+for path in app.rglob('*'):
+    if path.is_symlink() or not path.is_file(): continue
+    relative = str(path.relative_to(app))
+    if path.suffix.lower() in {'.gguf', '.ggml', '.safetensors', '.mlmodel', '.mlpackage', '.onnx', '.pt', '.bin'} or '.mlmodelc' in relative or path.name in names:
+        weights.append(relative); continue
+    if path.stat().st_size > 1_000_000:
+        with path.open('rb') as stream:
+            if hashlib.file_digest(stream, 'sha256').hexdigest() in pinned: weights.append(relative)
+if weights: sys.exit('Model weights must not ship in the app: '+', '.join(sorted(weights)))
+# Without weights the app is code, licences and integrations: keep it well under 100 MB.
+size = sum(p.stat().st_size for p in app.rglob('*') if p.is_file() and not p.is_symlink())
+if size > 100_000_000: sys.exit(f'The app is {size/1e6:.0f} MB; it must stay under 100 MB (did model weights come back?).')
 if info['CFBundleExecutable'] != 'parzr' or info['CFBundleName'] != 'Parzr':
     sys.exit('Unexpected application identity.')
 issues=[]
@@ -86,4 +91,4 @@ if issues:
         print('Embedded private build path in '+name+'; value omitted.', file=sys.stderr)
     sys.exit(1)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True, capture_output=True)
-print('Bundle audit passed: complete runtime, valid signature, no embedded home paths.')
+print('Bundle audit passed: complete runtime, no model weights, valid signature, no embedded home paths.')

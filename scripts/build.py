@@ -58,14 +58,10 @@ for name in ['Versions/B/Sparkle', 'Versions/B/Autoupdate', 'Versions/B/Updater.
     run(['lipo', sparkle/name, '-thin', 'arm64', '-output', sparkle/name])
 shutil.rmtree(sparkle/'Versions/B/_CodeSignature')
 shutil.copytree(ROOT/'resources/Brand', stage/'Contents/Resources/Brand')
+# The native model runtime is code and ships in the app; the model weights do not (Parzr downloads its
+# model pack on demand, see engine/models.json and scripts/model-pack.py). Only the runtime's license comes along.
 model_cache = dist/'model'
-model_info = json.loads((model_cache/'manifest.json').read_text())
 shutil.copy2(model_cache/'libparzr_model.dylib', stage/'Contents/Frameworks/libparzr_model.dylib')
-model_resources = stage/'Contents/Resources/Model'; model_resources.mkdir()
-for name in [model_info['file'], 'manifest.json', 'llama-LICENSE.txt']:
-    shutil.copy2(model_cache/name, model_resources/name)
-# GECToR (Core ML) beside the Qwen model: the runtime's default directory is Model/gector.
-shutil.copytree(model_cache/'gector', model_resources/'gector')
 for name, destination in [('libparzr_engine.dylib','Contents/Frameworks'),('parzr-engine','Contents/MacOS'),('parzr-native-host','Contents/MacOS'),('parzr-lsp','Contents/MacOS')]:
     files = [ROOT/'engine/target'/target/'release'/name if target else ROOT/'engine/target/release'/name for target in architectures]
     shutil.copy2(files[0],stage/destination/name)
@@ -85,6 +81,7 @@ run(['swift',ROOT/'scripts/make-icon.swift',iconset]); run(['iconutil','-c','icn
 for name in ['THIRD_PARTY_NOTICES','LICENSE']:
     shutil.copy2(ROOT/name,stage/'Contents/Resources'/name)
 if (ROOT/'resources/ThirdParty').exists(): shutil.copytree(ROOT/'resources/ThirdParty',stage/'Contents/Resources/ThirdParty')
+shutil.copy2(model_cache/'llama-LICENSE.txt',stage/'Contents/Resources/ThirdParty/llama-LICENSE.txt')
 shutil.copy2(ROOT/'engine/rules/frequency.json',stage/'Contents/Resources/ThirdParty/EnglishFrequency-data.json')
 integrations = stage/'Contents/Resources/Integrations'; integrations.mkdir()
 shutil.copytree(ROOT/'extensions',integrations/'extensions', ignore=shutil.ignore_patterns('node_modules', '.git', '.DS_Store', '*.vsix', '.env', '.env.*', '*.p12', '*.p8', '*.key', '*.pem'))
