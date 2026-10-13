@@ -22,6 +22,25 @@ required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Co
 for name in required:
     if not (app/name).is_file():
         sys.exit('Missing bundled runtime resource: '+name)
+# Model weights are downloaded on demand (engine/models.json), never bundled: no Model folder, no file the
+# manifest pins (by name or by hash), no model format and no large opaque blob anywhere in the app.
+if (app/'Contents/Resources/Model').exists(): sys.exit('Contents/Resources/Model must not exist: model weights are downloaded, not bundled.')
+manifest = json.loads((pathlib.Path(__file__).resolve().parent.parent/'engine/models.json').read_text())
+pinned = {f['sha256'] for pack in manifest['packs'] for f in pack['files']}
+names = {pathlib.PurePosixPath(f['path']).name for pack in manifest['packs'] for f in pack['files'] if f['bytes'] > 1_000_000}
+weights = []
+for path in app.rglob('*'):
+    if path.is_symlink() or not path.is_file(): continue
+    relative = str(path.relative_to(app))
+    if path.suffix.lower() in {'.gguf', '.ggml', '.safetensors', '.mlmodel', '.mlpackage', '.onnx', '.pt', '.bin'} or '.mlmodelc' in relative or path.name in names:
+        weights.append(relative); continue
+    if path.stat().st_size > 1_000_000:
+        with path.open('rb') as stream:
+            if hashlib.file_digest(stream, 'sha256').hexdigest() in pinned: weights.append(relative)
+if weights: sys.exit('Model weights must not ship in the app: '+', '.join(sorted(weights)))
+# Without weights the app is code, licences and integrations: keep it well under 100 MB.
+size = sum(p.stat().st_size for p in app.rglob('*') if p.is_file() and not p.is_symlink())
+if size > 100_000_000: sys.exit(f'The app is {size/1e6:.0f} MB; it must stay under 100 MB (did model weights come back?).')
 # The self tests' fixture editor (mac/Sources/ParzrFixture) is test-only and never ships.
 if any('ParzrFixture' in path.name for path in app.rglob('*')): sys.exit('The test-only ParzrFixture editor must not be bundled.')
 for name in ['Contents/MacOS/parzr','Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp','Contents/Frameworks/libparzr_engine.dylib','Contents/Frameworks/libparzr_model.dylib']:
@@ -51,25 +70,6 @@ for path in sorted(app.rglob('*')):
     with path.open('rb') as stream: magic = stream.read(4)
     if magic in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe') and subprocess.run(['codesign','--verify','--strict',str(path)],capture_output=True).returncode != 0:
         sys.exit('Unsigned or invalidly signed nested code: '+str(path.relative_to(app)))
-# Model weights are downloaded on demand (engine/models.json), never bundled: no Model folder, no file the
-# manifest pins (by name or by hash), no model format and no large opaque blob anywhere in the app.
-if (app/'Contents/Resources/Model').exists(): sys.exit('Contents/Resources/Model must not exist: model weights are downloaded, not bundled.')
-manifest = json.loads((pathlib.Path(__file__).resolve().parent.parent/'engine/models.json').read_text())
-pinned = {f['sha256'] for pack in manifest['packs'] for f in pack['files']}
-names = {pathlib.PurePosixPath(f['path']).name for pack in manifest['packs'] for f in pack['files'] if f['bytes'] > 1_000_000}
-weights = []
-for path in app.rglob('*'):
-    if path.is_symlink() or not path.is_file(): continue
-    relative = str(path.relative_to(app))
-    if path.suffix.lower() in {'.gguf', '.ggml', '.safetensors', '.mlmodel', '.mlpackage', '.onnx', '.pt', '.bin'} or '.mlmodelc' in relative or path.name in names:
-        weights.append(relative); continue
-    if path.stat().st_size > 1_000_000:
-        with path.open('rb') as stream:
-            if hashlib.file_digest(stream, 'sha256').hexdigest() in pinned: weights.append(relative)
-if weights: sys.exit('Model weights must not ship in the app: '+', '.join(sorted(weights)))
-# Without weights the app is code, licences and integrations: keep it well under 100 MB.
-size = sum(p.stat().st_size for p in app.rglob('*') if p.is_file() and not p.is_symlink())
-if size > 100_000_000: sys.exit(f'The app is {size/1e6:.0f} MB; it must stay under 100 MB (did model weights come back?).')
 if info['CFBundleExecutable'] != 'parzr' or info['CFBundleName'] != 'Parzr':
     sys.exit('Unexpected application identity.')
 issues=[]
