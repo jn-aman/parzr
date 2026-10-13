@@ -19,6 +19,56 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     hyphens(req, &tokens, edits);
     apostrophes(req, &tokens, edits);
     colons(req, &tokens, edits);
+    stray_marks(req, &tokens, edits);
+}
+
+/// Unambiguous slips with marks: an apostrophe typed as an accent ("Anna´s") and "the worlds
+/// largest" for the possessive.
+fn stray_marks(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let text = &req.text;
+    static ACCENT: OnceLock<Regex> = OnceLock::new();
+    let accent = ACCENT
+        .get_or_init(|| Regex::new(r"\p{L}(?P<m>\u{B4})(?:s|t|ll|re|ve|d|m)\b").expect("accent"));
+    for cap in accent.captures_iter(text) {
+        let m = cap.name("m").expect("m");
+        put(
+            req,
+            edits,
+            m.start(),
+            m.end(),
+            "'",
+            "punctuation.apostrophe",
+            "Use an apostrophe, not an accent mark.",
+            0.9,
+        );
+    }
+    for (i, t) in tokens.iter().enumerate() {
+        if t.normalized == "worlds"
+            && i > 0
+            && tokens[i - 1].normalized == "the"
+            && tokens.get(i + 1).is_some_and(|n| {
+                spaced(text, t, n)
+                    && ([
+                        "most", "best", "first", "only", "leading", "worst", "least", "top",
+                    ]
+                    .contains(&n.normalized.as_str())
+                        || n.normalized.len() > 4
+                            && n.normalized.ends_with("est")
+                            && spelling::flags(&n.normalized) & 8 != 0)
+            })
+        {
+            put(
+                req,
+                edits,
+                t.end_byte - 1,
+                t.end_byte - 1,
+                "'",
+                "punctuation.apostrophe",
+                "Add the apostrophe of the possessive.",
+                0.9,
+            );
+        }
+    }
 }
 
 #[expect(
@@ -1265,7 +1315,13 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 QUANTIFIERS.contains(&p.normalized.as_str())
                     || p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
             });
-            if noun && (plural_verb || counted) {
+            // "these PA's", "all ENA's products": an acronym keeps its apostrophe unless a number
+            // counts it ("two PR's").
+            let numbered = prev.is_some_and(|p| {
+                p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
+                    || NUMBERS.contains(&p.normalized.as_str())
+            });
+            if noun && (plural_verb || counted) && (!acronym || numbered) {
                 let possessive_next = next.is_some_and(|n| {
                     n.is_word
                         && spelling::flags(&n.normalized) & 2 != 0
@@ -1689,6 +1745,101 @@ mod tests {
             "Set user.Name to the new value.",
             "The range is 1..10 in Rust.",
             "print(hello world)",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
+    fn british_dates_take_no_comma() {
+        let out = crate::pipeline::rewrite(&Request {
+            text: "It opened on June 15 2008 and on 20 October 1861.".into(),
+            dialect: "british".into(),
+            ..Request::default()
+        })
+        .unwrap()
+        .text;
+        assert_eq!(out, "It opened on June 15 2008 and on 20 October 1861.");
+    }
+    #[test]
+    fn everyday_writing_keeps_its_commas_and_capitals() {
+        for text in [
+            "I'll be home by 9, don't wait up.",
+            "I lost my keys again, can you let me in?",
+            "That's a great idea, let's do it.",
+            "Some people got their orders refunded, whereas others got theirs shipped.",
+            "It is very helpful if employees can destroy old documents, return supplies to a central location and leave the desk clean.",
+            "This is the list of the business teams within ENA I received Tuesday from accounting.",
+            "I was hoping you'd make it to the reunion last year.",
+            "No specifics were discussed.",
+            "As per our previous discussion, these folks will provide all ENA's products.",
+            "Special Offers - Travel To Hawaii This Fall!",
+            "I will need their e:mail addresses to do so.",
+            "We need an admin for the Corp. application.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        for (input, expected) in [
+            ("Hi again,Ken", "Hi again, Ken"),
+            (
+                "hey can u text me ur names cuz i got a new phone",
+                "hey can u text me ur names cuz I got a new phone",
+            ),
+            ("Two PR's are open.", "Two PRs are open."),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn asides_and_stray_marks() {
+        for (input, expected) in [
+            (
+                "Hirsch (June 17 1923 – January 28 2004) was a player.",
+                "Hirsch (June 17, 1923 – January 28, 2004) was a player.",
+            ),
+            (
+                "On June 15 2008 the service started.",
+                "On June 15, 2008 the service started.",
+            ),
+            (
+                "The police however have said nothing.",
+                "The police, however, have said nothing.",
+            ),
+            (
+                "He did however make a sortie.",
+                "He did, however, make a sortie.",
+            ),
+            (
+                "It ended badly; however we stayed.",
+                "It ended badly; however, we stayed.",
+            ),
+            ("Anna´s book is here.", "Anna's book is here."),
+            (
+                "It is the worlds largest bank.",
+                "It is the world's largest bank.",
+            ),
+            (
+                "For example the plan was too slow.",
+                "For example, the plan was too slow.",
+            ),
+            (
+                "On the other hand we could wait.",
+                "On the other hand, we could wait.",
+            ),
+            (
+                "Moreover you can change it.",
+                "Moreover, you can change it.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+        for text in [
+            "On March 3 1500 troops landed.",
+            "I'll do it however you like.",
+            "You can do it however hard it is.",
+            "In addition to the fee we pay tax.",
+            "In General Dastgir resigned.",
+            "Of course not.",
+            "The worlds collide.",
         ] {
             assert_eq!(fix(text), text);
         }

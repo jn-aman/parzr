@@ -7,8 +7,15 @@ use crate::{Edit, Request, make_edit, morphology, spelling, starts_sentence};
 use std::{collections::HashMap, sync::OnceLock};
 
 /// Lowercase proper nouns whose usual reading is the proper noun, though the lexicon also lists
-/// a rare common word ("japan" lacquer, "french" a verb).
-const USUALLY_PROPER: [&str; 4] = ["japan", "french", "thanksgiving", "christian"];
+/// a rare common word ("japan" lacquer, "french" a verb, "protestant" one who protests).
+const USUALLY_PROPER: [&str; 6] = [
+    "japan",
+    "french",
+    "thanksgiving",
+    "christian",
+    "protestant",
+    "protestants",
+];
 type Entries = HashMap<String, Vec<(Vec<String>, Vec<&'static str>)>>;
 /// Gazetteer entries keyed by their first lowercase word, longest first.
 fn gazetteer() -> &'static Entries {
@@ -199,7 +206,15 @@ fn stray_season(req: &Request, tokens: &[Token<'_>], i: usize) -> bool {
     let surface = token.surface;
     let next = tokens.get(i + 1);
     let prev = word_at(tokens, i.checked_sub(1), token.paragraph);
+    // "Travel To Hawaii This Fall!": a capital on the word before marks a title-case heading.
+    let title_case = i.checked_sub(1).map(|p| &tokens[p]).is_some_and(|p| {
+        p.is_word
+            && p.paragraph == token.paragraph
+            && p.surface.starts_with(char::is_uppercase)
+            && !starts_sentence(&req.text, p.start_byte, req)
+    });
     SEASONS.contains(&token.normalized.as_str())
+        && !title_case
         && surface.starts_with(char::is_uppercase)
         && surface.chars().skip(1).all(char::is_lowercase)
         && !token.proper_name
@@ -438,6 +453,14 @@ mod tests {
             (
                 "The flight from Los angeles landed.",
                 "The flight from Los Angeles landed.",
+            ),
+            (
+                "Many protestant and islamic groups met at the olympic games.",
+                "Many Protestant and Islamic groups met at the Olympic games.",
+            ),
+            (
+                "Most muslims and hindus agreed.",
+                "Most Muslims and Hindus agreed.",
             ),
         ] {
             assert_eq!(fixed(input), output, "{input}");

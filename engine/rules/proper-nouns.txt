@@ -3,9 +3,9 @@
 # well-known brands and products. Compiled for Parzr from general knowledge (gazetteers), not
 # from any benchmark. A lowercase entry in text ("paris", "new york", "github") is given this
 # case. Entries whose lowercase form is also an ordinary English word ("china", "turkey",
-# "polish", "nice", "slack", "python") are left out; the engine's tests enforce that. Four are
-# kept because the proper noun is by far their usual reading: Japan, French, Thanksgiving and
-# Christian.
+# "polish", "nice", "slack", "python") are left out; the engine's tests enforce that. Six are
+# kept because the proper noun is by far their usual reading: Japan, French, Thanksgiving,
+# Christian, Protestant and Protestants.
 # Countries
 Afghanistan
 Albania
@@ -485,12 +485,42 @@ Sikh
 Quran
 Koran
 Torah
+Islamic
+Catholicism
+Protestant
+Protestants
+Protestantism
+Muslims
+Christians
+Hindus
+Sikhs
+Buddhists
+Jew
+Jews
+Arab
+Arabs
+Sunni
+Shiite
+Mormon
+Mormons
+Lutheran
+Anglican
+Methodist
+Presbyterian
+Pentecostal
+Quaker
+Quakers
+Amish
 # Organizations, events and places
 European Union
 United Nations
 Super Bowl
 World Cup
 Olympics
+Olympic
+Olympian
+Paralympics
+Paralympic
 Wall Street
 Disneyland
 Disney World

@@ -28,6 +28,16 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         for cap in regex.captures_iter(&req.text) {
             let whole = cap.get(0).unwrap();
             let mark = cap.name("target").unwrap();
+            // "e:mail", "C:drive": a colon after a single letter is part of the word.
+            if *kind == "after"
+                && mark.as_str() == ":"
+                && !req.text[..whole.start()]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_alphanumeric)
+            {
+                continue;
+            }
             let (a, b, replacement) = if *kind == "before" {
                 (whole.start() + 1, mark.start(), String::new())
             } else {
@@ -49,6 +59,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
     }
     sentence_boundaries(req, edits);
     clause_commas(req, edits);
+    dates_and_adverbs(req, edits);
     crate::marks::check(req, edits);
     crate::clauses::check(req, edits);
 }
@@ -176,6 +187,159 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
             )
         {
             edits.push(edit);
+        }
+    }
+}
+
+const MONTH_NAMES: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+/// Adverbs that link a clause to the one before; after a semicolon they take a comma ("; however,
+/// the plan").
+const LINKING: [&str; 8] = [
+    "however",
+    "therefore",
+    "moreover",
+    "furthermore",
+    "consequently",
+    "nevertheless",
+    "nonetheless",
+    "otherwise",
+];
+const AUX: [&str; 20] = [
+    "am", "is", "are", "was", "were", "has", "have", "had", "do", "does", "did", "can", "could",
+    "will", "would", "should", "may", "might", "must", "shall",
+];
+/// Commas that are not a matter of style: inside an American date ("October 20, 1861"), around
+/// "however" between a subject or auxiliary and its verb ("The police, however, have said", "He did, however, make"), and after a linking
+/// adverb that follows a semicolon.
+fn dates_and_adverbs(req: &Request, edits: &mut Vec<Edit>) {
+    let text = &req.text;
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let gap = |a: &Token<'_>, b: &Token<'_>| &text[a.end_byte..b.start_byte];
+    let spaced = |a: &Token<'_>, b: &Token<'_>| {
+        let g = gap(a, b);
+        !g.is_empty() && g.chars().all(|c| c == ' ')
+    };
+    let comma = |edits: &mut Vec<Edit>, t: &Token<'_>, id: &str, reason: &str| {
+        if let Some(edit) = make_edit(
+            text,
+            t.end_utf16,
+            t.end_utf16,
+            ",".into(),
+            "Punctuation",
+            id,
+            reason,
+            0.9,
+        ) {
+            edits.push(edit);
+        }
+    };
+    for i in 0..tokens.len() {
+        let t = &tokens[i];
+        // "October 20 1861" is "October 20, 1861" in American English; British dates put the day
+        // first ("20 October 1861") and take no comma.
+        if req.dialect != "british"
+            && MONTH_NAMES.contains(&t.surface)
+            && let (Some(day), Some(year)) = (tokens.get(i + 1), tokens.get(i + 2))
+            && spaced(t, day)
+            && spaced(day, year)
+            && day
+                .surface
+                .trim_end_matches(['s', 't', 'n', 'd', 'r', 'h'])
+                .parse::<u32>()
+                .is_ok_and(|d| (1..=31).contains(&d))
+            && day.surface.len() <= 4
+            && year.surface.len() == 4
+            && year
+                .surface
+                .parse::<u32>()
+                .is_ok_and(|y| (1000..=2099).contains(&y))
+            && text[year.end_byte..].chars().next().is_none_or(|c| {
+                c.is_whitespace() || ",;)!?\u{2013}\u{2014}\"'".contains(c)
+                    || c == '.' && !text[year.end_byte + 1..].starts_with(|d: char| d.is_ascii_digit())
+            })
+            // "March 3 1500 troops": a count, not a year.
+            && !tokens.get(i + 3).is_some_and(|n| {
+                n.is_word
+                    && spaced(year, n)
+                    && n.surface.starts_with(char::is_lowercase)
+                    && n.normalized.ends_with('s')
+                    && crate::spelling::flags(&n.normalized) & 2 != 0
+            })
+        {
+            comma(
+                edits,
+                day,
+                "punctuation.date_comma",
+                "Separate the day from the year with a comma.",
+            );
+        }
+        if !LINKING.contains(&t.surface) || i == 0 {
+            continue;
+        }
+        let prev = &tokens[i - 1];
+        let Some(next) = tokens.get(i + 1).filter(|n| n.is_word && spaced(t, n)) else {
+            continue;
+        };
+        if prev.surface == ";" {
+            let end = (i + 1..tokens.len())
+                .find(|&k| tokens[k].sentence != t.sentence || tokens[k].paragraph != t.paragraph)
+                .unwrap_or(tokens.len());
+            if crate::clauses::clause_at(&tokens, i + 1, end).is_some() {
+                comma(
+                    edits,
+                    t,
+                    "punctuation.introductory_comma",
+                    "Put a comma after the linking adverb.",
+                );
+            }
+            continue;
+        }
+        if t.surface != "however" || !prev.is_word || !spaced(prev, t) {
+            continue;
+        }
+        // "He did however make", "was however built": right after an auxiliary "however" is an
+        // aside. After a noun it is one only when the verb follows ("The police however have").
+        let p = prev.normalized.as_str();
+        let n = next.normalized.as_str();
+        let after_aux = AUX.contains(&p);
+        let verb_next = (AUX.contains(&n) || finite(next))
+            && ![
+                "and", "or", "but", "that", "which", "who", "if", "so", "because", "when",
+            ]
+            .contains(&p)
+            && !crate::clauses::PREPOSITIONS.contains(&p)
+            && (!finite(prev) || crate::clauses::noun_or_verb(prev))
+            && ![
+                "the", "a", "an", "this", "these", "those", "my", "your", "our", "their", "his",
+                "its", "her", "some", "any", "no", "every", "each", "than", "as", "then", "not",
+            ]
+            .contains(&p);
+        if after_aux || verb_next {
+            comma(
+                edits,
+                prev,
+                "punctuation.parenthetical_comma",
+                "Set off \"however\" with commas.",
+            );
+            comma(
+                edits,
+                t,
+                "punctuation.parenthetical_comma",
+                "Set off \"however\" with commas.",
+            );
         }
     }
 }
@@ -362,11 +526,11 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
         if !previous.is_word
             || [
                 "and", "or", "but", "so", "that", "because", "if", "when", "while", "although",
-                "since", "called", "named", "titled", "said", "says", "asked", "asks", "me", "us",
-                "him", "her", "them", "you", "think", "thought", "know", "knew", "believe",
-                "believed", "am", "is", "are", "was", "were", "be", "been", "being", "has", "have",
-                "had", "do", "does", "did", "can", "could", "will", "would", "shall", "should",
-                "may", "might", "must",
+                "since", "cuz", "cause", "coz", "cos", "bc", "called", "named", "titled", "said",
+                "says", "asked", "asks", "me", "us", "him", "her", "them", "you", "think",
+                "thought", "know", "knew", "believe", "believed", "am", "is", "are", "was", "were",
+                "be", "been", "being", "has", "have", "had", "do", "does", "did", "can", "could",
+                "will", "would", "shall", "should", "may", "might", "must",
             ]
             .contains(&previous.normalized.as_str())
         {
@@ -374,6 +538,59 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
         }
         let gap = &req.text[previous.end_byte..t.start_byte];
         if gap.is_empty() || !gap.chars().all(|c| c == ' ' || c == '\t') {
+            continue;
+        }
+        // "Cell Phones and Pagers Over the next few weeks Enron will": a title-case heading runs
+        // into its first sentence; that is layout, not a run-on.
+        let opening: Vec<&Token<'_>> = tokens[start..i]
+            .iter()
+            .filter(|x| x.is_word)
+            .take(4)
+            .collect();
+        let paragraph_start = start == 0 || tokens[start - 1].paragraph != tokens[start].paragraph;
+        if paragraph_start
+            && opening
+                .iter()
+                .filter(|x| {
+                    x.surface.starts_with(char::is_uppercase)
+                        && crate::spelling::ordinary(&x.normalized)
+                })
+                .count()
+                >= 3
+        {
+            continue;
+        }
+        // "the teams within ENA I received Tuesday": "I" and a verb with no object of its own
+        // describe the noun before them.
+        if t.surface == "I"
+            && tokens.get(i + 1).is_some_and(finite)
+            && tokens.get(i + 2).is_none_or(|x| {
+                !x.is_word
+                    || [
+                        "from",
+                        "on",
+                        "in",
+                        "at",
+                        "for",
+                        "with",
+                        "to",
+                        "by",
+                        "yesterday",
+                        "today",
+                        "last",
+                        "this",
+                        "earlier",
+                        "monday",
+                        "tuesday",
+                        "wednesday",
+                        "thursday",
+                        "friday",
+                        "saturday",
+                        "sunday",
+                    ]
+                    .contains(&x.normalized.as_str())
+            })
+        {
             continue;
         }
         let right_end = (i + 1..tokens.len())

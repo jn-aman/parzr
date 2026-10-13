@@ -40,9 +40,9 @@ pub fn abbreviation_continues(text: &str, dot: usize) -> bool {
         return true;
     }
     const TITLES: [&str; 6] = ["mr", "mrs", "ms", "dr", "prof", "mt"];
-    const ABBREVIATIONS: [&str; 16] = [
+    const ABBREVIATIONS: [&str; 22] = [
         "vs", "etc", "approx", "incl", "inc", "ltd", "co", "cf", "viz", "esp", "fig", "dept",
-        "govt", "st", "jr", "sr",
+        "govt", "st", "jr", "sr", "corp", "intl", "bros", "ave", "blvd", "assn",
     ];
     let head = &text[..dot];
     let start = head

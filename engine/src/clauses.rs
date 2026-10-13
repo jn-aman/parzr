@@ -588,6 +588,31 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     if !independent(tokens, s, c) || words(tokens, c + 1, end) < 3 {
         return;
     }
+    // Chat and everyday writing join these with a comma, and the comma reads as intended: a
+    // question or a "let's"/"don't" after a statement ("I'm at the store, do you need anything?",
+    // "I'll be home by 9, don't wait up"), a message typed all in lowercase, a contrast opened by
+    // "where" or "while", a result after "so tired", and a slipped first word ("Ifa situation").
+    let right = word(tokens, c + 1);
+    let casual = tokens[..=s]
+        .iter()
+        .find(|t| t.is_word && t.paragraph == tokens[s].paragraph)
+        .is_some_and(|t| t.surface.starts_with(char::is_lowercase));
+    if question && inverted_question(tokens, r, end)
+        || ["let's", "lets", "don't", "dont"].contains(&right)
+        || ["where", "whereas", "while", "which", "who", "whom", "whose"].contains(&right)
+        || casual
+        || (s..c).any(|k| word(tokens, k) == "so" && spelling::flags(word(tokens, k + 1)) & 8 != 0)
+        || !spelling::known(&tokens[s].normalized)
+            && ["if", "when", "as", "because", "since", "while"]
+                .iter()
+                .any(|w| tokens[s].normalized.starts_with(w))
+        || imperative_at(tokens, r, end) && (s..c).any(|k| SUBORDINATORS.contains(&word(tokens, k)))
+        || base_verb(&tokens[r])
+            && !SUBJECTS.contains(&right)
+            && (s..c).any(|k| SUBORDINATORS.contains(&word(tokens, k)))
+    {
+        return;
+    }
     let r = if !linked && SENTENCE_ADVERBS.contains(&word(tokens, r)) {
         r + 1
     } else {
@@ -808,8 +833,14 @@ const CLAUSE_VERBS: &[&str] = &[
 fn takes_clause(tokens: &[Token<'_>], k: usize) -> bool {
     let t = &tokens[k];
     let before = word(tokens, k.wrapping_sub(1));
-    NO_SPLIT.contains(&t.normalized.as_str())
-        || morphology::verb(&t.normalized).is_some_and(|v| CLAUSE_VERBS.contains(&v.base.as_str()))
+    let w = t.normalized.as_str();
+    // "hoping", "wishing": the -ing form of a clause verb takes a clause too.
+    let ing = w.strip_suffix("ing").is_some_and(|stem| {
+        CLAUSE_VERBS.contains(&stem) || CLAUSE_VERBS.contains(&format!("{stem}e").as_str())
+    });
+    NO_SPLIT.contains(&w)
+        || ing && !DETERMINERS.contains(&before)
+        || morphology::verb(w).is_some_and(|v| CLAUSE_VERBS.contains(&v.base.as_str()))
             && t.pos != "Noun"
             && !DETERMINERS.contains(&before)
             && spelling::flags(before) & (4 | 8) != 8
@@ -939,7 +970,9 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
         } else if DETERMINERS.contains(&w)
             && let Some(v) = clause
         {
+            // "will be changing the payment method": a progressive verb runs on to its object.
             left && left_words >= 3
+                && !word(tokens, i - 1).ends_with("ing")
                 && (plain_end(tokens, s, i, false)
                     || ["is", "are", "was", "were", "will", "must", "should", "can"]
                         .contains(&word(tokens, v))
@@ -1048,7 +1081,9 @@ fn fragment(
 }
 
 /// Sentence-opening words that a comma separates from the clause they introduce.
-const INTRO_WORDS: [&str; 22] = [
+const INTRO_WORDS: [&str; 24] = [
+    "moreover",
+    "nonetheless",
     "yes",
     "no",
     "well",
@@ -1071,6 +1106,27 @@ const INTRO_WORDS: [&str; 22] = [
     "additionally",
     "consequently",
     "nevertheless",
+];
+/// Transitional phrases that open a sentence and take a comma before its clause ("For example,
+/// the…", "On the other hand, we…").
+const INTRO_PHRASES: [&[&str]; 17] = [
+    &["for", "example"],
+    &["for", "instance"],
+    &["on", "the", "other", "hand"],
+    &["on", "the", "one", "hand"],
+    &["in", "conclusion"],
+    &["as", "a", "result"],
+    &["in", "fact"],
+    &["to", "sum", "up"],
+    &["in", "other", "words"],
+    &["in", "short"],
+    &["in", "summary"],
+    &["all", "in", "all"],
+    &["by", "the", "way"],
+    &["above", "all"],
+    &["in", "contrast"],
+    &["as", "you", "know"],
+    &["to", "conclude"],
 ];
 const GREETINGS: [&str; 4] = ["hi", "hey", "hello", "dear"];
 /// Words that begin a message right after a greeting and a name ("Hi Sarah I hope…").
@@ -1105,7 +1161,12 @@ fn introductory_comma(
         && next.is_some_and(|n| spaced(&req.text, first, n))
         && clause_at(tokens, s + 1, end).is_some()
         && !(fw == "no"
-            && ["one", "doubt", "way", "problem", "worries"].contains(&word(tokens, s + 1)))
+            && (["one", "doubt", "way", "problem", "worries"].contains(&word(tokens, s + 1))
+                // "No specifics were discussed": a determiner before its noun.
+                || !SUBJECTS.contains(&word(tokens, s + 1))
+                    && !CONTRACTED.contains(&word(tokens, s + 1))
+                    && !DETERMINERS.contains(&word(tokens, s + 1))
+                    && spelling::flags(word(tokens, s + 1)) & (2 | 8) != 0))
     {
         comma_after(
             edits,
@@ -1113,6 +1174,30 @@ fn introductory_comma(
             "punctuation.introductory_comma",
             "Put a comma after an introductory word.",
         );
+        return;
+    }
+    // "For example the plan…", "On the other hand we…".
+    if let Some(phrase) = INTRO_PHRASES.iter().find(|p| {
+        p.iter().enumerate().all(|(k, w)| {
+            word(tokens, s + k) == *w
+                // "In General Dastgir": a capital inside the phrase makes it a name.
+                && (k == 0
+                    || spaced(&req.text, &tokens[s + k - 1], &tokens[s + k])
+                        && tokens[s + k].surface.starts_with(char::is_lowercase))
+        })
+    }) {
+        let k = s + phrase.len();
+        if k < end
+            && spaced(&req.text, &tokens[k - 1], &tokens[k])
+            && (clause_at(tokens, k, end).is_some() || imperative_at(tokens, k, end))
+        {
+            comma_after(
+                edits,
+                k - 1,
+                "punctuation.introductory_comma",
+                "Put a comma after an introductory phrase.",
+            );
+        }
         return;
     }
     // "Hi Sarah I hope": a comma closes the greeting.
