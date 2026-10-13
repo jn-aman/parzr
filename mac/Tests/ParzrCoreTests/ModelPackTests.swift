@@ -175,8 +175,10 @@ final class ModelPackTests: XCTestCase {
         if case .other = ModelStore.failure(for: NSError(domain: "x", code: 1), needed: 1) {} else { XCTFail() }
     }
     func testCancellingKeepsThePartialFileForLater() async throws {
-        let fake = transport(.slow), store = store(fake)
-        let task = Task { await store.install(Self.pack) }
+        // An explicit capture of a differently named store: Swift 6.3's region checker could not analyse the closure
+        // capturing a local that shadows the `store(_:)` method.
+        let pending = store(transport(.slow))
+        let task = Task { [pending] in await pending.install(Self.pack) }
         try await Task.sleep(for: .milliseconds(300)); task.cancel()
         let result = await task.value
         XCTAssertEqual(result, .missing)
