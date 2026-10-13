@@ -899,10 +899,17 @@ fn mask(
                 return false;
             };
             let gap = &passage[b..c];
+            // "Dr. Chen", "Mr. Lee": a title and its name are one placeholder.
+            let title = [
+                "dr", "mr", "mrs", "ms", "mx", "prof", "st", "sr", "jr", "sir",
+            ]
+            .contains(&passage[a..b].to_lowercase().as_str())
+                && gap == ". ";
             name_chars(&passage[a..b])
                 && name_chars(&passage[c..d])
-                && gap.chars().all(|ch| [' ', '-', '\'', '’'].contains(&ch))
-                && gap.chars().count() <= 1
+                && (title
+                    || gap.chars().all(|ch| [' ', '-', '\'', '’'].contains(&ch))
+                        && gap.chars().count() <= 1)
         };
         match merged.last_mut() {
             Some(last) if join(last) => {
@@ -2834,6 +2841,14 @@ mod tests {
         assert_eq!(texts, ["Aman Jain", "Jean-Luc", "42"], "{masked}");
         assert_eq!(masked.matches("ZXQPARZRKEEP").count(), 3);
         assert!(literals[0].name && literals[1].name && !literals[2].name);
+    }
+    #[test]
+    fn a_title_and_its_name_share_one_placeholder() {
+        let text = "Please ask Dr. Chen today";
+        let (masked, literals) =
+            mask(text, &[], &[(range(11, 13), false), (range(15, 19), false)]).unwrap();
+        let texts: Vec<_> = literals.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(texts, ["Dr. Chen"], "{masked}");
     }
     #[test]
     fn lost_names_are_restored_by_position_but_links_are_not() {

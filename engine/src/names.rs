@@ -102,7 +102,7 @@ pub fn fold(s: &str) -> String {
 pub fn base(normalized: &str) -> &str {
     normalized.strip_suffix("'s").unwrap_or(normalized)
 }
-const SHORTHAND: [&str; 110] = [
+const SHORTHAND: [&str; 134] = [
     "u", "ur", "r", "k", "pls", "plz", "thx", "ty", "btw", "lol", "omg", "idk", "ok", "okk", "ya",
     "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb", "gtg", "ttyl", "lmk", "smh",
     "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk", "omw",
@@ -111,7 +111,9 @@ const SHORTHAND: [&str; 110] = [
     "bffs", "istg", "nvm", "irl", "dm", "dms", "thru", "tmr", "yup", "naw", "mhm", "hmm", "hmmm",
     "umm", "aww", "awww", "woohoo", "kk", "okie", "lemme", "gimme", "dunno", "yall", "coz", "bc",
     "thnx", "tysm", "atm", "wbu", "otw", "g2g", "msg", "msgs", "convo", "mins", "secs", "hrs",
-    "pfp", "lowkey", "highkey", "bruh", "ty4", "xoxo", "ttys", "bday", "gf", "bf",
+    "pfp", "lowkey", "highkey", "bruh", "ty4", "xoxo", "ttys", "bday", "gf", "bf", "cc", "bcc",
+    "lgtm", "ptal", "tldr", "wip", "afaict", "wfh", "ooo", "eod", "eow", "pto", "tbd", "tba",
+    "fwiw", "smth", "sth", "pov", "eng", "mgr", "mgmt", "dept", "approx", "qty",
 ];
 const CALENDAR: [&str; 19] = [
     "monday",
@@ -257,7 +259,28 @@ const ADDRESS_WORDS: [&str; 113] = [
 /// "everyone", "there", "again") or opens the next clause ("Hey, there's a bug").
 pub fn address_word(lower: &str) -> bool {
     let lower = base(lower);
+    // "guyss", "teamm": a doubled last letter is a slip of the word.
+    let undoubled = lower
+        .char_indices()
+        .last()
+        .filter(|&(i, c)| i > 0 && lower[..i].ends_with(c))
+        .map(|(i, _)| &lower[..i]);
+    // "bloth", "evryone": one letter added to or dropped from a word of three or more.
+    let typed: Vec<char> = lower.chars().collect();
+    let one_off = |w: &&str| {
+        let word: Vec<char> = w.chars().collect();
+        word.len() >= 3 && typed.len().abs_diff(word.len()) == 1 && {
+            let (short, long) = if typed.len() < word.len() {
+                (&typed, &word)
+            } else {
+                (&word, &typed)
+            };
+            (0..long.len()).any(|i| long[..i] == short[..i] && long[i + 1..] == short[i..])
+        }
+    };
     ADDRESS_WORDS.binary_search(&lower).is_ok()
+        || undoubled.is_some_and(|w| ADDRESS_WORDS.binary_search(&w).is_ok())
+        || !is_bundled_name(lower) && !spelling::known(lower) && ADDRESS_WORDS.iter().any(one_off)
         || is_shorthand(lower)
         // A contraction ("there's", "that's", "it'll") is a clause, never a name.
         || lower.split_once('\'').is_some_and(|(stem, _)| stem.chars().count() > 2)
@@ -270,11 +293,13 @@ pub fn is_shorthand(lower: &str) -> bool {
 /// Chat acronyms ("fyi", "lmk", "idk", "btw"): a capital on the first letter only ("Fyi") is wrong,
 /// so a sentence start leaves them as typed.
 pub fn is_chat_acronym(lower: &str) -> bool {
-    const ACRONYMS: [&str; 47] = [
-        "afaik", "asap", "atm", "bc", "bff", "bffs", "brb", "btw", "dm", "dms", "fyi", "g2g",
-        "gtg", "hbu", "idc", "idek", "idk", "iirc", "ikr", "ily", "ilysm", "imho", "imo", "irl",
-        "istg", "jk", "lmao", "lmfao", "lmk", "lol", "ngl", "np", "nvm", "omg", "omw", "otw", "rn",
-        "rofl", "smh", "tbh", "tmrw", "ttyl", "tysm", "wbu", "wtf", "wyd", "yw",
+    const ACRONYMS: [&str; 62] = [
+        "afaict", "afaik", "asap", "atm", "bc", "bcc", "bff", "bffs", "brb", "btw", "cc", "dm",
+        "dms", "eod", "eow", "fwiw", "fyi", "g2g", "gtg", "hbu", "idc", "idek", "idk", "iirc",
+        "ikr", "ily", "ilysm", "imho", "imo", "irl", "istg", "jk", "lgtm", "lmao", "lmfao", "lmk",
+        "lol", "ngl", "np", "nvm", "omg", "omw", "ooo", "otw", "ptal", "pto", "rn", "rofl", "smh",
+        "tba", "tbd", "tbh", "tldr", "tmrw", "ttyl", "tysm", "wbu", "wfh", "wip", "wtf", "wyd",
+        "yw",
     ];
     ACRONYMS.contains(&lower)
 }
@@ -718,6 +743,16 @@ pub fn capitalizations(
                     && spelling::name_only(b)
                     && !hinglish.contains(&(t.paragraph, t.sentence)))
             && !spelling::PARTICLES.contains(&b)
+            // "aman_v2.png": a word glued after a dot is an extension or a domain, no name.
+            && !text[..t.start_byte].ends_with('.')
+            // "fromm", "thatt": a frequent word with its last letter doubled is a slip, not "Fromm".
+            && !b
+                .char_indices()
+                .last()
+                .filter(|&(i, c)| i > 0 && b[..i].ends_with(c))
+                .is_some_and(|(i, _)| {
+                    spelling::ordinary(&b[..i]) && spelling::frequency(&b[..i]) >= 500
+                })
             && !spelling::hinglish(b)
             // "i'm" is the pronoun, capitalized by its own rule ("I'm", not "I'M").
             && b != "i"

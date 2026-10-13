@@ -118,6 +118,14 @@ fn name_score(_: &str, _: usize, _: usize) -> Option<f32> {
     None
 }
 
+/// "Pls" to "Please", "thx" to "thanks": Smart grammar leaves chat shorthand as typed.
+#[cfg(feature = "local-model")]
+fn shorthand(e: &Edit) -> bool {
+    let word = e.original.trim();
+    !word.contains(char::is_whitespace)
+        && crate::names::is_shorthand(&word.to_lowercase())
+        && e.replacement.trim().to_lowercase() != word.to_lowercase()
+}
 /// An edit to a word stretched for emphasis ("sooo", "yesss") is only its plain form ("so", "yes").
 #[cfg(feature = "local-model")]
 fn stretch_kept(e: &Edit) -> bool {
@@ -181,6 +189,83 @@ fn keep_typed_voice(text: &str, edits: &mut Vec<Edit>) {
             && !e.replacement.is_empty()
             && e.replacement.chars().all(|c| ".!?".contains(c))
             && (text[..a].ends_with(['.', '!', '?']) || text[b..].starts_with(['.', '!', '?']))
+        {
+            return false;
+        }
+        // "Their office is on the floor" to "Their office on the floor": the model's Fix pass
+        // never drops a verb (a doubled "is is" is the rules' to remove).
+        if e.replacement.trim().is_empty()
+            && [
+                "is", "are", "was", "were", "am", "be", "been", "has", "have", "had", "do", "does",
+                "did", "will", "can", "would", "should", "could",
+            ]
+            .contains(&e.original.trim().to_lowercase().as_str())
+        {
+            return false;
+        }
+        // "Dr. Patel" to "Dr, Patel": a title's full stop stays.
+        if e.original == "."
+            && [
+                "dr", "mr", "mrs", "ms", "mx", "prof", "st", "jr", "sr", "vs", "etc",
+            ]
+            .contains(&old.to_lowercase().as_str())
+        {
+            return false;
+        }
+        // "(and love)" to "and love": brackets the user typed stay.
+        if ['(', ')', '[', ']']
+            .iter()
+            .any(|b| e.original.contains(*b) && !e.replacement.contains(*b))
+        {
+            return false;
+        }
+        // "waitin'" to "waiting": a dropped g marked with its apostrophe is meant.
+        let bare = old.trim_end_matches(['\'', '’']);
+        if bare.len() > 3
+            && bare.ends_with("in")
+            && (bare.len() < old.len() || text[wb..].starts_with(['\'', '’']))
+        {
+            return false;
+        }
+        // 'said that "It was fine': a quotation mark the user did not type.
+        if ['"', '“', '”']
+            .iter()
+            .any(|q| e.replacement.contains(*q) && !e.original.contains(*q))
+        {
+            return false;
+        }
+        // "rwtries" to "rwtrts": one unknown word turned into another is no correction.
+        if !old.is_empty()
+            && !old.contains(char::is_whitespace)
+            && !new.contains(char::is_whitespace)
+            && !old.eq_ignore_ascii_case(&new)
+            && !crate::spelling::known(old.trim_matches('\''))
+            && !crate::spelling::known(new.trim_matches('\''))
+            // "betwde en": a word split by a space is repaired in two steps.
+            && !text[wb..]
+                .strip_prefix(' ')
+                .and_then(|r| r.split(|c: char| !c.is_alphabetic()).next())
+                .is_some_and(|piece| {
+                    (1..=3).contains(&piece.len())
+                        && ![
+                            "to", "a", "an", "in", "on", "at", "of", "is", "it", "be", "by", "or",
+                            "as", "we", "i", "so", "up", "my", "me", "us", "do", "go", "no", "if",
+                            "for", "the", "and", "but", "are", "was", "you", "can", "not", "our",
+                            "has", "had", "his", "her", "all", "any", "out", "off", "too", "now",
+                        ]
+                        .contains(&piece.to_lowercase().as_str())
+                })
+        {
+            return false;
+        }
+        // "Refactor auth middleware" to "Refactor the auth middleware": a line without a final
+        // mark (a commit message, a note, a status) leaves out articles and subjects on purpose.
+        let line_end = text[b..].find('\n').map_or(text.len(), |n| b + n);
+        let telegraphic = !text[..line_end].trim_end().ends_with(['.', '!', '?']);
+        if telegraphic
+            && e.original.trim().is_empty()
+            && ["the", "a", "an", "it", "i", "we"]
+                .contains(&e.replacement.trim().to_lowercase().as_str())
         {
             return false;
         }
@@ -681,7 +766,7 @@ fn check(req: &Request, start: Instant, contextual: bool) -> Result<RewriteResul
     let (text, source_map, edits) = if req.gec && req.mode == Mode::Fix {
         let mut merged = crate::gec::combine(req, &protected, edits.clone());
         // "Yesss" to "Yess": a stretched word may only lose its stretch ("goood" to "good").
-        merged.retain(|e| !e.rule_id.starts_with("gector") || stretch_kept(e));
+        merged.retain(|e| !e.rule_id.starts_with("gector") || stretch_kept(e) && !shorthand(e));
         match apply_edits(&req.text, &merged) {
             Ok((text, source_map)) => (text, source_map, merged),
             Err(_) => (text, source_map, edits),
@@ -693,7 +778,35 @@ fn check(req: &Request, start: Instant, contextual: bool) -> Result<RewriteResul
     #[cfg(feature = "local-model")]
     let (text, source_map, edits) = if req.mode == Mode::Fix && (req.gec || req.deep) {
         crate::confusion::take_pending();
-        let merged = crate::confusion::combine(req, &protected, edits.clone());
+        let mut merged = crate::confusion::combine(req, &protected, edits.clone());
+        // "the best day every" to "ever day": Smart grammar's edit beside a word the sentence
+        // swap replaced was made for the old word; the swap decides alone.
+        let swaps: Vec<(usize, usize)> = merged
+            .iter()
+            .filter(|e| e.rule_id.starts_with("context."))
+            .map(|e| (e.start_utf16, e.end_utf16))
+            .collect();
+        // "nit: rename this var", "todo: tests": a label opening its line is typed as meant.
+        merged.retain(|e| {
+            !e.rule_id.starts_with("context.")
+                || !byte_at(&req.text, e.end_utf16).is_some_and(|b| {
+                    req.text[b..].starts_with(':')
+                        && byte_at(&req.text, e.start_utf16).is_some_and(|a| {
+                            req.text[..a]
+                                .trim_end_matches([' ', '\t', '-', '*'])
+                                .ends_with('\n')
+                                || req.text[..a]
+                                    .trim_start_matches([' ', '\t', '-', '*'])
+                                    .is_empty()
+                        })
+                })
+        });
+        merged.retain(|e| {
+            !e.rule_id.starts_with("gector")
+                || !swaps
+                    .iter()
+                    .any(|&(a, b)| e.start_utf16 <= b + 1 && e.end_utf16 + 1 >= a)
+        });
         if crate::confusion::take_pending() {
             warnings.push(PENDING_WARNING.into());
         }
@@ -892,6 +1005,19 @@ mod tests {
         (e.start_utf16, e.end_utf16, e.original, e.replacement) =
             (at, at, String::new(), ".".into());
         assert!(kept(text, e).is_empty());
+        // An article added to a commit message, a quote mark, an unknown word made another.
+        let text = "Refactor auth middleware";
+        let mut e = model(text, "Refactor", "Refactor");
+        (e.start_utf16, e.end_utf16, e.original, e.replacement) =
+            (9, 9, String::new(), "the ".into());
+        assert!(kept(text, e).is_empty());
+        let text = "She said that it was fine.";
+        assert!(kept(text, model(text, "it", "\"It")).is_empty());
+        let text = "Added rwtries to the handler.";
+        assert!(kept(text, model(text, "rwtries", "rwtrts")).is_empty());
+        // "been waitin' forever" stays.
+        let text = "been waitin' forever";
+        assert!(kept(text, model(text, "waitin'", "waiting")).is_empty());
         // A real fix still goes through.
         let text = "I has a question";
         assert_eq!(kept(text, model(text, "has", "have")).len(), 1);

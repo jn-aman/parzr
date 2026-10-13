@@ -124,6 +124,10 @@ fn article_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if !["a", "an"].contains(&s[i].normalized.as_str()) || !s[i + 1].is_word {
             continue;
         }
+        // "Q&A Facts", "R&A teams": an "A" glued to the mark before it is no article.
+        if i > 0 && s[i - 1].end_byte == s[i].start_byte {
+            continue;
+        }
         let w = s[i + 1].normalized.as_str();
         let after = &s[i + 2];
         if s[i + 1].proper_name
@@ -317,6 +321,26 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             i + 1
         };
         let noun = &s[n];
+        // "These Q&A Facts", "this API": a title-case or acronym noun names something; its
+        // number is the name's.
+        if s[i + 1..=n]
+            .iter()
+            .any(|t| t.surface.chars().any(char::is_uppercase))
+        {
+            continue;
+        }
+        // "this weeks pool", "this years budget": a time word before another noun lost its
+        // possessive apostrophe.
+        if [
+            "weeks", "months", "years", "days", "quarters", "seasons", "mornings", "nights",
+        ]
+        .contains(&noun.normalized.as_str())
+            && s.get(n + 1)
+                .is_some_and(|a| a.is_word && spelling::flags(&a.normalized) & 2 != 0)
+            && ["this", "that"].contains(&d)
+        {
+            continue;
+        }
         // A noun that goes on into a compound ("this sports car") is a modifier.
         let ends = s.get(n + 1).is_none_or(|a| {
             let f = spelling::flags(&a.normalized);

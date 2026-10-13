@@ -236,10 +236,11 @@ const NEVER_POSSESSIVE: [(&str, &str); 4] = [
     ("regard's", "regards"),
 ];
 /// Words that follow "it's" and never the possessive "its" ("its a mess", "its not", "its been").
-const IT_IS_NEXT: [&str; 44] = [
+const IT_IS_NEXT: [&str; 45] = [
     "a",
     "about",
     "actually",
+    "all",
     "almost",
     "already",
     "alright",
@@ -293,10 +294,10 @@ const IT_IS_PREDICATES: [&str; 51] = [
 ];
 /// Words that may follow such a predicate and still close the clause, or that a predicate
 /// adjective takes and a noun's adjective never does ("its ready for review", "its hard to say").
-const IT_IS_AFTER_PREDICATE: [&str; 25] = [
+const IT_IS_AFTER_PREDICATE: [&str; 29] = [
     "again", "already", "and", "anyway", "at", "because", "but", "by", "enough", "for", "from",
-    "haha", "if", "in", "lol", "now", "so", "tho", "though", "to", "today", "too", "when", "with",
-    "yet",
+    "haha", "how", "if", "in", "it", "lol", "now", "so", "that", "tho", "though", "to", "today",
+    "too", "what", "when", "with", "yet",
 ];
 /// Predicates after "we're" that "were" cannot take at a sentence start.
 const WE_ARE: [&str; 20] = [
@@ -416,6 +417,11 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
                             "that",
                         ]
                         .contains(&f.after_next())
+                    // "@mike its merged", "its deployed now": a participle that ends the clause.
+                    || morphology::verb(next).is_some_and(|v| v.participle == next && v.past == next)
+                        && f.tokens.get(f.index + 2).is_none_or(|t| {
+                            !t.is_word && t.surface != "-" || t.paragraph != token.paragraph
+                        })
                     // "its taking up space", "its working now": a gerund followed by a particle,
                     // an object or the clause's end is a verb ("its growing popularity" is not).
                     || gerund(next)
@@ -427,7 +433,8 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
                         .contains(&f.after_next())
                     || IT_IS_PREDICATES.contains(&next) && ends(f.tokens.get(f.index + 2)))
         }
-        "ill" => f.clause_start(false) && AFTER_I_WILL.contains(&next),
+        // "but ill watch the recording": any verb after it ("ill will" and "ill health" are no verbs).
+        "ill" => f.clause_start(false) && (AFTER_I_WILL.contains(&next) || base_verb(next)),
         "id" => f.clause_start(false) && AFTER_I_WOULD.contains(&next),
         // "Were just parking now": no question opens this way.
         "were" => {
@@ -635,6 +642,32 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         let piece_after = tokens.get(index + 1).is_some_and(|t| {
             t.is_word && t.normalized.len() == 1 && !["a", "i"].contains(&t.normalized.as_str())
         });
+        // "I'veadded", "Aren'tyou", "That'sthe": a contraction typed together with the next word.
+        if normalized.contains('\'')
+            && !spelling::known(normalized)
+            && let Some((full, rest)) = CONTRACTIONS.iter().find_map(|c| {
+                let rest = normalized.strip_prefix(c)?;
+                ((rest.len() >= 2 || rest == "a") && spelling::ordinary(rest)).then_some((*c, rest))
+            })
+            && let Some(cut) = token
+                .surface
+                .char_indices()
+                .nth(full.chars().count())
+                .map(|(b, _)| b)
+            && let Some(head) = cased(full, &token.surface[..cut], apostrophe)
+        {
+            let tail = &token.surface[cut..];
+            let _ = rest;
+            push(
+                req,
+                edits,
+                token.start_byte,
+                token.end_byte,
+                format!("{head} {tail}"),
+                "A space is missing after this contraction.",
+            );
+            continue;
+        }
         // "you'r", "I'l", "we'v": the contraction's last letter left off.
         if !piece_after
             && let Some(full) = truncated(normalized)
@@ -716,7 +749,14 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 || tokens.get(index + 1).is_some_and(|n| {
                     n.is_word && n.surface.starts_with(char::is_uppercase) && n.normalized != "i"
                 }));
-        if !allowed || capital_inside && full.starts_with("i'") {
+        // "but Im swamped", "Hi folks, Ive updated": a capital "Im"/"Ive" between lowercase
+        // words is the contraction; beside another capital ("Jony Ive", "Im Jae-won") a name.
+        let name_beside = index.checked_sub(1).is_some_and(|p| {
+            tokens[p].is_word && tokens[p].surface.starts_with(char::is_uppercase)
+        }) || tokens.get(index + 1).is_some_and(|n| {
+            n.is_word && n.surface.starts_with(char::is_uppercase) && n.normalized != "i"
+        });
+        if !allowed || capital_inside && full.starts_with("i'") && name_beside {
             continue;
         }
         if let Some(replacement) = cased(full, token.surface, apostrophe) {
@@ -792,6 +832,14 @@ mod tests {
     fn apostrophe_less_contractions_are_restored() {
         for (input, output) in [
             ("Ive got the tickets.", "I've got the tickets."),
+            (
+                "I'd love to help, but Im swamped.",
+                "I'd love to help, but I'm swamped.",
+            ),
+            (
+                "Hi folks, Ive updated the doc.",
+                "Hi folks, I've updated the doc.",
+            ),
             ("im heading out now", "I'm heading out now"),
             ("Shes in a meeting.", "She's in a meeting."),
             ("Theyll call us back.", "They'll call us back."),
@@ -857,6 +905,11 @@ mod tests {
             ("they'r here", "they're here"),
             ("I'l be there.", "I'll be there."),
             ("We'v done it.", "We've done it."),
+            ("Hi both, I'veadded you.", "Hi both, I've added you."),
+            ("Aren'tyou on vacation?", "Aren't you on vacation?"),
+            ("That'sthe third time.", "That's the third time."),
+            ("I couldn'thear it.", "I couldn't hear it."),
+            ("I couldn’thear it.", "I couldn’t hear it."),
             ("Thank's for your help.", "Thanks for your help."),
             ("Congrat's on the promotion!", "Congrats on the promotion!"),
         ] {
@@ -892,6 +945,13 @@ mod tests {
             ),
             ("Its not my fault.", "It's not my fault."),
             ("Its so cold outside.", "It's so cold outside."),
+            ("@mike its merged", "@mike it's merged"),
+            (
+                "its amazing how little they know",
+                "it's amazing how little they know",
+            ),
+            ("its all good", "it's all good"),
+            ("Not sure its worth it.", "Not sure it's worth it."),
             (
                 "Delete the backup, its taking up space.",
                 "Delete the backup, it's taking up space.",
@@ -918,6 +978,8 @@ mod tests {
             "The court ruled on its taking of the land.",
             "The app owes its growing popularity to word of mouth.",
             "Its founding members met in 1990.",
+            "The firm and its merged units grew.",
+            "its skilled and semi-skilled employees were unionized",
             "Since its founding, the school has grown.",
             "Its on air moniker is Cat Country.",
             "The fame of Southwell is its late 13th century chapter house.",

@@ -826,6 +826,28 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let Some(mut is_plural) = plural(p) else {
             continue;
         };
+        // "Today: emails, code review, gym.", "call mom, finish report": a noun pair that makes up
+        // a whole list item is a noun phrase, not a subject and its verb.
+        let item_start = i < 2
+            || [",", ":", ";", "-", "•", "*"].contains(&tokens[i - 2].surface)
+            || tokens[i - 2].paragraph != p.paragraph;
+        let item_end = tokens.get(i + 1).is_none_or(|n| {
+            [",", ";", ".", ")"].contains(&n.surface) || n.paragraph != t.paragraph
+        });
+        if item_start
+            && item_end
+            && !pronoun_subject
+            && !determiner_subject
+            && spelling::flags(&t.normalized) & 2 != 0
+        {
+            continue;
+        }
+        // "Enron Net Works invites", "Acme Industries invites": a capitalized name inside the
+        // sentence is one company or team, whatever its last word's number.
+        let name_subject = p.normalized != "i"
+            && (p.proper_name
+                || p.surface.starts_with(char::is_uppercase)
+                    && !crate::starts_sentence(&req.text, p.start_byte, req));
         // "A and B are": a conjoined subject at the start of its clause. Another verb or a pronoun
         // before the "and" means it joins clauses ("I sing a song and the world is perfect").
         if let Some(and) = tokens[..i - 1]
@@ -1054,7 +1076,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     edits,
                 );
             }
-        } else if w == v.third && is_plural && !["read", "put", "cut", "let"].contains(&w) {
+        } else if w == v.third
+            && is_plural
+            && !name_subject
+            && !["read", "put", "cut", "let"].contains(&w)
+        {
             emit(
                 req,
                 t,

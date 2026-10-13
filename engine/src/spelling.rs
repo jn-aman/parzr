@@ -851,9 +851,21 @@ pub(crate) fn opening_name_slip(tokens: &[Token<'_>], index: usize) -> bool {
         && next.is_some_and(|next| {
             slips_from(word).iter().any(|c| {
                 frequency(c) >= 600 && doubled_or_swapped(word, c) && context::count(c, next) > 0
+                    // "Thaks for", "Apologis for": one letter dropped from a frequent word that
+                    // makes a very common pair with the next word (a name one letter short of
+                    // such a word is rare).
+                    // A name is usually followed by its verb or "and" ("Stans and he", "Bran said").
+                    || frequency(c) >= 400
+                        && c.len() >= 5
+                        && word.len() + 1 == c.len()
+                        && !["and", "or"].contains(&next)
+                        && crate::morphology::verb(next).is_none()
+                        && context::count(c, next) >= DROPPED_PAIR
             })
         })
 }
+/// Pair count above which a dropped-letter opener is read as the frequent word ("thanks for").
+const DROPPED_PAIR: u64 = 1_000_000;
 /// `typed` is `intended` with one key pressed twice ("wwe") or two neighbouring keys swapped
 /// ("cna"): slips that leave no name-like shape, unlike a dropped letter ("Yu", "Tis").
 fn doubled_or_swapped(typed: &str, intended: &str) -> bool {

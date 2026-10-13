@@ -297,7 +297,7 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b[\w.-]*[\w-]/[\w.-]*\w(?:/[\w.-]+)*|(?i:\b(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*| ?(?:[:;=8][-^o']?[)(\]\[dDpPoO3/\\|*]+|[)(][-^']?[:;]|<3+|\^_?\^|\bxD\b|:'\()(?:\s|$)|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b[\w.-]*[\w-]/[\w.-]*\w(?:/[\w.-]+)*|(?i:\b(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*| ?(?:[:;=8][-^o']?[)(\]\[dDpPoO3/\\|*]+|[)(][-^']?[:;]|<3+|\^_?\^|\bxD\b|:'\()(?:\s|$)|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]|\b\w+_\w+\b|\b[A-Za-z]+\d+[A-Za-z\d]*\b|\b[a-z]+[A-Z][A-Za-z\d]*\b").expect("constant protected-span regex"))
 }
 /// Command-line tools typed lowercase; "go", "make" and "node" are English words first.
 const TOOLS: [&str; 26] = [
@@ -514,10 +514,34 @@ pub fn protected_spans(req: &Request) -> Vec<TextRange> {
 /// marked one ("doin'") is left as typed.
 fn chat_forms(text: &str, edits: &mut Vec<Edit>) {
     edits.retain_mut(|e| {
+        // "c u later", "r u ok": chat letters are words of their own, never one word.
+        if e.rule_id.starts_with("spelling.")
+            && e.original.contains(' ')
+            && e.original
+                .split_whitespace()
+                .all(|p| p.chars().count() == 1 && "curykbn".contains(p.to_lowercase().as_str()))
+        {
+            return false;
+        }
         if !e.rule_id.starts_with("spelling.") || e.original.contains(char::is_whitespace) {
             return true;
         }
         let word = e.original.as_str();
+        // "ofc!", "pic?", "tho.": shorthand that is also a slip ("round ofc interviews") is the
+        // shorthand when no word follows it.
+        let ends_clause = byte_at(text, e.end_utf16).is_some_and(|b| {
+            text[b..]
+                .trim_start_matches([' ', '\t'])
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric())
+        });
+        if ends_clause
+            && ["ofc", "tho", "fr", "pic", "pics", "eta", "bae", "vid", "xo"]
+                .contains(&word.to_lowercase().as_str())
+        {
+            return false;
+        }
         if names::stretched(word) {
             let fixed = e.replacement.to_lowercase();
             let letters: Vec<char> = word.to_lowercase().chars().collect();
@@ -661,8 +685,15 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
     let token = &tokens[index];
     let w = token.normalized.as_str();
     let before = |k: usize| index >= k && tokens[index - k].sentence == token.sentence;
+    // "jk jk", "sure sure", "lol lol", "thanks thanks": chat doubles are meant too.
+    let meant = DOUBLED_ON_PURPOSE.contains(&w)
+        || names::is_shorthand(w)
+        || [
+            "sure", "thanks", "thank", "please", "cool", "nice", "wait", "come", "stop", "fine",
+        ]
+        .contains(&w);
     token.is_word
-        && !DOUBLED_ON_PURPOSE.contains(&w)
+        && !meant
         // "a A": an article and the letter it names.
         && !(token.surface.chars().count() == 1 && token.surface != tokens[index - 1].surface)
         // "what it is is", "all that is is": a clause about what something is, then its verb.
@@ -1848,6 +1879,11 @@ mod tests {
         }
         for (input, output) in [
             ("hey hope!", "Hey Hope!"),
+            // A letter outside ASCII once crashed the check for a slipped greeting word.
+            (
+                "Hey s\u{f8}ren! Long time no see.",
+                "Hey S\u{f8}ren! Long time no see.",
+            ),
             ("Thanks, rose.", "Thanks, Rose."),
             ("Hi mom", "Hi Mom"),
             ("Hey jack, can you check?", "Hey Jack, can you check?"),
@@ -1888,6 +1924,12 @@ mod tests {
             "The bug is in src/main.rs line 42.",
             "The error is coming from utils/date_helpers.py.",
             "fyi the build is green",
+            "ofc!",
+            "My username is jdoe42.",
+            "she uploaded jen_headshot.jpeg",
+            "the key is sk_test_abc123",
+            "c u later",
+            "jk jk",
             "see you there :)",
             "I was just saying (: do you need to talk",
             "thanks ;) see you",
@@ -1912,6 +1954,51 @@ mod tests {
             ),
         ] {
             assert_eq!(fix_request(with_names(input, &[], true)), output, "{input}");
+        }
+    }
+    #[test]
+    fn an_opening_word_one_letter_short_of_a_common_pair_is_a_slip() {
+        let opened = |text: &str| {
+            fix_request(Request {
+                sentence_start: true,
+                ..with_names(text, &[], false)
+            })
+        };
+        assert_eq!(
+            opened("Thaks for the reminder."),
+            "Thanks for the reminder."
+        );
+        assert_eq!(opened("Belo you will find it."), "Below you will find it.");
+        for text in ["Bran said hi.", "Tina will call.", "Mara will join."] {
+            assert_eq!(opened(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn list_items_names_and_titles_keep_their_number() {
+        for text in [
+            "Today: emails, code review, gym.",
+            "call mom, buy milk, finish report",
+            "These Q&A Facts are regularly updated.",
+            "Enron Net Works invites you to join us.",
+            "Acme Industries invites you to our open house.",
+        ] {
+            assert_eq!(fix_request(with_names(text, &[], false)), text, "{text}");
+        }
+        for (input, output) in [
+            ("My parents lives in Pune.", "My parents live in Pune."),
+            ("These book is great.", "This book is great."),
+            ("I am an experts in this.", "I am an expert in this."),
+            ("Sorry, ill be late.", "Sorry, I'll be late."),
+            (
+                "I can't come, but ill watch it.",
+                "I can't come, but I'll watch it.",
+            ),
+        ] {
+            assert_eq!(
+                fix_request(with_names(input, &[], false)),
+                output,
+                "{input}"
+            );
         }
     }
     #[test]
