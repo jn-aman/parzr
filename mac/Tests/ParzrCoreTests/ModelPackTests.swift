@@ -36,6 +36,17 @@ final class FakeTransport: ModelTransport, @unchecked Sendable {
     }
 }
 
+/// Starts an install and cancels it after `delay`. A free function with an explicit `update` closure: Swift 6.3's
+/// region checker on CI could not analyse a `Task` closure in the test class calling `install` with its default argument.
+func installThenCancel(_ store: ModelStore, _ pack: ModelPack, after delay: Duration) async -> ModelPackState {
+    await withTaskGroup(of: ModelPackState.self) { group in
+        group.addTask { await store.install(pack, update: { _ in }) }
+        try? await Task.sleep(for: delay)
+        group.cancelAll()
+        return await group.next() ?? .missing
+    }
+}
+
 final class ModelPackTests: XCTestCase {
     private var root: URL!
     override func setUp() { root = FileManager.default.temporaryDirectory.appendingPathComponent("parzr-models-\(UUID().uuidString)") }
@@ -175,12 +186,7 @@ final class ModelPackTests: XCTestCase {
         if case .other = ModelStore.failure(for: NSError(domain: "x", code: 1), needed: 1) {} else { XCTFail() }
     }
     func testCancellingKeepsThePartialFileForLater() async throws {
-        // An explicit capture of a differently named store: Swift 6.3's region checker could not analyse the closure
-        // capturing a local that shadows the `store(_:)` method.
-        let pending = store(transport(.slow))
-        let task = Task { [pending] in await pending.install(Self.pack) }
-        try await Task.sleep(for: .milliseconds(300)); task.cancel()
-        let result = await task.value
+        let result = await installThenCancel(store(transport(.slow)), Self.pack, after: .milliseconds(300))
         XCTAssertEqual(result, .missing)
         XCTAssertGreaterThan(ModelStore.size(staging.appendingPathComponent("writer.gguf.partial")) ?? 0, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: final.path))
