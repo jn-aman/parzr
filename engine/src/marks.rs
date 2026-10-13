@@ -1523,10 +1523,12 @@ const NO_COLON_AFTER: [&str; 24] = [
     "from",
     "as",
 ];
-/// Words that open a clause after a colon ("The question is: who pays?"), which may stay.
-const CLAUSE_OPENERS: [&str; 18] = [
+/// Words that open a clause after a colon ("The question is: who pays?", "The question is: can
+/// we use it?"), which may stay.
+const CLAUSE_OPENERS: [&str; 35] = [
     "who", "what", "when", "where", "why", "how", "whether", "if", "we", "i", "you", "they", "he",
-    "she", "it", "there", "this", "that",
+    "she", "it", "there", "this", "that", "can", "could", "will", "would", "should", "do", "does",
+    "did", "is", "are", "was", "were", "have", "has", "may", "shall", "must",
 ];
 const CONJUNCTIONS: [&str; 5] = ["and", "but", "so", "or", "yet"];
 fn colons(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
@@ -1956,6 +1958,7 @@ mod tests {
         for text in [
             "Note: the office is closed.",
             "The question is: who pays?",
+            "The specific question is: can we use it?",
             "The results were clear; the new design performed better.",
             "We have offices in Paris, France; Berlin, Germany; and Madrid, Spain.",
             "She called it “the big one.”",

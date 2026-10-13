@@ -1975,9 +1975,36 @@ pub(crate) fn keeps_meaning(
     if approximations(source) != approximations(output) {
         return Err("changes how exact a number is".into());
     }
+    // A rewrite says each phrase once ("… a printer in my office, based on the volume of
+    // activity" said twice).
+    let grams = |t: &str| {
+        let w: Vec<String> = t
+            .split(|c: char| !c.is_alphanumeric() && c != '\'')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect();
+        w.windows(3).map(|g| g.join(" ")).collect::<Vec<_>>()
+    };
+    let (src_grams, out_grams) = (grams(source), grams(output));
+    if let Some(g) = out_grams.iter().find(|g| {
+        out_grams.iter().filter(|o| o == g).count()
+            > src_grams.iter().filter(|s| s == g).count().max(1)
+    }) {
+        return Err(format!("says “{g}” twice"));
+    }
     // Every sentence of the rewrite comes from the original: one whose content words all are
     // new ("I was hoping to discuss this matter.") was made up.
     // A softened insult may be said anew ("This is garbage" as "This needs more work").
+    // When the rewrite has more sentences than the original, a new one must carry at least one
+    // of the original's words ("You're welcome! I'm so glad you're here." made one up; "the demo
+    // went well. The client loved it." split one). An emoji alone is no sentence.
+    let worded = |t: &str| {
+        sentences(t)
+            .into_iter()
+            .filter(|s| s.chars().any(char::is_alphabetic))
+            .count()
+    };
+    let extra = worded(output) > worded(source);
     for sentence in sentences(output).into_iter().filter(|_| !softened) {
         let content: Vec<Word> = words(sentence, &[])
             .into_iter()
@@ -1987,7 +2014,10 @@ pub(crate) fn keeps_meaning(
             .iter()
             .filter(|o| src.iter().any(|s| matches(s, o)))
             .count();
-        if content.len() >= 2 && kept == 0 || content.len() >= 4 && kept <= 1 {
+        if content.len() >= 2 && kept == 0
+            || content.len() >= 4 && kept <= 1
+            || extra && !content.is_empty() && kept == 0
+        {
             return Err(format!("adds “{}”", sentence.trim()));
         }
     }

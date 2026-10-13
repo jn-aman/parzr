@@ -949,6 +949,10 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
             break;
         }
         let w = t.normalized.as_str();
+        // "Thanks for you're quick response": no sentence ends on a preposition's object.
+        if PREPOSITIONS.contains(&word(tokens, i - 1)) {
+            continue;
+        }
         let pronoun = SUBJECTS[..7].contains(&w) || CONTRACTED[..29].contains(&w);
         let clause = clause_at(tokens, i, end);
         let left = clause_at(tokens, s, i).is_some_and(|v| v < i);
@@ -968,6 +972,8 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
                         || clause.is_some_and(|v| AUXILIARIES.contains(&word(tokens, v)))))
                 && words(tokens, i, end) >= 3
         } else if DETERMINERS.contains(&w)
+            // "a guide that should help": "that" after a noun opens its relative clause.
+            && !(w == "that" && spelling::flags(word(tokens, i - 1)) & 2 != 0)
             && let Some(v) = clause
         {
             // "will be changing the payment method": a progressive verb runs on to its object.
