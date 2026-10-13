@@ -135,7 +135,7 @@ final class PassiveObserver {
         }
         observed.removeAll { $0.1 != kAXFocusedUIElementChangedNotification }
         guard let app = SelfTestTarget.watched else { return }
-        guard let focused = AX.focusedText(app), !AX.isSecure(focused) else {
+        guard let focused = AX.focusedText(app), !AX.isSecure(focused), !AX.isSearch(focused) else {
             // The first queries after activation can see only the menu bar while Firefox or VS Code switch accessibility on; look once more.
             if retry, Compat.needsFocusRetry(bundle: app.bundleIdentifier, vscodeEnabled: Preferences.shared.checkVSCode) {
                 focusRetry?.cancel()

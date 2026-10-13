@@ -71,11 +71,20 @@ public enum SuggestedRewrite {
 public struct EmptyCheck: Equatable, Sendable {
     public let title: String, detail: String, hint: String
     public let warning: Bool
+    /// The engine's warning that a tone rewrite changed what the writer meant and was left out.
+    public static let toneWithheld = "tone.withheld"
     public init(mode: RewriteMode, status: String? = nil) {
+        hint = mode == .fix ? "Want it reworded? Pick a tone above." : "Try another tone above."
+        if mode != .fix, status?.contains(Self.toneWithheld) == true {
+            // Not "Already reads well": a rewrite was written, but it changed the meaning.
+            warning = true
+            title = "No safe \(mode.title) version"
+            detail = "Parzr’s rewrite changed what you meant, so your words stay as they are."
+            return
+        }
         warning = status != nil
         title = mode == .fix ? (status == nil ? "Looks good" : "No changes found") : "Already reads well in \(mode.title)"
         detail = status ?? (mode == .fix ? "No grammar or spelling changes in this selection." : "No changes suggested.")
-        hint = mode == .fix ? "Want it reworded? Pick a tone above." : "Try another tone above."
     }
 }
 public struct TextSpan: Codable, Sendable, Equatable {

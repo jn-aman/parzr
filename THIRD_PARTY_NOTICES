@@ -76,6 +76,18 @@ resources/ThirdParty/EnglishFrequency-NOTICES.md. Both files ship in the
 app's Resources/ThirdParty directory. Wordfreq's Apache-2.0 Python code is
 used only by the build-time exporter and is not shipped as a runtime.
 
+Mined misspelling pairs (engine/rules/typos.txt)
+Word pairs (misspelling and correction, no running text) counted from real
+corrections and kept by scripts/build-typo-lexicon.py:
+  WikEd Error Corpus v1.0, Wikipedia revision text, CC BY-SA 3.0
+  (Grundkiewicz and Junczys-Dowmunt 2014).
+  GitHub Typo Corpus v1.0.0 (Hagiwara and Mita 2020), edits from public
+  repositories under their own licenses.
+  Holbrook, Aspell and Wikipedia misspelling lists and the Birkbeck spelling
+  error corpus, compiled by Roger Mitton (Birkbeck, University of London).
+  Wikipedia:Lists of common misspellings/For machines, CC BY-SA 4.0.
+Pairs from non-commercial learner corpora are never included.
+
 Local model and runtime
 Qwen3.5-0.8B: Copyright Alibaba/Qwen contributors. Apache License 2.0.
 https://huggingface.co/Qwen/Qwen3.5-0.8B

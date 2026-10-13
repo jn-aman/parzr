@@ -23,6 +23,13 @@ final class EmptyCheckTests: XCTestCase {
         XCTAssertEqual(empty.detail, "Context refinement is unavailable.")
         XCTAssertTrue(empty.warning)
     }
+    func testAWithheldRewriteNeverClaimsTheTextReadsWell() {
+        let empty = EmptyCheck(mode: .professional, status: EmptyCheck.toneWithheld)
+        XCTAssertEqual(empty.title, "No safe Professional version")
+        XCTAssertTrue(empty.detail.contains("changed what you meant"))
+        XCTAssertTrue(empty.warning)
+        XCTAssertEqual(empty.hint, "Try another tone above.")
+    }
     func testEveryModeHasADistinctSummaryAndHelp() {
         let modes = RewriteMode.allCases
         XCTAssertEqual(Set(modes.map(\.summary)).count, modes.count)

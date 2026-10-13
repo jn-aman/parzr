@@ -4,7 +4,7 @@ use crate::Mode;
 use aho_corasick::AhoCorasick;
 use regex::Regex;
 use serde::Deserialize;
-use std::sync::OnceLock;
+use std::{collections::HashMap, sync::OnceLock};
 mod literals;
 #[derive(Debug, Deserialize)]
 pub struct Rule {
@@ -116,8 +116,24 @@ pub fn candidates(text: &str) -> Vec<bool> {
 }
 /// The reviewed list of common misspellings: (misspelling, correction) pairs.
 pub fn misspellings() -> impl Iterator<Item = (&'static str, &'static str)> {
-    include_str!("../rules/misspellings.txt")
-        .lines()
+    pairs(include_str!("../rules/misspellings.txt"))
+}
+/// Misspellings mined from real corrections (scripts/build-typo-lexicon.py): (misspelling,
+/// correction) pairs that are no word or name and are corrected one way nearly every time.
+pub fn mined_misspellings() -> impl Iterator<Item = (&'static str, &'static str)> {
+    pairs(include_str!("../rules/typos.txt"))
+}
+/// The mined correction of one lowercase word ("febuary" is "February"), by table lookup: the
+/// list is too long for the phrase matcher to build quickly.
+pub fn mined_typo(lower: &str) -> Option<&'static str> {
+    static TABLE: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
+    TABLE
+        .get_or_init(|| mined_misspellings().collect())
+        .get(lower)
+        .copied()
+}
+fn pairs(list: &'static str) -> impl Iterator<Item = (&'static str, &'static str)> {
+    list.lines()
         .filter(|line| !line.starts_with('#'))
         .filter_map(|line| line.split_once(' '))
 }
@@ -236,9 +252,38 @@ mod tests {
         }
     }
     #[test]
+    fn mined_misspellings_respell_words_but_not_names() {
+        for (input, expected) in [
+            (
+                "It was in Febuary that we left.",
+                "It was in February that we left.",
+            ),
+            (
+                "He moved to Britian last year.",
+                "He moved to Britain last year.",
+            ),
+            ("Seperate the files please.", "Separate the files please."),
+            ("The competion was fierce.", "The competition was fierce."),
+            ("See you on Wenesday.", "See you on Wednesday."),
+            (
+                "Look up a non-existant invoice.",
+                "Look up a non-existent invoice.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected);
+        }
+        // A capitalized word inside a sentence whose correction is an ordinary word may be a
+        // name ("Siller" is no "Miller", "Princip" no "Principle").
+        for text in ["We met Mr Siller today.", "The shot was fired by Princip."] {
+            assert_eq!(fix(text), text);
+        }
+        assert_eq!(mined_typo("febuary"), Some("February"));
+        assert_eq!(mined_typo("february"), None);
+    }
+    #[test]
     fn listed_misspellings_are_never_words_or_names() {
         let mut seen = std::collections::HashSet::new();
-        for (wrong, right) in misspellings() {
+        for (wrong, right) in misspellings().chain(mined_misspellings()) {
             // Not a word or name in any English variant, listed once, and corrected to words.
             assert!(!crate::spelling::known(wrong), "{wrong} is a word");
             assert!(!crate::names::is_bundled_name(wrong), "{wrong} is a name");

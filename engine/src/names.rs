@@ -78,7 +78,21 @@ pub fn is_known_misspelling(word: &str) -> bool {
             .filter(|s| !s.contains(' '))
             .collect()
     });
-    is_name_typo(lower) || sources.contains(lower)
+    is_name_typo(lower)
+        || sources.contains(lower)
+        || crate::rules::mined_typo(lower).is_some()
+        || crate::spelling::calendar_word_slip(lower).is_some()
+}
+/// A misspelling from the hand-reviewed lists only (name typos, one-word phrase rules). Names the
+/// writer gives Parzr are dropped only for these: the mined list is broad ("projet" is someone's word).
+pub fn is_reviewed_misspelling(word: &str) -> bool {
+    let lower = fold(word);
+    let lower = base(&lower);
+    is_name_typo(lower)
+        || crate::rules::phrases()
+            .rules
+            .iter()
+            .any(|r| !r.source.contains(' ') && r.source == lower)
 }
 /// Unicode case folding used for every name comparison (matches `Token::normalized`).
 pub fn fold(s: &str) -> String {
@@ -88,10 +102,16 @@ pub fn fold(s: &str) -> String {
 pub fn base(normalized: &str) -> &str {
     normalized.strip_suffix("'s").unwrap_or(normalized)
 }
-const SHORTHAND: [&str; 41] = [
+const SHORTHAND: [&str; 110] = [
     "u", "ur", "r", "k", "pls", "plz", "thx", "ty", "btw", "lol", "omg", "idk", "ok", "okk", "ya",
     "yep", "nope", "tbh", "imo", "fyi", "asap", "np", "yw", "brb", "gtg", "ttyl", "lmk", "smh",
     "afaik", "iirc", "rn", "ngl", "wyd", "hbu", "tmrw", "cuz", "ppl", "lmao", "imho", "jk", "omw",
+    "haha", "hahaha", "hahah", "hahahah", "hahahaha", "ahaha", "ahahaha", "ahah", "hehe", "hehehe",
+    "hihi", "tehe", "teehee", "lmfao", "rofl", "wtf", "ikr", "idc", "idek", "ily", "ilysm", "bff",
+    "bffs", "istg", "nvm", "irl", "dm", "dms", "thru", "tmr", "yup", "naw", "mhm", "hmm", "hmmm",
+    "umm", "aww", "awww", "woohoo", "kk", "okie", "lemme", "gimme", "dunno", "yall", "coz", "bc",
+    "thnx", "tysm", "atm", "wbu", "otw", "g2g", "msg", "msgs", "convo", "mins", "secs", "hrs",
+    "pfp", "lowkey", "highkey", "bruh", "ty4", "xoxo", "ttys", "bday", "gf", "bf",
 ];
 const CALENDAR: [&str; 19] = [
     "monday",
@@ -114,9 +134,189 @@ const CALENDAR: [&str; 19] = [
     "november",
     "december",
 ];
-/// Chat shorthand ("pls", "thx") is a word of its own: never a name, never respelled.
+/// Ordinary words people greet or thank a group or a person with ("Hi team", "Thanks, everyone",
+/// "Hey there", "Hello again", "Hi guys"), and the pronouns, adverbs and question words that open a
+/// sentence after "Hey," ("Hey, there's a bug"): a greeting before them makes none of them a name.
+/// Family words used as names ("Hi Mom") are not listed and keep their capital.
+const ADDRESS_WORDS: [&str; 113] = [
+    "again",
+    "all",
+    "allies",
+    "anyway",
+    "babe",
+    "baby",
+    "back",
+    "beautiful",
+    "boss",
+    "both",
+    "boys",
+    "bro",
+    "bros",
+    "buddies",
+    "buddy",
+    "champ",
+    "chief",
+    "class",
+    "colleague",
+    "colleagues",
+    "crew",
+    "customer",
+    "customers",
+    "cutie",
+    "darling",
+    "dear",
+    "dude",
+    "dudes",
+    "each",
+    "everybody",
+    "everyone",
+    "fam",
+    "fellas",
+    "folks",
+    "friend",
+    "friends",
+    "gals",
+    "gang",
+    "gentlemen",
+    "gents",
+    "girl",
+    "girls",
+    "guys",
+    "handsome",
+    "he",
+    "hello",
+    "her",
+    "here",
+    "hey",
+    "hi",
+    "him",
+    "hon",
+    "honey",
+    "how",
+    "hun",
+    "it",
+    "kiddo",
+    "kids",
+    "ladies",
+    "love",
+    "ma'am",
+    "maam",
+    "madam",
+    "man",
+    "mate",
+    "mates",
+    "me",
+    "members",
+    "much",
+    "neighbor",
+    "neighbors",
+    "neighbour",
+    "neighbours",
+    "now",
+    "pal",
+    "partner",
+    "partners",
+    "peeps",
+    "people",
+    "she",
+    "sir",
+    "sirs",
+    "so",
+    "squad",
+    "stranger",
+    "students",
+    "sunshine",
+    "sweetheart",
+    "sweetie",
+    "team",
+    "that",
+    "them",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "though",
+    "today",
+    "together",
+    "too",
+    "us",
+    "we",
+    "what",
+    "when",
+    "where",
+    "who",
+    "why",
+    "world",
+    "y'all",
+    "yall",
+    "yo",
+    "you",
+];
+/// A word that, after a greeting or a thank-you, addresses people without naming one ("team",
+/// "everyone", "there", "again") or opens the next clause ("Hey, there's a bug").
+pub fn address_word(lower: &str) -> bool {
+    let lower = base(lower);
+    ADDRESS_WORDS.binary_search(&lower).is_ok()
+        || is_shorthand(lower)
+        // A contraction ("there's", "that's", "it'll") is a clause, never a name.
+        || lower.split_once('\'').is_some_and(|(stem, _)| stem.chars().count() > 2)
+}
+/// Chat shorthand and interjections ("pls", "thx", "haha", "idc", "bc") are words of their own:
+/// never a name, never respelled ("haha" is no "aha", "bc" no "by").
 pub fn is_shorthand(lower: &str) -> bool {
     SHORTHAND.contains(&lower)
+}
+/// Chat acronyms ("fyi", "lmk", "idk", "btw"): a capital on the first letter only ("Fyi") is wrong,
+/// so a sentence start leaves them as typed.
+pub fn is_chat_acronym(lower: &str) -> bool {
+    const ACRONYMS: [&str; 47] = [
+        "afaik", "asap", "atm", "bc", "bff", "bffs", "brb", "btw", "dm", "dms", "fyi", "g2g",
+        "gtg", "hbu", "idc", "idek", "idk", "iirc", "ikr", "ily", "ilysm", "imho", "imo", "irl",
+        "istg", "jk", "lmao", "lmfao", "lmk", "lol", "ngl", "np", "nvm", "omg", "omw", "otw", "rn",
+        "rofl", "smh", "tbh", "tmrw", "ttyl", "tysm", "wbu", "wtf", "wyd", "yw",
+    ];
+    ACRONYMS.contains(&lower)
+}
+/// "pleaseee", "yesss", "sooo": a word stretched for emphasis, never a name.
+/// A word stretched for emphasis ("sooo", "yesss", "pleeease", "hmmm"): a run of three letters
+/// at the end, or of a vowel inside a word of five letters or more, that collapses to a word
+/// people stretch.
+/// Short words with a tripled inner vowel ("eeek", "neeedd") and tripled consonants inside a word
+/// ("plannnig", "willlose") are slips.
+pub fn stretched(word: &str) -> bool {
+    let c: Vec<char> = word.to_lowercase().chars().collect();
+    let run = c.windows(3).enumerate().any(|(i, t)| {
+        t[0].is_alphabetic()
+            && t[0] == t[1]
+            && t[1] == t[2]
+            && (i + 3 == c.len() || "aeiouy".contains(t[0]) && c.len() >= 5)
+    });
+    run && (1..=2).any(|keep| EXPRESSIVE.contains(&squeeze(&c, keep).as_str()))
+}
+/// Words people stretch in chats ("sooo", "pleeease", "yesss"); a stretched "weee" or "feee" is a
+/// slip of "were" or "free".
+const EXPRESSIVE: [&str; 64] = [
+    "ah", "aw", "bad", "bored", "cold", "cool", "cute", "damn", "fun", "funny", "good", "gosh",
+    "great", "happy", "hello", "hey", "hi", "hm", "hmm", "hot", "hungry", "late", "lol", "long",
+    "love", "me", "mine", "much", "nice", "no", "nope", "now", "oh", "ok", "okay", "omg", "please",
+    "pretty", "real", "really", "sad", "so", "soon", "sorry", "sure", "thank", "thanks", "there",
+    "tired", "too", "ugh", "very", "what", "why", "wow", "yay", "yeah", "yep", "yes", "you", "yum",
+    "yummy", "yup", "zzz",
+];
+/// `word` with every run of a repeated letter cut to `keep` letters.
+pub fn squeeze(word: &[char], keep: usize) -> String {
+    let mut out = String::new();
+    let mut run = 0;
+    let mut last = None;
+    for &c in word {
+        run = if Some(c) == last { run + 1 } else { 1 };
+        last = Some(c);
+        if run <= keep {
+            out.push(c);
+        }
+    }
+    out
 }
 /// Days, months, chat shorthand and one or two lowercase letters are never name guesses, whatever
 /// a language tagger or a list says; only the user's own names and dictionary can claim them.
@@ -128,7 +328,7 @@ pub fn never_a_name(token: &str) -> bool {
     // capitalized form (aquire/Aquire) and the tagger may call a capitalized typo a person ("for
     // Teh meeting"). Names the user taught Parzr are matched separately and still win.
     let typo = is_name_typo(lower) || is_known_misspelling(lower);
-    short || typo || SHORTHAND.contains(&lower) || CALENDAR.contains(&lower)
+    short || typo || stretched(lower) || SHORTHAND.contains(&lower) || CALENDAR.contains(&lower)
 }
 /// MEDIUM predicate: a bundled name that is not an ordinary word and not a known typo.
 pub fn name_word(lower: &str) -> bool {
@@ -210,7 +410,7 @@ impl NameIndex {
         for word in &req.dictionary {
             index.dictionary.add(word, false);
         }
-        for name in req.names.iter().filter(|n| !is_known_misspelling(n)) {
+        for name in req.names.iter().filter(|n| !is_reviewed_misspelling(n)) {
             index.names.add(name, true);
         }
         index
@@ -315,6 +515,7 @@ impl NameIndex {
             // A known misspelling ("thanks alot") is never the person addressed.
             let addressed_capital = !sentence_start(i)
                 && !is_known_misspelling(b)
+                && !stretched(b)
                 // "Thank yyou so much": a slip of "you", not a person thanked.
                 && !spelling::slip_fits(b, i.checked_sub(1).map(|j| &tokens[j]), tokens.get(i + 1), t)
                 && (capitalized(t) && spelling::addressed(tokens, i)
@@ -322,6 +523,7 @@ impl NameIndex {
                         && spelling::closes_name(tokens, i)
                         // "thanks for", "thank you", "best quality", "dear me": an ordinary word is
                         // a name only behind a comma ("bye, hope.") or a salutation ("hey hope!").
+                        && !address_word(&t.normalized)
                         && (!spelling::ordinary(b)
                             || i > 0 && tokens[i - 1].surface == ","
                             || i > 0
@@ -391,6 +593,74 @@ impl NameIndex {
     }
 }
 
+/// Function words that never follow a possessive as its noun.
+const GLUE: [&str; 48] = [
+    "a", "an", "the", "and", "or", "but", "so", "to", "of", "in", "on", "at", "by", "for", "from",
+    "with", "is", "are", "was", "were", "be", "has", "have", "had", "will", "would", "can",
+    "could", "should", "it", "its", "we", "they", "you", "he", "she", "me", "us", "him", "them",
+    "my", "your", "our", "their", "this", "that", "not", "no",
+];
+/// "I like noahs life", "that was sarahs idea": a first name typed in lowercase with the "s" of
+/// its possessive but no apostrophe, before a noun, is the name's possessive ("Noah's life"). The
+/// stem must be a name the dictionary only knows capitalized (or a bundled name that is no
+/// ordinary word), and the word itself no word of its own ("johns", "rosés" stay).
+pub fn lowercase_possessives(text: &str, tokens: &[Token<'_>]) -> Vec<Capitalization> {
+    let mut out = vec![];
+    for (i, t) in tokens.iter().enumerate() {
+        let Some(stem) = t.normalized.strip_suffix('s') else {
+            continue;
+        };
+        let lower = |c: char| c.is_ascii_lowercase();
+        let prev = i.checked_sub(1).map(|p| &tokens[p]);
+        let next = tokens.get(i + 1);
+        if !t.is_word
+            || !t.surface.chars().all(lower)
+            // "lib dems face": a short stem must be a bundled first name.
+            || stem.len() < 3
+            || stem.len() == 3 && !is_bundled_name(stem)
+            || spelling::known(&t.normalized)
+            || never_a_name(stem)
+            || is_name_typo(stem)
+            || !(spelling::name_only(stem) || name_word(stem))
+            // "the jones family": a determiner owns a plural, not a possessive.
+            || prev.is_some_and(|p| {
+                ["the", "a", "an", "these", "those", "all", "both"].contains(&p.normalized.as_str())
+            })
+        {
+            continue;
+        }
+        if next
+            .filter(|n| {
+                n.is_word
+                    && n.surface.chars().all(lower)
+                    && text[t.end_byte..n.start_byte] == *" "
+                    && spelling::flags(&n.normalized) & 2 != 0
+                    && ![
+                        "Verb",
+                        "Adverb",
+                        "Preposition",
+                        "Pronoun",
+                        "Determiner",
+                        "Conjunction",
+                    ]
+                    .contains(&n.pos.as_str())
+                    && !GLUE.contains(&n.normalized.as_str())
+            })
+            .is_none()
+        {
+            continue;
+        }
+        let cased = spelling::canonical_case(stem)
+            .map(String::from)
+            .unwrap_or_else(|| crate::upper_first(stem));
+        out.push(Capitalization {
+            start_utf16: t.start_utf16,
+            end_utf16: t.end_utf16,
+            replacement: format!("{cased}'s"),
+        });
+    }
+    out
+}
 /// A case-only suggestion over `tokens[start..=end]`.
 pub struct Capitalization {
     pub start_utf16: usize,
@@ -459,12 +729,35 @@ pub fn capitalizations(
                 .all(char::is_lowercase)
             && (!spelling::ordinary(b)
                 || cover[i]
-                || spelling::addressed(tokens, i) && spelling::closes_name(tokens, i))
+                || spelling::addressed(tokens, i)
+                    && spelling::closes_name(tokens, i)
+                    && !address_word(&t.normalized))
+    };
+    // A slug or compound glued by hyphens to a word that is no name ("devops-general", "team-aman-notes") is an
+    // identifier, never a name to capitalize in part.
+    let glued = |a: usize, b: usize| tokens[a].end_byte == tokens[b].start_byte;
+    let hyphen_at = |k: usize| tokens.get(k).is_some_and(|t| t.surface == "-");
+    let in_slug = |i: usize| {
+        let mut k = i;
+        while k >= 2 && hyphen_at(k - 1) && glued(k - 2, k - 1) && glued(k - 1, k) {
+            k -= 2;
+            if !eligible(k) {
+                return true;
+            }
+        }
+        let mut k = i;
+        while hyphen_at(k + 1) && k + 2 < tokens.len() && glued(k, k + 1) && glued(k + 1, k + 2) {
+            k += 2;
+            if !eligible(k) {
+                return true;
+            }
+        }
+        false
     };
     let mut out = Vec::new();
     let mut i = 0;
     while i < tokens.len() {
-        if !eligible(i) {
+        if !eligible(i) || in_slug(i) {
             i += 1;
             continue;
         }

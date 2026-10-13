@@ -75,6 +75,22 @@ enum Compat {
         guard let value else { return false }
         return value.unicodeScalars.allSatisfy { $0 == "\u{200B}" || CharacterSet.whitespacesAndNewlines.contains($0) }
     }
+    /// A search box (the Google box, an address bar, an app's Search field) holds queries, not prose: "VP in hcl
+    /// salary" is no sentence to correct. Automatic checking skips it; Option+Space on a selection still works.
+    static func isSearchField(role: String?, subrole: String?, labels: [String?]) -> Bool {
+        if subrole == "AXSearchField" || role == "AXComboBox" { return true }
+        return labels.contains { label in
+            guard let label = label?.lowercased(), !label.isEmpty else { return false }
+            return label == "search" || label.hasPrefix("search ") || label.contains("address and search") || label.hasSuffix(" search")
+        }
+    }
+    /// An empty web composer (Teams, Slack, Chrome) can report its placeholder ("Message in devops-general") as its
+    /// text: Chromium exposes CSS-generated placeholder content. Text that is exactly the field's placeholder, label or
+    /// title is no writing of the user's.
+    static func isPlaceholder(_ text: String?, labels: [String?]) -> Bool {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return false }
+        return labels.contains { $0?.trimmingCharacters(in: .whitespacesAndNewlines) == text }
+    }
     /// Keystrokes in Docs with no readable text before the setup hint appears (a new empty document reads the same until the first characters land).
     static let docsHintKeystrokes = 8
     static func docsHintNeeded(isDocs: Bool, value: String?, keystrokes: Int, dismissed: Bool) -> Bool {
@@ -206,11 +222,16 @@ extension AX {
     static func isMarkerEditor(_ element: AXUIElement) -> Bool {
         get(element, "AXStartTextMarker") != nil && settable(element, kAXValueAttribute) && settable(element, "AXSelectedTextMarkerRange")
     }
+    static func isSearch(_ element: AXUIElement) -> Bool {
+        Compat.isSearchField(role: string(element, kAXRoleAttribute), subrole: string(element, kAXSubroleAttribute),
+                             labels: ["AXPlaceholderValue", kAXDescriptionAttribute, kAXTitleAttribute].map { string(element, $0) })
+    }
     static func text(_ element: AXUIElement) -> String? {
-        let value = string(element, kAXValueAttribute)
+        var value = string(element, kAXValueAttribute)
         if value?.isEmpty != false, isMarkerEditor(element), let start = get(element, "AXStartTextMarker"), let end = get(element, "AXEndTextMarker"),
-           let all = param(element, "AXTextMarkerRangeForUnorderedTextMarkers", [start, end] as CFArray) { return param(element, "AXStringForTextMarkerRange", all) as? String }
-        return value
+           let all = param(element, "AXTextMarkerRangeForUnorderedTextMarkers", [start, end] as CFArray) { value = param(element, "AXStringForTextMarkerRange", all) as? String }
+        let labels = ["AXPlaceholderValue", kAXDescriptionAttribute, kAXTitleAttribute, kAXHelpAttribute].map { string(element, $0) }
+        return Compat.isPlaceholder(value, labels: labels) ? "" : value
     }
     static func selection(_ element: AXUIElement) -> NSRange? {
         if let known = range(element) { return known }

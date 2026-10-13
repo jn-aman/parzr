@@ -8,6 +8,7 @@ mod confusion;
 mod context;
 mod contractions;
 mod determiners;
+mod forms;
 #[cfg(feature = "local-model")]
 mod gec;
 #[cfg(feature = "local-model")]
@@ -285,7 +286,131 @@ fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
 }
 fn protection_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|(?i:\b[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+    RE.get_or_init(||Regex::new(r"(?ms)```.*?(?:```|\z)|~~~.*?(?:~~~|\z)|`[^`\n]*(?:`|$)|(?:https?://|www\.)[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|\B[@#]\w(?:[\w.-]*\w)?|(?:/|~/|[A-Za-z]:\\)[\w./\\-]+|\b[\w.-]*[\w-]/[\w.-]*\w(?:/[\w.-]+)*|(?i:\b(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)*\.(?:png|jpe?g|gif|svg|webp|heic|tiff?|bmp|ico|pdf|docx?|xlsx?|pptx?|odt|rtf|csv|tsv|txt|md|json|ya?ml|toml|xml|html?|css|scss|less|js|mjs|cjs|jsx|ts|tsx|py|rb|rs|java|kt|swift|cpp|hpp|cs|php|sh|zsh|bash|sql|zip|tar|gz|tgz|rar|7z|dmg|pkg|app|exe|msi|apk|ipa|mp3|mp4|mov|wav|m4a|aac|flac|avi|mkv|webm|sketch|fig|psd|log|env|lock|ini|cfg|conf|ipynb|vsix|epub|gguf|dylib|so|dll|jar|wasm)\b)|\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|app|dev|ai|co|uk|tv|xyz|info|biz|edu|gov|ly|tech|site|online|store|cloud|page|gg)\b|\b\d+(?:[.,:/-]\d+)*\b|(?m)^>[^\n]*| ?(?:[:;=8][-^o']?[)(\]\[dDpPoO3/\\|*]+|[)(][-^']?[:;]|<3+|\^_?\^|\bxD\b|:'\()(?:\s|$)|(?m)^-- ?$[\s\S]*|(?m)^\s*(?:curl|git|npm|npx|cargo|sudo|python3?|ssh|brew)\s[^\n]*(?:\\\n[^\n]*)*|[\u{FFFC}]").expect("constant protected-span regex"))
+}
+/// Command-line tools typed lowercase; "go", "make" and "node" are English words first.
+const TOOLS: [&str; 26] = [
+    "apt", "apt-get", "aws", "brew", "cargo", "conda", "curl", "docker", "gcloud", "gem", "git",
+    "helm", "kubectl", "npm", "npx", "pip", "pip3", "pipx", "pnpm", "poetry", "python", "python3",
+    "rustup", "ssh", "sudo", "yarn",
+];
+/// What follows a tool's name in a command ("git pull", "brew install", "npm run").
+const SUBCOMMANDS: [&str; 52] = [
+    "add",
+    "apply",
+    "build",
+    "cask",
+    "check",
+    "checkout",
+    "ci",
+    "clone",
+    "commit",
+    "compose",
+    "config",
+    "create",
+    "delete",
+    "deploy",
+    "describe",
+    "diff",
+    "doctor",
+    "down",
+    "exec",
+    "fetch",
+    "fmt",
+    "freeze",
+    "get",
+    "i",
+    "info",
+    "init",
+    "install",
+    "list",
+    "log",
+    "login",
+    "logs",
+    "ls",
+    "merge",
+    "new",
+    "outdated",
+    "publish",
+    "pull",
+    "push",
+    "rebase",
+    "remove",
+    "reset",
+    "restart",
+    "run",
+    "search",
+    "show",
+    "start",
+    "stash",
+    "status",
+    "stop",
+    "test",
+    "uninstall",
+    "update",
+];
+/// A shell command inside a sentence ("Install it with brew install ffmpeg.", "use python3 -m venv
+/// .venv", "Run git pull before you start."): the tool, its subcommand, and then flags, paths and
+/// words no dictionary knows, up to the first ordinary word or the sentence's end.
+fn command_spans(text: &str) -> Vec<TextRange> {
+    static TOOL: OnceLock<Regex> = OnceLock::new();
+    let tool = TOOL.get_or_init(|| {
+        Regex::new(r"(?:^|[\s(`])([a-z][a-z0-9-]*[a-z0-9])\b").expect("constant tool regex")
+    });
+    let mut out = vec![];
+    for c in tool.captures_iter(text) {
+        let m = c.get(1).expect("tool");
+        if !TOOLS.contains(&m.as_str()) || text[m.end()..].starts_with(['.', '/', '-', '_']) {
+            continue;
+        }
+        let mut end = m.end();
+        let mut subcommand = true;
+        let mut after_flag = false;
+        let mut args = 0;
+        loop {
+            let rest = &text[end..];
+            let Some(gap) = rest.strip_prefix(' ') else {
+                break;
+            };
+            let arg_len = gap.find([' ', '\n', '\t']).unwrap_or(gap.len());
+            let raw = &gap[..arg_len];
+            // A sentence's own mark after the last argument is not part of it.
+            let arg = raw.trim_end_matches(['.', ',', ';', '!', '?', ')', ':']);
+            let well_formed = !arg.is_empty()
+                && arg
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_./@:=~+".contains(c));
+            let flag = arg.starts_with('-');
+            let pathish =
+                arg.contains(['.', '/', '@', ':', '=', '~', '_']) || arg.contains(char::is_numeric);
+            let bare = arg.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+            let plain_word = bare && spelling::ordinary(arg);
+            if !well_formed
+                || !(flag
+                    || pathish
+                    || subcommand && (SUBCOMMANDS.contains(&arg) || TOOLS.contains(&arg))
+                    || after_flag && bare
+                    || bare && !plain_word)
+                || args >= 8
+            {
+                break;
+            }
+            subcommand = false;
+            after_flag = flag;
+            args += 1;
+            end += 1 + arg.len();
+            if arg.len() != raw.len() {
+                break;
+            }
+        }
+        if args > 0 {
+            out.push(TextRange {
+                start_utf16: utf16_at(text, m.start()),
+                end_utf16: utf16_at(text, end),
+            });
+        }
+    }
+    out
 }
 fn protected_ranges(req: &Request) -> Vec<TextRange> {
     let tokens = tokenizer::tokenize(&req.text, &req.tokens);
@@ -303,6 +428,7 @@ fn protected_ranges_for(
             end_utf16: utf16_at(&req.text, m.end()),
         });
     }
+    spans.extend(command_spans(&req.text));
     // Dictionary words (also multi-word and hyphenated entries) stay exactly as typed; other names
     // the tagger found are protected up to their possessive boundary.
     let dictionary = index.dictionary_hits(tokens);
@@ -370,6 +496,62 @@ pub fn protected_spans(req: &Request) -> Vec<TextRange> {
         }
     }
     spans
+}
+/// Words typed the way people talk in chats: a stretched word ("sooo", "yesss", "pleaseee") is no
+/// slip of another word ("soon", "yes's"), so a respelling may only shorten its stretch; a dropped
+/// "-ing" g ("holdin", "billin") is never split into "hold in", it may only get its g back, and a
+/// marked one ("doin'") is left as typed.
+fn chat_forms(text: &str, edits: &mut Vec<Edit>) {
+    edits.retain_mut(|e| {
+        if !e.rule_id.starts_with("spelling.") || e.original.contains(char::is_whitespace) {
+            return true;
+        }
+        let word = e.original.as_str();
+        if names::stretched(word) {
+            let fixed = e.replacement.to_lowercase();
+            let letters: Vec<char> = word.to_lowercase().chars().collect();
+            return (1..=2).any(|keep| fixed == names::squeeze(&letters, keep))
+                && spelling::known(&fixed);
+        }
+        let g_less =
+            word.len() >= 4 && word.ends_with("in") && word.chars().all(|c| c.is_ascii_lowercase());
+        if !g_less {
+            return true;
+        }
+        let full = format!("{word}g");
+        let stem = &word[..word.len() - 2];
+        // "interestedin", "notin" are two words: only a verb ("hold", "bill") or no word at all
+        // ("runn") whose "-ing" form is a word lost its g.
+        if !spelling::known(&full)
+            || spelling::known(stem) && morphology::verb(&full).is_none_or(|v| v.base != stem)
+        {
+            return true;
+        }
+        let marked = byte_at(text, e.end_utf16)
+            .and_then(|b| text[b..].chars().next())
+            .is_some_and(|c| c == '\'' || c == '’');
+        if marked {
+            return false;
+        }
+        // "the linkin my last message", "the guyin the shirt": "in" before a determiner is the
+        // preposition, and the split stands.
+        let next_word = byte_at(text, e.end_utf16)
+            .map(|b| text[b..].split_whitespace().next().unwrap_or(""))
+            .unwrap_or("")
+            .to_lowercase();
+        if e.replacement.to_lowercase() != format!("{} in", &word[..word.len() - 2])
+            || [
+                "the", "a", "an", "my", "your", "his", "her", "our", "their", "these", "those",
+                "its",
+            ]
+            .contains(&next_word.as_str())
+        {
+            return true;
+        }
+        e.replacement = match_case(&full, &e.replacement);
+        e.explanation = "Add the g this word dropped.".into();
+        true
+    });
 }
 #[expect(
     clippy::too_many_arguments,
@@ -456,11 +638,11 @@ fn match_case(replacement: &str, original: &str) -> String {
     }
 }
 /// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
-const DOUBLED_ON_PURPOSE: [&str; 48] = [
-    "that", "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well",
-    "blah", "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um",
-    "la", "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi",
-    "wow", "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
+const DOUBLED_ON_PURPOSE: [&str; 47] = [
+    "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well", "blah",
+    "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um", "la",
+    "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi", "wow",
+    "boo", "tick", "tock", "choo", "yum", "mm", "hmm", "pretty",
 ];
 /// The word at `index` repeats the one before it by a slip ("the the", "call call"). Doubles that
 /// can be meant are kept, and so is "is is" after "what it" ("what it is is").
@@ -472,7 +654,43 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
         && !DOUBLED_ON_PURPOSE.contains(&w)
         // "a A": an article and the letter it names.
         && !(token.surface.chars().count() == 1 && token.surface != tokens[index - 1].surface)
-        && !(w == "is" && before(2) && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str()))
+        // "what it is is", "all that is is": a clause about what something is, then its verb.
+        && !(w == "is"
+            && before(3)
+            && ["it", "that", "this"].contains(&tokens[index - 2].normalized.as_str())
+            && ["what", "all", "way", "how", "who", "where", "whatever"]
+                .contains(&tokens[index - 3].normalized.as_str()))
+        // "that that": a demonstrative after the conjunction ("I know that that works") is meant;
+        // a pronoun, article or plural noun after both is not.
+        // "put in in the model": the first "in" is "it", which the grammar pass restores.
+        && !(w == "in"
+            && before(2)
+            && crate::forms::PUT_IN.contains(&tokens[index - 2].normalized.as_str())
+            && !(before(3)
+                && ["be", "been", "being", "is", "are", "was", "were", "get", "got"]
+                    .contains(&tokens[index - 3].normalized.as_str()))
+            && tokens.get(index + 1).is_some_and(|n| n.is_word))
+        && (w != "that"
+            // "what you mean by that that.": nothing follows to make it a demonstrative.
+            || tokens
+                .get(index + 1)
+                .is_none_or(|n| n.sentence != token.sentence || [".", "!", "?"].contains(&n.surface))
+            || tokens.get(index + 1).is_some_and(|n| {
+                n.sentence == token.sentence
+                    && ([
+                        "i", "you", "he", "she", "we", "they", "there", "the", "a", "an", "my",
+                        "your", "his", "our", "their", "its", "some", "many", "most", "these",
+                        "those", "if", "when", "once",
+                    ]
+                    .contains(&n.normalized.as_str())
+                        || (n.pos == "Noun" || spelling::flags(&n.normalized) & 2 != 0)
+                            && structure::plural(n) == Some(true)
+                            && !n.proper_name
+                            // "the ethics that that implicates": a verb, not a plural noun.
+                            && !morphology::verb(&n.normalized).is_some_and(|v| {
+                                v.third == n.normalized && spelling::flags(&n.normalized) & 4 != 0
+                            }))
+            }))
         // A capitalized double inside a sentence is a name ("Bora Bora", "Walla Walla").
         && !(token.surface.starts_with(char::is_uppercase)
             && tokens[index - 1].surface.starts_with(char::is_uppercase)
@@ -613,6 +831,67 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             &rule.id,
             &rule.explanation,
             rule.confidence,
+        ) {
+            edits.push(e);
+        }
+    }
+    // Misspellings mined from real corrections, matched word by word ("Febuary", "existant").
+    // A capital inside a sentence may be a name ("Siller", "Princip"): only a misspelt proper noun
+    // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
+    // throughout only on longer words ("INITALIZED").
+    for t in tokens.iter().filter(|_| !tone_only) {
+        // The writer's names and dictionary words (and links, code, file names) are never respelled.
+        if protected
+            .iter()
+            .chain(guard.iter())
+            .any(|r| overlaps(t.start_utf16, t.end_utf16, r))
+        {
+            continue;
+        }
+        // "Wenesday", "Thurday": a capitalized slip of a day or month name.
+        let day = spelling::calendar_slip(t);
+        let Some(correction) = (t.is_word && t.surface.is_ascii())
+            .then(|| rules::mined_typo(&t.normalized))
+            .flatten()
+            .or(day.as_deref())
+        else {
+            continue;
+        };
+        let original = t.surface;
+        let mut letters = original.chars();
+        let capital = letters.next().is_some_and(|c| c.is_ascii_uppercase());
+        let rest_lower = letters.clone().all(|c| !c.is_ascii_uppercase());
+        let all_caps = letters.all(|c| !c.is_ascii_lowercase());
+        let allowed = if !capital {
+            rest_lower
+        } else if rest_lower {
+            starts_sentence(&req.text, t.start_byte, req)
+                || correction.starts_with(|c: char| c.is_ascii_uppercase()) && !t.system_known
+        } else {
+            all_caps && original.len() >= 6 && !t.system_known
+        };
+        if !allowed {
+            continue;
+        }
+        let mut replacement = typo_capital(
+            match_case(correction, original),
+            original,
+            starts_sentence(&req.text, t.start_byte, req),
+        );
+        if starts_sentence(&req.text, t.start_byte, req)
+            && req.text.trim_end().ends_with(['.', '!', '?'])
+        {
+            replacement = upper_first(&replacement);
+        }
+        if let Some(e) = make_edit(
+            &req.text,
+            t.start_utf16,
+            t.end_utf16,
+            replacement,
+            "Spelling",
+            "spelling.common_misspelling",
+            "This is a common misspelling.",
+            0.95,
         ) {
             edits.push(e);
         }
@@ -766,7 +1045,14 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         let contracted_i = ["i'm", "i've", "i'll", "i'd"].contains(&token.normalized.as_str())
             && token.surface.starts_with('i')
             && token.surface[1..].chars().all(|c| !c.is_uppercase());
-        if (token.normalized == "i" && token.surface == "i" || contracted_i) && !dotted_abbreviation
+        // "c) What is covered?", "(i) a credit decision": a letter or numeral that labels a list item.
+        let enumerator = token.surface.chars().count() <= 4
+            && req.text[token.end_byte..].starts_with(')')
+            && (token.surface.chars().count() == 1
+                || token.surface.chars().all(|c| "ivxlc".contains(c)));
+        if (token.normalized == "i" && token.surface == "i" || contracted_i)
+            && !dotted_abbreviation
+            && !enumerator
         {
             if let Some(e) = make_edit(
                 &req.text,
@@ -781,6 +1067,9 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 edits.push(e);
             }
         } else if starts_sentence(&req.text, token.start_byte, req)
+            && !enumerator
+            // "fyi the build is green", "lmk if": chat acronyms stay as typed, never "Fyi".
+            && !names::is_chat_acronym(&token.normalized)
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
                 || capitalization::interjection(&token.normalized)
@@ -832,22 +1121,55 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
         if index > 0 {
             let previous = &tokens[index - 1];
-            if previous.normalized == token.normalized
+            // "we we're", "should shouldn't": the word and then its own contraction.
+            let contracted = previous.normalized != "that"
+                && previous.is_word
+                && token
+                    .normalized
+                    .strip_prefix(previous.normalized.as_str())
+                    .is_some_and(|rest| {
+                        ["'re", "'s", "'d", "'ll", "'ve", "'m", "n't", "'t"].contains(&rest)
+                    });
+            if (previous.normalized == token.normalized && repeated_by_mistake(&tokens, index)
+                || contracted)
                 && previous.sentence == token.sentence
                 && previous.paragraph == token.paragraph
-                && repeated_by_mistake(&tokens, index)
             {
                 let gap = &req.text[previous.end_byte..token.start_byte];
                 // "a A$1.5 billion" and "US$ 5": the letter belongs to a currency or code token.
-                let code = req.text[token.end_byte..]
-                    .starts_with(|c: char| c.is_ascii_digit() || "$€£¥#/_-".contains(c));
+                // A word of two letters or more may run into a hyphen ("for for-profit").
+                let code = req.text[token.end_byte..].starts_with(|c: char| {
+                    c.is_ascii_digit()
+                        || "$€£¥#/_".contains(c)
+                        || c == '-' && token.surface.chars().count() < 2
+                });
+                // "the The Beatles", "we we're": the second copy is the one to keep. A capital
+                // after a lowercase copy is kept only on a function word ("home arena Arena
+                // Mexico" is a name, "as well as AS units" an acronym).
+                let raised = token.surface.starts_with(char::is_uppercase)
+                    && !previous.surface.starts_with(char::is_uppercase);
+                let keep_second = contracted || raised;
+                let name_like = raised
+                    && (![
+                        "the", "a", "an", "and", "of", "in", "on", "to", "for", "with", "at", "by",
+                        "from",
+                    ]
+                    .contains(&token.normalized.as_str())
+                        || token.surface.chars().count() > 1
+                            && token.surface.chars().all(char::is_uppercase));
+                let (start, end) = if keep_second {
+                    (previous.start_utf16, token.start_utf16)
+                } else {
+                    (previous.end_utf16, token.end_utf16)
+                };
                 if !gap.is_empty()
                     && !code
+                    && !name_like
                     && gap.chars().all(|c| c == ' ' || c == '\t')
                     && let Some(e) = make_edit(
                         &req.text,
-                        previous.end_utf16,
-                        token.end_utf16,
+                        start,
+                        end,
                         String::new(),
                         "Repetition",
                         "grammar.repeated_word",
@@ -924,6 +1246,20 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         }
     }
     if req.capitalize_names && !tone_only {
+        for c in names::lowercase_possessives(&req.text, &tokens) {
+            if let Some(e) = make_edit(
+                &req.text,
+                c.start_utf16,
+                c.end_utf16,
+                c.replacement.clone(),
+                "Style",
+                "names.possessive",
+                &format!("Write the name's possessive as “{}”.", c.replacement),
+                0.88,
+            ) {
+                edits.push(e);
+            }
+        }
         for c in names::capitalizations(
             &req.text,
             &tokens,
@@ -985,6 +1321,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 e.start_utf16 >= *a && e.start_utf16 < *b && (*all || e.category == "Grammar")
             })
     });
+    chat_forms(&req.text, &mut edits);
     // Names take case changes only: any other edit touching one is dropped.
     let case_only = |e: &Edit| e.original.to_lowercase() == e.replacement.to_lowercase();
     // Only lowercase letters turned capital, nothing else changed.
@@ -1008,8 +1345,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // "Sarahs laptop" to "Sarah's laptop": an apostrophe added to or dropped from a name keeps
     // every letter of it.
     let apostrophe_only = |e: &Edit| {
-        e.rule_id == "punctuation.apostrophe"
-            && e.original.replace(['\'', '’'], "") == e.replacement.replace(['\'', '’'], "")
+        let letters = |s: &str| s.replace(['\'', '’'], "");
+        e.rule_id == "punctuation.apostrophe" && letters(&e.original) == letters(&e.replacement)
+            // "noahs" to "Noah's": the name's capital and its apostrophe, no letter changed.
+            || e.rule_id == "names.possessive"
+                && letters(&e.original).to_lowercase() == letters(&e.replacement).to_lowercase()
     };
     // A sentence's first word is capitalized by position, so the tagger's name guess there is weak
     // evidence: an ordinary word that a context rule rewrites ("Hat makes sense", "Thy said", "Bit
@@ -1404,12 +1744,46 @@ mod tests {
         assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
     }
     #[test]
+    fn the_writers_names_are_never_respelled_by_the_misspelling_list() {
+        assert_eq!(
+            fix_request(with_names("I read the projet today.", &[], false)),
+            "I read the project today."
+        );
+        assert_eq!(
+            fix_request(with_names("I read the projet today.", &["projet"], false)),
+            "I read the projet today."
+        );
+    }
+    #[test]
+    fn a_capital_you_inside_a_sentence_is_lowercased_but_headings_keep_theirs() {
+        let fix = |t: &str| fix_request(with_names(t, &[], true));
+        assert_eq!(
+            fix("Hey, You have Clickhouse available now!"),
+            "Hey, you have Clickhouse available now!"
+        );
+        assert_eq!(
+            fix("Thanks, Your help was great."),
+            "Thanks, your help was great."
+        );
+        assert_eq!(
+            fix("Everything You Need To Know About Rust"),
+            "Everything You Need To Know About Rust"
+        );
+        assert_eq!(
+            fix("You did it. You really did."),
+            "You did it. You really did."
+        );
+    }
+    #[test]
     fn file_names_and_domains_are_never_capitalized() {
         for text in [
             "aman.png",
             "rename it to aman.png",
             "send AMAN.PNG and priya_notes.docx",
             "see parzr.app and github.com",
+            "Message in devops-general",
+            "post in aman-notes please",
+            "using jn-aman/m365-agent-gateway: a local gateway",
         ] {
             assert_eq!(
                 fix_request(with_names(text, &["Aman", "Priya"], true)),
@@ -1419,6 +1793,10 @@ mod tests {
         assert_eq!(
             fix_request(with_names("send it to aman", &["Aman"], true)),
             "send it to Aman"
+        );
+        assert_eq!(
+            fix_request(with_names("send it to jean-luc", &["Jean-Luc"], true)),
+            "send it to Jean-Luc"
         );
     }
     #[test]
@@ -1433,6 +1811,102 @@ mod tests {
             ..with_names("I like noahs life.", &[], true)
         };
         assert!(pipeline::rewrite(&req).is_ok());
+    }
+    #[test]
+    fn greetings_capitalize_names_not_the_people_or_words_they_address() {
+        for text in [
+            "Hi again, Ken.",
+            "Hey there, how are you?",
+            "Thanks, everyone.",
+            "Hi team, quick update.",
+            "Dear team, please note the change.",
+            "Hello world",
+            "Hey, there's a bug.",
+            "Hi guys",
+            "Bye, folks!",
+            "Hey buddy, what's up?",
+            "Hi both, see attached.",
+            "Hey, that's fine.",
+        ] {
+            assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
+        }
+        for (input, output) in [
+            ("hey hope!", "Hey Hope!"),
+            ("Thanks, rose.", "Thanks, Rose."),
+            ("Hi mom", "Hi Mom"),
+            ("Hey jack, can you check?", "Hey Jack, can you check?"),
+        ] {
+            assert_eq!(fix_request(with_names(input, &[], true)), output, "{input}");
+        }
+    }
+    #[test]
+    fn lowercase_names_with_a_bare_possessive_s_get_the_apostrophe() {
+        for (input, output) in [
+            ("I like noahs life.", "I like Noah's life."),
+            ("That was sarahs idea.", "That was Sarah's idea."),
+        ] {
+            assert_eq!(fix_request(with_names(input, &[], true)), output, "{input}");
+        }
+        for text in [
+            "I borrowed johns car.",
+            "We met the joneses at noon.",
+            "the jones family",
+            "Their kids play here.",
+        ] {
+            assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
+        }
+    }
+    #[test]
+    fn chat_words_lists_and_commands_are_left_as_typed() {
+        for text in [
+            "I'm sooo tired.",
+            "Yesss we did it!",
+            "haha true",
+            "idk... and idc either lmao",
+            "his name is bullseye bc you see",
+            "doin' fine, thanks",
+            "c) What is covered?",
+            "She said (i) this is fine and (ii) that is too.",
+            "use python3 -m venv .venv",
+            "Install it with brew install ffmpeg.",
+            "The bug is in src/main.rs line 42.",
+            "The error is coming from utils/date_helpers.py.",
+            "fyi the build is green",
+            "see you there :)",
+            "I was just saying (: do you need to talk",
+            "thanks ;) see you",
+            "love you <3",
+            "hey ppl can u text me",
+        ] {
+            assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
+        }
+        for (input, output) in [
+            ("he's not holdin you down", "he's not holding you down"),
+            (
+                "Need a reviewer on the billin change.",
+                "Need a reviewer on the billing change.",
+            ),
+            (
+                "Hasan was notin favor of it.",
+                "Hasan was not in favor of it.",
+            ),
+            (
+                "Run git pull before you staart.",
+                "Run git pull before you start.",
+            ),
+        ] {
+            assert_eq!(fix_request(with_names(input, &[], true)), output, "{input}");
+        }
+    }
+    #[test]
+    fn a_first_name_that_is_a_modal_is_not_an_inverted_auxiliary() {
+        for text in [
+            "Will Smith was great in that film.",
+            "Will Ferrell was funny.",
+            "May Lee has left.",
+        ] {
+            assert_eq!(fix_request(with_names(text, &[], false)), text, "{text}");
+        }
     }
     #[test]
     fn capitalize_names_adds_one_case_only_edit() {

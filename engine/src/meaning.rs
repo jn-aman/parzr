@@ -325,6 +325,145 @@ const FILLER: &[&str] = &[
     "quick",
     "quickly",
 ];
+/// Rude or crude words ("stupid", "hell"): softening them is what a tone rewrite is for, so every tone may drop
+/// them, and a softened sentence may say "not" ("a dumb idea" is "not the best idea").
+const RUDE: &[&str] = &[
+    "stupid",
+    "dumb",
+    "idiot",
+    "idiotic",
+    "idiots",
+    "moron",
+    "moronic",
+    "hell",
+    "damn",
+    "damned",
+    "dammit",
+    "goddamn",
+    "crap",
+    "crappy",
+    "shit",
+    "shitty",
+    "bullshit",
+    "fuck",
+    "fucking",
+    "fucked",
+    "wtf",
+    "bloody",
+    "freaking",
+    "frigging",
+    "sucks",
+    "suck",
+    "sucky",
+    "lame",
+    "pathetic",
+    "useless",
+    "ridiculous",
+    "garbage",
+    "trash",
+    "ass",
+    "asshole",
+    "jerk",
+    "screw",
+    "screwed",
+    "nonsense",
+    "shut",
+];
+/// How a reply begins: a rewrite that starts like this answers the message instead of rewriting it.
+const REPLY_OPENERS: &[&str] = &[
+    "sure",
+    "of course",
+    "absolutely",
+    "no problem",
+    "certainly",
+    "yes,",
+    "yes!",
+    "no,",
+    "thanks for asking",
+    "i'd love to",
+    "i would love to",
+    "i'd be happy to",
+    "i would be happy to",
+    "happy to help",
+    "great question",
+];
+/// "have" as the main verb ("You have Clickhouse available", "We have a meeting"), not the auxiliary of a
+/// perfect ("have sent", "has already been"): the sentence says someone has something, and a rewrite that drops it
+/// ("You and Clickhouse are now available") says something else.
+fn possessive_have(text: &str) -> bool {
+    const PARTICIPLES: &[&str] = &[
+        "been",
+        "done",
+        "gone",
+        "made",
+        "seen",
+        "got",
+        "gotten",
+        "taken",
+        "given",
+        "written",
+        "known",
+        "sent",
+        "built",
+        "put",
+        "set",
+        "had",
+        "left",
+        "found",
+        "told",
+        "said",
+        "heard",
+        "kept",
+        "brought",
+        "bought",
+        "thought",
+        "met",
+        "run",
+        "come",
+        "become",
+        "begun",
+        "read",
+        "paid",
+        "lost",
+        "won",
+        "sold",
+        "held",
+        "felt",
+        "to",
+        "spent",
+        "let",
+        "shut",
+        "cut",
+        "hit",
+        "hurt",
+        "understood",
+        "taught",
+        "caught",
+        "fought",
+        "sought",
+    ];
+    const BETWEEN: &[&str] = &[
+        "already", "just", "never", "not", "also", "recently", "ever", "still", "all", "both",
+        "finally", "now",
+    ];
+    let words: Vec<String> = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '\'' || c == '’'))
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_lowercase().replace('’', "'"))
+        .collect();
+    words.iter().enumerate().any(|(i, w)| {
+        let have = ["have", "has", "had", "having"].contains(&w.as_str()) || w.ends_with("'ve");
+        if !have {
+            return false;
+        }
+        let next = words[i + 1..]
+            .iter()
+            .find(|n| !BETWEEN.contains(&n.as_str()));
+        next.is_some_and(|n| {
+            !(PARTICIPLES.contains(&n.as_str()) || n.ends_with("ed") && n.len() > 3)
+        })
+    })
+}
 /// Hedging verbs ("I think", "I guess"): Direct and Concise may drop them.
 const HEDGES: &[&str] = &[
     "think", "guess", "believe", "suppose", "feel", "reckon", "seem",
@@ -1005,8 +1144,45 @@ pub(crate) fn keeps_meaning(
 ) -> Result<(), String> {
     let (src, out) = (words(source, source_hints), words(output, output_hints));
     let around = words(elsewhere, &[]);
+    let rude = |w: &Word| mode != Mode::Fix && w.keys.iter().any(|k| RUDE.contains(&k.as_str()));
+    let softened = src
+        .iter()
+        .any(|s| rude(s) && !out.iter().any(|o| matches(s, o)));
+    if let Some(w) = out
+        .iter()
+        .find(|o| rude(o) && !src.iter().any(|s| matches(s, o)))
+    {
+        return Err(format!("adds “{}”, which is rude", w.surface));
+    }
+    // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
+    // an instruction), and it never answers the message ("Sure, I'd love to take a look!").
+    if mode != Mode::Direct && source.trim_end().ends_with('?') && !output.trim_end().ends_with('?')
+    {
+        return Err("turns a question into a statement".into());
+    }
+    let opener = |t: &str| {
+        let t = t.trim_start().to_lowercase();
+        REPLY_OPENERS.iter().any(|o| t.starts_with(o))
+    };
+    if opener(output) && !opener(source) {
+        return Err("answers the message instead of rewriting it".into());
+    }
+    // Professional and Friendly keep the sentence's shape; Concise and Direct may recast it ("if you had a chance to
+    // look" is "did you check").
+    if matches!(mode, Mode::Professional | Mode::Friendly)
+        && possessive_have(source)
+        && !possessive_have(output)
+        && !["got", "own", "owns", "possess", "with"].iter().any(|w| {
+            output
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|o| o.eq_ignore_ascii_case(w))
+        })
+    {
+        return Err("drops “have”, so the sentence says something else".into());
+    }
     let negated = |w: &[Word]| w.iter().any(|w| w.kind == Kind::Negation);
-    if negated(&src) != negated(&out) {
+    // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
+    if negated(&src) != negated(&out) && (negated(&src) || !softened) {
         return Err(if negated(&src) {
             "drops a negation".into()
         } else {
@@ -1069,7 +1245,7 @@ pub(crate) fn keeps_meaning(
     };
     let lost: Vec<&Word> = src_content
         .iter()
-        .filter(|s| !hedge(s) && !out.iter().any(|o| matches(s, o)))
+        .filter(|s| !hedge(s) && !rude(s) && !out.iter().any(|o| matches(s, o)))
         .collect();
     let added: Vec<&str> = out_content
         .iter()
@@ -1288,6 +1464,65 @@ mod tests {
         assert!(!ok(c, "Please send me the slides.", "Please send me."));
     }
 
+    #[test]
+    fn a_rewrite_keeps_who_has_what() {
+        let src = "Hey, You have Clickhouse available now!";
+        assert!(!ok(
+            Mode::Professional,
+            src,
+            "Hello, You and Clickhouse are now available!"
+        ));
+        assert!(ok(
+            Mode::Professional,
+            src,
+            "Hello, you now have Clickhouse available!"
+        ));
+        assert!(ok(
+            Mode::Friendly,
+            src,
+            "Hey, you've got Clickhouse available now!"
+        ));
+        // The auxiliary of a perfect is no possession: "I have sent it" may become "I sent it".
+        assert!(ok(
+            Mode::Concise,
+            "I have already sent the report.",
+            "I sent the report."
+        ));
+    }
+    #[test]
+    fn tones_soften_rudeness_but_never_answer_or_turn_a_question_around() {
+        assert!(ok(
+            Mode::Professional,
+            "Why the hell is this broken again?",
+            "Why is this broken again?"
+        ));
+        assert!(ok(
+            Mode::Professional,
+            "This is a dumb idea.",
+            "This is not a good idea."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "This is a dumb idea.",
+            "This is a stupid idea."
+        ));
+        assert!(!ok(
+            Mode::Friendly,
+            "Could you review this?",
+            "Sure, I'd love to review this!"
+        ));
+        assert!(!ok(
+            Mode::Professional,
+            "Can we meet tomorrow?",
+            "We would be happy to meet tomorrow."
+        ));
+        assert!(ok(
+            Mode::Direct,
+            "Could you review this?",
+            "Please review this."
+        ));
+        assert!(!ok(Mode::Fix, "This is a dumb idea.", "This is an idea."));
+    }
     #[test]
     fn tones_may_swap_synonyms_but_not_the_point() {
         for mode in [Mode::Professional, Mode::Friendly, Mode::Direct] {

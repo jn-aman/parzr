@@ -4,6 +4,20 @@ use crate::{
     tokenizer::{self, Token},
 };
 
+/// "Will Smith was great.", "May Lee has left.": a capitalized "Will" or "May" before another
+/// capitalized word, in a sentence that asks nothing, is a first name, not an inverted auxiliary.
+fn full_name_statement(tokens: &[Token<'_>], aux: usize) -> bool {
+    let (first, next) = (&tokens[aux], tokens.get(aux + 1));
+    ["will", "may"].contains(&first.normalized.as_str())
+        && first.surface.starts_with(char::is_uppercase)
+        && next.is_some_and(|n| {
+            n.is_word && n.surface.starts_with(char::is_uppercase) && n.normalized != "i"
+        })
+        && tokens
+            .iter()
+            .rfind(|t| t.paragraph == first.paragraph && t.sentence == first.sentence)
+            .is_some_and(|last| last.surface != "?")
+}
 /// Words after which a clause (and so a subject) can begin.
 const CLAUSE_OPENERS: [&str; 41] = [
     "and",
@@ -517,6 +531,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && w == v.base
             // "is do bad" is a damaged "is so bad", not a passive.
             && !(w == "do" && tokens.get(i + 1).is_some_and(spelling::adjective))
+            // "All we need to do is build a wall": a pseudo-cleft takes the bare verb.
+            && !tokens[..prev].iter().any(|x| {
+                x.sentence == t.sentence
+                    && ["do", "does", "did", "done"].contains(&x.normalized.as_str())
+            })
             && (spelling::flags(w) & 8 == 0
                 || [
                     "deliver", "prepare", "repair", "invite", "attach", "assign", "publish",
@@ -579,6 +598,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             // "I talked to Will he said yes": a capitalized "Will" inside a sentence is a name.
             && (!tokens[prev - 1].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
+            && !full_name_statement(&tokens, prev - 1)
         {
             if w != v.base {
                 emit(
@@ -794,6 +814,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         }
         // "actions that day were": the plural before "that" is the head of the subject.
         if i >= 3 && tokens[i - 2].normalized == "that" && plural(&tokens[i - 3]) == Some(true) {
+            continue;
+        }
+        // "Each students has": the determiner, not the noun's ending, gives the number.
+        if i >= 2
+            && ["each", "every"].contains(&tokens[i - 2].normalized.as_str())
+            && plural(p) == Some(true)
+        {
             continue;
         }
         let Some(mut is_plural) = plural(p) else {

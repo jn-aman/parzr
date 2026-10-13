@@ -132,6 +132,10 @@ const SEASON: (&str, &str) = (
     "grammar.season_lowercase",
     "Seasons are not capitalized in running text.",
 );
+const STRAY_YOU: (&str, &str) = (
+    "grammar.pronoun_lowercase",
+    "“you” takes a capital only at the start of a sentence.",
+);
 const AFTER_COLON: (&str, &str) = (
     "grammar.colon_lowercase",
     "A list or phrase after a colon starts with a lowercase letter.",
@@ -226,6 +230,43 @@ const CLAUSE_WORDS: [&str; 40] = [
 /// A capital that opens a short lowercase list or phrase after a colon in running text ("three
 /// options: Keep, merge, or delete"). A label ("Note: The office..."), a clause, a name or a
 /// capitalized list keeps its capitals.
+/// "Hey, You have it": "You" or "Your" capitalized inside a sentence, after a word or a comma. A heading in title
+/// case ("Everything You Need") keeps its capitals, and so does a quote or a line that is all one case.
+fn stray_capital_you(text: &str, tokens: &[Token<'_>], i: usize) -> bool {
+    let token = &tokens[i];
+    if ![
+        "You", "Your", "Yours", "You're", "You've", "You'll", "You'd", "You’re", "You’ve",
+        "You’ll", "You’d",
+    ]
+    .contains(&token.surface)
+    {
+        return false;
+    }
+    let Some(previous) = i.checked_sub(1).map(|p| &tokens[p]) else {
+        return false;
+    };
+    let gap = &text[previous.end_byte..token.start_byte];
+    let after_word = previous.is_word && gap == " ";
+    let after_comma = previous.surface == "," && gap == " ";
+    if previous.paragraph != token.paragraph || !(after_word || after_comma) {
+        return false;
+    }
+    // Title case: most other words after the first start with a capital ("Everything You Need To Know").
+    let others: Vec<&Token<'_>> = tokens
+        .iter()
+        .enumerate()
+        .filter(|(k, t)| {
+            *k != i && t.is_word && t.sentence == token.sentence && t.paragraph == token.paragraph
+        })
+        .skip(1)
+        .map(|(_, t)| t)
+        .collect();
+    let capitals = others
+        .iter()
+        .filter(|t| t.surface.starts_with(char::is_uppercase))
+        .count();
+    capitals * 2 < others.len()
+}
 fn stray_capital_after_colon(req: &Request, tokens: &[Token<'_>], i: usize) -> bool {
     let token = &tokens[i];
     let word = token.normalized.as_str();
@@ -333,6 +374,8 @@ pub fn check(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
             push(req, edits, token, upper_first(token.surface), MONTH);
         } else if stray_season(req, tokens, i) {
             push(req, edits, token, lower_first(token.surface), SEASON);
+        } else if stray_capital_you(text, tokens, i) {
+            push(req, edits, token, lower_first(token.surface), STRAY_YOU);
         } else if stray_capital_after_colon(req, tokens, i) {
             push(req, edits, token, lower_first(token.surface), AFTER_COLON);
         }
