@@ -153,7 +153,7 @@ final class InlineSuggestions {
               let carried = MarkCarry.remap(edits: result.edits.filter { visible.contains($0.id) }, selection: s.selection, inlineBreaks: s.inlineBreaks, from: old, to: now), !carried.edits.isEmpty else { return false }
         let text = WebGeometry.joining((now as NSString).substring(with: carried.selection), origin: carried.selection.location, breaks: carried.inlineBreaks)
         let moved = SelectionSnapshot(app: s.app, element: s.element, selection: carried.selection, expectedSelection: caret, text: text, fullText: now, bounds: s.bounds,
-                                      richText: nil, copied: false, canPatch: s.canPatch, docs: s.docs, inlineBreaks: carried.inlineBreaks, automatic: true)
+                                      richText: nil, copied: false, canPatch: s.canPatch, docs: s.docs, inlineBreaks: carried.inlineBreaks, automatic: true, reportable: s.reportable)
         return show(snapshot: moved, result: result.replacingEdits(carried.edits))
     }
     func stop() {
@@ -341,8 +341,9 @@ struct InlineCorrection: View {
     var applySentence: (() -> Void)? = nil
     var ignore: () -> Void
     var close: () -> Void
-    /// Reports what the writer did with this suggestion; nil when reports are off (or for the welcome guide's sample).
-    var report: ((ReportAction) -> Void)? = nil
+    /// "Report wrong suggestion": the only thing that sends a report. nil when reports are off, for the welcome guide's
+    /// sample, and for fields reports never come from. Ignore sends nothing.
+    var report: (() -> Void)? = nil
     private var sentenceEdits: [WritingEdit] { SentencePreview.edits(source: source, edits: edits, focused: edit) }
     var body: some View {
         let count = sentenceEdits.count
@@ -363,8 +364,8 @@ struct InlineCorrection: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: canApply, action: apply)
                 }
                 Spacer(minLength: 0)
-                CardMore(edit: edit, done: ignore, report: report.map { report in { report(.reported); ignore() } })
-                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); report?(.dismissed); ignore() }).fixedSize()
+                CardMore(edit: edit, done: ignore, report: report.map { report in { report(); ignore() } })
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore() }).fixedSize()
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }

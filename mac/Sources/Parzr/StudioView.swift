@@ -153,7 +153,7 @@ struct StudioView: View {
                 }.padding(.horizontal, 16).padding(.vertical, 12)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
                 ZStack(alignment: .topLeading) {
-                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, report: model.canReport ? { edits, text, action in model.report(edits, action, text: text) } : nil)
+                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, report: model.canReport ? { edits, text in model.report(edits, text: text) } : nil)
                     if draft.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("A thought. A message. A first draft.").font(.system(size: preferences.boundedFontSize)).foregroundStyle(Color.textSecondary.opacity(0.7))
@@ -175,8 +175,8 @@ struct StudioView: View {
                                     let related = EditPlan.related(to: edit, in: model.chosenEdits)
                                     guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(related, to: draft) else { return }
                                     preferences.noteFixes(related); draft = next
-                                }, ignore: { edit in model.report([edit], .dismissed, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
-                                report: model.canReport ? { edit in model.report([edit], .reported, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
+                                }, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
+                                report: model.canReport ? { edit in model.report([edit], text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
                             }
                     }
                     if draft.isEmpty { NativeButton(title: "Try a sample", action: { draft = "I recieved your mesage.\n\nCan you chek this?" }).fixedSize() }
@@ -341,6 +341,8 @@ struct StudioView: View {
                 if Reports.configured {
                     group("SUGGESTION REPORTS") {
                         settingRow("Send anonymous suggestion reports", detail: Self.reportsDetail) { toggle("Send anonymous suggestion reports", $preferences.shareReports) }
+                        divider
+                        settingRow("What is sent and kept", detail: "Retention, who processes reports, and how to reach us: \(Reports.privacyURL.host ?? "")\(Reports.privacyURL.path)") { NativeButton(title: "Privacy details", kind: .utility, action: { NSWorkspace.shared.open(Reports.privacyURL) }).fixedSize() }
                     }
                 }
                 group("CLIPBOARD & SESSION") {
@@ -387,7 +389,7 @@ struct StudioView: View {
         }
     }
     /// What a suggestion report holds, in the words Settings and the welcome guide use.
-    static let reportsDetail = "Only when you ignore a suggestion or report it as wrong, Parzr sends the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on this Mac first. Suggestions you accept are never sent. A report also holds the suggestion, the rule or model that made it, whether you ignored or reported it, the app's bundle ID and Parzr's version, nothing else. No account, device ID or IP address is kept. Turning this off stops sending and deletes reports not yet sent."
+    static let reportsDetail = "Only when you click Report wrong suggestion, Parzr sends that suggestion and the text around it (up to about 240 characters on each side). Before sending, Parzr removes names it recognises, emails, phone numbers, other numbers, links and keys on this Mac; the rest of the text around the suggestion is sent as written, so health or other personal details in ordinary words can't be reliably caught. A report also holds the rule or model that made the suggestion, the app's bundle ID and Parzr's version. Ignoring or accepting a suggestion sends nothing, and nothing is sent from excluded apps, secure fields or fields Parzr treats as sensitive. Reports are kept for 180 days on Cloudflare, which runs the report server for Parzr. No account, device ID or IP address is stored, so a sent report can't be found or deleted individually. Turning this off stops sending and deletes reports not yet sent."
     /// Settings, Learning: the private weekly summary, learned words and muted suggestions.
     @ViewBuilder private var learning: some View {
         let summary = preferences.stats.summary(today: LearningDay.today())

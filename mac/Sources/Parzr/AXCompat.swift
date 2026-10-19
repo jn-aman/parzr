@@ -13,6 +13,13 @@ enum Compat {
                             "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper"]
     static let excluded = terminals + ["dev.zed.Zed", "com.jetbrains"]
     static func isExcluded(_ bundle: String?) -> Bool { excluded.contains { bundle?.hasPrefix($0) == true } }
+    /// Whether "Report wrong suggestion" may send text from this field. Never from an app on the exclusion list (built in or a
+    /// host rule) or one the writer turned off, a secure field (or while secure input is on), a field the host rules or the
+    /// sensitive-field keywords block, or text read by copying, whose field Parzr cannot see.
+    static func reportsAllowed(bundle: String?, excludedByRules: Bool, enabled: Bool, secure: Bool, verdict: HostRules.Verdict, copied: Bool) -> Bool {
+        guard let bundle, !bundle.isEmpty else { return false }
+        return !isExcluded(bundle) && !excludedByRules && enabled && !secure && verdict == .allowed && !copied
+    }
     static func isTerminal(_ bundle: String?) -> Bool { terminals.contains { bundle?.hasPrefix($0) == true } }
     /// Who holds secure input, as far as Parzr can tell. The window server records the frontmost app's pid whenever the holder is a background process
     /// (measured: a faceless holder app, with Warp and then Chrome in front, read as Warp and then Chrome), so a frontmost app is named only when it can
