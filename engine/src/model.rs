@@ -2411,7 +2411,19 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let all = drop_added_emphasis(req, all);
         let (failed, gain) = candidate_score(req, &all, false);
         let first_output = apply_edits(&req.text, &all)?.0;
-        let second = (failed > 0 || weak(req.mode, &req.text, &first_output))
+        // A Professional or Friendly second answer can only earn its place by removing an
+        // insult or chat shorthand (gain 2 or more): without one in the text, it is not asked.
+        let marks = crate::meaning::tone_marks(&req.text);
+        let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
+            || 3 * marks.rude
+                + 1
+                + if req.mode == Mode::Professional {
+                    2 * marks.chat
+                } else {
+                    0
+                }
+                >= 2;
+        let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
             .then(|| attempt_with(None, true).ok())
             .flatten()
             .map(|(_, e)| drop_added_emphasis(req, keep_names(req, e)))
