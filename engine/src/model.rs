@@ -68,15 +68,21 @@ fn library_path() -> Result<PathBuf, String> {
         .ok_or("Could not locate the model runtime.")?;
     Ok(directory.join("../Frameworks/libparzr_model.dylib"))
 }
-/// The writing model: PARZR_MODEL_PATH (a development override), else the downloaded pack's file.
+/// The writing model, to load: PARZR_MODEL_PATH (a development override), else the downloaded
+/// pack's file once it hashed to its pinned SHA-256 in this process (waiting for that the first
+/// time).
 pub fn model_file() -> Option<PathBuf> {
     crate::overrides::var("PARZR_MODEL_PATH")
         .map(PathBuf::from)
         .or_else(|| crate::packs::installed("writing_model"))
 }
-/// True when the writing model is on this Mac (a cheap file check; nothing loads).
+/// True when the writing model is on this Mac (a cheap file check; nothing loads, and it never
+/// waits for the model file to be hashed).
 pub fn model_available() -> bool {
-    model_file().is_some_and(|m| m.is_file())
+    crate::overrides::var("PARZR_MODEL_PATH")
+        .map(PathBuf::from)
+        .or_else(|| crate::packs::available("writing_model"))
+        .is_some_and(|m| m.is_file())
 }
 fn library() -> Result<&'static Api, String> {
     LIBRARY

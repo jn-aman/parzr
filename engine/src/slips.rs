@@ -34,17 +34,21 @@ const EXPLICIT_ROWS: usize = 1024;
 /// A word of more sub-tokens than this is not a slip of a common word (the candidates are short).
 const MAX_WORD_TOKENS: usize = 6;
 
-/// Where the slip checker's files live: PARZR_SLIP_DIR (development), else the downloaded pack's
-/// folder. None while the pack is not on this Mac.
+/// Where the slip checker's files live, to load them: PARZR_SLIP_DIR (development), else the
+/// downloaded pack's folder once its files hashed to their pinned SHA-256 in this process. None
+/// while the pack is not on this Mac.
 pub fn dir() -> Option<PathBuf> {
     if let Some(dir) = crate::overrides::var("PARZR_SLIP_DIR") {
         return Some(PathBuf::from(dir));
     }
     crate::packs::installed("slip_model")
 }
-/// True when the slip checker is on this Mac (a cheap file check; nothing loads).
+/// True when the slip checker is on this Mac (a cheap file check; nothing loads or waits).
 pub fn available() -> bool {
-    dir().is_some_and(|d| d.join("mlm.mlmodelc").is_dir())
+    crate::overrides::var("PARZR_SLIP_DIR")
+        .map(PathBuf::from)
+        .or_else(|| crate::packs::available("slip_model"))
+        .is_some_and(|d| d.join("mlm.mlmodelc").is_dir())
 }
 
 struct Slips {
