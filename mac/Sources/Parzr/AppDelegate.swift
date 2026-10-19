@@ -233,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self.inline.dismiss(); self.passive?.onDismiss?()
         }
         passive.onSuggestion = { [weak self] snapshot, result in
-            guard let self, !self.isShown(self.panel), !self.inline.isPresenting else { return }
+            guard let self, !self.isShown(self.panel), !self.panelYielded, !self.inline.isPresenting else { return }
             if Preferences.shared.selectedTextPopover, snapshot.expectedSelection.length > 0, let anchor = snapshot.bounds {
                 _ = self.inline.present(snapshot: snapshot, result: result, anchor: anchor, activate: false)
                 return
@@ -241,6 +241,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !self.inline.show(snapshot: snapshot, result: result, revealAfter: self.passive?.revealDelay ?? 0) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
+        // The card steps aside while a fix is written into another app, so that app's window has the keyboard (see AppModel.handOff).
+        panelModel.handOff = { [weak self] yielding in
+            guard let self, self.showsWindows, let panel = self.panel else { return }
+            self.panelYielded = yielding
+            if yielding { panel.orderOut(nil) } else if self.panelModel.snapshot != nil { panel.orderFrontRegardless() }
+        }
         // The selection card offers one rewrite after a Fix check; the Studio's checks do not.
         panelModel.offersRewrite = true
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
@@ -543,7 +549,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let visible = panel.screen?.visibleFrame { frame.origin.y = max(frame.origin.y, visible.minY) }
         panel.setFrame(frame, display: true)
     }
+    /// The selection card stepped aside for a fix in progress (`AppModel.handOff`).
+    private var panelYielded = false
     func closePanel() {
+        panelYielded = false
         panel?.orderOut(nil); panel.map { _ = headlessShown.remove(ObjectIdentifier($0)) }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }

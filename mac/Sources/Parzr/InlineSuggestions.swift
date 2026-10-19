@@ -35,7 +35,9 @@ final class InlineSuggestions {
     private var relayout: Task<Void, Never>?
     private let maxMarks = 32
     var hasMarks: Bool { overlay.hasMarks }
-    var isPresenting: Bool { correction?.isVisible == true }
+    /// The card stepped aside for a fix in progress: it still counts as presenting, and stale checks wait for the fix to finish.
+    private var yielded = false
+    var isPresenting: Bool { correction?.isVisible == true || yielded }
     var correctionSize: CGSize? { correction?.frame.size }
     var correctionView: NSView? { correction?.contentView }
     func markedView(for edit: WritingEdit) -> MarkElement? { overlay.element(for: edit.id) }
@@ -48,6 +50,13 @@ final class InlineSuggestions {
     init(headless: Bool = false) {
         self.headless = headless
         model.dismiss = { [weak self] in self?.closeCard(); self?.dismissIfStale() }
+        // While a fix is written the card steps aside, so the editor's window has the keyboard again (see AppModel.handOff); it comes back,
+        // without taking the keyboard, only when the fix did not go through and the session is still open.
+        model.handOff = { [weak self] yielding in
+            guard let self, let card = self.correction else { return }
+            self.yielded = yielding
+            if yielding { card.orderOut(nil) } else if self.model.snapshot != nil { card.orderFrontRegardless() }
+        }
         model.didAnalyze = { [weak self] in
             guard let self else { return }
             self.model.selectedEdits.subtract(IgnoreKey.ids(in: self.model.result?.edits ?? [], ignored: self.ignored))
@@ -115,6 +124,7 @@ final class InlineSuggestions {
         return abs(now.minX - p.rect.minX) < s.snapshot.markDrift && abs(now.minY - p.rect.minY) < s.snapshot.markDrift
     }
     private func closeCard() {
+        yielded = false
         correction?.orderOut(nil)
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         model.clearSession()
@@ -127,6 +137,8 @@ final class InlineSuggestions {
         // when the text, focus, position or the passive/app settings no longer match.
         let prefs = Preferences.shared
         guard prefs.passive, !prefs.paused else { dismiss(); return }
+        // A fix is being written: the text and focus are expected to move, and the fix itself closes the card (or brings it back with the reason).
+        if yielded { return }
         if let snapshot = shown?.snapshot ?? model.snapshot, !snapshot.checkingEnabled { dismiss(); return }
         if shown != nil, !marksAreCurrent { if !carryOver() { dismiss() }; return }
         if isPresenting, (try? model.snapshot?.validate()) == nil { if shown != nil { closeCard() } else { dismiss() }; return }

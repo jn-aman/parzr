@@ -225,58 +225,78 @@ final class AppModel: ObservableObject {
     func applySentence() { apply(edits: sentenceEdits) }
     func applyBest() { if focusedEdit == nil, suggestionReady { useSuggestion() } else if fixesSentence { applySentence() } else { applyCurrent() } }
     func apply() { apply(edits: chosenEdits) }
+    /// Parzr's card is the key window while the writer clicks in it, so the editor's own window has no keyboard: Chromium then reports no
+    /// focused field, and keys posted to the editor reach nothing. `handOff(true)` gives the keyboard back to the editor before a fix is written
+    /// into another app; `handOff(false)` shows the card again, without taking the keyboard, when the fix did not go through.
+    var handOff: ((Bool) -> Void)?
+    /// A fix goes into another app's field (not Parzr's own writing space or a headless test editor), so the card steps aside first.
+    private func yields(_ snapshot: SelectionSnapshot) -> Bool { !snapshot.own && snapshot.headlessEditor == nil }
+    private func failed(_ error: Error, yielded: Bool) {
+        self.error = error.localizedDescription; busy = false
+        if yielded { handOff?(false) }
+    }
     private func apply(edits: [WritingEdit]) {
         guard canApply, let snapshot else { return }
         guard !edits.isEmpty, edits.allSatisfy({ chosenEdits.contains($0) }) else { return }
-        do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
-        busy = true
+        // Only what does not depend on the keyboard is checked here: while the card has it, a Chromium editor reports no focused field.
+        // Focus, caret and text are checked once the editor has it back (`prepareToApply`, then `apply`).
+        do { try snapshot.validateCheckingEligibility() } catch { self.error = error.localizedDescription; return }
+        let yielded = yields(snapshot)
+        busy = true; error = nil
+        if yielded { handOff?(true) }
         if !snapshot.own { SelfTestTarget.bringForward(snapshot.app) }   // Parzr's own writing space is already in front
-        if snapshot.copied { applyCopied(snapshot, edits); return }
+        if snapshot.copied { applyCopied(snapshot, edits, yielded: yielded); return }
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(80))
-                try await snapshot.apply(edits)
+                let target = try await snapshot.prepareToApply()
+                try await target.apply(edits)
                 self.snapshot = nil; busy = false; dismiss?()
-            } catch { self.error = error.localizedDescription; busy = false }
+            } catch { failed(error, yielded: yielded) }
         }
     }
     /// Canvas editors (Google Docs): re-copy to prove the selection is unchanged, then paste the whole replacement over it.
     /// Independent of `clipboardFallback`: the user explicitly ran a copy-based check.
-    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit]) {
+    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit], yielded: Bool) {
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
                 let replacement = try EditPlan.apply(edits, to: source)
                 try await Task.sleep(for: .milliseconds(80))
+                try snapshot.validate(applying: true)
                 guard let again = try await ClipboardTransaction.copySelection(from: snapshot.app.processIdentifier), SelectionSnapshot.sameCopiedText(again, snapshot.text) else {
-                    throw ParzrError.message("Your selection changed. Select the text again.")
+                    throw ApplyLog.fail(.selectionChanged, stage: "copied", context: snapshot.logContext)
                 }
-                try snapshot.validate()
+                try snapshot.validate(applying: true)
                 try transaction.stage(replacement); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
                 FixLearning.record(edits, in: snapshot)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 self.snapshot = nil; busy = false; dismiss?()
-            } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
+            } catch { transaction.restore(); self.clipboard = nil; failed(error, yielded: yielded) }
         }
     }
     func pasteFallback() {
         guard Preferences.shared.clipboardFallback, !chosenEdits.isEmpty, !busy, let snapshot else { return }
         let replacement = preview, edits = chosenEdits
         let attributed = snapshot.richText.flatMap { try? EditPlan.apply(chosenEdits, to: $0) }
-        do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
-        busy = true; SelfTestTarget.bringForward(snapshot.app)
+        do { try snapshot.validateCheckingEligibility() } catch { self.error = error.localizedDescription; return }
+        let yielded = yields(snapshot)
+        busy = true; error = nil
+        if yielded { handOff?(true) }
+        SelfTestTarget.bringForward(snapshot.app)
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
-                try await Task.sleep(for: .milliseconds(100)); try snapshot.validate()
-                guard AX.select(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
+                try await Task.sleep(for: .milliseconds(100))
+                let target = try await snapshot.prepareToApply()
+                guard AX.select(target.element, target.selection) || target.selection == target.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
                 try transaction.stage(replacement, attributed: attributed); self.clipboard = transaction
-                try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
-                FixLearning.record(edits, in: snapshot)
+                try ClipboardTransaction.paste(to: target.app.processIdentifier)
+                FixLearning.record(edits, in: target)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 busy = false; self.snapshot = nil; dismiss?()
-            } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
+            } catch { transaction.restore(); self.clipboard = nil; failed(error, yielded: yielded) }
         }
     }
     func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); toneFlag = nil; suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }

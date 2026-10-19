@@ -358,42 +358,62 @@ extension AX {
 
     /// Replaces `range`: AXSelectedText when the editor honours it, otherwise Unicode key events posted to the app. Verified by re-reading the text.
     static func replace(_ element: AXUIElement, in app: NSRunningApplication, range: NSRange, with replacement: String, before: String, expected: String, automatic: Bool = false) async throws {
-        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: isDocsText(element)), select(element, range) else {
-            throw ParzrError.message("The editor refused a range edit.")
+        let docs = isDocsText(element)
+        func context() -> ApplyLog.Context {
+            ApplyLog.Context(bundle: app.bundleIdentifier ?? "pid.\(app.processIdentifier)", role: string(element, kAXRoleAttribute) ?? "unknown", automatic: automatic, chromium: isChromiumText(element), docs: docs)
         }
+        func fail(_ failure: ApplyFailure, _ stage: String, _ detail: String = "") -> ApplyError { ApplyLog.fail(failure, stage: stage, context: context(), detail: detail) }
+        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: docs) else {
+            throw fail(.rangeRefused, "plan", "rangeSettable=false")
+        }
+        guard select(element, range) else { throw fail(.rangeRefused, "select", "step=\(first)") }
         if first == .axText, AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, replacement as CFString) == .success {
             // Some editors accept the write and change nothing; a slow one may still apply it, so wait before deciding.
             switch await settled(element, before: before, expected: expected, attempts: 8) {
-            case .applied: return
-            case .diverged: throw ParzrError.message("The editor changed during replacement.")
+            case .applied: ApplyLog.note("edit landed", context: context(), detail: "step=axText"); return
+            case .diverged: throw fail(.changedDuring, "axText")
             case .unchanged: break
             }
         }
-        // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
-        let docs = isDocsText(element)
-        guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
-              ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }),
-              docs || select(element, range) else {
-            throw ParzrError.message("Your selection changed. Select the text again.")
+        // Typing goes to whichever field has the keyboard, so it waits for this field to have it (the card has just handed it back) and never
+        // moves it: a different field with focus means the writer went there.
+        guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier else { throw fail(.editorNotInFront, "typed") }
+        guard !IsSecureEventInputEnabled() else { throw fail(.secureInput, "typed") }
+        var focused = false
+        for attempt in 0..<5 {
+            if ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }) { focused = true; break }
+            if attempt < 4 { try await Task.sleep(for: .milliseconds(40)) }
         }
+        guard focused else {
+            let focus = focusedText(app, automatic: automatic)
+            throw fail(ApplyFocus.focusFailure(editable: true, focusResolves: focus != nil), "typed", focus == nil ? "focus=none" : "focus=other")
+        }
+        // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
+        guard docs || select(element, range) else { throw fail(.rangeRefused, "typed-select") }
         // A Chromium composer must hold exactly the words being replaced before anything is typed: a selection that landed elsewhere would be overwritten.
         if !docs, isChromiumComposer(element) {
             let wanted = (before as NSString).substring(with: range)
             var held = false
             for _ in 0..<15 { if string(element, kAXSelectedTextAttribute) ?? "" == wanted { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
-            guard held else { throw ParzrError.message("The editor did not select the words to replace. Nothing was typed.") }
+            guard held else { throw fail(.selectionNotHeld, "typed-hold", "wanted=\(wanted.utf16.count)u") }
         }
         if docs {
             var held = false
             for _ in 0..<40 { if self.range(element) == range { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
-            guard held else { throw ParzrError.message("Docs did not select the text. Try again.") }
+            guard held else { throw fail(.docsNotSelected, "typed-hold") }
             try await Task.sleep(for: .milliseconds(120))
         }
         for event in TypedReplacement.events(for: replacement) {
             post(event, to: app.processIdentifier)
             try await Task.sleep(for: .milliseconds(8))
         }
-        guard await settled(element, before: before, expected: expected, attempts: 30) == .applied else { throw ParzrError.message("The editor did not accept the replacement.") }
+        let verdict = await settled(element, before: before, expected: expected, attempts: 30)
+        guard verdict == .applied else { throw fail(verdict == .diverged ? .changedDuring : .notAccepted, "typed", "verdict=\(verdict)") }
+        ApplyLog.note("edit landed", context: context(), detail: "step=typed axTextTried=\(first == .axText)")
+    }
+    /// Puts keyboard focus back into `element`, the field an inline fix belongs to, when no field has it (see `SelectionSnapshot.prepareToApply`).
+    static func restoreFocus(_ element: AXUIElement) {
+        _ = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
     private static func settled(_ element: AXUIElement, before: String, expected: String, attempts: Int) async -> ReplacePlan.Verdict {
         var verdict = ReplacePlan.Verdict.unchanged
