@@ -6,10 +6,15 @@ import ParzrCore
 final class PassiveObserver {
     var onSuggestion: ((SelectionSnapshot, RewriteResult) -> Void)?
     var onDismiss: (() -> Void)?
+    /// A check found nothing (or could not read the paragraph): marks carried over typing are now stale, so they go.
+    var onClear: (() -> Void)?
     private var observer: AXObserver?
     private var observed: [(AXUIElement, String)] = []
     private var work: Task<Void, Never>?
     private var pacer = CheckPacer()
+    private var typing = TypingMonitor()
+    /// How long marks that are new to the writer wait before they show, given how fast they are typing (ms).
+    var revealDelay: Double { typing.delay(at: ProcessInfo.processInfo.systemUptime) }
     /// A check is waiting out its delay; false once it has started reading the editor.
     private var pending = false
     /// Quiet re-checks after a typing check left sentence swaps for the model (cold, busy or over budget),
@@ -32,7 +37,7 @@ final class PassiveObserver {
     }
     /// VS Code and Cursor are checked only after the user opts in (Apps settings).
     private func isExcluded(_ bundle: String) -> Bool {
-        Compat.isExcluded(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
+        Compat.isExcluded(bundle) || HostRules.shared.excludesApp(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
     }
     func installMonitors() {
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }
@@ -40,6 +45,8 @@ final class PassiveObserver {
         // Some editors omit AX value notifications after paste. Native input events
         // schedule the same bounded check; event text is never stored, and only used to tell whether the key ended a word.
         inputMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Parzr's own typed replacement or paste shortcut: the value change it causes still schedules a check, but it is not the writer typing.
+            guard !SyntheticEvent.isParzr(event.cgEvent) else { return }
             let wordEnd = CheckPacer.endsWord(event.characters)
             MainActor.assumeIsolated { self?.noteKeystroke(); self?.keyPressed(wordEnd: wordEnd) }
         }
@@ -106,7 +113,9 @@ final class PassiveObserver {
     func keyPressed(wordEnd: Bool) {
         guard !stopped, let attachedPID, SelfTestTarget.watched?.processIdentifier == attachedPID else { return }
         pacer.ceiling = Preferences.shared.boundedCheckingDelay
-        schedule(pacer.key(at: ProcessInfo.processInfo.systemUptime, wordEnd: wordEnd))
+        let now = ProcessInfo.processInfo.systemUptime
+        typing.key(at: now)
+        schedule(pacer.key(at: now, wordEnd: wordEnd))
     }
     private func add(_ element: AXUIElement, _ notification: String) {
         guard let observer else { return }
@@ -186,7 +195,8 @@ final class PassiveObserver {
                 self?.pending = false
                 // A follow-up re-check keeps the marks on screen until its own result replaces them.
                 if !followUp { self?.onDismiss?() }
-                let snapshot = try SelectionSnapshot.capture(passive: true)
+                let snapshot: SelectionSnapshot
+                do { snapshot = try SelectionSnapshot.capture(passive: true) } catch { self?.onClear?(); return }
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
                                             dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar)
@@ -203,7 +213,7 @@ final class PassiveObserver {
                 if !result.edits.isEmpty {
                     if followUp { self?.onDismiss?() }
                     self?.onSuggestion?(snapshot, result)
-                }
+                } else if !followUp { self?.onClear?() }
                 if again, let self { self.followUps += 1; self.schedule(.restart(ms: Self.followUpDelay), followUp: true) }
             } catch { /* Passive failures are quiet and never log writing text. */ }
         }

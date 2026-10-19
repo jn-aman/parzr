@@ -54,7 +54,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs(); forgetWeb() }
+    static func forgetFocus() { verdicts = []; resolved = nil; fieldVerdicts = []; forgetDocs(); forgetWeb() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -88,9 +88,44 @@ enum AX {
     }
     static func automaticEligibility(_ element: AXUIElement) -> Compat.EditorEligibility {
         guard !isSecure(element) else { return .blocked }
-        return Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
-                                        valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
-                                        markerEditor: isMarkerEditor(element), search: isSearch(element))
+        let eligibility = Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
+                                                   valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
+                                                   markerEditor: isMarkerEditor(element), search: isSearch(element))
+        // Only a field that already qualifies is asked about: the rules can take it away (a one-time code box, a sign-in form), never add one.
+        return eligibility == .editor ? Compat.applying(hostVerdict(element), to: eligibility) : eligibility
+    }
+    private static var fieldVerdicts: [(element: AXUIElement, verdict: HostRules.Verdict, time: TimeInterval)] = []
+    /// What the host rules say about this field. Reads only names (labels, identifiers, DOM classes, the page URL), never the field's text;
+    /// remembered for as long as the secure-field verdict, or until focus moves.
+    static func hostVerdict(_ element: AXUIElement) -> HostRules.Verdict {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let known = fieldVerdicts.first(where: { now - $0.time < verdictLifetime && CFEqual($0.element, element) }) { return known.verdict }
+        let field = fieldContext(element)
+        let verdict = HostRules.shared.verdict(for: field)
+        fieldVerdicts = Array((fieldVerdicts.filter { now - $0.time < verdictLifetime } + [(element, verdict, now)]).suffix(16))
+        return verdict
+    }
+    static func fieldContext(_ element: AXUIElement) -> HostRules.Field {
+        let attributes = [kAXRoleAttribute, "AXPlaceholderValue", kAXDescriptionAttribute, kAXTitleAttribute, kAXIdentifierAttribute, "AXDOMIdentifier", "AXDOMClassList", kAXParentAttribute]
+        func names(_ values: [CFTypeRef?]) -> (labels: [String], classes: [String]) {
+            (values[1...5].compactMap { $0 as? String }.filter { !$0.isEmpty }, (values[6] as? [String] ?? []).prefix(16).map { $0 })
+        }
+        var pid: pid_t = 0
+        _ = AXUIElementGetPid(element, &pid)
+        let values = multiple(element, attributes), own = names(values)
+        var field = HostRules.Field(bundle: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, role: values[0] as? String, labels: own.labels, markers: own.classes)
+        var parent = values[7]
+        // Up to the page or window: their titles are page and document names, not this field's.
+        for _ in 0..<12 {
+            guard let next = parent, CFGetTypeID(next) == AXUIElementGetTypeID() else { break }
+            let current = next as! AXUIElement, values = multiple(current, attributes), role = values[0] as? String ?? ""
+            if role == "AXWebArea" { field.url = (get(current, "AXURL") as? URL)?.absoluteString; break }
+            if [kAXWindowRole, kAXApplicationRole].contains(role) { break }
+            let around = names(values)
+            if field.ancestors.count < 6 { field.ancestors.append(around.labels + around.classes) }
+            parent = values[7]
+        }
+        return field
     }
     static func isSecure(_ element: AXUIElement) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
@@ -160,6 +195,24 @@ enum AX {
         }
         guard let rect = bounds(element, range), rect.height < 40 else { return [] }
         return [rect]
+    }
+    /// The visible box a field scrolls in, in AppKit coordinates: its scroll area when it sits in one (an NSTextView's own frame is the whole document), else its own frame.
+    static func scrollArea(_ element: AXUIElement) -> CGRect? {
+        func frame(_ element: AXUIElement) -> CGRect? {
+            let values = multiple(element, [kAXPositionAttribute, kAXSizeAttribute])
+            guard let p = values[0], let s = values[1], CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
+            var origin = CGPoint.zero, size = CGSize.zero
+            guard AXValueGetValue(p as! AXValue, .cgPoint, &origin), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { return nil }
+            return cocoa(CGRect(origin: origin, size: size))
+        }
+        var cursor: AXUIElement? = element
+        for _ in 0..<4 {
+            guard let current = cursor else { break }
+            if string(current, kAXRoleAttribute) == kAXScrollAreaRole { return frame(current) }
+            guard let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+            cursor = (parent as! AXUIElement)
+        }
+        return frame(element)
     }
     static func attributed(_ element: AXUIElement, _ range: NSRange) -> NSAttributedString? {
         var cf = CFRange(location: range.location, length: range.length)
@@ -338,9 +391,11 @@ struct SelectionSnapshot {
         for edit in edits.reversed() {
             guard checkingEnabled else { throw ParzrError.message("Checking is paused or disabled for this app. \(applied) edits applied; use the editor's Undo if needed.") }
             // Verify between every range patch; never replace the entire document.
-            guard AX.text(element) == expected else {
+            // An editor may restyle quotes or spaces as it takes a write; plan from its text when every offset still holds.
+            guard let current = ReplacePlan.adopt(AX.text(element), expected: expected) else {
                 throw ParzrError.message("The editor changed during replacement. \(applied) edits applied; use the editor's Undo to revert.")
             }
+            expected = current
             let global = NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)
             let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement)
             do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String, automatic: automatic) }
@@ -351,7 +406,8 @@ struct SelectionSnapshot {
             expected = next as String
             applied += 1
         }
-        guard AX.text(element) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        guard let final = AX.text(element), ReplacePlan.sameText(final, expected) else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        if final.utf16.count == expected.utf16.count { expected = final }
         FixLearning.record(edits, in: self)
         let delta = edits.reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
         if expectedSelection.length == 0 {

@@ -226,13 +226,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if let self, self.inline.hasMarks, self.inline.overflow > 0 { return }
             self?.marker?.orderOut(nil); self?.marker?.contentView = nil
         }
+        passive.onClear = { [weak self] in
+            guard let self, !self.inline.isPresenting else { return }
+            self.inline.dismiss(); self.passive?.onDismiss?()
+        }
         passive.onSuggestion = { [weak self] snapshot, result in
             guard let self, !self.isShown(self.panel), !self.inline.isPresenting else { return }
             if Preferences.shared.selectedTextPopover, snapshot.expectedSelection.length > 0, let anchor = snapshot.bounds {
                 _ = self.inline.present(snapshot: snapshot, result: result, anchor: anchor, activate: false)
                 return
             }
-            if !self.inline.show(snapshot: snapshot, result: result) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
+            if !self.inline.show(snapshot: snapshot, result: result, revealAfter: self.passive?.revealDelay ?? 0) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
         // The selection card offers one rewrite after a Fix check; the Studio's checks do not.
