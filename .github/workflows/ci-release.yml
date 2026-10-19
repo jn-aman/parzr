@@ -172,6 +172,7 @@ jobs:
         # Rust engine and on the app's NaturalLanguage path.
         run: |
           for set in 1000:100 2000:200; do
+            PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-english-benchmark.py --engine engine/target/release/parzr-engine --library engine/target/release/libparzr_engine.dylib \
               --corpus "benchmarks/english-${set%%:*}.jsonl" --controls "benchmarks/english-${set##*:}-clean.jsonl" --output "dist/qa/english-${set%%:*}" --require-exact
           done
