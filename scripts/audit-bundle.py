@@ -85,6 +85,11 @@ if not args.qa:
         if magic not in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'): continue
         data = path.read_bytes()
         found |= {(marker.decode(), str(path.relative_to(app))) for marker in qa_markers if marker in data}
+    # Short flags can be compiled into instructions rather than stored as text, so the QA entry points are also looked up by symbol.
+    qa_functions = ['runAutomaticPasteTest', 'runAutomaticTypingTest', 'runCardClickTest', 'runEditorTypingTest', 'runGoogleDocsTest', 'runGrammarTypingTest',
+                    'runModelsTest', 'runNativeIntegrationTest', 'runOwnEditorTest', 'runUIControlsTest', 'runUpdateTest', 'runWebComposerTest', 'IntegrationTest.swift']
+    symbols = subprocess.run(['nm', str(app/'Contents/MacOS/parzr')], capture_output=True, text=True).stdout + (app/'Contents/MacOS/parzr').read_bytes().decode('latin-1')
+    found |= {(name, 'Contents/MacOS/parzr') for name in qa_functions if name in symbols}
     if found: sys.exit('A release build must not carry QA modes: '+', '.join(f'{m} in {p}' for m, p in sorted(found)))
     # The release engine is built without its dev-overrides feature, and the native runtime reads no environment: no PARZR_* name is left in them.
     for name in ['Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Frameworks/libparzr_model.dylib']:
