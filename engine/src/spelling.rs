@@ -54,15 +54,14 @@ impl Lexicon {
 }
 pub(crate) fn frequency(word: &str) -> u16 {
     static FREQUENCIES: OnceLock<Table> = OnceLock::new();
-    let table = FREQUENCIES
-        .get_or_init(|| Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/frequency.bin"))));
+    let table = FREQUENCIES.get_or_init(|| Table::new(crate::tables::get().frequency));
     table.find(word).map_or(0, |e| table.value_u32(e, 0) as u16)
 }
 fn lexicon() -> &'static Lexicon {
     static LEXICON: OnceLock<Lexicon> = OnceLock::new();
     LEXICON.get_or_init(|| Lexicon {
-        words: Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/lexicon.bin"))),
-        deletes: Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/deletes.bin"))),
+        words: Table::new(crate::tables::get().lexicon),
+        deletes: Table::new(crate::tables::get().deletes),
     })
 }
 fn deletions(word: &str) -> HashSet<String> {

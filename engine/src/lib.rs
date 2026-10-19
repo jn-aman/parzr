@@ -29,6 +29,7 @@ mod rules;
 mod spelling;
 mod structure;
 mod table;
+pub mod tables;
 mod tokenizer;
 mod wording;
 pub use names::NameIndex;
@@ -141,6 +142,7 @@ impl Default for Request {
 }
 
 pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
+    tables::ready()?;
     #[cfg(feature = "local-model")]
     if req.tokens.is_empty() && !req.text.is_empty() {
         if req.text.len() > MAX_TEXT_BYTES {
@@ -1679,6 +1681,13 @@ struct GuardVerdict {
     reason: Option<String>,
 }
 fn guard(req: GuardRequest) -> GuardVerdict {
+    if let Err(error) = tables::ready() {
+        return GuardVerdict {
+            ok: false,
+            output: req.output,
+            reason: Some(error),
+        };
+    }
     let mut output = req.output.trim().to_string();
     let mut output_tokens = req.output_tokens;
     if let Some(head) = meaning::preamble(&output) {

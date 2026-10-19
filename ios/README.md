@@ -49,7 +49,7 @@ A keyboard extension is ended by the system at roughly 60–70 MB (est.; Apple d
 Peak footprint, macOS, release build, rules only (`/usr/bin/time -l`):
 
 | Workload | v0.5.0 | Now |
-|---|---|---|
+| --- | --- | --- |
 | one short request, fresh process ("i recieved teh report") | 136 MB | 21.7 MB |
 | each of the 1,643 held-out DEV error items alone, fresh process | (over 100 MB) | median 19.5, p95 21.5, max 24.0 MB |
 | 9,278 paragraphs in one process (English 1000 + 2000 with clean controls, typo-fuzz and held-out DEV samples), with NaturalLanguage hints | 166–174 MB | 29.3–30.6 MB |
@@ -58,18 +58,37 @@ Peak footprint, macOS, release build, rules only (`/usr/bin/time -l`):
 - **Outputs are identical.** Base and new engines were compared request by request, ignoring only `elapsed_ms`:
 
   | Build | Requests | Requests that differ |
-  |---|---|---|
+  | --- | --- | --- |
   | rules-only, with NaturalLanguage hints | 9,278 | 0 |
   | rules-only, without hints | 9,278 | 0 |
   | rules-only, sentence windows | 18,004 | 0 |
   | default features (local model), with hints | 9,278 | 0 |
+  | `external-tables` (the Mac bundle's configuration), rules-only, with and without hints | 9,278 each | 0 |
+  | `external-tables`, default features, with hints | 9,278 | 0 |
+  | `external-tables`, sentence windows, rules-only and default features | 18,004 each | 0 |
+
+  The external build's memory matches the embedded build on the sentence windows: 31.3–32.1 MB against 32.0–32.1 MB, run to run. It takes +0.2% instructions, which is the one-time hash check of the file.
 
   The 9,278 requests are English 1000/2000 and their clean controls, 500 British-dialect paragraphs, a fifth of the typo-fuzz DEV set with its clean set, and the held-out DEV split by the runner's hash rule. The held-out test split was never used.
 - **Lookups are tested exhaustively.** `spelling::compiled_tables` checks every word, deletion key, frequency and pair against maps rebuilt from the JSON.
 - **Speed and size.**
   - Instructions retired: 105.5 G against 103.8 G on the 9,278 requests (+1.7%), and 152.0 G against 149.5 G on the sentence windows (+1.7%).
   - A cold first request takes about a third of the time: 0.10 s against 0.31 s at low load, and 0.30 s against 0.81 s under load.
-  - The cost is binary size. Each binary that links the engine grows by about 16 MB (11.1 MB compressed against 4.4 MB) because the hashed tables compress worse than the JSON.
+  - **Binary size.**
+    - Embedded, the hashed tables make each binary about 16 MB larger than the JSON did (11.1 MB compressed against 4.4 MB). iOS keeps the embedded copy: the app and keyboard share it through ParzrKit.
+    - The Mac app has four engine binaries (`libparzr_engine.dylib`, `parzr-engine`, `parzr-native-host`, `parzr-lsp`), so it builds with the `external-tables` feature and ships the tables once, as `Contents/Resources/parzr-tables.dat`. Every binary maps that file read-only, and so does the dylib inside the app, which finds it through `dladdr`.
+    - Each binary has the file's length and hash compiled in. A missing or mismatched file fails every request with a message naming the path and "Reinstall Parzr", and the engine never runs on other tables. `PARZR_TABLES_PATH` overrides the location.
+    - `scripts/build.py` copies the file in and checks that the staged engine accepts it. `scripts/audit-bundle.py` requires the file, rejects an engine binary over 12 MB (one that embeds the tables), and runs the bundled engine against it.
+  - **Mac app size, local ad-hoc build of this branch** (`build.py --skip-build` after its own cargo and swift commands; not launched) **against the v0.5.1 release:**
+
+    | | v0.5.1 release | This branch |
+    | --- | --- | --- |
+    | zip (`ditto -c -k`) | 28.99 MB | 27.41 MB (−1.58 MB, −5.5%) |
+    | uncompressed bundle | 84.9 MB | 72.4 MB |
+    | engine files, deflated | 19.8 MB (4 binaries of 15.5 MB) | 18.3 MB (4 binaries of 5.9 MB and the 26.5 MB tables file) |
+    | everything else, deflated | 9.1 MB | 9.0 MB |
+
+    With the tables embedded in all four binaries, the engine files would have come to about 44 MB compressed.
 - **In the keyboard.**
   - `MemoryBudget.engineMB` is now 40 MB of headroom, so the keyboard runs the full engine and the meaning guard, and falls back to `SystemSpelling` (UITextChecker) only when headroom is below that.
   - The simulator sets no memory limit, so the engine always runs there.
@@ -145,7 +164,7 @@ So the design does not depend on the answer:
 ## Next steps
 
 1. **Run the keyboard on a device with Full Access.** Read the Apple Intelligence probe result and the memory headroom in the Keyboard tab, on the oldest supported iPhone.
-2. **Win back the binary size.** The Mac app ships four binaries that link the engine (the dylib, `parzr-engine`, `parzr-native-host`, `parzr-lsp`), so the tables are in it four times. Linking the side binaries against the dylib, or shipping the tables as one read-only file mapped at run time, keeps one copy.
+2. **Shrink the tables file.** It is 26.5 MB (9.7 MB compressed). Dropping the per-entry key length (it follows from the next entry's offset) would save about 3 MB.
 3. **Keyboard polish:**
    - long-press accents;
    - double-space period;

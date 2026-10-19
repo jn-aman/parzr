@@ -11,6 +11,59 @@
 //! Linear probing. `build.rs` includes this file to share `hash`, `slot` and the constants.
 
 pub(crate) const MAGIC: u32 = u32::from_le_bytes(*b"PZT2");
+/// The file holding all four tables: `BUNDLE_MAGIC, count` then `count × (offset, len)` as u64,
+/// then the tables, each starting on an 8-byte boundary.
+pub(crate) const BUNDLE_MAGIC: u32 = u32::from_le_bytes(*b"PZTS");
+/// The tables in a bundle, in order: lexicon, deletes, frequency, word pairs.
+pub(crate) const BUNDLE_TABLES: usize = 4;
+
+/// Writes a bundle (build.rs).
+#[allow(dead_code)]
+pub(crate) fn bundle(tables: &[&[u8]]) -> Vec<u8> {
+    let header = 8 + tables.len() * 16;
+    let mut out = Vec::new();
+    out.extend(BUNDLE_MAGIC.to_le_bytes());
+    out.extend((tables.len() as u32).to_le_bytes());
+    let mut at = header.next_multiple_of(8);
+    for table in tables {
+        out.extend((at as u64).to_le_bytes());
+        out.extend((table.len() as u64).to_le_bytes());
+        at = (at + table.len()).next_multiple_of(8);
+    }
+    for table in tables {
+        out.resize(out.len().next_multiple_of(8), 0);
+        out.extend_from_slice(table);
+    }
+    out
+}
+
+/// The tables of a bundle, or why it is not one.
+#[allow(dead_code)]
+pub(crate) fn unbundle(data: &'static [u8]) -> Result<[&'static [u8]; BUNDLE_TABLES], String> {
+    let word = |at: usize| -> Option<u64> {
+        Some(u64::from_le_bytes(data.get(at..at + 8)?.try_into().ok()?))
+    };
+    let magic = data
+        .get(..4)
+        .map(|m| u32::from_le_bytes(m.try_into().unwrap()));
+    let count = data
+        .get(4..8)
+        .map(|c| u32::from_le_bytes(c.try_into().unwrap()));
+    if magic != Some(BUNDLE_MAGIC) || count != Some(BUNDLE_TABLES as u32) {
+        return Err("not a Parzr table bundle".into());
+    }
+    let mut tables = [&data[..0]; BUNDLE_TABLES];
+    for (i, table) in tables.iter_mut().enumerate() {
+        let (at, len) = (word(8 + i * 16), word(16 + i * 16));
+        let (Some(at), Some(len)) = (at, len) else {
+            return Err("truncated table bundle".into());
+        };
+        *table = data
+            .get(at as usize..(at + len) as usize)
+            .ok_or("truncated table bundle")?;
+    }
+    Ok(tables)
+}
 pub(crate) const HEADER: usize = 6 * 4;
 /// Entries a table may hold (24-bit indices). Used by build.rs.
 #[allow(dead_code)]

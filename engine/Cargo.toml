@@ -44,6 +44,9 @@ path = "src/lsp.rs"
 default = ["local-model"]
 local-model = []
 baseline-harper = ["dep:harper-core"]
+# The Mac app bundle: the compiled tables ship once, as Contents/Resources/parzr-tables.dat,
+# instead of inside each of its four engine binaries (see src/tables.rs).
+external-tables = []
 
 [[example]]
 name = "tone_judge"

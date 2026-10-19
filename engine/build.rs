@@ -1,5 +1,5 @@
 //! Builds the engine's static lookup tables from the attributed JSON data in `rules/` (see
-//! `src/table.rs` for the format). Run time then reads them in place: no JSON parsing, no
+//! `src/table.rs` for the format) into one file, `parzr-tables.dat` in OUT_DIR. Run time then reads them in place: no JSON parsing, no
 //! per-word allocations, and the pages stay clean (a keyboard extension's memory limit is about
 //! 60-70 MB; the old run-time maps peaked over 100 MB).
 //!
@@ -24,22 +24,29 @@ fn main() {
     let out = env::var("OUT_DIR").expect("OUT_DIR");
     let out = Path::new(&out);
     let frequencies = frequencies();
+    let frequency = write(
+        frequencies
+            .iter()
+            .map(|(k, v)| (k.clone(), u32::from(*v).to_le_bytes().to_vec())),
+        4,
+        &[],
+        &[],
+    );
+    let (lexicon, deletes) = lexicon(&frequencies);
+    // One file, `tables::FILE_NAME`: embedded by default, shipped once in the Mac app's
+    // Resources with the `external-tables` feature. Its hash and length are compiled into the
+    // engine, which accepts only the exact file it was built with.
+    let tables = table::bundle(&[&lexicon, &deletes, &frequency, &bigrams()]);
+    fs::write(out.join("parzr-tables.dat"), &tables).unwrap();
     fs::write(
-        out.join("frequency.bin"),
-        write(
-            frequencies
-                .iter()
-                .map(|(k, v)| (k.clone(), u32::from(*v).to_le_bytes().to_vec())),
-            4,
-            &[],
-            &[],
+        out.join("tables_meta.rs"),
+        format!(
+            "pub(crate) const TABLES_HASH: u64 = {:#018x};\npub(crate) const TABLES_LEN: usize = {};\n",
+            table::hash(&tables),
+            tables.len()
         ),
     )
     .unwrap();
-    let (lexicon, deletes) = lexicon(&frequencies);
-    fs::write(out.join("lexicon.bin"), lexicon).unwrap();
-    fs::write(out.join("deletes.bin"), deletes).unwrap();
-    fs::write(out.join("bigrams.bin"), bigrams()).unwrap();
 }
 
 fn read(path: &str) -> serde_json::Value {

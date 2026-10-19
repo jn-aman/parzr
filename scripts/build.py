@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reproducible macOS app builder. Never silently downgrade a requested release signature."""
-import argparse, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, shlex
+import argparse, glob, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, shlex
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--sign', action='store_true', help='Require Developer ID Application signing')
@@ -23,7 +23,9 @@ if not args.skip_build:
     run(model_command)
     for target in architectures:
         if target: run(['rustup','target','add',target])
-        command = ['cargo','build','--release','--locked','--manifest-path','engine/Cargo.toml']
+        # The engine's compiled tables ship once, as Contents/Resources/parzr-tables.dat, not inside
+        # each of the four engine binaries (engine/src/tables.rs).
+        command = ['cargo','build','--release','--locked','--manifest-path','engine/Cargo.toml','--features','external-tables']
         if target: command += ['--target',target]
         environment = os.environ.copy(); environment['MACOSX_DEPLOYMENT_TARGET']='13.0'
         rustflags = environment.get('CARGO_ENCODED_RUSTFLAGS', '').split('\x1f') if environment.get('CARGO_ENCODED_RUSTFLAGS') else shlex.split(environment.get('RUSTFLAGS', ''))
@@ -66,12 +68,25 @@ for name, destination in [('libparzr_engine.dylib','Contents/Frameworks'),('parz
     files = [ROOT/'engine/target'/target/'release'/name if target else ROOT/'engine/target/release'/name for target in architectures]
     shutil.copy2(files[0],stage/destination/name)
 run(['install_name_tool','-id','@rpath/libparzr_engine.dylib',stage/'Contents/Frameworks/libparzr_engine.dylib'])
+# The tables file these binaries were built with: each pins its length and hash, so the first
+# build output the staged engine accepts is the right one.
+probe = '{"text":"teh","tokens":[{"start_utf16":0,"end_utf16":3,"pos":"Noun"}]}\n'
+def engine_accepts(tables=None):
+    environment = {k: v for k, v in os.environ.items() if k != 'PARZR_TABLES_PATH'}
+    if tables: environment['PARZR_TABLES_PATH'] = str(tables)
+    out = subprocess.run([stage/'Contents/MacOS/parzr-engine'], input=probe, capture_output=True, text=True, env=environment).stdout
+    return out.startswith('{') and '"error"' not in out and '"text"' in out
+outputs = sorted(glob.glob(str(ROOT/'engine/target'/architectures[0]/'release/build/parzr-engine-*/out/parzr-tables.dat')), key=os.path.getmtime, reverse=True)
+tables = next((pathlib.Path(p) for p in outputs if engine_accepts(p)), None)
+if not tables: sys.exit('No engine tables file matches the built engine (engine/target/*/release/build/parzr-engine-*/out/parzr-tables.dat); rebuild the engine.')
+shutil.copy2(tables, stage/'Contents/Resources/parzr-tables.dat')
+if not engine_accepts(): sys.exit('The bundled engine does not find Contents/Resources/parzr-tables.dat.')
 run(['install_name_tool','-add_rpath','@executable_path/../Frameworks',stage/'Contents/MacOS/parzr'])
 for binary in ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Frameworks/libparzr_model.dylib']:
     run(['strip', '-S', stage/binary])
 info = plistlib.loads((ROOT/'resources/Info.plist').read_bytes()); info['CFBundleIdentifier']=args.bundle_id
 revision = hashlib.sha256()
-for source in sorted([*ROOT.glob('mac/Sources/**/*.swift'), *ROOT.glob('engine/src/**/*.rs'), ROOT/'native/model.mm']):
+for source in sorted([*ROOT.glob('mac/Sources/**/*.swift'), *ROOT.glob('engine/src/**/*.rs'), ROOT/'engine/build.rs', ROOT/'native/model.mm']):
     revision.update(str(source.relative_to(ROOT)).encode()); revision.update(source.read_bytes())
 info['ParzrBuildRevision'] = revision.hexdigest()[:12]
 (stage/'Contents/Info.plist').write_bytes(plistlib.dumps(info))

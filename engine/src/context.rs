@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 /// "a b" to its count, built by `build.rs` from `rules/bigrams.json` and read in place.
 fn counts() -> &'static Table {
     static COUNTS: OnceLock<Table> = OnceLock::new();
-    COUNTS.get_or_init(|| Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/bigrams.bin"))))
+    COUNTS.get_or_init(|| Table::new(crate::tables::get().bigrams))
 }
 pub fn count(a: &str, b: &str) -> u64 {
     let counts = counts();
