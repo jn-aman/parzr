@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon
 
 /// Google Docs paints its page on a canvas and exposes no word geometry (AXBoundsForRange on its text area is invalid).
 /// What it does expose, measured in Chrome: a hidden copy of the text (children of the text area) whose runs report real x and a line pitch about
@@ -205,15 +206,29 @@ extension AX {
     static func docsLines(_ element: AXUIElement, _ range: NSRange) -> [CGRect] { DocsGeometry.lines(docsPieces(element, range)) }
     /// Docs cannot place a caret at the end of a paragraph through a selection range (that offset means the start of the next paragraph), so a caret
     /// is put back with arrow keys: `count` characters right, or left when negative, from where the typed replacement left it.
-    static func docsMoveCaret(_ app: NSRunningApplication, by count: Int) async {
+    /// The arrows are tagged as Parzr's own (so they never count as the writer typing), and each one goes only while Docs is still in front,
+    /// no secure input is on and the keyboard is still in `element`: a writer who moved on keeps their caret where they put it.
+    /// Returns the number of arrows sent.
+    @discardableResult
+    static func docsMoveCaret(_ app: NSRunningApplication, element: AXUIElement, automatic: Bool = true, by count: Int) async -> Int {
         let key: CGKeyCode = count > 0 ? 124 : 123
+        var sent = 0
         for _ in 0..<min(abs(count), 600) {
-            for down in [true, false] {
-                guard let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { continue }
-                event.flags = []
-                event.postToPid(app.processIdentifier)
-            }
+            guard ReplacePlan.typingInterrupted(inFront: SelfTestTarget.watched?.processIdentifier == app.processIdentifier, secureInput: IsSecureEventInputEnabled(),
+                                                focusMatches: { ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }) }) == nil else { break }
+            for event in docsArrow(key) { event.postToPid(app.processIdentifier) }
+            sent += 1
             try? await Task.sleep(for: .milliseconds(8))
+        }
+        return sent
+    }
+    /// One arrow press, down and up, with no modifiers and tagged as Parzr's own.
+    static func docsArrow(_ key: CGKeyCode) -> [CGEvent] {
+        [true, false].compactMap { down in
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { return nil }
+            event.flags = []
+            SyntheticEvent.mark(event)
+            return event
         }
     }
 }
