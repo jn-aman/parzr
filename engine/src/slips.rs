@@ -520,6 +520,91 @@ mod tests {
             writeln!(out, "{record}").unwrap();
         }
     }
+    /// One typing check as the app makes it (Smart grammar on, `deep` off), with its follow-ups: while
+    /// the engine answers "context.pending" the app asks again 900 ms later, at most three times
+    /// (PassiveObserver). Returns the edits of the last answer and the follow-ups it took.
+    fn typing_check(text: &str) -> (Vec<crate::Edit>, usize) {
+        let req = crate::Request {
+            text: text.into(),
+            gec: true,
+            dialect: "american".into(),
+            ..crate::Request::default()
+        };
+        let mut follow_ups = 0;
+        loop {
+            let result = crate::rewrite(&req).expect("a typing check");
+            let pending = result
+                .warnings
+                .iter()
+                .any(|w| w == crate::pipeline::PENDING_WARNING);
+            if !pending || follow_ups == 3 {
+                return (result.edits, follow_ups);
+            }
+            follow_ups += 1;
+            std::thread::sleep(std::time::Duration::from_millis(900));
+        }
+    }
+    /// The typing route with the real pack (PARZR_SLIP_DIR or the installed pack, and the native
+    /// runtime in PARZR_MODEL_RUNTIME): "I hat it" is fixed by the slip check while typing, whether
+    /// or not the writing model is installed, within the app's follow-ups.
+    #[test]
+    #[ignore = "needs the slip checker and the native runtime"]
+    fn typing_route_fixes_a_slip_with_the_real_pack() {
+        assert!(available(), "no slip checker pack");
+        let (edits, follow_ups) = typing_check("This is so bad. I hat it.");
+        let slip: Vec<_> = edits
+            .iter()
+            .filter(|e| e.rule_id == "context.slip_swap")
+            .map(|e| (e.original.as_str(), e.replacement.as_str()))
+            .collect();
+        assert_eq!(
+            slip,
+            [("hat", "hate")],
+            "after {follow_ups} follow-ups: {edits:?}"
+        );
+        // Asked again (the next keystroke elsewhere), the cached verdict answers at once.
+        let started = std::time::Instant::now();
+        let (again, more) = typing_check("This is so bad. I hat it.");
+        assert_eq!(more, 0);
+        assert!(again.iter().any(|e| e.rule_id == "context.slip_swap"));
+        assert!(started.elapsed() < std::time::Duration::from_millis(500));
+    }
+    /// Typing harness: PARZR_SLIPS_TYPING=in.jsonl:out.jsonl runs every line through `typing_check`
+    /// (the app's typing route with its follow-ups) and writes every edit, the follow-ups and the time.
+    #[test]
+    #[ignore = "needs the slip checker and PARZR_SLIPS_TYPING"]
+    fn slips_typing() {
+        use std::io::Write;
+        let spec = std::env::var("PARZR_SLIPS_TYPING").expect("PARZR_SLIPS_TYPING=in:out");
+        let (input, output) = spec.split_once(':').expect("in:out");
+        assert!(available(), "no slip checker pack");
+        let mut out = std::fs::File::create(output).unwrap();
+        for line in std::fs::read_to_string(input).unwrap().lines() {
+            let item: serde_json::Value = serde_json::from_str(line).unwrap();
+            let text = item["input"].as_str().or(item["text"].as_str()).unwrap();
+            let started = std::time::Instant::now();
+            let (edits, follow_ups) = typing_check(text);
+            let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let json = |e: &crate::Edit| {
+                serde_json::json!([
+                    e.start_utf16,
+                    e.end_utf16,
+                    e.original,
+                    e.replacement,
+                    e.rule_id
+                ])
+            };
+            let swaps = ["context.slip_swap", "context.sentence_swap"];
+            let slips: Vec<_> = edits
+                .iter()
+                .filter(|e| swaps.contains(&e.rule_id.as_str()))
+                .map(json)
+                .collect();
+            let all: Vec<_> = edits.iter().map(json).collect();
+            let record = serde_json::json!({"id": item["id"], "ms": ms, "follow_ups": follow_ups, "slips": slips, "edits": all});
+            writeln!(out, "{record}").unwrap();
+        }
+    }
     /// Dev harness: PARZR_SLIPS_DEV=in.jsonl:out.jsonl (lines with "id" and "input" or "text") writes,
     /// for every window the checker scores (a sentence and the sentence before, as `confusion` scores
     /// it), every candidate swap with its masked-word gain and the time the window took, for
