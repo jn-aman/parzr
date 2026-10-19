@@ -1981,6 +1981,48 @@ fn guard(source: &str, all: Vec<Edit>) -> Vec<Edit> {
         .collect()
 }
 
+/// A short chat message ("On my way", "Miss you") or one that ends in an emoji ("Just got home 🏠")
+/// reads as complete without a final mark, but the model ends nearly every passage with one. Its
+/// period, exclamation or question mark at the end of such a passage is no correction: the mark
+/// is taken out of the edit that adds it, and the rest of that edit ("u" to "you.") stays. Longer
+/// sentences still get their missing final punctuation, and a selection that continues past the
+/// passage is already told to add none.
+fn keep_chat_ending(req: &Request, edits: Vec<Edit>) -> Vec<Edit> {
+    const MARKS: [char; 3] = ['.', '!', '?'];
+    let text = req.text.trim_end();
+    let words = text
+        .split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
+        .count();
+    // The words before a closing emoji: the model puts its mark after them ("legs. 😅") as often
+    // as after the emoji ("legs 😅.").
+    let core = match emoji_regex().find_iter(text).last() {
+        Some(m) if m.end() == text.len() => text[..m.start()].trim_end(),
+        _ => text,
+    };
+    let emoji_end = core.len() < text.len();
+    if !req.sentence_end || core.is_empty() || core.ends_with(MARKS) || !(words <= 4 || emoji_end) {
+        return edits;
+    }
+    let end = core.encode_utf16().count();
+    edits
+        .into_iter()
+        .filter_map(|mut e| {
+            let r = e.replacement.trim_end();
+            if e.end_utf16 < end || !r.ends_with(MARKS) || e.original.trim_end().ends_with(MARKS) {
+                return Some(e);
+            }
+            let kept = format!("{}{}", r.trim_end_matches(MARKS), &e.replacement[r.len()..]);
+            if kept == e.original {
+                return None;
+            }
+            (e.category, e.explanation) = describe(&e.original, &kept);
+            e.replacement = kept;
+            Some(e)
+        })
+        .collect()
+}
+
 /// Letters, digits and inner apostrophes belong to a word; widening never crosses protected text.
 fn widen_to_words(
     source: &str,
@@ -2530,7 +2572,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         if req.dialect == "british" {
             kept.retain(|e| !group_noun_verb(&req.text, e));
         }
-        (kept, false)
+        (keep_chat_ending(req, kept), false)
     } else {
         // A first rewrite that fails the meaning check somewhere, or barely moves the text toward
         // its tone, gets one more attempt with worked examples. The candidate whose checked
@@ -3174,6 +3216,67 @@ mod tests {
     fn guarded(source: &str, target: &str) -> String {
         let kept = guard(source, edits(source, target, Mode::Fix, &[]));
         apply_edits(source, &kept).unwrap().0
+    }
+    #[test]
+    fn short_chat_messages_and_emoji_endings_keep_their_open_end() {
+        let fixed = |source: &str, target: &str, sentence_end: bool| {
+            let req = Request {
+                text: source.into(),
+                sentence_end,
+                ..Request::default()
+            };
+            let kept = keep_chat_ending(&req, guard(source, edits(source, target, Mode::Fix, &[])));
+            apply_edits(source, &kept).unwrap().0
+        };
+        // Short messages stay open-ended.
+        for (source, target) in [
+            ("be there in five", "be there in five."),
+            ("Call me later", "Call me later!"),
+            ("Free tonight", "Free tonight?"),
+            ("Nice work, team", "Nice work, team."),
+            ("Got the tickets 🎉", "Got the tickets 🎉."),
+            (
+                "Our team shipped the new release today 🚀",
+                "Our team shipped the new release today. 🚀",
+            ),
+            (
+                "We finally fixed the build on the release branch 👍",
+                "We finally fixed the build on the release branch 👍.",
+            ),
+        ] {
+            assert_eq!(fixed(source, target, true), source, "{source:?}");
+        }
+        // The rest of an edit that also adds the mark stays.
+        assert_eq!(
+            fixed("see you tomorow", "see you tomorrow.", true),
+            "see you tomorrow"
+        );
+        assert_eq!(
+            fixed("i recieved it", "I received it.", true),
+            "I received it"
+        );
+        // A sentence of five words or more still gets its final punctuation.
+        assert_eq!(
+            fixed(
+                "The package arrived this morning",
+                "The package arrived this morning.",
+                true
+            ),
+            "The package arrived this morning."
+        );
+        // A mark the writer typed, and a selection that runs on past the passage, are left to
+        // the other checks.
+        for (source, target, end) in [
+            ("Call me later!", "Call me later.", true),
+            ("Big news on Monday! 🎉", "Big news on Monday. 🎉", true),
+            ("be there in five", "be there in five.", false),
+        ] {
+            assert_eq!(
+                fixed(source, target, end),
+                guarded(source, target),
+                "{source:?}"
+            );
+        }
     }
     #[test]
     fn curly_quotes_stay_curly() {
