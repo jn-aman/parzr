@@ -570,6 +570,10 @@ mod tests {
     #[ignore = "needs the slip checker and the native runtime"]
     fn typing_route_fixes_a_slip_with_the_real_pack() {
         assert!(available(), "no slip checker pack");
+        // Load the word lists and Smart grammar first, as the app does at launch: a cold first check spends the
+        // whole typing budget loading them and leaves the slip check for a later keystroke without asking for a
+        // follow-up, which is not the route under test.
+        let _ = typing_check("Load the lists once.");
         let (edits, follow_ups) = typing_check("This is so bad. I hat it.");
         let slip: Vec<_> = edits
             .iter()
