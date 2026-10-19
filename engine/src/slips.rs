@@ -37,7 +37,7 @@ const MAX_WORD_TOKENS: usize = 6;
 /// Where the slip checker's files live: PARZR_SLIP_DIR (development), else the downloaded pack's
 /// folder. None while the pack is not on this Mac.
 pub fn dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("PARZR_SLIP_DIR").filter(|d| !d.is_empty()) {
+    if let Some(dir) = crate::overrides::var("PARZR_SLIP_DIR") {
         return Some(PathBuf::from(dir));
     }
     crate::packs::installed("slip_model")

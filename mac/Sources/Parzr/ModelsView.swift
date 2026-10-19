@@ -51,7 +51,7 @@ enum ToneModel {
     static var center: ModelCenter? { .tone }
     /// The installed classifier folder, or PARZR_TONE_DIR in development.
     static func folder() -> URL? {
-        if let custom = ProcessInfo.processInfo.environment["PARZR_TONE_DIR"], !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
+        if let custom = DevOverrides.value("PARZR_TONE_DIR") { return URL(fileURLWithPath: custom, isDirectory: true) }
         guard let center, center.state == .ready, let pack = center.pack, let store = center.store, let relative = pack.provides[OptionalPack.tone.role] else { return nil }
         return store.folder(pack).appendingPathComponent(relative, isDirectory: true)
     }
@@ -135,6 +135,7 @@ struct ModelStatus: View {
         switch center.state {
         case .downloading: NativeButton(title: "Stop", kind: .utility, label: "Stop the model download", action: { center.cancel() }).fixedSize()
         case .missing: NativeButton(title: "Download", kind: compact ? .secondary : .primary, label: "Download the models", action: { center.start(userInitiated: true) }).fixedSize()
+        case .failed(.changedOnDisk): NativeButton(title: "Download again", label: "Download the models again", action: { center.start(userInitiated: true) }).fixedSize()
         case .failed: NativeButton(title: "Try again", label: "Try the model download again", action: { center.start(userInitiated: true) }).fixedSize()
         case .ready, .verifying, .development: EmptyView()
         }

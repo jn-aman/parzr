@@ -42,6 +42,40 @@ def digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+MARKER = '.verified.json'
+
+
+def identity(path):
+    """Size, inode and modification time (ns) of a regular file, as engine/src/packs.rs and the app record them."""
+    info = os.stat(path, follow_symlinks=False)
+    if not os.path.isfile(path) or os.path.islink(path): raise SystemExit(f'{path} is not a regular file')
+    return info.st_size, info.st_ino, info.st_mtime_ns
+
+
+def mark(pack, folder):
+    """The verification marker the engine requires before it uses a pack (engine/src/packs.rs): written only after
+    every file matched its pinned SHA-256, naming each file's identity on disk."""
+    files = []
+    for f in pack['files']:
+        size, inode, mtime = identity(folder/f['path'])
+        files.append({'path': f['path'], 'sha256': f['sha256'], 'bytes': size, 'inode': inode, 'mtime_ns': mtime})
+    (folder/MARKER).write_text(json.dumps({'schema': 1, 'pack': pack['id'], 'version': pack['version'], 'files': files}, indent=2)+'\n')
+
+
+def marked(pack, folder):
+    """The marker still vouches for every file as it is now (no hashing)."""
+    try: marker = json.loads((folder/MARKER).read_text())
+    except (OSError, ValueError): return False
+    if marker.get('schema') != 1 or marker.get('pack') != pack['id'] or marker.get('version') != pack['version']: return False
+    entries = {m.get('path'): m for m in marker.get('files', [])}
+    for f in pack['files']:
+        m = entries.get(f['path'])
+        try: now = identity(folder/f['path'])
+        except (OSError, SystemExit): return False
+        if not m or m.get('sha256') != f['sha256'] or m.get('bytes') != f['bytes'] or now != (m.get('bytes'), m.get('inode'), m.get('mtime_ns')): return False
+    return True
+
+
 def asset_name(file):
     return urllib.parse.unquote(file['url'].rsplit('/', 1)[1])
 
@@ -183,7 +217,9 @@ def fetch(manifest, args):
     for pack in pick(manifest, args.pack):
         final = root/pack['id']/pack['version']
         if final.is_dir() and all((final/f['path']).is_file() and (final/f['path']).stat().st_size == f['bytes'] for f in pack['files']):
-            if not args.verify or all(digest(final/f['path']) == f['sha256'] for f in pack['files']):
+            # The engine uses a pack only with a current marker; without one (an older checkout or cache) the files are hashed first.
+            if (marked(pack, final) and not args.verify) or all(digest(final/f['path']) == f['sha256'] for f in pack['files']):
+                if not marked(pack, final): mark(pack, final)
                 print(f'{final} is installed'); continue
         staging = root/pack['id']/f".download-{pack['version']}"
         base = args.base_url
@@ -209,6 +245,7 @@ def fetch(manifest, args):
         (staging/'pack.json').write_text(json.dumps(pack, indent=2)+'\n')
         if final.exists(): shutil.rmtree(final)
         staging.rename(final)
+        mark(pack, final)
         for old in (root/pack['id']).iterdir():
             if old != final and old.is_dir(): shutil.rmtree(old)
         print(f'Installed {final}')

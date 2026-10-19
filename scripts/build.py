@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Reproducible macOS app builder. Never silently downgrade a requested release signature."""
-import argparse, glob, hashlib, json, os, pathlib, plistlib, shutil, subprocess, sys, shlex
+"""Reproducible macOS app builder. Never silently downgrade a requested release signature.
+
+The default build is the release app (dist/Parzr.app): no QA modes and no PARZR_* development overrides, in the
+Swift app or in the engine (built without its `dev-overrides` feature). `--qa` builds dist/Parzr-QA.app instead,
+with the self-test flags compiled in (-DPARZR_QA) and the overrides honoured, for local end-to-end runs
+(docs/qa/README.md). A QA build is never signed for release."""
+import argparse, glob, hashlib, json, os, pathlib, plistlib, re, shutil, subprocess, sys, shlex
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--sign', action='store_true', help='Require Developer ID Application signing')
 parser.add_argument('--identity', default=os.environ.get('PARZR_SIGNING_IDENTITY'))
 parser.add_argument('--bundle-id', default=os.environ.get('PARZR_BUNDLE_ID','app.parzr.desktop'))
 parser.add_argument('--skip-build', action='store_true')
+parser.add_argument('--qa', action='store_true', help='QA build (dist/Parzr-QA.app): self-test flags and PARZR_* overrides compiled in; never for release')
 args = parser.parse_args()
+if args.qa and args.sign: sys.exit('A QA build carries the self-test modes and development overrides; it is never signed for release.')
 if args.sign and (not args.identity or not args.identity.startswith('Developer ID Application:')):
     sys.exit('Developer ID signing requires --identity "Developer ID Application: Name (TEAMID)". No unsigned fallback will be produced.')
 def run(command, **kwargs):
@@ -16,7 +23,7 @@ version = plistlib.loads((ROOT/'resources/Info.plist').read_bytes())['CFBundleSh
 for name in ['THIRD_PARTY_NOTICES', 'LICENSE', 'engine/rules/frequency.json']:
     if not (ROOT/name).is_file(): sys.exit('Missing required build source: '+name)
 dist = ROOT/'dist'; dist.mkdir(exist_ok=True)
-app = dist/'Parzr.app'
+app = dist/('Parzr-QA.app' if args.qa else 'Parzr.app')
 architectures = ['aarch64-apple-darwin']
 if not args.skip_build:
     model_command = [sys.executable, ROOT/'scripts/prepare-model.py']
@@ -25,7 +32,9 @@ if not args.skip_build:
         if target: run(['rustup','target','add',target])
         # The engine's compiled tables ship once, as Contents/Resources/parzr-tables.dat, not inside
         # each of the four engine binaries (engine/src/tables.rs).
-        command = ['cargo','build','--release','--locked','--manifest-path','engine/Cargo.toml','--features','external-tables']
+        # Release: without the default `dev-overrides` feature, so the shipped engine ignores PARZR_* variables (engine/src/overrides.rs).
+        features = ['--features','external-tables'] if args.qa else ['--no-default-features','--features','local-model,external-tables']
+        command = ['cargo','build','--release','--locked','--manifest-path','engine/Cargo.toml',*features]
         if target: command += ['--target',target]
         environment = os.environ.copy(); environment['MACOSX_DEPLOYMENT_TARGET']='13.0'
         rustflags = environment.get('CARGO_ENCODED_RUSTFLAGS', '').split('\x1f') if environment.get('CARGO_ENCODED_RUSTFLAGS') else shlex.split(environment.get('RUSTFLAGS', ''))
@@ -36,9 +45,11 @@ if not args.skip_build:
     # Pin the Swift Build engine: the deprecated native one (Swift 6.3 default) embeds the
     # absolute build path in package resource accessors, which the bundle audit rejects.
     swift += ['--arch','arm64','--build-system','swiftbuild']
+    # QA modes (--typing-test and the rest) and PARZR_* overrides exist only under DEBUG or PARZR_QA.
+    if args.qa: swift += ['-Xswiftc', '-DPARZR_QA']
     run(swift)
 # Build into a staging bundle then replace only this builder's named artifact.
-stage = dist/'Parzr-staging.app'
+stage = dist/('Parzr-QA-staging.app' if args.qa else 'Parzr-staging.app')
 if stage.exists(): shutil.rmtree(stage)
 for directory in ['Contents/MacOS','Contents/Frameworks','Contents/Resources']:
     (stage/directory).mkdir(parents=True,exist_ok=True)
@@ -69,19 +80,27 @@ for name, destination in [('libparzr_engine.dylib','Contents/Frameworks'),('parz
     shutil.copy2(files[0],stage/destination/name)
 run(['install_name_tool','-id','@rpath/libparzr_engine.dylib',stage/'Contents/Frameworks/libparzr_engine.dylib'])
 # The tables file these binaries were built with: each pins its length and hash, so the first
-# build output the staged engine accepts is the right one.
+# build output the staged engine accepts in Contents/Resources is the right one. The engine runs with
+# no PARZR_* variable (a release engine ignores them anyway), so it reads only its bundle.
 probe = '{"text":"teh","tokens":[{"start_utf16":0,"end_utf16":3,"pos":"Noun"}]}\n'
-def engine_accepts(tables=None):
-    environment = {k: v for k, v in os.environ.items() if k != 'PARZR_TABLES_PATH'}
-    if tables: environment['PARZR_TABLES_PATH'] = str(tables)
+bundled_tables = stage/'Contents/Resources/parzr-tables.dat'
+def engine_accepts():
+    environment = {k: v for k, v in os.environ.items() if not k.startswith('PARZR_')}
     out = subprocess.run([stage/'Contents/MacOS/parzr-engine'], input=probe, capture_output=True, text=True, env=environment).stdout
     return out.startswith('{') and '"error"' not in out and '"text"' in out
 outputs = sorted(glob.glob(str(ROOT/'engine/target'/architectures[0]/'release/build/parzr-engine-*/out/parzr-tables.dat')), key=os.path.getmtime, reverse=True)
-tables = next((pathlib.Path(p) for p in outputs if engine_accepts(p)), None)
+tables = None
+for candidate in outputs:
+    bundled_tables.unlink(missing_ok=True); shutil.copy2(candidate, bundled_tables)
+    if engine_accepts(): tables = pathlib.Path(candidate); break
 if not tables: sys.exit('No engine tables file matches the built engine (engine/target/*/release/build/parzr-engine-*/out/parzr-tables.dat); rebuild the engine.')
-shutil.copy2(tables, stage/'Contents/Resources/parzr-tables.dat')
-if not engine_accepts(): sys.exit('The bundled engine does not find Contents/Resources/parzr-tables.dat.')
 run(['install_name_tool','-add_rpath','@executable_path/../Frameworks',stage/'Contents/MacOS/parzr'])
+# Only Contents/Frameworks (Sparkle) and the system Swift runtime: the linker's @loader_path (Contents/MacOS) and
+# its absolute toolchain path are dropped, so nothing beside the executable or outside the OS can be loaded through @rpath.
+def rpaths(binary):
+    return re.findall(r'cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (.+?) \(offset \d+\)', subprocess.check_output(['otool','-l',str(binary)],text=True))
+for path in rpaths(stage/'Contents/MacOS/parzr'):
+    if path not in ('@executable_path/../Frameworks', '/usr/lib/swift'): run(['install_name_tool','-delete_rpath',path,stage/'Contents/MacOS/parzr'])
 for binary in ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Frameworks/libparzr_model.dylib']:
     run(['strip', '-S', stage/binary])
 info = plistlib.loads((ROOT/'resources/Info.plist').read_bytes()); info['CFBundleIdentifier']=args.bundle_id
@@ -111,9 +130,9 @@ for nested in ['Versions/B/Autoupdate', 'Versions/B/Updater.app', '']:
     run(['codesign','--force','--sign',identity,'--options','runtime',*(['--timestamp'] if args.sign else []),sparkle/nested if nested else sparkle])
 run(['codesign','--force','--sign',identity,*options,'--entitlements',ROOT/'resources/Parzr.entitlements',stage])
 run(['codesign','--verify','--deep','--strict',stage])
-run([sys.executable, ROOT/'scripts/audit-bundle.py', stage])
+run([sys.executable, ROOT/'scripts/audit-bundle.py', stage, *(['--qa'] if args.qa else [])])
 if app.exists(): shutil.rmtree(app)
 stage.rename(app)
-report = {'app':str(app),'version':version,'architectures':'arm64','signature':'Developer ID Application' if args.sign else 'ad-hoc (local development only)','notarized':False,'bundle_id':args.bundle_id}
-(dist/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
+report = {'app':str(app),'version':version,'architectures':'arm64','signature':'Developer ID Application' if args.sign else 'ad-hoc (local development only)','notarized':False,'bundle_id':args.bundle_id,'qa':args.qa}
+(dist/('build-report-qa.json' if args.qa else 'build-report.json')).write_text(json.dumps(report,indent=2)+'\n')
 print(f'Built {app} · {report["signature"]}')

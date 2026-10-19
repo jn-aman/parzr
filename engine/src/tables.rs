@@ -137,11 +137,11 @@ mod external {
         Some(PathBuf::from(name))
     }
 
-    /// PARZR_TABLES_PATH, then `../Resources/` beside the image's folder (Contents/MacOS and
+    /// PARZR_TABLES_PATH (a development override), then `../Resources/` beside the image's folder (Contents/MacOS and
     /// Contents/Frameworks both sit beside Contents/Resources), then the image's own folder.
     pub(super) fn candidates() -> Vec<PathBuf> {
         let mut out = vec![];
-        if let Some(path) = std::env::var_os("PARZR_TABLES_PATH").filter(|p| !p.is_empty()) {
+        if let Some(path) = crate::overrides::var("PARZR_TABLES_PATH") {
             out.push(PathBuf::from(path));
         }
         if let Some(image) = image() {

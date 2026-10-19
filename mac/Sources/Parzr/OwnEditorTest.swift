@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ParzrCore
 
@@ -76,3 +78,4 @@ func runOwnEditorTest(app: AppDelegate, host: NSView, window: NSWindow, director
     try data.write(to: target.appendingPathComponent("own-editor-results.json"))
     print(String(decoding: data, as: UTF8.self))
 }
+#endif

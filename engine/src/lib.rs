@@ -22,6 +22,7 @@ mod model;
 mod morphology;
 mod names;
 #[cfg_attr(not(feature = "local-model"), allow(dead_code))]
+mod overrides;
 pub mod packs;
 mod pipeline;
 mod punctuation;
@@ -202,6 +203,13 @@ pub extern "C" fn parzr_slips_warm() -> i32 {
         return 1;
     }
     0
+}
+
+/// The app holds the model packs (1) while it re-hashes them at launch and lets go (0) once they
+/// verified: until then no pack is used in this process, whatever its marker says.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_packs_hold(on: i32) {
+    packs::hold(on != 0);
 }
 
 /// The pinned model manifest compiled into this engine (`engine/models.json`), as JSON. The app

@@ -1,6 +1,27 @@
 import Foundation
 import Darwin
 
+/// Development overrides: `PARZR_*` environment variables that point Parzr at another engine library, models folder, download
+/// address or model files. Honoured in debug builds, QA builds (`scripts/build.py --qa` compiles with `-DPARZR_QA`) and the
+/// benchmark harnesses (built with `-D PARZR_QA`). A release build ignores every one of them, so the shipped app loads only its
+/// own bundle and the verified model packs; its engine is built without the matching `dev-overrides` cargo feature.
+public enum DevOverrides {
+    #if DEBUG || PARZR_QA
+    public static let enabled = true
+    #else
+    public static let enabled = false
+    #endif
+    /// The variable's value, when overrides are honoured and it is set and not empty.
+    public static func value(_ name: String, in environment: [String: String] = ProcessInfo.processInfo.environment, enabled: Bool = DevOverrides.enabled) -> String? {
+        guard enabled, let value = environment[name], !value.isEmpty else { return nil }
+        return value
+    }
+    /// The environment as Parzr may read it: without any `PARZR_*` variable unless overrides are honoured.
+    public static func environment(_ environment: [String: String] = ProcessInfo.processInfo.environment, enabled: Bool = DevOverrides.enabled) -> [String: String] {
+        enabled ? environment : environment.filter { !$0.key.hasPrefix("PARZR_") }
+    }
+}
+
 /// The engine actor isolates Rust's per-thread state and keeps analysis off the UI actor.
 public actor WritingEngine {
     public static let shared = WritingEngine()
@@ -34,7 +55,7 @@ public actor WritingEngine {
     }
     private func load() throws {
         if rewriteFunction != nil { return }
-        let supplied = ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]
+        let supplied = DevOverrides.value("PARZR_ENGINE_PATH")
         let paths = Self.libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: supplied)
         for path in paths {
             guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL) else { continue }
@@ -55,7 +76,7 @@ public actor WritingEngine {
     public nonisolated static func warmSlips() async -> Bool { await warm("parzr_slips_warm") }
     private nonisolated static func warm(_ symbol: String) async -> Bool {
         await Task.detached(priority: .utility) {
-            let supplied = ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]
+            let supplied = DevOverrides.value("PARZR_ENGINE_PATH")
             let paths = libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: supplied)
             for path in paths {
                 guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let warm = dlsym(handle, symbol) else { continue }
@@ -64,9 +85,18 @@ public actor WritingEngine {
             return false
         }.value
     }
+    /// Holds (true) or releases the model packs in this process's engine (`parzr_packs_hold`): while held, the engine uses
+    /// no pack. Does nothing when the engine is missing or older.
+    nonisolated static func holdPacks(_ on: Bool) {
+        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: DevOverrides.value("PARZR_ENGINE_PATH")) {
+            guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let hold = dlsym(handle, "parzr_packs_hold") else { continue }
+            unsafeBitCast(hold, to: (@convention(c) (Int32) -> Void).self)(on ? 1 : 0)
+            return
+        }
+    }
     /// The pinned model manifest compiled into the engine (engine/models.json), or nil when the engine cannot load.
     public nonisolated static func modelManifest() -> Data? {
-        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]) {
+        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: DevOverrides.value("PARZR_ENGINE_PATH")) {
             guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let manifest = dlsym(handle, "parzr_model_manifest"), let free = dlsym(handle, "parzr_string_free") else { continue }
             guard let text = unsafeBitCast(manifest, to: (@convention(c) () -> UnsafeMutablePointer<CChar>?).self)() else { return nil }
             defer { unsafeBitCast(free, to: (@convention(c) (UnsafeMutablePointer<CChar>?) -> Void).self)(text) }
@@ -75,7 +105,7 @@ public actor WritingEngine {
         return nil
     }
     private nonisolated static let misspellingCheck: (@convention(c) (UnsafePointer<CChar>?) -> Int32)? = {
-        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]) {
+        for path in libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: DevOverrides.value("PARZR_ENGINE_PATH")) {
             if let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let check = dlsym(handle, "parzr_is_known_misspelling") { return unsafeBitCast(check, to: (@convention(c) (UnsafePointer<CChar>?) -> Int32).self) }
         }
         return nil

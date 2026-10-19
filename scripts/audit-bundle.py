@@ -13,6 +13,7 @@ import sys
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('app', type=pathlib.Path)
+parser.add_argument('--qa', action='store_true', help='a QA build (scripts/build.py --qa): its self-test modes are expected')
 args = parser.parse_args()
 app = args.app
 required = ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Resources/LICENSE', 'Contents/Resources/THIRD_PARTY_NOTICES', 'Contents/Resources/PrivacyInfo.xcprivacy', 'Contents/Resources/Integrations/extensions/browser/manifest.json', 'Contents/Resources/Integrations/extensions/vscode/package.json']
@@ -69,7 +70,22 @@ if list(sparkle.rglob('*.xpc')) or (sparkle/'XPCServices').exists(): sys.exit('S
 for name in ['Versions/B/Autoupdate', 'Versions/B/Updater.app']:
     if 'runtime' not in subprocess.run(['codesign','-dvv',str(sparkle/name)],capture_output=True,text=True).stderr.split('flags=')[-1].split('\n')[0]:
         sys.exit('Sparkle helper is not signed with the hardened runtime: '+name)
-if '@executable_path/../Frameworks' not in subprocess.check_output(['otool','-l',str(app/'Contents/MacOS/parzr')],text=True): sys.exit('The app executable cannot find Contents/Frameworks (missing rpath).')
+rpaths = re.findall(r'cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (.+?) \(offset \d+\)', subprocess.check_output(['otool','-l',str(app/'Contents/MacOS/parzr')],text=True))
+if '@executable_path/../Frameworks' not in rpaths: sys.exit('The app executable cannot find Contents/Frameworks (missing rpath).')
+# Nothing beside the executable (@loader_path) or outside the OS and the bundle's Frameworks is searched through @rpath.
+if set(rpaths) - {'@executable_path/../Frameworks', '/usr/lib/swift'}: sys.exit('Unexpected LC_RPATH in the app executable: '+', '.join(sorted(set(rpaths) - {'@executable_path/../Frameworks', '/usr/lib/swift'})))
+# QA modes are compiled out of a release build (#if DEBUG || PARZR_QA): none of their flags, nor the fixture override, may be in any of its code.
+qa_markers = [b'--web-composer-test', b'--docs-test', b'--integration-test', b'--typing-test', b'--paste-test', b'--grammar-typing-test', b'--ui-test',
+              b'--editor-typing-test', b'--own-editor-test', b'--click-test', b'--models-test', b'--snapshot', b'--update-test', b'PARZR_FIXTURE_PATH', b'updateTestMode']
+if not args.qa:
+    found = set()
+    for path in sorted(app.rglob('*')):
+        if path.is_symlink() or not path.is_file() or path.stat().st_size < 4: continue
+        with path.open('rb') as stream: magic = stream.read(4)
+        if magic not in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'): continue
+        data = path.read_bytes()
+        found |= {(marker.decode(), str(path.relative_to(app))) for marker in qa_markers if marker in data}
+    if found: sys.exit('A release build must not carry QA modes: '+', '.join(f'{m} in {p}' for m, p in sorted(found)))
 sparkle_license = (app/'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt').read_text()
 for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVerifier']:
     if part not in sparkle_license: sys.exit('Sparkle-LICENSE.txt is incomplete (missing '+part+')')
@@ -107,4 +123,4 @@ if issues:
         print('Embedded private build path in '+name+'; value omitted.', file=sys.stderr)
     sys.exit(1)
 subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True, capture_output=True)
-print('Bundle audit passed: complete runtime, no model weights, valid signature, no embedded home paths.')
+print('Bundle audit passed: complete runtime, no model weights, valid signature, no embedded home paths'+(' (QA build: self-test modes present).' if args.qa else ', no QA modes.'))
