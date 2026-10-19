@@ -188,7 +188,7 @@ jobs:
         run: |
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native --engine engine/target/release/libparzr_engine.dylib --paths typing,deep --deep-sample 40
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         # Totals only (the sealed test sets never write per-item results): what update-baselines.py takes.
         continue-on-error: true
