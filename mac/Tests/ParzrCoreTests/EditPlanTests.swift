@@ -118,6 +118,15 @@ final class EditPlanTests: XCTestCase {
         let edit = WritingEdit(start: 0, end: 0, replacement: "x", original: "")
         XCTAssertThrowsError(try EditPlan.apply([edit,edit], to: ""))
     }
+    func testInsertionAndReplacementAtSameStartRejected() throws {
+        let source = "That's not fair. He new about it the whole time."
+        let expected = "That's not fair. He knew about it the whole time."
+        let insertion = WritingEdit(start: 20, end: 20, replacement: "k", original: "")
+        let replacement = WritingEdit(start: 20, end: 23, replacement: "knew", original: "new")
+        XCTAssertEqual(try EditPlan.apply([insertion], to: source), expected)
+        XCTAssertEqual(try EditPlan.apply([replacement], to: source), expected)
+        XCTAssertThrowsError(try EditPlan.apply([insertion, replacement], to: source))
+    }
     func testJSONRoundtrip() throws {
         let request = EngineRequest(text: "Hello 😀", mode: .professional, dictionary: ["parzr"], sentenceStart: false)
         let decoded = try JSONDecoder().decode(EngineRequest.self, from: JSONEncoder().encode(request))

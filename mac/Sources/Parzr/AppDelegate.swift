@@ -222,6 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let passive = PassiveObserver(); self.passive = passive
         passive.onDismiss = { [weak self] in
             self?.inline.dismissIfStale()
+            if let self, let snapshot = self.panelModel.snapshot, snapshot.automatic, !snapshot.checkingEnabled { self.closePanel() }
             if let self, self.inline.hasMarks, self.inline.overflow > 0 { return }
             self?.marker?.orderOut(nil); self?.marker?.contentView = nil
         }
@@ -529,6 +530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         panelModel.clearSession()
     }
     private func showMarker(snapshot: SelectionSnapshot, result: RewriteResult) {
+        guard snapshot.checkingEnabled, snapshot.automaticEditorIsCurrent() else { marker?.orderOut(nil); marker?.contentView = nil; return }
         guard !isShown(panel), let bounds = snapshot.bounds, let screen = NSScreen.screens.first(where: { $0.frame.intersects(bounds) }) else { return }
         let more = inline.overflow
         let size = more > 0 ? NSSize(width: 40, height: 22) : NSSize(width: 26, height: 26)

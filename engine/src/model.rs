@@ -1947,35 +1947,61 @@ fn hints(text: &str) -> Vec<crate::TokenHint> {
 /// once more, more strictly, for a sentence that does not, and otherwise leaves that sentence
 /// as corrected. Linked edits stay together.
 fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
+    guard_segments(
+        req,
+        all,
+        |source, output, elsewhere| {
+            crate::meaning::keeps_meaning(
+                req.mode,
+                source,
+                output,
+                elsewhere,
+                &hints(source),
+                &hints(output),
+            )
+            .and_then(|()| match example(req.mode) {
+                Some((input, _)) => crate::meaning::borrows(input, source, output),
+                None => Ok(()),
+            })
+        },
+        |segment| careful(req, segment),
+    )
+}
+
+fn guard_segments(
+    req: &Request,
+    all: Vec<Edit>,
+    mut check: impl FnMut(&str, &str, &str) -> Result<(), String>,
+    mut retry: impl FnMut(&crate::meaning::Segment) -> Option<Vec<Edit>>,
+) -> (Vec<Edit>, bool) {
     let mut withheld = false;
     let mut kept = vec![];
+    let mut rejected = vec![];
     let mut retries = 0;
     for segment in crate::meaning::segments(&req.text, &all) {
         let Some((source, output)) = crate::meaning::texts(&req.text, &segment, &all) else {
             continue;
         };
         let elsewhere = outside(&req.text, segment.start, segment.end);
-        let verdict = crate::meaning::keeps_meaning(
-            req.mode,
-            &source,
-            &output,
-            &elsewhere,
-            &hints(&source),
-            &hints(&output),
-        )
-        .and_then(|()| match example(req.mode) {
-            Some((input, _)) => crate::meaning::borrows(input, &source, &output),
-            None => Ok(()),
-        });
+        let verdict = check(&source, &output, &elsewhere);
         if verdict.is_ok() {
             kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
         } else {
-            let retried = if retries < RETRIES {
+            rejected.push((segment.start, segment.end));
+            let mut retried = if retries < RETRIES {
                 retries += 1;
-                careful(req, &segment).unwrap_or_default()
+                retry(&segment).unwrap_or_default()
             } else {
                 vec![]
             };
+            // A retry validates only its own window, not a neighbor it would join.
+            if !retried.is_empty()
+                && crate::meaning::boundary_dependencies(&req.text, &retried)
+                    .iter()
+                    .any(|&(start, end)| start < segment.start || end > segment.end)
+            {
+                retried.clear();
+            }
             withheld |= retried.is_empty();
             kept.extend(retried);
         }
@@ -1992,17 +2018,7 @@ fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
         }
         fits
     });
-    let lone: Vec<String> = kept
-        .iter()
-        .filter_map(|e| e.group_id.clone())
-        .filter(|g| {
-            kept.iter()
-                .filter(|e| e.group_id.as_ref() == Some(g))
-                .count()
-                != 2
-        })
-        .collect();
-    kept.retain(|e| !e.group_id.as_ref().is_some_and(|g| lone.contains(g)));
+    withheld |= crate::meaning::retain_composition(&req.text, &all, &mut kept, &rejected);
     (kept, withheld)
 }
 /// The text around `start..end` (UTF-16), with a sentence break where that range was.
@@ -2174,6 +2190,391 @@ pub const TONE_WITHHELD: &str = "tone.withheld";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn boundary_retry_edits(
+        req: &Request,
+        segment: &crate::meaning::Segment,
+        rewrite: impl FnOnce(&str) -> String,
+    ) -> Vec<Edit> {
+        let a = byte_at(&req.text, segment.start).unwrap();
+        let b = byte_at(&req.text, segment.end).unwrap();
+        let source = &req.text[a..b];
+        let mut retried = edits(source, &rewrite(source), req.mode, &[]);
+        for edit in &mut retried {
+            edit.start_utf16 += segment.start;
+            edit.end_utf16 += segment.start;
+        }
+        retried
+    }
+
+    #[test]
+    fn boundary_composition_retry_cannot_join_outside_its_checked_window() {
+        let req = Request {
+            text: "Please inspect logs. Archive invoices.".into(),
+            mode: Mode::Concise,
+            ..Request::default()
+        };
+        let original = edits(
+            &req.text,
+            "Please inspect security logs. Archive invoices.",
+            req.mode,
+            &[],
+        );
+        assert!(
+            crate::meaning::keeps_meaning(
+                req.mode,
+                "Please inspect logs.",
+                "Please inspect security logs.",
+                "Archive invoices.",
+                &[],
+                &[],
+            )
+            .is_err()
+        );
+        assert!(
+            crate::meaning::keeps_meaning(
+                req.mode,
+                "Please inspect logs.",
+                "Inspect logs",
+                "Archive invoices.",
+                &[],
+                &[],
+            )
+            .is_ok()
+        );
+        let mut retries = 0;
+        let (kept, withheld) = guard_segments(
+            &req,
+            original,
+            |source, output, elsewhere| {
+                crate::meaning::keeps_meaning(req.mode, source, output, elsewhere, &[], &[])
+            },
+            |segment| {
+                retries += 1;
+                Some(boundary_retry_edits(&req, segment, |_| {
+                    "Inspect logs".into()
+                }))
+            },
+        );
+        assert_eq!(retries, 1);
+        assert_eq!(
+            (apply_edits(&req.text, &kept).unwrap().0, withheld),
+            (req.text.clone(), true),
+        );
+    }
+
+    #[test]
+    fn boundary_composition_retry_preserves_valid_boundaries_and_eof() {
+        for (source, candidate, retried, expected) in [
+            (
+                "Please inspect logs. Archive invoices.",
+                "Please inspect security logs. Archive invoices.",
+                "Inspect logs.",
+                "Inspect logs. Archive invoices.",
+            ),
+            (
+                "Please inspect logs. Archive invoices.",
+                "Please inspect security logs. Archive invoices.",
+                "Inspect logs!",
+                "Inspect logs! Archive invoices.",
+            ),
+            (
+                "Please inspect logs.\nArchive invoices.",
+                "Please inspect security logs.\nArchive invoices.",
+                "Inspect logs",
+                "Inspect logs\nArchive invoices.",
+            ),
+            (
+                "Please inspect logs.",
+                "Please inspect security logs.",
+                "Inspect logs",
+                "Inspect logs",
+            ),
+        ] {
+            let req = Request {
+                text: source.into(),
+                mode: Mode::Concise,
+                ..Request::default()
+            };
+            let original = edits(source, candidate, req.mode, &[]);
+            let mut retries = 0;
+            let (kept, withheld) = guard_segments(
+                &req,
+                original,
+                |source, output, elsewhere| {
+                    crate::meaning::keeps_meaning(req.mode, source, output, elsewhere, &[], &[])
+                },
+                |segment| {
+                    retries += 1;
+                    let a = byte_at(source, segment.start).unwrap();
+                    let b = byte_at(source, segment.end).unwrap();
+                    assert!(
+                        crate::meaning::keeps_meaning(
+                            req.mode,
+                            &source[a..b],
+                            retried,
+                            "",
+                            &[],
+                            &[],
+                        )
+                        .is_ok()
+                    );
+                    Some(boundary_retry_edits(&req, segment, |_| retried.into()))
+                },
+            );
+            assert_eq!(retries, 1, "{source:?}: {retried}");
+            assert_eq!(
+                (apply_edits(source, &kept).unwrap().0, withheld),
+                (expected.into(), false),
+                "{source:?}: {retried}"
+            );
+        }
+    }
+
+    #[test]
+    fn boundary_composition_retry_can_join_within_its_checked_window() {
+        let window = "Please inspect logs. Archive invoices.";
+        let candidate = "Please inspect logs. Archive 7 invoices.";
+        let req = Request {
+            text: format!("{window} Keep receipts."),
+            mode: Mode::Concise,
+            ..Request::default()
+        };
+        let mut original = edits(
+            &req.text,
+            &format!("{candidate} Keep receipts."),
+            req.mode,
+            &[],
+        )
+        .remove(0);
+        original.start_utf16 = 0;
+        original.end_utf16 = window.encode_utf16().count();
+        original.original = window.into();
+        original.replacement = candidate.into();
+        original.group_id = None;
+        let mut retries = 0;
+        let (kept, withheld) = guard_segments(
+            &req,
+            vec![original],
+            |source, output, elsewhere| {
+                crate::meaning::keeps_meaning(req.mode, source, output, elsewhere, &[], &[])
+            },
+            |segment| {
+                retries += 1;
+                assert_eq!(
+                    (segment.start, segment.end),
+                    (0, window.encode_utf16().count())
+                );
+                let retried = "Inspect logs; archive invoices.";
+                assert!(
+                    crate::meaning::keeps_meaning(
+                        req.mode,
+                        window,
+                        retried,
+                        "Keep receipts.",
+                        &[],
+                        &[],
+                    )
+                    .is_ok()
+                );
+                Some(boundary_retry_edits(&req, segment, |_| retried.into()))
+            },
+        );
+        assert_eq!(retries, 1);
+        assert_eq!(
+            (apply_edits(&req.text, &kept).unwrap().0, withheld),
+            (
+                "Inspect logs; archive invoices. Keep receipts.".into(),
+                false
+            )
+        );
+    }
+
+    #[test]
+    fn boundary_composition_retry_outcomes_restore_connected_originals() {
+        let req = Request {
+            text: "This is so bad. The task failed, though. Please send the logs.".into(),
+            mode: Mode::Professional,
+            ..Request::default()
+        };
+        let target =
+            "This is bad. The task failed, although I'd appreciate it if you could send the logs.";
+        for outcome in ["success", "empty", "error", "identical"] {
+            let original = edits(&req.text, target, req.mode, &[]);
+            let mut calls = 0;
+            let (kept, withheld) = guard_segments(
+                &req,
+                original.clone(),
+                |source, _, _| {
+                    if source.starts_with("Please") {
+                        Err("synthetic rejection".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                |segment| {
+                    calls += 1;
+                    match outcome {
+                        "success" => Some(boundary_retry_edits(&req, segment, |_| {
+                            "Kindly send the logs.".into()
+                        })),
+                        "empty" => Some(vec![]),
+                        "error" => None,
+                        "identical" => {
+                            Some(segment.edits.iter().map(|&i| original[i].clone()).collect())
+                        }
+                        _ => unreachable!(),
+                    }
+                },
+            );
+            assert_eq!(calls, 1, "{outcome}");
+            assert!(withheld, "{outcome}");
+            assert_eq!(
+                apply_edits(&req.text, &kept).unwrap().0,
+                "This is bad. The task failed, though. Please send the logs.",
+                "{outcome}"
+            );
+        }
+    }
+
+    #[test]
+    fn boundary_composition_keeps_unrelated_successful_retries() {
+        let req = Request {
+            text: "This is so bad. Please send the logs.".into(),
+            mode: Mode::Professional,
+            ..Request::default()
+        };
+        let original = edits(
+            &req.text,
+            "This is bad. Could you send the logs?",
+            req.mode,
+            &[],
+        );
+        let (kept, withheld) = guard_segments(
+            &req,
+            original,
+            |source, _, _| {
+                if source.starts_with("Please") {
+                    Err("synthetic rejection".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |segment| {
+                Some(boundary_retry_edits(&req, segment, |_| {
+                    "Kindly send the logs.".into()
+                }))
+            },
+        );
+        assert!(!withheld);
+        assert_eq!(
+            apply_edits(&req.text, &kept).unwrap().0,
+            "This is bad. Kindly send the logs."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_preserves_order_and_exhausted_retry_limit() {
+        use std::cell::RefCell;
+        let req = Request {
+            text: "This is so bad. One task failed. Two tasks failed. Three tasks failed. Archive invoices. Inspect logs.".into(),
+            mode: Mode::Professional,
+            ..Request::default()
+        };
+        let original = edits(
+            &req.text,
+            "This is bad. One task changed. Two tasks changed. Three tasks changed. Archive invoices; inspect logs.",
+            req.mode,
+            &[],
+        );
+        let events = RefCell::new(vec![]);
+        let mut retries = 0;
+        let (kept, withheld) = guard_segments(
+            &req,
+            original,
+            |source, _, elsewhere| {
+                events.borrow_mut().push(format!("check:{source}"));
+                if source.starts_with("This") {
+                    Ok(())
+                } else {
+                    assert!(elsewhere.contains("This is so bad."));
+                    Err("synthetic rejection".into())
+                }
+            },
+            |segment| {
+                retries += 1;
+                let a = byte_at(&req.text, segment.start).unwrap();
+                let b = byte_at(&req.text, segment.end).unwrap();
+                events
+                    .borrow_mut()
+                    .push(format!("retry:{}", &req.text[a..b]));
+                Some(boundary_retry_edits(&req, segment, |source| {
+                    source.replace("failed", "stopped")
+                }))
+            },
+        );
+        assert_eq!(retries, 3);
+        assert!(withheld);
+        assert_eq!(
+            *events.borrow(),
+            vec![
+                "check:This is so bad.",
+                "check:One task failed.",
+                "retry:One task failed.",
+                "check:Two tasks failed.",
+                "retry:Two tasks failed.",
+                "check:Three tasks failed.",
+                "retry:Three tasks failed.",
+                "check:Archive invoices.",
+                "check:Inspect logs.",
+            ]
+        );
+        assert_eq!(
+            apply_edits(&req.text, &kept).unwrap().0,
+            "This is bad. One task stopped. Two tasks stopped. Three tasks stopped. Archive invoices. Inspect logs."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_restores_originals_after_equal_start_cleanup() {
+        let req = Request {
+            text: "This is so bad. Alpha failed. Beta waits. Gamma waits.".into(),
+            mode: Mode::Professional,
+            ..Request::default()
+        };
+        let original = edits(
+            &req.text,
+            "This is bad. Alpha failed, beta waits. Gamma changed.",
+            req.mode,
+            &[],
+        );
+        let beta = "This is so bad. Alpha failed. ".encode_utf16().count();
+        let mut collision = original
+            .iter()
+            .find(|e| e.start_utf16 <= beta && e.end_utf16 > beta)
+            .unwrap()
+            .clone();
+        collision.end_utf16 = collision.start_utf16;
+        collision.original.clear();
+        collision.replacement = "Maybe ".into();
+        let (kept, withheld) = guard_segments(
+            &req,
+            original,
+            |source, _, _| {
+                if source.starts_with("Gamma") {
+                    Err("synthetic rejection".into())
+                } else {
+                    Ok(())
+                }
+            },
+            |_| Some(vec![collision.clone()]),
+        );
+        assert!(withheld);
+        assert_eq!(
+            apply_edits(&req.text, &kept).unwrap().0,
+            "This is bad. Alpha failed. Beta waits. Gamma waits."
+        );
+    }
     fn d(original: &str, replacement: &str) -> (String, String) {
         describe(original, replacement)
     }

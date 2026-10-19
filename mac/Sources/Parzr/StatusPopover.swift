@@ -2,6 +2,28 @@ import SwiftUI
 import AppKit
 import ParzrCore
 
+/// Standard menu controls shared by the current-app popover and permanent app opt-out list.
+struct AppAutomaticPauseMenu: View {
+    @ObservedObject private var preferences = Preferences.shared
+    let bundleID: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Menu("Pause automatic checking in this app") {
+                Button("For 15 minutes") { preferences.pauseAutomaticChecking(for: bundleID, duration: .fifteenMinutes) }
+                Button("For 1 hour") { preferences.pauseAutomaticChecking(for: bundleID, duration: .oneHour) }
+                Divider()
+                Button("Resume now") { preferences.resumeAutomaticChecking(for: bundleID) }
+                    .disabled(preferences.automaticPauseExpiration(for: bundleID) == nil)
+            }.menuStyle(.borderlessButton).controlSize(.small)
+                .disabled(!preferences.enabled(for: bundleID))
+                .help("Temporary pauses stop automatic checks only. Explicit selection checks remain available.")
+            if let expiry = preferences.automaticPauseExpiration(for: bundleID) {
+                Text("Paused until \(expiry, style: .time)").font(.system(size: 10)).foregroundStyle(Color.textSecondary)
+            }
+        }
+    }
+}
+
 struct StatusPopover: View {
     @ObservedObject var preferences = Preferences.shared
     @ObservedObject var updates = UpdateModel.shared
@@ -31,6 +53,7 @@ struct StatusPopover: View {
                 }
                 if let sourceApp, let id = sourceApp.bundleIdentifier {
                     HStack { Text(sourceApp.localizedName ?? "Current app").font(.system(size: 11)).foregroundStyle(Color.textSecondary); Spacer(); Toggle("Enable in \(sourceApp.localizedName ?? "current app")", isOn: $preferences[appEnabled: id]).labelsHidden().toggleStyle(.switch).controlSize(.small) }
+                    AppAutomaticPauseMenu(bundleID: id).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }.padding(13).graphiteSurface()
             HStack {

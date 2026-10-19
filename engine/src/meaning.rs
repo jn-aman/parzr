@@ -2286,6 +2286,111 @@ pub(crate) fn texts(text: &str, segment: &Segment, edits: &[Edit]) -> Option<(St
     Some((source, output))
 }
 
+pub(crate) fn boundary_dependencies(text: &str, edits: &[Edit]) -> Vec<(usize, usize)> {
+    let tokens = tokenizer::tokenize(text, &[]);
+    let Ok((output, map)) = apply_edits(text, edits) else {
+        return vec![(0, text.encode_utf16().count())];
+    };
+    let rewritten = tokenizer::tokenize(&output, &[]);
+    let checks = segments(text, edits);
+    let mut dependencies: Vec<(usize, usize)> = vec![];
+    for pair in tokens.windows(2).filter(|p| p[0].sentence != p[1].sentence) {
+        let boundary = pair[0].end_utf16;
+        let Some(mapping) = map
+            .iter()
+            .find(|m| m.input_start_utf16 <= boundary && boundary <= m.input_end_utf16)
+        else {
+            continue;
+        };
+        let position = if mapping.changed {
+            mapping.output_end_utf16
+        } else {
+            mapping.output_start_utf16 + boundary - mapping.input_start_utf16
+        };
+        let before = rewritten.iter().rfind(|t| t.start_utf16 < position);
+        let after = rewritten.iter().find(|t| t.end_utf16 > position);
+        if !matches!((before, after), (Some(a), Some(b)) if a.sentence == b.sentence) {
+            continue;
+        }
+        let mut start = tokens
+            .iter()
+            .find(|t| t.sentence == pair[0].sentence)
+            .unwrap()
+            .start_utf16;
+        let mut end = tokens
+            .iter()
+            .rfind(|t| t.sentence == pair[1].sentence)
+            .unwrap()
+            .end_utf16;
+        for check in &checks {
+            if check.start < end && check.end > start {
+                start = start.min(check.start);
+                end = end.max(check.end);
+            }
+        }
+        match dependencies.last_mut() {
+            Some(last) if start < last.1 => last.1 = last.1.max(end),
+            _ => dependencies.push((start, end)),
+        }
+    }
+    dependencies
+}
+
+fn touches_dependency(edit: &Edit, (start, end): (usize, usize)) -> bool {
+    (edit.start_utf16 < end && edit.end_utf16 > start)
+        || (edit.start_utf16 == edit.end_utf16 && (start..=end).contains(&edit.start_utf16))
+}
+
+/// Restore joined sentences if any original constituent plan was rejected, retried or pruned.
+pub(crate) fn retain_composition(
+    text: &str,
+    original: &[Edit],
+    kept: &mut Vec<Edit>,
+    rejected: &[(usize, usize)],
+) -> bool {
+    let dependencies = boundary_dependencies(text, original);
+    let mut withheld = false;
+    loop {
+        let before = kept.len();
+        for &dependency in &dependencies {
+            let failed = rejected
+                .iter()
+                .any(|&(start, end)| start < dependency.1 && end > dependency.0)
+                || original
+                    .iter()
+                    .filter(|e| touches_dependency(e, dependency))
+                    .any(|e| {
+                        !kept.iter().any(|k| {
+                            k.start_utf16 == e.start_utf16
+                                && k.end_utf16 == e.end_utf16
+                                && k.original == e.original
+                                && k.replacement == e.replacement
+                                && k.group_id == e.group_id
+                        })
+                    });
+            if failed {
+                withheld = true;
+                kept.retain(|e| !touches_dependency(e, dependency));
+            }
+        }
+        let lone: Vec<String> = kept
+            .iter()
+            .filter_map(|e| e.group_id.clone())
+            .filter(|g| {
+                kept.iter()
+                    .filter(|e| e.group_id.as_ref() == Some(g))
+                    .count()
+                    != 2
+            })
+            .collect();
+        kept.retain(|e| !e.group_id.as_ref().is_some_and(|g| lone.contains(g)));
+        // A restored component can orphan a move, which can invalidate another component.
+        if kept.len() == before {
+            return withheld;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2642,5 +2747,395 @@ mod tests {
         let tail = [edit(31, 31, " 🙂")];
         assert_eq!(segments(text, &tail)[0].edits, vec![0]);
         assert_eq!(segments(text, &tail)[0].start, 26);
+    }
+
+    fn boundary_edit(text: &str, original: &str, replacement: &str) -> Edit {
+        let byte = text.find(original).unwrap();
+        let start_utf16 = text[..byte].encode_utf16().count();
+        Edit {
+            start_utf16,
+            end_utf16: start_utf16 + original.encode_utf16().count(),
+            original: original.into(),
+            replacement: replacement.into(),
+            category: "Style".into(),
+            rule_id: "boundary-test".into(),
+            explanation: "Suggested rewrite".into(),
+            confidence: 1.0,
+            group_id: None,
+        }
+    }
+
+    fn boundary_output(text: &str, edits: &[Edit], accept: impl Fn(&str, &str) -> bool) -> String {
+        let mut kept = vec![];
+        let mut rejected = vec![];
+        for segment in segments(text, edits) {
+            let (source, output) = texts(text, &segment, edits).unwrap();
+            if accept(&source, &output) {
+                kept.extend(segment.edits.iter().map(|&i| edits[i].clone()));
+            } else {
+                rejected.push((segment.start, segment.end));
+            }
+        }
+        retain_composition(text, edits, &mut kept, &rejected);
+        apply_edits(text, &kept).unwrap().0
+    }
+
+    #[test]
+    fn boundary_composition_is_atomic_and_keeps_independent_edits() {
+        let text = "This is so bad. The task failed, though. Please send the logs.";
+        let edits = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "though.", "although"),
+            boundary_edit(text, "Please", "I'd appreciate it if you could"),
+        ];
+        assert_eq!(
+            boundary_output(text, &edits, |_, _| true),
+            "This is bad. The task failed, although I'd appreciate it if you could send the logs."
+        );
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("appreciate")),
+            "This is bad. The task failed, though. Please send the logs."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_saved_evaluation_reproduction() {
+        // This saved evaluation-only passage is never a training example.
+        let text = "Thanks for fixing the login issue so quickly. I still can't export the report, though. Please check the export failure without closing the ticket; the login fix alone hasn't resolved it.";
+        let target = "Thank you for resolving the login issue so promptly. I am still unable to export the report, although I would appreciate it if you could check the export failure without closing the ticket. The login fix alone has not yet resolved the issue.";
+        let edits: Vec<Edit> = [
+            (0, 6, "Thanks", "Thank"),
+            (7, 7, "", "you "),
+            (11, 17, "fixing", "resolving"),
+            (37, 44, "quickly", "promptly"),
+            (48, 48, "", "am "),
+            (54, 59, "can't", "unable to"),
+            (79, 85, "though", "although"),
+            (85, 86, ".", ""),
+            (87, 93, "Please", "I would appreciate"),
+            (94, 94, "", "it if you could "),
+            (145, 146, ";", "."),
+            (147, 150, "the", "The"),
+            (167, 173, "hasn't", "has not"),
+            (174, 174, "", "yet "),
+            (183, 185, "it", "the issue"),
+        ]
+        .into_iter()
+        .map(|(start, end, original, replacement)| Edit {
+            start_utf16: start,
+            end_utf16: end,
+            original: original.into(),
+            replacement: replacement.into(),
+            category: "Style".into(),
+            rule_id: "boundary-test".into(),
+            explanation: "Suggested rewrite".into(),
+            confidence: 1.0,
+            group_id: None,
+        })
+        .collect();
+        assert_eq!(apply_edits(text, &edits).unwrap().0, target);
+        assert_eq!(boundary_output(text, &edits, |_, _| true), target);
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("appreciate")),
+            "Thank you for resolving the login issue so promptly. I still can't export the report, though. Please check the export failure without closing the ticket; the login fix alone hasn't resolved it."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_includes_an_unchanged_neighbor() {
+        let text = "This is so bad. The task failed, though. Please send the logs.";
+        let edits = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "though.", "although"),
+        ];
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("although")),
+            "This is bad. The task failed, though. Please send the logs."
+        );
+        assert_eq!(
+            boundary_output(text, &edits, |_, _| true),
+            apply_edits(text, &edits).unwrap().0
+        );
+        let checks = segments(text, &edits);
+        assert_eq!(checks.len(), 2);
+        assert_eq!(
+            texts(text, &checks[1], &edits).unwrap().1,
+            "The task failed, although"
+        );
+        assert_eq!(
+            boundary_dependencies(text, &edits),
+            vec![("This is so bad. ".len(), text.len())]
+        );
+    }
+
+    #[test]
+    fn boundary_composition_joins_transitively() {
+        let text = "This is so bad. The task failed. The log vanished. Please retry.";
+        let edits = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "failed.", "failed,"),
+            boundary_edit(text, "vanished.", "vanished,"),
+            boundary_edit(text, "Please retry", "Kindly retry"),
+        ];
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("Kindly")),
+            "This is bad. The task failed. The log vanished. Please retry."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_preserves_remaining_terminators() {
+        for (ending, replacement) in [(".", "!"), ("?!", "?"), ("!?", "!"), (".\"", "!\"")] {
+            let text = format!("This is so bad. The task failed{ending} Please send the logs.");
+            let from = format!("failed{}", ending.trim_end_matches('"'));
+            let to = format!("failed{}", replacement.trim_end_matches('"'));
+            let edits = vec![
+                boundary_edit(&text, "so ", ""),
+                boundary_edit(&text, &from, &to),
+                boundary_edit(&text, "Please", "Kindly"),
+            ];
+            assert_eq!(
+                boundary_output(&text, &edits, |_, output| !output.contains("Kindly")),
+                format!("This is bad. The task failed{replacement} Please send the logs.")
+            );
+        }
+    }
+
+    #[test]
+    fn boundary_composition_handles_newlines_and_closing_quotes() {
+        for (text, from, to) in [
+            ("The task failed\nPlease send the logs.", "\n", " "),
+            (
+                "The task failed.\" Please send the logs.",
+                "failed.",
+                "failed",
+            ),
+            (
+                "The task failed.” Please send the logs.",
+                "failed.",
+                "failed",
+            ),
+        ] {
+            let edits = vec![
+                boundary_edit(text, from, to),
+                boundary_edit(text, "Please", "Kindly"),
+            ];
+            assert_eq!(
+                boundary_output(text, &edits, |_, output| !output.contains("Kindly")),
+                text
+            );
+        }
+        let text = "The task failed.\nPlease send the logs.";
+        let edits = vec![
+            boundary_edit(text, "failed.", "failed"),
+            boundary_edit(text, "Please", "Kindly"),
+        ];
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("Kindly")),
+            "The task failed\nPlease send the logs."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_preserves_utf16_coordinates() {
+        let text = "Café 🧪 works. The task failed, though. Please send the logs.";
+        let edits = vec![
+            boundary_edit(text, "works", "worked"),
+            boundary_edit(text, "though.", "although"),
+            boundary_edit(text, "Please", "Kindly"),
+        ];
+        assert_eq!(
+            boundary_output(text, &edits, |_, output| !output.contains("Kindly")),
+            "Café 🧪 worked. The task failed, though. Please send the logs."
+        );
+        let grouped = segments(text, &edits);
+        assert_eq!(grouped[1].start, "Café 🧪 works. ".encode_utf16().count());
+        assert!(byte_at(text, grouped[1].start).is_some());
+        assert!(byte_at(text, grouped[1].end).is_some());
+    }
+
+    #[test]
+    fn boundary_composition_preserves_each_adversarial_sentence_check() {
+        let cases: [(&str, &[(&str, &str)]); 6] = [
+            (
+                "Inspect logs. Archive invoices, receipts, contracts, reports, and manifests.",
+                &[("Inspect logs. ", "")],
+            ),
+            (
+                "Archive invoices. Inspect logs.",
+                &[("invoices.", "invoices;"), ("Inspect", "inspect security")],
+            ),
+            (
+                "I cannot approve refunds. I can approve credits.",
+                &[
+                    ("cannot", "can"),
+                    ("refunds.", "refunds, but"),
+                    ("can approve credits", "cannot approve credits"),
+                ],
+            ),
+            (
+                "I approved invoices. You approved refunds.",
+                &[
+                    ("I approved invoices.", "You approved invoices, and"),
+                    ("You approved refunds.", "I approved refunds."),
+                ],
+            ),
+            (
+                "Ship 3 boxes. Store 4 crates.",
+                &[
+                    ("3", "4"),
+                    ("boxes.", "boxes and"),
+                    ("Store", "store"),
+                    ("4", "3"),
+                ],
+            ),
+            (
+                "Did you verify the backup? Save the logs.",
+                &[
+                    ("Did you verify the backup?", "You verified the backup;"),
+                    ("Save", "save"),
+                ],
+            ),
+        ];
+        for (body, changes) in cases {
+            let text = format!("This is so bad. {body}");
+            let mut edits = vec![boundary_edit(&text, "so ", "")];
+            edits.extend(
+                changes
+                    .iter()
+                    .map(|&(from, to)| boundary_edit(&text, from, to)),
+            );
+            edits.sort_by_key(|e| (e.start_utf16, e.end_utf16));
+            for mode in [Mode::Professional, Mode::Friendly, Mode::Concise] {
+                // The existing Professional/Friendly budget already permits this single added word.
+                let expected = if body == "Archive invoices. Inspect logs." && mode != Mode::Concise
+                {
+                    apply_edits(&text, &edits).unwrap().0
+                } else {
+                    format!("This is bad. {body}")
+                };
+                assert_eq!(
+                    boundary_output(&text, &edits, |a, b| ok(mode, a, b)),
+                    expected,
+                    "{mode:?}: {body}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_composition_keeps_a_safe_original_join() {
+        let text = "This is so bad. Archive invoices. Inspect logs.";
+        let edits = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "invoices.", "invoices;"),
+            boundary_edit(text, "Inspect", "inspect"),
+        ];
+        for mode in TONES {
+            assert_eq!(
+                boundary_output(text, &edits, |a, b| ok(mode, a, b)),
+                "This is bad. Archive invoices; inspect logs.",
+                "{mode:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn boundary_composition_restores_a_plan_partly_removed_by_cleanup() {
+        let text = "This is so bad. The task failed, though. Please send the logs.";
+        let original = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "though.", "although"),
+            boundary_edit(text, "Please", "I'd appreciate it if you could"),
+        ];
+        let mut kept = original[..2].to_vec();
+        assert!(retain_composition(text, &original, &mut kept, &[]));
+        assert_eq!(
+            apply_edits(text, &kept).unwrap().0,
+            "This is bad. The task failed, though. Please send the logs."
+        );
+    }
+
+    #[test]
+    fn boundary_composition_and_move_pruning_reach_a_fixed_point() {
+        let text = "This is so bad. Alpha failed. Beta waits. Gamma failed. Delta waits.";
+        let mut original = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "Alpha failed.", "Alpha failed,"),
+            boundary_edit(text, "Beta", "beta"),
+            boundary_edit(text, "Gamma failed.", "gamma failed,"),
+            boundary_edit(text, "Delta", "delta"),
+        ];
+        original[2].group_id = Some("existing-move".into());
+        original[3].group_id = Some("existing-move".into());
+        let mut kept = original.clone();
+        assert!(!retain_composition(text, &original, &mut kept, &[]));
+        assert_eq!(kept.len(), original.len());
+        assert_eq!(kept.iter().filter(|e| e.group_id.is_some()).count(), 2);
+
+        let checks = segments(text, &original);
+        let rejected = [(checks[1].start, checks[1].end)];
+        assert!(retain_composition(text, &original, &mut kept, &rejected));
+        assert_eq!(kept.len(), 1);
+        assert_eq!(
+            apply_edits(text, &kept).unwrap().0,
+            "This is bad. Alpha failed. Beta waits. Gamma failed. Delta waits."
+        );
+        assert!(kept.iter().all(|e| e.group_id.is_none()));
+    }
+
+    #[test]
+    fn boundary_composition_handles_eof_and_invalid_utf16() {
+        let text = "This is so bad. The task failed.";
+        let original = vec![
+            boundary_edit(text, "so ", ""),
+            boundary_edit(text, "failed.", "failed"),
+        ];
+        assert!(boundary_dependencies(text, &original).is_empty());
+        let mut kept = original.clone();
+        assert!(!retain_composition(text, &original, &mut kept, &[]));
+        assert_eq!(
+            apply_edits(text, &kept).unwrap().0,
+            "This is bad. The task failed"
+        );
+
+        let text = "🧪 passed. Keep logs.";
+        let mut invalid = boundary_edit(text, "🧪", "It");
+        invalid.start_utf16 = 1;
+        let original = vec![invalid, boundary_edit(text, "Keep", "Save")];
+        assert!(apply_edits(text, &original).is_err());
+        let mut kept = original[1..].to_vec();
+        assert!(retain_composition(text, &original, &mut kept, &[]));
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn boundary_composition_does_not_bypass_fact_guards() {
+        let text = "This is so bad. The report has 3 pages, though. Please ask Priya not to send it today.";
+        for (fact, changed) in [("3", "4"), ("not ", ""), ("Priya", "Alex")] {
+            let mut edits = vec![
+                boundary_edit(text, "so ", ""),
+                boundary_edit(text, "though.", "although"),
+                boundary_edit(text, "Please", "I'd appreciate it if you could"),
+                boundary_edit(text, fact, changed),
+            ];
+            edits.sort_by_key(|e| (e.start_utf16, e.end_utf16));
+            let checks = segments(text, &edits);
+            assert_eq!(checks.len(), 3);
+            for mode in TONES {
+                assert!(
+                    checks.iter().any(|segment| {
+                        let (source, output) = texts(text, segment, &edits).unwrap();
+                        !ok(mode, &source, &output)
+                    }),
+                    "{mode:?}: {fact}"
+                );
+                assert_eq!(
+                    boundary_output(text, &edits, |a, b| ok(mode, a, b)),
+                    "This is bad. The report has 3 pages, though. Please ask Priya not to send it today.",
+                    "{mode:?}: {fact}"
+                );
+            }
+        }
     }
 }

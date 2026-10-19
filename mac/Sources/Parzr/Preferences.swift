@@ -21,7 +21,13 @@ final class Preferences: ObservableObject {
         atexit { UserDefaults(suiteName: Preferences.selfTestSuite)?.removePersistentDomain(forName: Preferences.selfTestSuite) }
         return suite
     }()
+    enum AutomaticPauseDuration: TimeInterval { case fifteenMinutes = 900, oneHour = 3600 }
     private let defaults: UserDefaults
+    private let now: () -> Date
+    private var automaticPauseExpiry: Task<Void, Never>?
+    @Published private(set) var automaticAppPauses: [String: Date] {
+        didSet { defaults.set(automaticAppPauses, forKey: "automaticAppPauses"); scheduleAutomaticPauseExpiry() }
+    }
     @Published var passive: Bool { didSet { defaults.set(passive, forKey: "passive") } }
     @Published var paused: Bool { didSet { defaults.set(paused, forKey: "paused") } }
     @Published var dialect: String { didSet { defaults.set(dialect, forKey: "dialect") } }
@@ -77,13 +83,17 @@ final class Preferences: ObservableObject {
         if shortcutModifiers & 256 != 0 { label += "⌘" }
         return label + " " + shortcutLabel
     }
-    @Published var permissionGranted = AXIsProcessTrusted()
+    @Published var permissionGranted: Bool
     @Published var launchError: String?
     @Published var permissionRequested = false
     private var permissionWatch: Task<Void, Never>?
     var launchAtLogin: Bool { SMAppService.mainApp.status == .enabled }
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
+    init(defaults: UserDefaults = .standard, now: @escaping () -> Date = Date.init, permissionGranted: Bool? = nil) {
+        self.defaults = defaults; self.now = now
+        self.permissionGranted = permissionGranted ?? AXIsProcessTrusted()
+        automaticAppPauses = (defaults.dictionary(forKey: "automaticAppPauses") ?? [:]).reduce(into: [:]) { pauses, entry in
+            if !entry.key.isEmpty, let expiry = entry.value as? Date, expiry.timeIntervalSince1970.isFinite, expiry > now() { pauses[entry.key] = expiry }
+        }
         passive = defaults.object(forKey: "passive") as? Bool ?? true; paused = defaults.bool(forKey: "paused")
         dialect = defaults.string(forKey: "dialect") ?? "american"
         defaultMode = RewriteMode(rawValue: defaults.string(forKey: "defaultMode") ?? "fix") ?? .fix
@@ -110,6 +120,8 @@ final class Preferences: ObservableObject {
         nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.everywhere.rawValue
         ignoreCounts = defaults.dictionary(forKey: "ignoreCounts") as? [String: Int] ?? [:]
         ledger = defaults.data(forKey: "repetitionLedger").flatMap { try? JSONDecoder().decode(RepetitionLedger.self, from: $0) } ?? RepetitionLedger()
+        defaults.set(automaticAppPauses, forKey: "automaticAppPauses")
+        scheduleAutomaticPauseExpiry()
     }
     func requestPermission() {
         permissionRequested = true
@@ -147,6 +159,35 @@ final class Preferences: ObservableObject {
     func dismissFirefoxHint() { firefoxHint = false; firefoxHintDismissed = true }
     func dismissDocsHint(forever: Bool) { docsHint = false; if forever { docsHintDismissed = true } }
     func enabled(for bundle: String) -> Bool { !disabledApps.contains(bundle) }
+    /// Temporary pauses affect automatic checks only; explicit selection checks still honor permanent app opt-outs.
+    func checkingEnabled(for bundle: String, automatic: Bool) -> Bool {
+        enabled(for: bundle) && (!automatic || (setupFinished && passive && !paused && automaticPauseExpiration(for: bundle) == nil))
+    }
+    func automaticPauseExpiration(for bundle: String) -> Date? {
+        guard let expiry = automaticAppPauses[bundle], expiry > now() else { return nil }
+        return expiry
+    }
+    func pauseAutomaticChecking(for bundle: String, duration: AutomaticPauseDuration) {
+        guard !bundle.isEmpty else { return }
+        automaticAppPauses[bundle] = now().addingTimeInterval(duration.rawValue)
+    }
+    func resumeAutomaticChecking(for bundle: String) {
+        guard automaticAppPauses[bundle] != nil else { return }
+        automaticAppPauses.removeValue(forKey: bundle)
+    }
+    func refreshAutomaticAppPauses() {
+        let active = automaticAppPauses.filter { $0.value > now() }
+        if active != automaticAppPauses { automaticAppPauses = active } else { scheduleAutomaticPauseExpiry() }
+    }
+    private func scheduleAutomaticPauseExpiry() {
+        automaticPauseExpiry?.cancel(); automaticPauseExpiry = nil
+        guard let expiry = automaticAppPauses.values.min() else { return }
+        let delay = min(AutomaticPauseDuration.oneHour.rawValue, max(0, expiry.timeIntervalSince(now())))
+        automaticPauseExpiry = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)); try Task.checkCancellation() } catch { return }
+            self?.refreshAutomaticAppPauses()
+        }
+    }
     func saveWord(_ word: String) {
         guard !word.isEmpty, word.utf8.count <= 128, dictionary.count < 1000, !dictionary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
         dictionary.append(word)

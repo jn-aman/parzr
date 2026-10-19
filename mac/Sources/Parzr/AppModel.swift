@@ -36,14 +36,14 @@ final class AppModel: ObservableObject {
     private var clipboard: ClipboardTransaction?
     var chosenEdits: [WritingEdit] { result?.edits.filter { selectedEdits.contains($0.id) } ?? [] }
     var preview: String { (try? EditPlan.apply(chosenEdits, to: source)) ?? source }
-    var canApply: Bool { !busy && !provisional && !chosenEdits.isEmpty && (snapshot?.canPatch == true || snapshot?.copied == true) }
+    var canApply: Bool { !busy && !provisional && !chosenEdits.isEmpty && snapshot?.checkingEnabled == true && (snapshot?.canPatch == true || snapshot?.copied == true) }
     var focusedEdit: WritingEdit? { chosenEdits.first { $0.id == focusedEditID } ?? chosenEdits.first }
     var sentenceEdits: [WritingEdit] { focusedEdit.map { SentencePreview.edits(source: source, edits: chosenEdits, focused: $0) } ?? [] }
     var fixesSentence: Bool { (snapshot?.expectedSelection.length ?? 0) == 0 && sentenceEdits.count > 1 }
     /// The offered rewrite is written, changes more than the fixes, and still belongs to this text.
-    var suggestionReady: Bool { suggestion.map { $0.source == source && SuggestedRewrite.worthOffering($0.result, fixed: result?.text ?? source) } ?? false }
+    var suggestionReady: Bool { snapshot?.checkingEnabled != false && (suggestion.map { $0.source == source && SuggestedRewrite.worthOffering($0.result, fixed: result?.text ?? source) } ?? false) }
     /// Shown while it is written, and once written when it is worth offering; hidden when it came back empty or failed.
-    var showsSuggestion: Bool { mode == .fix && result != nil && suggestion.map { $0.source == source && (!$0.done || suggestionReady) } ?? false }
+    var showsSuggestion: Bool { snapshot?.checkingEnabled != false && (mode == .fix && result != nil && suggestion.map { $0.source == source && (!$0.done || suggestionReady) } ?? false) }
     var canUseSuggestion: Bool { !busy && suggestionReady && (snapshot?.canPatch == true || snapshot?.copied == true) }
     /// The engine's warnings as the card shows them: a missing model reads as "Smart grammar is downloading" (or how to get it).
     static func statusText(_ warnings: [String]?) -> String? {
@@ -64,10 +64,12 @@ final class AppModel: ObservableObject {
             catch { self.error = error.localizedDescription } }
     }
     func select(_ snapshot: SelectionSnapshot) {
+        guard snapshot.checkingEnabled else { clearSession(); return }
         selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = Preferences.shared.defaultMode; status = nil; analyze()
     }
     func select(_ snapshot: SelectionSnapshot, result: RewriteResult, focused: WritingEdit?) {
+        guard snapshot.checkingEnabled else { clearSession(); return }
         analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1
         selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = .fix; self.result = result
@@ -97,8 +99,9 @@ final class AppModel: ObservableObject {
         return chosenEdits.compactMap { change.shift($0) }
     }
     func analyze(debounce: Bool = false) {
+        do { try snapshot?.validateCheckingEligibility() } catch { clearSession(); self.error = error.localizedDescription; return }
         analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1
-        let current = generation; let original = source
+        let current = generation; let original = source; let checkingSnapshot = snapshot
         error = nil; status = nil
         // An explicit check clears the old answer and shows Checking at once; typing keeps its marks and only shows Checking if the wait is long.
         if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true }
@@ -114,14 +117,15 @@ final class AppModel: ObservableObject {
             defer { slow?.cancel() }
             do {
                 if debounce { try await Task.sleep(for: .milliseconds(Int(Preferences.shared.boundedCheckingDelay))) }
-                try Task.checkCancellation()
+                try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 if debounce { slow = Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); if !Task.isCancelled, current == generation { busy = true } } }
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
-                try Task.checkCancellation()
+                try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
+                try checkingSnapshot?.validateCheckingEligibility()
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
                 self.status = Self.statusText(result.warnings)
                 if !debounce, requestMode == .fix, offersRewrite, SuggestedRewrite.offered(for: original) { suggest(original, generation: current) }
@@ -134,6 +138,8 @@ final class AppModel: ObservableObject {
     }
     /// Writes the offered rewrite of `original` in the background, after the Fix result is already on the card; a new check or tone cancels it.
     private func suggest(_ original: String, generation current: Int) {
+        guard snapshot?.checkingEnabled != false else { return }
+        let checkingSnapshot = snapshot
         let bundle = snapshot?.app.bundleIdentifier, tone = SuggestedRewrite.tone(for: bundle, text: original)
         suggestion = SuggestedVersion(tone: tone, source: original)
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
@@ -142,12 +148,13 @@ final class AppModel: ObservableObject {
         suggestionTask = Task { @MainActor in
             var written: RewriteResult?
             do {
+                try checkingSnapshot?.validateCheckingEligibility()
                 let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
-                try Task.checkCancellation()
+                try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 written = KnownNames.dropMacLearned(try await WritingEngine.shared.rewrite(request), from: original)
             } catch {}
-            guard !Task.isCancelled, current == generation, source == original, suggestion?.source == original else { return }
+            guard !Task.isCancelled, current == generation, source == original, suggestion?.source == original, checkingSnapshot?.checkingEnabled != false else { return }
             suggestion?.result = written; suggestion?.done = true
         }
     }
@@ -159,6 +166,7 @@ final class AppModel: ObservableObject {
     }
     /// A tone's finished result shown without a new check.
     private func show(_ written: RewriteResult, as tone: RewriteMode) {
+        guard snapshot?.checkingEnabled != false else { return }
         analysisTask?.cancel(); suggestionTask?.cancel(); generation += 1
         mode = tone; result = written; suggestion = nil
         selectedEdits = Set(written.edits.map(\.id)); focusedEditID = written.edits.first?.id
@@ -177,7 +185,7 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
-    func copy() { guard !busy, !provisional, result != nil else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
+    func copy() { guard !busy, !provisional, result != nil, snapshot?.checkingEnabled != false else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
     func applyBest() { if focusedEdit == nil, suggestionReady { useSuggestion() } else if fixesSentence { applySentence() } else { applyCurrent() } }

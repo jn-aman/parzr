@@ -297,7 +297,12 @@ struct StudioView: View {
                 group("OPEN APPLICATIONS") {
                     ForEach(runningApps, id: \.bundleIdentifier) { app in
                         if let id = app.bundleIdentifier {
-                            settingRow(app.localizedName ?? id, detail: id) { toggle("Enable \(app.localizedName ?? id)", $preferences[appEnabled: id]) }
+                            settingRow(app.localizedName ?? id, detail: id) {
+                                VStack(alignment: .trailing, spacing: 8) {
+                                    toggle("Enable \(app.localizedName ?? id)", $preferences[appEnabled: id])
+                                    AppAutomaticPauseMenu(bundleID: id).fixedSize()
+                                }
+                            }
                             divider
                         }
                     }
