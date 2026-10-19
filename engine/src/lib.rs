@@ -2218,6 +2218,8 @@ mod tests {
                 "Hi mark,\nI've attached the report.\nThanks,",
             ),
             ("teh build is green", "The build is green"),
+            ("what should we do", "What should we do?"),
+            ("i don't know what to do", "I don't know what to do"),
         ] {
             assert_eq!(fix(input), expected, "{input}");
             assert_eq!(fix(expected), expected, "idempotent: {expected}");
@@ -2241,6 +2243,11 @@ mod tests {
             "1. open the app\n2. tap settings",
             "a) yes\nb) no",
             "e.g. the second option",
+            "echo \"Adding privileges to the cluster\"",
+            "return \"zookeeper authenticated\"",
+            "from browser import html, alert",
+            "new Thread(this).start();",
+            "it \"should create a new status\" do",
         ] {
             assert_eq!(fix(text), text, "{text}");
         }

@@ -78,7 +78,21 @@ pub fn code_start(text: &str, token: &Token<'_>) -> bool {
         || line.contains(" $")
         || line.contains(" ~/")
         || line.contains(" ./");
-    glued_after || glued_before || shell || list_item(text, token)
+    // A line of source code: "echo \"done\"", "return \"ok\"", "from x import y", "new Thread(this).start();",
+    // "it \"works\" do".
+    let trimmed = line.trim_end();
+    let keyword = [
+        "echo", "return", "import", "from", "def", "const", "let", "var", "function", "print",
+        "printf", "elif", "export", "new", "it", "test", "describe", "class", "struct", "fn",
+        "pub", "use", "include", "require",
+    ]
+    .contains(&token.normalized.as_str());
+    let source = trimmed.ends_with([';', '{', '}'])
+        || trimmed.ends_with(" do") && keyword
+        || keyword && (rest.starts_with(" \"") || rest.starts_with(" '") || rest.starts_with(" `"))
+        || token.normalized == "from" && line.contains(" import ")
+        || line.contains("();");
+    glued_after || glued_before || shell || source || list_item(text, token)
 }
 /// The first word after a list number ("1. open the app", "2) tap settings"): a list keeps the case
 /// its writer chose, as items after "-" or "*" do.
