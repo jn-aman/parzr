@@ -1852,6 +1852,34 @@ mod tests {
             group_id: None,
         }
     }
+    /// "no no no" became "No no" once GECToR deleted a copy and the sentence took its capital (everyday item
+    /// b002-0999): a word written twice on purpose keeps its copy, wherever the deleted copy sits, while a slip
+    /// such as "the the" is still removed.
+    #[test]
+    fn a_word_written_twice_on_purpose_keeps_its_copy() {
+        let delete = |text: &str, from: usize, to: usize| {
+            let req = Request {
+                text: text.into(),
+                ..Request::default()
+            };
+            let raw = Raw {
+                start: from,
+                end: to,
+                replacement: String::new(),
+                confidence: 0.9,
+                verb: false,
+            };
+            merge(&req, &[], vec![], vec![(0, text.len(), raw)])
+                .into_iter()
+                .map(|e| e.original)
+                .collect::<Vec<_>>()
+        };
+        assert!(delete("no no no", 3, 6).is_empty(), "the middle copy");
+        assert!(delete("no no no", 5, 8).is_empty(), "the last copy");
+        assert!(delete("Bye bye, see you soon.", 3, 7).is_empty());
+        assert!(delete("Ha ha ha, that was great.", 2, 5).is_empty());
+        assert_eq!(delete("I saw the the cat.", 9, 13), [" the"]);
+    }
     #[test]
     fn corrections_survive_only_when_the_guards_allow_them() {
         // A plain correction is kept, with UTF-16 positions after an emoji, a rule id and a category.
