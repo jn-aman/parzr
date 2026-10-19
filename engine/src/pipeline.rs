@@ -817,6 +817,18 @@ fn check(req: &Request, start: Instant, contextual: bool) -> Result<RewriteResul
     } else {
         (text, source_map, edits)
     };
+    // Hinglish: Roman Hindi words keep their spelling, and a code-mixed sentence keeps only the
+    // rules' spelling, capitalization and punctuation fixes (see `hinglish::screen`).
+    #[cfg(feature = "local-model")]
+    let mut edits = edits;
+    let (text, source_map) = if crate::hinglish::screen(
+        &crate::tokenizer::tokenize(&req.text, &req.tokens),
+        &mut edits,
+    ) {
+        apply_edits(&req.text, &edits)?
+    } else {
+        (text, source_map)
+    };
     Ok(RewriteResult {
         version: VERSION.into(),
         text,

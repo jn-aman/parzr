@@ -125,7 +125,7 @@ final class AppModel: ObservableObject {
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
-                let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
+                let result = KnownNames.screened(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
                 try checkingSnapshot?.validateCheckingEligibility()
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
@@ -154,7 +154,7 @@ final class AppModel: ObservableObject {
                 let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
-                written = KnownNames.dropMacLearned(try await WritingEngine.shared.rewrite(request), from: original)
+                written = KnownNames.screened(try await WritingEngine.shared.rewrite(request), from: original)
             } catch {}
             guard !Task.isCancelled, current == generation, source == original, suggestion?.source == original, checkingSnapshot?.checkingEnabled != false else { return }
             suggestion?.result = written; suggestion?.done = true

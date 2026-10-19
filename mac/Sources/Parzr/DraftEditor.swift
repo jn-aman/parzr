@@ -157,6 +157,7 @@ final class CorrectionTextView: NSTextView {
         for item in related.reversed() { insertText(item.replacement, replacementRange: item.range) }
         undoManager?.endUndoGrouping()
         undoManager?.setActionName("Apply Parzr correction")
+        Preferences.shared.noteFixes(related)
         dismissCorrection()
     }
 
@@ -167,6 +168,7 @@ final class CorrectionTextView: NSTextView {
         for item in batch.sorted(by: { $0.start_utf16 > $1.start_utf16 }) { insertText(item.replacement, replacementRange: item.range) }
         undoManager?.endUndoGrouping()
         undoManager?.setActionName("Apply Parzr sentence")
+        Preferences.shared.noteFixes(batch)
         dismissCorrection()
     }
 }

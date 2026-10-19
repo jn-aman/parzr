@@ -72,6 +72,13 @@ final class Preferences: ObservableObject {
     /// Name tokens from Contacts; memory only, rebuilt at launch while authorized and purged otherwise.
     @Published var contactNames: [String] = []
     @Published var contactsNote: String?
+    /// Jargon, acronyms and product names Parzr learned (repeated Ignores, typed again and again, undone fixes of a lowercase word); sent as dictionary words, so they stay exactly as typed, and shared through known-words.json.
+    @Published var learnedWords: [String] { didSet { defaults.set(learnedWords, forKey: "learnedWords") } }
+    /// Suggestion kinds ignored `SuggestionMutes.ignoresToMute` times, and the Ignore counts toward them.
+    @Published private(set) var mutes: SuggestionMutes { didSet { defaults.set(try? JSONEncoder().encode(mutes), forKey: "suggestionMutes") } }
+    /// A private tally of applied fixes for the weekly summary; on this Mac only, cleared when turned off.
+    @Published private(set) var stats: WritingStats { didSet { defaults.set(try? JSONEncoder().encode(stats), forKey: "writingStats") } }
+    @Published var keepsWritingSummary: Bool { didSet { defaults.set(keepsWritingSummary, forKey: "keepsWritingSummary"); if !keepsWritingSummary { stats.clear() } } }
     private var ignoreCounts: [String: Int] { didSet { defaults.set(ignoreCounts, forKey: "ignoreCounts") } }
     private(set) var ledger: RepetitionLedger { didSet { defaults.set(try? JSONEncoder().encode(ledger), forKey: "repetitionLedger") } }
     var boundedCheckingDelay: Double { checkingDelay.isFinite ? min(700, max(40, checkingDelay)) : 90 }
@@ -121,6 +128,10 @@ final class Preferences: ObservableObject {
         learnedNames = defaults.stringArray(forKey: "learnedNames") ?? []
         useContactNames = defaults.bool(forKey: "useContactNames")
         nameCapitalization = defaults.string(forKey: "nameCapitalization") ?? NameCapitalization.everywhere.rawValue
+        learnedWords = defaults.stringArray(forKey: "learnedWords") ?? []
+        mutes = defaults.data(forKey: "suggestionMutes").flatMap { try? JSONDecoder().decode(SuggestionMutes.self, from: $0) } ?? SuggestionMutes()
+        stats = defaults.data(forKey: "writingStats").flatMap { try? JSONDecoder().decode(WritingStats.self, from: $0) } ?? WritingStats()
+        keepsWritingSummary = defaults.object(forKey: "keepsWritingSummary") as? Bool ?? true
         ignoreCounts = defaults.dictionary(forKey: "ignoreCounts") as? [String: Int] ?? [:]
         ledger = defaults.data(forKey: "repetitionLedger").flatMap { try? JSONDecoder().decode(RepetitionLedger.self, from: $0) } ?? RepetitionLedger()
         defaults.set(automaticAppPauses, forKey: "automaticAppPauses")
@@ -201,24 +212,55 @@ final class Preferences: ObservableObject {
         guard let name = WritingEdit.nameToken(raw), !WritingEngine.isKnownMisspelling(name), learnedNames.count < 2000, !learnedNames.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else { return false }
         learnedNames.append(name); return true
     }
-    /// Drops learned names and Ignore counts that are known misspellings (older versions learned "teh" from an undone fix). Idempotent, so it runs at every launch.
+    /// Adds a word to leave alone (jargon, an acronym, a product name) once; false when it is not word-shaped, a known misspelling, already known, or the list is full.
+    @discardableResult
+    func learnWord(_ raw: String) -> Bool {
+        guard let word = LearnedWord.token(raw), !WritingEngine.isKnownMisspelling(word), learnedWords.count < LearnedWord.maxWords,
+              ![learnedWords, dictionary, learnedNames].joined().contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return false }
+        learnedWords.append(word); return true
+    }
+    /// Learns what the user keeps writing: a capitalized letters-only word ("Aman", "GitHub") as a name, anything else ("gector", "K8s", "pgvector") as a word kept exactly as typed.
+    @discardableResult
+    func learn(_ raw: String) -> Bool {
+        if let name = WritingEdit.nameToken(raw), LearnedWord.isNameShaped(name) { return learnName(name) }
+        return learnWord(raw)
+    }
+    /// Drops learned names, words and Ignore counts that are known misspellings (older versions learned "teh" from an undone fix). Idempotent, so it runs at every launch.
     func purgeMisspelledNames() {
         learnedNames.removeAll { WritingEngine.isKnownMisspelling($0) }
+        learnedWords.removeAll { WritingEngine.isKnownMisspelling($0) }
         ignoreCounts = ignoreCounts.filter { !WritingEngine.isKnownMisspelling($0.key) }
     }
-    /// A user Ignore on a spelling or name-like edit counts toward learning its word as a name.
+    /// A user Ignore on a spelling or name-like edit counts toward learning its word (see `learn`).
     static let ignoresToLearn = 2
+    /// Any other Ignore counts toward muting that kind of suggestion (`SuggestionMutes`).
+    static var ignoresToMute: Int { SuggestionMutes.ignoresToMute }
     func noteIgnored(_ edit: WritingEdit) {
-        guard edit.category == "Spelling" || edit.nameCandidate != nil, let name = WritingEdit.nameToken(edit.original) else { return }
-        let key = name.lowercased()
+        if keepsWritingSummary { stats.recordIgnore(day: LearningDay.today()) }
+        guard edit.category == "Spelling" || edit.nameCandidate != nil, let word = WritingEdit.nameToken(edit.original) ?? LearnedWord.token(edit.original) else {
+            mutes.ignored(edit, day: LearningDay.today()); return
+        }
+        let key = word.lowercased()
         guard ignoreCounts[key] != nil || ignoreCounts.count < 500 else { return }
         let count = (ignoreCounts[key] ?? 0) + 1
-        if count >= Self.ignoresToLearn { learnName(name); ignoreCounts[key] = nil } else { ignoreCounts[key] = count }
+        if count >= Self.ignoresToLearn { learn(word); ignoreCounts[key] = nil } else { ignoreCounts[key] = count }
     }
-    /// A lowercase word kept through a passive check. Learned as a name after 3 sightings over 2 or more apps or days; see RepetitionLedger.
+    /// True when the user muted this kind of suggestion.
+    func isMuted(_ edit: WritingEdit) -> Bool { mutes.mutes(edit) }
+    func unmute(_ key: String) { mutes.unmute(key) }
+    func resetMutes() { mutes.reset() }
+    /// Applied fixes: counted for the weekly summary, and their kinds' Ignores start over.
+    func noteFixes(_ edits: [WritingEdit]) {
+        guard !edits.isEmpty else { return }
+        for edit in edits { mutes.applied(edit) }
+        if keepsWritingSummary { stats.recordFixes(edits, day: LearningDay.today()) }
+    }
+    func clearWritingSummary() { stats.clear() }
+    /// A lowercase word kept through a passive check. Learned as a word kept as typed after 3 sightings over 2 or more apps or days; see RepetitionLedger.
+    /// Per check the system lexicon still treats it as a name when macOS knows it capitalized ("jatin"); learned here, it is never re-cased.
     func noteSighting(_ word: String, app: String, day: Int) {
-        guard !learnedNames.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }), ledger.sight(word, app: app, day: day) else { return }
-        learnName(word)
+        guard ![learnedNames, learnedWords].joined().contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }), ledger.sight(word, app: app, day: day) else { return }
+        learnWord(word)
     }
     /// The user applied a Parzr correction to this word, so repetition never learns it.
     func noteApplied(_ word: String) { ledger.applied(word, day: Int(Date().timeIntervalSince1970 / 86_400)) }
@@ -307,10 +349,12 @@ enum KnownNames {
         let (document, lexicon) = await (scan, known)
         return merge(user, prefs.learnedNames, document, lexicon, prefs.useContactNames ? prefs.contactNames : [], limit: maxNames)
     }
-    @MainActor static func dictionary() -> [String] { merge(Preferences.shared.dictionary) }
-    /// Spelling edits for words the user taught macOS are not mistakes. Cheap: only flagged edits are asked.
-    @MainActor static func dropMacLearned(_ result: RewriteResult, from source: String) -> RewriteResult {
-        result.dropping(from: source) { $0.category == "Spelling" && NSSpellChecker.shared.hasLearnedWord($0.original) }
+    /// The user's dictionary, then the words Parzr learned, within the engine's 1000 entries.
+    @MainActor static func dictionary() -> [String] { merge(Preferences.shared.dictionary, Preferences.shared.learnedWords) }
+    /// Drops what the user already told Parzr or macOS: suggestion kinds the user muted, and spelling edits for words the user taught macOS. Cheap: only flagged edits are asked.
+    @MainActor static func screened(_ result: RewriteResult, from source: String) -> RewriteResult {
+        let prefs = Preferences.shared
+        return result.dropping(from: source) { prefs.isMuted($0) || $0.category == "Spelling" && NSSpellChecker.shared.hasLearnedWord($0.original) }
     }
 }
 
