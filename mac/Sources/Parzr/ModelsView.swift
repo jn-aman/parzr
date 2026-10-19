@@ -5,6 +5,8 @@ import SwiftUI
 extension ModelCenter {
     /// The app's model pack. Self tests, snapshots and `swift test` use the throwaway preferences suite and never start a download on their own.
     static let app = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard)
+    /// The optional slip-check pack (the typing-time word-choice check), downloaded after the essential pack is ready.
+    static let slips = ModelCenter.liveSlips(defaults: Preferences.selfTestDefaults ?? .standard)
     /// A normal launch may download (never a self test, a snapshot or `swift test`).
     static var downloadsAllowed: Bool { !Preferences.isSelfTest && !Preferences.underXCTest && !CommandLine.arguments.contains("--health-check") }
 }
@@ -41,13 +43,13 @@ struct ModelStatus: View {
     private var percent: String { "\(Int((center.state.fraction ?? 0) * 100))%" }
     private var title: String {
         switch center.state {
-        case .ready: compact ? "Smart grammar is ready" : "Downloaded and checked"
+        case .ready: compact ? "\(center.feature) is ready" : "Downloaded and checked"
         case .development: "Development models in use"
-        case .downloading(_, let total): compact ? "Smart grammar is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
-        case .verifying: compact ? "Smart grammar · checking the download" : "Checking the download…"
-        case .missing where center.removedByUser: compact ? "Smart grammar isn't downloaded" : "Not downloaded"
-        case .missing: compact ? "Smart grammar downloads soon" : "Waiting to download"
-        case .failed: compact ? "Smart grammar isn't downloaded" : "Download paused"
+        case .downloading(_, let total): compact ? "\(center.feature) is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+        case .verifying: compact ? "\(center.feature) · checking the download" : "Checking the download…"
+        case .missing where center.removedByUser: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
+        case .missing: compact ? "\(center.feature) downloads soon" : "Waiting to download"
+        case .failed: compact ? "\(center.feature) isn't downloaded" : "Download paused"
         }
     }
     private var detail: String? {
@@ -55,6 +57,7 @@ struct ModelStatus: View {
         case .ready: "\(center.sizeText) on this Mac, each file checked against its pinned SHA-256."
         case .development: center.statusLine
         case .downloading, .verifying: nil
+        case .missing where center.pack?.provides["slip_model"] != nil: center.removedByUser ? "Word-choice slips are checked only on Option+Space until you download it." : "Word-choice slips are checked on Option+Space until it arrives."
         case .missing: center.removedByUser ? "Parzr checks with its rules only until you download it." : "Parzr checks with its rules until it arrives."
         case .failed(let failure): failure.message
         }
@@ -80,28 +83,13 @@ struct ModelStatus: View {
 /// Settings, Models: what is on this Mac, how big, under which license, and Re-download / Remove.
 struct ModelsSettings: View {
     @ObservedObject var center: ModelCenter
+    /// The optional slip-check pack, listed below the essential one with its own Download / Remove.
+    var slips: ModelCenter? = nil
     @State private var confirmRemove = false
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section(center.pack?.title.uppercased() ?? "MODELS") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(center.pack?.purpose ?? "").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-                    ModelStatus(center: center)
-                }.padding(16)
-                divider
-                ForEach(Array(center.models.enumerated()), id: \.offset) { index, model in
-                    if index > 0 { divider }
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(model.name).font(.system(size: 12, weight: .medium))
-                            Text(model.purpose).font(.system(size: 11)).foregroundStyle(Color.textSecondary)
-                            Text("\(model.license) · \(model.version)").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.8)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 8)
-                        Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Color.textSecondary)
-                    }.padding(16)
-                }
-            }
+            PackSection(center: center)
+            if let slips { PackSection(center: slips, removable: true) }
             section("MANAGE") {
                 row("Download again", detail: "Deletes the downloaded files and fetches them again from GitHub, checking each one.") {
                     NativeButton(title: "Re-download", label: "Download the models again", enabled: center.pack != nil && !center.state.isWorking && center.state != .development, action: { center.redownload() }).fixedSize()
@@ -128,4 +116,49 @@ struct ModelsSettings: View {
     private func row<Control: View>(_ title: String, detail: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(alignment: .center, spacing: 18) { VStack(alignment: .leading, spacing: 5) { Text(title).font(.system(size: 12, weight: .medium)); Text(detail).font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true).lineSpacing(2) }; Spacer(minLength: 8); control() }.padding(16)
     }
+}
+
+/// One pack in Settings, Models: its purpose, state and action, and one line per model with size, license and version.
+/// An optional pack (`removable`) also offers Remove here; the essential pack's Re-download and Remove are under MANAGE.
+struct PackSection: View {
+    @ObservedObject var center: ModelCenter
+    var removable = false
+    @State private var confirmRemove = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(center.pack?.title.uppercased() ?? "MODELS").font(.system(size: 9, weight: .semibold)).tracking(1.2).foregroundStyle(Color.textSecondary).padding(.leading, 2)
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(center.pack?.purpose ?? "").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    ModelStatus(center: center)
+                }.padding(16)
+                divider
+                ForEach(Array(center.models.enumerated()), id: \.offset) { index, model in
+                    if index > 0 { divider }
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.name).font(.system(size: 12, weight: .medium))
+                            Text(model.purpose).font(.system(size: 11)).foregroundStyle(Color.textSecondary)
+                            Text("\(model.license) · \(model.version)").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.8)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Color.textSecondary)
+                    }.padding(16)
+                }
+                if removable, center.state == .ready {
+                    divider
+                    HStack(alignment: .center, spacing: 18) {
+                        Text("Frees \(center.sizeText). Parzr does not download it again until you ask.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        NativeButton(title: "Remove", label: "Remove the \(center.feature.lowercased()) model", action: { confirmRemove = true }).fixedSize()
+                    }.padding(16)
+                }
+            }.graphiteSurface()
+        }
+        .confirmationDialog("Remove the \(center.feature.lowercased()) model?", isPresented: $confirmRemove) {
+            Button("Remove", role: .destructive) { center.remove() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Word-choice slips are then checked only on Option+Space, until you download it again (\(center.sizeText)).") }
+    }
+    private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
 }

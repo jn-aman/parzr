@@ -60,12 +60,16 @@ public actor WritingEngine {
     }
     /// Loads the on-device grammar model off every actor; the first run compiles it for the Neural Engine (seconds), later runs reload in well under a second.
     @discardableResult
-    public nonisolated static func warmGrammar() async -> Bool {
+    public nonisolated static func warmGrammar() async -> Bool { await warm("parzr_gec_warm") }
+    /// Loads the slip-check model (the typing-time word-choice check) the same way; false when it is not downloaded or the engine is older.
+    @discardableResult
+    public nonisolated static func warmSlips() async -> Bool { await warm("parzr_slips_warm") }
+    private nonisolated static func warm(_ symbol: String) async -> Bool {
         await Task.detached(priority: .utility) {
             let supplied = ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"]
             let paths = libraryPaths(bundle: Bundle.main.bundleURL, workingDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath), supplied: supplied)
             for path in paths {
-                guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let warm = dlsym(handle, "parzr_gec_warm") else { continue }
+                guard let handle = dlopen(path, RTLD_NOW | RTLD_LOCAL), let warm = dlsym(handle, symbol) else { continue }
                 return unsafeBitCast(warm, to: (@convention(c) () -> Int32).self)() == 1
             }
             return false

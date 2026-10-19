@@ -272,7 +272,7 @@ struct StudioView: View {
                 }
                 notice("Grammar, spelling, and punctuation are checked in every mode. The model unloads after 30 seconds of inactivity.", symbol: "leaf")
             case .models:
-                ModelsSettings(center: models)
+                ModelsSettings(center: models, slips: ModelCenter.slips)
             case .appearance:
                 group("LOOK & FEEL") {
                     settingRow("Appearance", detail: "Graphite, Paper, or your Mac’s appearance.") { ChoiceStrip(label: "Appearance", choices: [("Graphite", "graphite"), ("Paper", "paper"), ("System", "system")], selection: $preferences.appearance) }

@@ -26,6 +26,8 @@ mod pipeline;
 mod punctuation;
 mod real_word;
 mod rules;
+#[cfg(feature = "local-model")]
+mod slips;
 mod spelling;
 mod structure;
 mod tokenizer;
@@ -163,6 +165,17 @@ pub extern "C" fn parzr_cancel_rewrite() {
 pub extern "C" fn parzr_gec_warm() -> i32 {
     #[cfg(feature = "local-model")]
     if catch_unwind(gec::warm).unwrap_or(false) {
+        return 1;
+    }
+    0
+}
+
+/// Loads the slip checker (the masked language model of the typing-time word-choice check) so the
+/// first check is fast. Safe to call from any thread, repeatedly. Returns 1 when it is ready, else 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_slips_warm() -> i32 {
+    #[cfg(feature = "local-model")]
+    if catch_unwind(slips::warm).unwrap_or(false) {
         return 1;
     }
     0

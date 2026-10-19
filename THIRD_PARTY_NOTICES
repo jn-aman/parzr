@@ -124,6 +124,16 @@ https://github.com/grammarly/gector. Copyright Grammarly, Inc. Apache License 2.
 (resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt).
 The model runs entirely on the device; nothing is sent.
 
+distilroberta-base (the word-choice check while typing, optional "slips" pack)
+Weights: distilbert/distilroberta-base, revision
+fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, https://huggingface.co/distilbert/distilroberta-base
+Copyright Hugging Face. Apache License 2.0. Distilled from roberta-base (Facebook
+AI Research, MIT license); its byte level BPE vocabulary (vocab.json, merges.txt)
+ships with the model. Parzr downloads a Core ML conversion (int8 weight-only, the
+masked-language-model head scored at one position per row) made by
+scripts/convert-slips.py; revisions, versions and SHA-256 hashes are in the pack's
+slips/manifest.json. The model runs entirely on the device; nothing is sent.
+
 The engine tokenizes sentences for the model as spaCy 3.8 does. Its English tokenizer rules
 (engine/rules/gec-tokenizer.json: prefix, suffix and infix patterns and the special-case table)
 are exported from spaCy, Copyright Explosion. MIT license. https://github.com/explosion/spaCy

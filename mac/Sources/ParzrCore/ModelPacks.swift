@@ -61,6 +61,8 @@ public struct ModelManifest: Codable, Equatable, Sendable {
     }
     /// The pack that holds the models for typing and Option+Space (the one that provides the writing model).
     public var essential: ModelPack? { packs.first { $0.provides["writing_model"] != nil } ?? packs.first }
+    /// The optional pack of the typing-time slip check (the one that provides the slip model).
+    public var slips: ModelPack? { packs.first { $0.provides["slip_model"] != nil } }
 }
 
 /// Why a pack is not ready. Every case leaves Parzr working with its rules.

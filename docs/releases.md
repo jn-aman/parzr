@@ -85,6 +85,19 @@ python3 scripts/model-pack.py fetch --models-dir "$(mktemp -d)" --verify   # dow
 
 **A new pack version** (Phase 2's fine-tuned Qwen3.5-2B, the slip detector, the tone classifier): put the files in a new pack version in `engine/models.json` (new `version`, URLs under a new tag such as `models-2`, hashes, sizes, licenses, purposes, and `provides` naming what the engine looks up), stage them with `--from-dir`, publish, and only then release the app that pins them. On their first launch, updated apps download the new version beside the old one and delete the old one only after the new one verifies. Never re-upload an asset under an existing tag.
 
+**Publish `models-slips-1`** (the optional slip-check pack, 8 files, 84 MB; before the first app release that pins it). Its Core ML model is compiled by the local toolchain, so the pinned hashes are those of the converted files on the machine that made them: publish exactly those files (`dist/slips-build` on that machine), or convert again and re-pin `engine/models.json` before publishing.
+
+```sh
+# Only to rebuild the files (a venv with torch, coremltools 9, safetensors; transformers for the parity check):
+venv/bin/python -I scripts/convert-slips.py --download --out dist/slips-build/slips   # then update the slips entries in engine/models.json
+python3 scripts/model-pack.py stage --pack slips --from-dir dist/slips-build      # checks every pinned size and SHA-256
+python3 scripts/model-pack.py publish --pack slips --dry-run
+python3 scripts/model-pack.py publish --pack slips          # gh release create models-slips-1 --prerelease --latest=false
+python3 scripts/model-pack.py fetch --pack slips --models-dir "$(mktemp -d)" --verify
+```
+
+Until it is published the app reports it as not available yet and retries hourly, with the typing-time slip check off (Option+Space still checks word choice with Qwen), and CI's `fetch --derive-fallback` skips it.
+
 **CI** downloads the pinned pack into `dist/models` (cached by the hash of `engine/models.json`) and runs every model test against it through `PARZR_MODELS_DIR`; before the pack's release exists it rebuilds the pack from the pinned upstream sources with the same hash checks. The bundle audit (`scripts/audit-bundle.py`) fails the build if any model file (by name, format or pinned hash) is in the app, or if the app is over 100 MB.
 
 **Check the download end to end** in a built app, without the release:

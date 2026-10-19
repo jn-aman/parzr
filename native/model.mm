@@ -692,3 +692,116 @@ extern "C" int32_t parzr_gec_forward(const int32_t *ids, int32_t count, float *l
     } catch (...) { return 4; }
     return 0;
 }
+
+// The slip checker (distilroberta-base, a masked language model) on the Neural Engine: one static Core ML model of
+// batch x length token ids, a masked position per row and the token ids to score there; it returns their
+// log-probabilities. Resident once prepared, released under memory pressure (the engine prepares it again), own mutex,
+// never touching Qwen or GECToR state. The engine names the folder (the downloaded pack's, or PARZR_SLIP_DIR).
+namespace {
+struct Mlm {
+    std::mutex mutex;
+    MLModel *model = nil;
+    std::string directory, remembered;
+    int32_t batch = 0, length = 0, targets = 0;
+    dispatch_source_t pressure = nullptr;
+};
+Mlm &mlm() { static auto *value = new Mlm; return *value; }
+void mlmRelease(Mlm &m) {
+    m.model = nil; m.directory.clear();
+    malloc_zone_pressure_relief(nullptr, 0);
+}
+int32_t dimension(MLModel *model, NSString *input, NSUInteger axis) {
+    MLFeatureDescription *d = model.modelDescription.inputDescriptionsByName[input];
+    NSArray<NSNumber *> *shape = d.multiArrayConstraint.shape;
+    return axis < shape.count ? shape[axis].intValue : 0;
+}
+int32_t mlmPrepare(Mlm &m, const char *given) {
+    const std::string directory = given && *given ? std::string(given) : m.remembered;
+    if (m.model && m.directory == directory) return 0;
+    if (directory.empty()) return 1;
+    @autoreleasepool {
+        NSURL *url = [NSURL fileURLWithPath:[@(directory.c_str()) stringByAppendingPathComponent:@"mlm.mlmodelc"] isDirectory:YES];
+        if (![url checkResourceIsReachableAndReturnError:nil]) return 2;
+        auto *configuration = [MLModelConfiguration new];
+        configuration.computeUnits = MLComputeUnitsCPUAndNeuralEngine;
+        NSError *error = nil;
+        MLModel *model = [MLModel modelWithContentsOfURL:url configuration:configuration error:&error];
+        if (!model) return 3;
+        const int32_t batch = dimension(model, @"ids", 0), length = dimension(model, @"ids", 1), targets = dimension(model, @"targets", 1);
+        if (batch < 1 || length < 3 || targets < 1 || dimension(model, @"position", 0) != batch || dimension(model, @"targets", 0) != batch) return 3;
+        m.model = model; m.directory = directory; m.remembered = directory;
+        m.batch = batch; m.length = length; m.targets = targets;
+        if (!m.pressure) {
+            m.pressure = dispatch_source_create(DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0, DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+            dispatch_source_set_event_handler(m.pressure, ^{ auto &now = mlm(); std::lock_guard lock(now.mutex); mlmRelease(now); });
+            dispatch_resume(m.pressure);
+        }
+    }
+    return 0;
+}
+}
+// Loads (the first time also compiles for the Neural Engine, cached by the OS) the model in `directory` and reports its
+// shape: rows per batch, tokens per row and targets per row. 0 on success.
+extern "C" int32_t parzr_mlm_prepare(const char *directory, int32_t *batch, int32_t *length, int32_t *targets) {
+    auto &m = mlm();
+    std::lock_guard lock(m.mutex);
+    try {
+        if (int32_t status = mlmPrepare(m, directory)) return status;
+        if (batch) *batch = m.batch;
+        if (length) *length = m.length;
+        if (targets) *targets = m.targets;
+        return 0;
+    } catch (...) { return 4; }
+}
+extern "C" void parzr_mlm_release(void) {
+    auto &m = mlm();
+    std::lock_guard lock(m.mutex);
+    mlmRelease(m);
+}
+// `rows` rows of `length` token ids (padded by the caller with the pad id), each with its masked position and `targets`
+// token ids; `logp` receives rows x targets log-probabilities. `length` and `targets` must match the prepared model (they
+// are passed so a model replaced under the engine is detected); rows are batched here. 0 on success.
+extern "C" int32_t parzr_mlm_forward(const int32_t *ids, const int32_t *positions, const int32_t *targets, int32_t rows, int32_t length, int32_t count, float *logp) {
+    if (!ids || !positions || !targets || !logp || rows < 1) return 1;
+    auto &m = mlm();
+    std::lock_guard lock(m.mutex);
+    try {
+        if (!m.model) { if (int32_t status = mlmPrepare(m, nullptr)) return status; }
+        if (length != m.length || count != m.targets) return 8;
+        const int32_t B = m.batch, L = m.length, K = m.targets;
+        for (int32_t first = 0; first < rows; first += B) {
+            @autoreleasepool {
+                NSError *error = nil;
+                auto *idsArray = [[MLMultiArray alloc] initWithShape:@[@(B), @(L)] dataType:MLMultiArrayDataTypeInt32 error:&error];
+                auto *posArray = [[MLMultiArray alloc] initWithShape:@[@(B)] dataType:MLMultiArrayDataTypeInt32 error:&error];
+                auto *tgtArray = [[MLMultiArray alloc] initWithShape:@[@(B), @(K)] dataType:MLMultiArrayDataTypeInt32 error:&error];
+                if (!idsArray || !posArray || !tgtArray) return 5;
+                auto *i = static_cast<int32_t *>(idsArray.dataPointer), *p = static_cast<int32_t *>(posArray.dataPointer), *t = static_cast<int32_t *>(tgtArray.dataPointer);
+                const int32_t used = std::min(B, rows - first);
+                for (int32_t r = 0; r < B; r++) {
+                    // Unused rows of the last batch: an empty sentence, scored and dropped.
+                    const bool real = r < used;
+                    for (int32_t c = 0; c < L; c++) i[r * L + c] = real ? ids[size_t(first + r) * L + c] : (c == 0 ? 0 : c == 1 ? 2 : 1);
+                    p[r] = real ? positions[first + r] : 0;
+                    for (int32_t k = 0; k < K; k++) t[r * K + k] = real ? targets[size_t(first + r) * K + k] : 1;
+                }
+                auto *features = [[MLDictionaryFeatureProvider alloc] initWithDictionary:@{@"ids": idsArray, @"position": posArray, @"targets": tgtArray} error:&error];
+                id<MLFeatureProvider> result = features ? [m.model predictionFromFeatures:features error:&error] : nil;
+                if (!result) return 6;
+                MLMultiArray *array = [result featureValueForName:@"logp"].multiArrayValue;
+                if (!array || array.shape.count != 2 || array.shape[0].intValue != B || array.shape[1].intValue != K) return 7;
+                const long row = array.strides[0].longValue, column = array.strides[1].longValue;
+                const bool half = array.dataType == MLMultiArrayDataTypeFloat16;
+                if (!half && array.dataType != MLMultiArrayDataTypeFloat32) return 7;
+                [array getBytesWithHandler:^(const void *bytes, NSInteger) {
+                    for (int32_t r = 0; r < used; r++)
+                        for (int32_t k = 0; k < K; k++) {
+                            const long at = r * row + k * column;
+                            logp[size_t(first + r) * K + k] = half ? float(static_cast<const _Float16 *>(bytes)[at]) : static_cast<const float *>(bytes)[at];
+                        }
+                }];
+            }
+        }
+    } catch (...) { return 4; }
+    return 0;
+}
