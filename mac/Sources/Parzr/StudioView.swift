@@ -29,7 +29,7 @@ enum StudioRoute: String, CaseIterable, Identifiable {
         case .apps: "Choose where Parzr lends a hand."
         case .privacy: "Local by design. In your control."
         case .compatibility: "Bring corrections closer to your writing."
-        case .about: "Made for your words. Built to stay local."
+        case .about: "Made for your words. Built to run on your Mac."
         }
     }
 }
@@ -90,7 +90,7 @@ struct StudioView: View {
             Spacer(minLength: 16)
             VStack(alignment: .leading, spacing: 8) {
                 StatusLine(title: model.engineReady ? "On this Mac" : model.error == nil ? "Starting…" : "Engine unavailable", good: model.engineReady)
-                Text("Your writing stays here.").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.7))
+                Text("Your writing is checked here.").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.7))
             }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color.canvas, in: RoundedRectangle(cornerRadius: 10)).padding(14)
         }.frame(width: 190).frame(maxHeight: .infinity).background(Color.sidebar)
     }
@@ -146,7 +146,7 @@ struct StudioView: View {
                 }.padding(.horizontal, 16).padding(.vertical, 12)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
                 ZStack(alignment: .topLeading) {
-                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) })
+                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, report: model.canReport ? { edits, text, action in model.report(edits, action, text: text) } : nil)
                     if draft.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("A thought. A message. A first draft.").font(.system(size: preferences.boundedFontSize)).foregroundStyle(Color.textSecondary.opacity(0.7))
@@ -165,9 +165,12 @@ struct StudioView: View {
                         NativeButton(title: "Review", symbol: "list.bullet", label: "Review suggestions", action: { reviewVisible.toggle() }).fixedSize()
                             .popover(isPresented: $reviewVisible, arrowEdge: .bottom) {
                                 SuggestionReview(model: model, apply: { edit in
-                                    guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(EditPlan.related(to: edit, in: model.chosenEdits), to: draft) else { return }
+                                    let related = EditPlan.related(to: edit, in: model.chosenEdits)
+                                    guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(related, to: draft) else { return }
+                                    model.report(related, .accepted, text: draft)
                                     draft = next
-                                }, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false })
+                                }, ignore: { edit in model.report([edit], .dismissed, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
+                                report: model.canReport ? { edit in model.report([edit], .reported, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
                             }
                     }
                     if draft.isEmpty { NativeButton(title: "Try a sample", action: { draft = "I recieved your mesage.\n\nCan you chek this?" }).fixedSize() }
@@ -175,7 +178,7 @@ struct StudioView: View {
                         NativeButton(title: "Check passage", symbol: "checkmark", enabled: !model.busy, action: { model.playground(draft) }).fixedSize().help("Review the whole passage with the selected writing mode")
                         NativeButton(title: model.status == "Copied to clipboard" ? "Copied" : "Copy", symbol: model.status == "Copied to clipboard" ? "checkmark" : "doc.on.doc", enabled: model.result != nil && !model.busy, action: { guard model.source == draft else { return }; model.copy() }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: model.status == "Copied to clipboard", isEnabled: animate)
-                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
+                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; model.report(model.chosenEdits, .accepted, text: draft); draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: appliedCount, isEnabled: animate)
                     }
                 }.font(.system(size: 11)).foregroundStyle(Color.textSecondary).padding(.horizontal, 16).padding(.vertical, 12)
@@ -247,7 +250,7 @@ struct StudioView: View {
                     divider
                     settingRow("Context refinement", detail: "Use the larger on-device model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
                     divider
-                    settingRow("Smart grammar (on-device model)", detail: models.isReady ? "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. Nothing leaves your Mac." : "A small model on your Mac's Neural Engine catches grammar the rules miss. \(models.unavailableNote ?? "")") { toggle("Smart grammar", $preferences.smartGrammar) }
+                    settingRow("Smart grammar (on-device model)", detail: models.isReady ? "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. It runs entirely on your Mac." : "A small model on your Mac's Neural Engine catches grammar the rules miss. \(models.unavailableNote ?? "")") { toggle("Smart grammar", $preferences.smartGrammar) }
                 }
                 group("PERSONAL DICTIONARY") {
                     VStack(alignment: .leading, spacing: 12) {
@@ -304,12 +307,15 @@ struct StudioView: View {
                     ForEach(preferences.disabledApps.filter { id in !runningApps.contains { $0.bundleIdentifier == id } }, id: \.self) { id in settingRow(id, detail: "Disabled") { NativeButton(title: "Enable", action: { preferences.toggleApp(id) }).fixedSize() } }
                 }
             case .privacy:
-                group("ALWAYS LOCAL") {
+                group("CHECKED ON YOUR MAC") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Label("Your words stay on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
-                        Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary, learned names and preferences are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
-                        Text("Parzr makes two kinds of request, both to GitHub and both carrying nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Label("Your writing is checked on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
+                        Text("Grammar and rewrites run locally. No account and no writing history. Your dictionary, learned names and preferences are saved on this Mac only.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
+                }
+                group("SUGGESTION REPORTS") {
+                    settingRow("Send anonymous suggestion reports", detail: Self.reportsDetail) { toggle("Send anonymous suggestion reports", $preferences.shareReports) }
                 }
                 group("CLIPBOARD & SESSION") {
                     settingRow("Allow paste fallback", detail: "An explicit option for editors that refuse range edits. May change formatting. Parzr restores an unchanged clipboard after 0.8 seconds.") { toggle("Allow paste fallback", $preferences.clipboardFallback) }
@@ -336,7 +342,7 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 14) {
                         Brand()
                         Text("Version \(Support.version) · Apple Silicon · \(Support.build)").font(.system(size: 12)).foregroundStyle(Color.textSecondary)
-                        Text("An open-source writing assistant that checks grammar and rewrites text on your Mac. Your words stay with you.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("An open-source writing assistant that checks grammar and rewrites text on your Mac.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(20)
                 }
                 group("UPDATES") {
@@ -354,6 +360,8 @@ struct StudioView: View {
             }
         }
     }
+    /// What a suggestion report holds, in the words Settings and the welcome guide use.
+    static let reportsDetail = "When you ignore, accept or report a suggestion, Parzr sends the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on this Mac first. A report also holds the suggestion, the rule or model that made it, what you did, the app's bundle ID and Parzr's version, nothing else. No account, device ID or IP address is kept. Turning this off stops sending and deletes reports not yet sent."
     private func stat(_ name: String, _ value: String) -> some View { HStack { Text(name).foregroundStyle(Color.textSecondary); Spacer(); Text(value).monospacedDigit() }.font(.system(size: 12)) }
     private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

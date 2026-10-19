@@ -24,6 +24,8 @@ final class AppModel: ObservableObject {
     @Published var suggestion: SuggestedVersion?
     /// Set for the selection card: a Fix check of a few words or more also offers one rewrite.
     var offersRewrite = false
+    /// What the writer does with this model's suggestions is reported (when reports are on). The welcome guide's sample turns it off.
+    var reports = true
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
     var didAnalyze: (() -> Void)?
@@ -177,6 +179,20 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
+    /// The app the text belongs to: the editor's, or Parzr's own for its writing space.
+    private var reportApp: String? { snapshot?.app.bundleIdentifier ?? Bundle.main.bundleIdentifier }
+    /// Reports what the writer did with `edits` of the current text. `text` overrides the source (the writing space's draft can be a keystroke ahead).
+    func report(_ edits: [WritingEdit], _ action: ReportAction, text: String? = nil) {
+        guard reports else { return }
+        Reports.record(edits, source: text ?? source, action: action, mode: mode, app: reportApp)
+    }
+    var canReport: Bool { reports && Reports.available }
+    /// The report of an accepted fix is made once it is in the editor, from what the card showed when it was applied.
+    private func acceptedReport(_ edits: [WritingEdit]) -> () -> Void {
+        guard reports else { return {} }
+        let (text, tone, app) = (source, mode, reportApp)
+        return { Reports.record(edits, source: text, action: .accepted, mode: tone, app: app) }
+    }
     func copy() { guard !busy, !provisional, result != nil else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
@@ -188,18 +204,20 @@ final class AppModel: ObservableObject {
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
         busy = true
         if !snapshot.own { SelfTestTarget.bringForward(snapshot.app) }   // Parzr's own writing space is already in front
-        if snapshot.copied { applyCopied(snapshot, edits); return }
+        let accepted = acceptedReport(edits)
+        if snapshot.copied { applyCopied(snapshot, edits, accepted: accepted); return }
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(80))
                 try await snapshot.apply(edits)
+                accepted()
                 self.snapshot = nil; busy = false; dismiss?()
             } catch { self.error = error.localizedDescription; busy = false }
         }
     }
     /// Canvas editors (Google Docs): re-copy to prove the selection is unchanged, then paste the whole replacement over it.
     /// Independent of `clipboardFallback`: the user explicitly ran a copy-based check.
-    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit]) {
+    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit], accepted: @escaping () -> Void) {
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
@@ -211,7 +229,7 @@ final class AppModel: ObservableObject {
                 try snapshot.validate()
                 try transaction.stage(replacement); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
-                FixLearning.record(edits, in: snapshot)
+                FixLearning.record(edits, in: snapshot); accepted()
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 self.snapshot = nil; busy = false; dismiss?()
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
@@ -223,6 +241,7 @@ final class AppModel: ObservableObject {
         let attributed = snapshot.richText.flatMap { try? EditPlan.apply(chosenEdits, to: $0) }
         do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
         busy = true; SelfTestTarget.bringForward(snapshot.app)
+        let accepted = acceptedReport(edits)
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
@@ -230,7 +249,7 @@ final class AppModel: ObservableObject {
                 guard AX.select(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
                 try transaction.stage(replacement, attributed: attributed); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
-                FixLearning.record(edits, in: snapshot)
+                FixLearning.record(edits, in: snapshot); accepted()
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 busy = false; self.snapshot = nil; dismiss?()
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }

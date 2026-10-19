@@ -39,6 +39,8 @@ final class OnboardingModel: ObservableObject {
     init(preferences: Preferences = .shared, step: OnboardingStep? = nil, models: ModelCenter = .app) {
         self.preferences = preferences; self.models = models
         self.step = step ?? OnboardingFlow.firstStep(completed: preferences.onboardingCompleted, granted: preferences.permissionGranted)
+        // Every new user sees the same sample sentence: what they do with it says nothing about Parzr's suggestions.
+        editor.reports = false
     }
     func next() { if canAdvance, let next = step.next { step = next } }
     /// The download starts when the guide reaches its step (and carries on whatever the user does next).

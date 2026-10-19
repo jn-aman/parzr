@@ -12,6 +12,8 @@ struct DraftEditor: NSViewRepresentable {
     var highlightFill = true
     var focusedEditID: String? = nil
     var ignore: (WritingEdit) -> Void = { _ in }
+    /// Reports what the writer did with suggestions: the edits, the text they were made in, and the action. nil: never.
+    var report: (([WritingEdit], String, ReportAction) -> Void)? = nil
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true
@@ -50,6 +52,7 @@ struct DraftEditor: NSViewRepresentable {
         if restoreUndoRegistration { undo?.enableUndoRegistration() }
         editor.suggestions = provisional ? [] : edits
         editor.ignore = ignore
+        editor.report = report
         if editor.string != text && !editor.hasMarkedText() {
             let selected = editor.selectedRange()
             context.coordinator.writingFromBinding = true
@@ -105,6 +108,7 @@ struct DraftEditor: NSViewRepresentable {
 final class CorrectionTextView: NSTextView {
     var suggestions: [WritingEdit] = []
     var ignore: (WritingEdit) -> Void = { _ in }
+    var report: (([WritingEdit], String, ReportAction) -> Void)?
     private var correction: NSPopover?
     private var correctionEdit: WritingEdit?
     /// The edit whose card is on screen, and that card's view (read by the click self test).
@@ -139,7 +143,7 @@ final class CorrectionTextView: NSTextView {
         guard local.x >= hit.minX, local.x <= hit.maxX, local.y >= line.minY, local.y <= line.maxY else { dismissCorrection(); return }
         dismissCorrection()
         let popover = NSPopover(); popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }))
+        popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }, report: report.map { report in { [weak self] action in report([edit], self?.string ?? "", action) } }))
         popover.contentSize = InlineCorrection.size
         correction = popover; correctionEdit = edit
         if presentsPopover { popover.show(relativeTo: rect, of: self, preferredEdge: .maxY) }
@@ -148,6 +152,7 @@ final class CorrectionTextView: NSTextView {
     func accept(_ edit: WritingEdit) {
         let related = EditPlan.related(to: edit, in: suggestions)
         guard suggestions.contains(edit), (try? EditPlan.validate(related, in: string)) != nil else { dismissCorrection(); return }
+        report?(related, string, .accepted)
         // insertText follows NSTextView's normal binding, selection, and undo transaction.
         undoManager?.beginUndoGrouping()
         for item in related.reversed() { insertText(item.replacement, replacementRange: item.range) }
@@ -159,6 +164,7 @@ final class CorrectionTextView: NSTextView {
     func acceptSentence(_ edit: WritingEdit) {
         let batch = SentencePreview.edits(source: string, edits: suggestions, focused: edit)
         guard !batch.isEmpty, (try? EditPlan.validate(batch, in: string)) != nil else { dismissCorrection(); return }
+        report?(batch, string, .accepted)
         undoManager?.beginUndoGrouping()
         for item in batch.sorted(by: { $0.start_utf16 > $1.start_utf16 }) { insertText(item.replacement, replacementRange: item.range) }
         undoManager?.endUndoGrouping()
