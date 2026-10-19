@@ -29,6 +29,8 @@ mod rules;
 mod spelling;
 mod structure;
 mod tokenizer;
+#[cfg(feature = "local-model")]
+mod tone_format;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
