@@ -86,6 +86,9 @@ if not args.qa:
         data = path.read_bytes()
         found |= {(marker.decode(), str(path.relative_to(app))) for marker in qa_markers if marker in data}
     if found: sys.exit('A release build must not carry QA modes: '+', '.join(f'{m} in {p}' for m, p in sorted(found)))
+    # The release engine is built without its dev-overrides feature, and the native runtime reads no environment: no PARZR_* name is left in them.
+    for name in ['Contents/MacOS/parzr-engine', 'Contents/MacOS/parzr-native-host', 'Contents/MacOS/parzr-lsp', 'Contents/Frameworks/libparzr_engine.dylib', 'Contents/Frameworks/libparzr_model.dylib']:
+        if b'PARZR_' in (app/name).read_bytes(): sys.exit(name+' still reads PARZR_* development overrides; build the engine without the dev-overrides feature.')
 sparkle_license = (app/'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt').read_text()
 for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVerifier']:
     if part not in sparkle_license: sys.exit('Sparkle-LICENSE.txt is incomplete (missing '+part+')')
