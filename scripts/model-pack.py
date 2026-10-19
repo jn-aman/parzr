@@ -28,8 +28,9 @@ QWEN_SOURCE = ('https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea62
                '37ae482d336108d23516fa35e8e0c4126688d81018b87178a18d752a1357814f')
 GECTOR_ZIP = ('https://github.com/jn-aman/parzr/releases/download/gector-v1/gector-roberta-base-5k-coreml-int8.zip',
               '9e3d2c433206b4eea2cb612c1a32765a24bf39ba2eef9a1c51a9ed8942427796')
-# Packs --derive can rebuild byte for byte. The slips pack's Core ML model is compiled by the local toolchain, so its pinned
-# hashes are those of the published assets: before its release exists, fetch --derive-fallback skips it (its tests skip too).
+# Packs --derive can rebuild byte for byte. The slips and tone packs' Core ML models are compiled by the local toolchain, so their
+# pinned hashes are those of the published assets: a missing release of one of them fails the fetch, with or without
+# --derive-fallback (publish the pack before the change that pins it; docs/releases.md).
 DERIVABLE = {'essential'}
 
 
@@ -274,9 +275,8 @@ def fetch(manifest, args):
         except urllib.error.HTTPError as error:
             if not args.derive_fallback: raise SystemExit(f'{error.url}: HTTP {error.code}. Is the {tag_of(pack)} release published?')
             if pack['id'] not in DERIVABLE:
-                print(f"{tag_of(pack)} is not published yet (HTTP {error.code}) and pack {pack['id']} cannot be rebuilt here: skipped "
-                      "(Parzr works without it; its tests skip)", file=sys.stderr)
-                continue
+                raise SystemExit(f"{error.url}: HTTP {error.code}. Pack {pack['id']} cannot be rebuilt from upstream (its Core ML model is "
+                                 f"compiled locally): publish {tag_of(pack)} before pinning it (docs/releases.md).")
             print(f'{tag_of(pack)} is not published yet (HTTP {error.code}); rebuilding the pack from its pinned upstream sources', file=sys.stderr)
             assets = pathlib.Path(tempfile.mkdtemp(prefix='parzr-pack-'))
             stage(manifest, argparse.Namespace(out=assets, from_app=None, from_dir=None, work=args.work, pack=pack['id']))
@@ -305,7 +305,8 @@ def main():
     p.add_argument('--target', help='commit or branch for a new tag (default: the default branch)')
     f = sub.add_parser('fetch'); f.add_argument('--models-dir', default=os.environ.get('PARZR_MODELS_DIR') or str(ROOT/'dist/models'))
     f.add_argument('--base-url', help='download from here instead of the release (for example file:///…/dist/model-pack)')
-    f.add_argument('--derive-fallback', action='store_true', help='rebuild the pack from upstream when its release is not published yet')
+    f.add_argument('--derive-fallback', action='store_true', help='rebuild a derivable pack (essential) from upstream when its release is not '
+                   'published yet; a missing release of any other pack still fails')
     f.add_argument('--verify', action='store_true', help='re-hash an installed pack instead of trusting its sizes')
     for command in (s, p, f): command.add_argument('--pack')
     for command in (s, f): command.add_argument('--work', default=str(ROOT/'dist/model-derive'))

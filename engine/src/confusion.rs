@@ -1170,8 +1170,11 @@ mod tests {
     }
     #[test]
     fn typing_never_waits_past_its_budget_and_the_answer_comes_from_the_cache() {
+        // The scorer takes far longer than the typing budget (80 ms), so a check that waited for it would take
+        // over SLOW; one that kept to its budget returns long before, however busy the machine running the tests.
+        const SLOW: Duration = Duration::from_millis(1500);
         fn slow(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(SLOW);
             fake(sentence, swaps, how)
         }
         let req = Request {
@@ -1187,9 +1190,13 @@ mod tests {
         combine_with(&warm, &[], vec![], fake);
         let started = Instant::now();
         assert!(combine_with(&req, &[], vec![], slow).is_empty());
-        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(
+            started.elapsed() < SLOW / 2,
+            "typing waited {:?} for the scorer",
+            started.elapsed()
+        );
         // The job finishes in the background; a later check reads its verdict.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(10);
         let mut edits = vec![];
         while edits.is_empty() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));
@@ -1206,9 +1213,11 @@ mod tests {
     fn typing_scores_slips_in_the_background_and_a_follow_up_reads_the_verdict() {
         static MODEL_ASKED: AtomicBool = AtomicBool::new(false);
         static SLIPS_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        // Far over the typing budget (80 ms): a check that waited for the job would take over SLOW.
+        const SLOW: Duration = Duration::from_millis(1500);
         fn slow_slips(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
             SLIPS_RUNS.fetch_add(1, Ordering::SeqCst);
-            std::thread::sleep(Duration::from_millis(250));
+            std::thread::sleep(SLOW);
             slips_fake(sentence, swaps, how)
         }
         fn watched_model(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
@@ -1232,12 +1241,14 @@ mod tests {
         let first = combine_using(&req, &[], vec![], scorers);
         assert!(first.is_empty());
         assert!(
-            started.elapsed() < Duration::from_millis(200),
-            "typing waits for its budget only"
+            started.elapsed() < SLOW / 2,
+            "typing waits for its budget only, not the {:?} job (took {:?})",
+            SLOW,
+            started.elapsed()
         );
         assert!(take_pending(), "the app is told to look again");
         // Follow-ups (the app's come 900 ms apart) find the verdict once the job is done.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(10);
         let mut edits = vec![];
         while edits.is_empty() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(100));

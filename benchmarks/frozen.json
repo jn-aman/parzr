@@ -1,0 +1,162 @@
+{
+  "about": "SHA-256 pins of the frozen benchmark corpora; scripts/check-frozen-corpora.py checks them (CI verify) and --update records a deliberate change.",
+  "patterns": [
+    "benchmarks/english-*.jsonl",
+    "benchmarks/english-*-manifest.json",
+    "benchmarks/heldout/*.jsonl",
+    "benchmarks/heldout/TAXONOMY.md",
+    "benchmarks/heldout/src/*.py",
+    "benchmarks/heldout/src/**/*.txt",
+    "benchmarks/typo-fuzz/*.jsonl",
+    "benchmarks/typo-fuzz/src/*.txt",
+    "benchmarks/names/corpus.jsonl",
+    "benchmarks/names/heldout.jsonl",
+    "benchmarks/everyday/items.jsonl"
+  ],
+  "files": {
+    "benchmarks/english-100-clean.jsonl": {
+      "sha256": "c5abe05954f0166feb0992e79c899b8de5407dfc7d6578bd4e02563e6f74ea7b",
+      "bytes": 44534
+    },
+    "benchmarks/english-1000.jsonl": {
+      "sha256": "50d428206c88badbef80560b218de7a93438cc94b5e6d77ca67381b1580e481b",
+      "bytes": 1053013
+    },
+    "benchmarks/english-200-clean.jsonl": {
+      "sha256": "f1595442f5a76ac58a078283517c4ba056f339b154710c77eaf9357affebb804",
+      "bytes": 88470
+    },
+    "benchmarks/english-2000.jsonl": {
+      "sha256": "a9d16beb506d78667894b870d64e63c70d91e33defa68e3a9309694824c16478",
+      "bytes": 2100746
+    },
+    "benchmarks/english-1000-manifest.json": {
+      "sha256": "1f77c27f4542e18f75071c47de3f529133fa9aff39bda569a2a0079c4e1efb4e",
+      "bytes": 1131
+    },
+    "benchmarks/english-2000-manifest.json": {
+      "sha256": "9b6197adedfbc3f10dee5cf09f57b5ebd24d9fd0770b1d3e035ab4b055f4b9cf",
+      "bytes": 595
+    },
+    "benchmarks/heldout/clean.jsonl": {
+      "sha256": "440cceafe82c4cb5d79f0e6ab1148ffe80b5f3505643bc715a6d795d31b9f93d",
+      "bytes": 152568
+    },
+    "benchmarks/heldout/errors.jsonl": {
+      "sha256": "4d8296e06aa1f0f177d70be8c92a8b9a742938ee8b2d9fd3ddfdcb7cd1444eda",
+      "bytes": 761087
+    },
+    "benchmarks/heldout/TAXONOMY.md": {
+      "sha256": "ccd430e3e2c6987962ee9df8d09f0a4c6789c568310fb3429b27132e7c1e0a50",
+      "bytes": 16107
+    },
+    "benchmarks/heldout/src/build.py": {
+      "sha256": "69b6aea6b69f1ede1d71d45dcb31e598ba76687d610ce9f36a3d252903572f8d",
+      "bytes": 4401
+    },
+    "benchmarks/heldout/src/taxonomy.py": {
+      "sha256": "dce34224d260dd1de352c65d5232d3bec1a35fbeb6bc8403fd75d0652bf365be",
+      "bytes": 17187
+    },
+    "benchmarks/heldout/src/clean/01_tricky_real_word.txt": {
+      "sha256": "4c97bc938df85d41b4cedb7e240072e4feb56c572a143e9dc0fbb8eedab89d02",
+      "bytes": 4103
+    },
+    "benchmarks/heldout/src/clean/02_homophones_fragments.txt": {
+      "sha256": "940519f47c104333264399d2a44445e9e92ffd4751b7351a300df64ad1177e57",
+      "bytes": 2625
+    },
+    "benchmarks/heldout/src/clean/03_names_code.txt": {
+      "sha256": "d6f7c93af8c72cb5d2903b7537ac9935b4a57a590ede1713b7dac3f9e3180d0b",
+      "bytes": 5381
+    },
+    "benchmarks/heldout/src/clean/04_punct_grammar.txt": {
+      "sha256": "f8cf329c8746f4933f9e3da9f695713dbcb6adb56a1fd5e6f429be2a7c61ca33",
+      "bytes": 8678
+    },
+    "benchmarks/heldout/src/clean/05_registers_gb.txt": {
+      "sha256": "56e61606bbc7dcf2a48a3b2dc346275296148a091e38a6e2a156b2a0b404b194",
+      "bytes": 11533
+    },
+    "benchmarks/heldout/src/errors/01_real_word.txt": {
+      "sha256": "388792d6411b69d8805d30fb1022e9b19385d160ce19289ea6a345fa6bb483f0",
+      "bytes": 10381
+    },
+    "benchmarks/heldout/src/errors/02_spelling.txt": {
+      "sha256": "04ebc752c14fb6020fe534fddd2b51d2f30c27f87f915e5b957f15f494a12198",
+      "bytes": 11719
+    },
+    "benchmarks/heldout/src/errors/03_agreement.txt": {
+      "sha256": "9c1d5eb88e82f72c20aa66c6b93f8a486d9d18c9762b435947b26252131f61d5",
+      "bytes": 10582
+    },
+    "benchmarks/heldout/src/errors/04_verb_form.txt": {
+      "sha256": "8dfcbbf10f9b2ceea303cf592ee0ebf5bc18c7543be280cd74f143ff16a1bccc",
+      "bytes": 9723
+    },
+    "benchmarks/heldout/src/errors/05_articles.txt": {
+      "sha256": "1b3f187bd751c6bc54b7ae3266af641bf298335ceae628b6275a9e99d1b096ea",
+      "bytes": 6874
+    },
+    "benchmarks/heldout/src/errors/06_prepositions.txt": {
+      "sha256": "7428d1745130458899d227a9650a602be838e6adfdde4f2ac5e7ff3f0e5ca7ea",
+      "bytes": 5269
+    },
+    "benchmarks/heldout/src/errors/07_usage_words_order.txt": {
+      "sha256": "3582526eedc657882eca25b70f9dd92822648fdec23d0d4aa404d2c763162961",
+      "bytes": 11968
+    },
+    "benchmarks/heldout/src/errors/08_punctuation.txt": {
+      "sha256": "7707d6f95bc1e2ce87620b444863840f855f860398898c88f5549e3bc630545c",
+      "bytes": 21694
+    },
+    "benchmarks/heldout/src/errors/09_caps_runon_contr_mixed.txt": {
+      "sha256": "dc8117e7a220a0d2afe1b05c932196f3578ab74bc0c66490f03aa0e722d28a81",
+      "bytes": 15552
+    },
+    "benchmarks/heldout/src/errors/10_mixed.txt": {
+      "sha256": "83fdbf78760effd17264195c43b6040d5e6f42aa69a8198d771f35b7ca1f9519",
+      "bytes": 8523
+    },
+    "benchmarks/heldout/src/errors/11_topup.txt": {
+      "sha256": "2ee6f0e13f9867f3771f3a7a58d522a2c315a3a5ed5e679ca15247fda8e0573b",
+      "bytes": 7365
+    },
+    "benchmarks/typo-fuzz/dev-clean.jsonl": {
+      "sha256": "438c134b644306d6e940ab32cf9482fb1b1826e2517a39fd42f22d96da95da7a",
+      "bytes": 41328
+    },
+    "benchmarks/typo-fuzz/dev.jsonl": {
+      "sha256": "419fd4d9f84c8eb7a5fa9584af2051e57d161940b86bb6d0737a29975ec6f9c0",
+      "bytes": 5910679
+    },
+    "benchmarks/typo-fuzz/test-clean.jsonl": {
+      "sha256": "01f6ab7f8fadc8385533296ebd62229fa51ec4eebe499c94261de275d6d0f366",
+      "bytes": 25538
+    },
+    "benchmarks/typo-fuzz/test.jsonl": {
+      "sha256": "9f21885b49f1b4ed14b1c113ca8108014b62cd33092b68ae6190de01a32302db",
+      "bytes": 4379674
+    },
+    "benchmarks/typo-fuzz/src/dev-extra.txt": {
+      "sha256": "0d9b7807d18dbb537cf4fa06ef82645e4b3c459cc6e2750a7fa18f5d25287b3d",
+      "bytes": 1977
+    },
+    "benchmarks/typo-fuzz/src/test-sentences.txt": {
+      "sha256": "d668dea6b0994db4a3e5b44b3ba135e76112f3d61b9ccc14362e279cfab95a80",
+      "bytes": 8548
+    },
+    "benchmarks/names/corpus.jsonl": {
+      "sha256": "5a7755761dc393d42f5ffec858e208382577cf650b5479f46a489c1f141bf167",
+      "bytes": 1282262
+    },
+    "benchmarks/names/heldout.jsonl": {
+      "sha256": "dd7bc727ad6e6d44253cce8f071268e575ac286213824cb6e40c9eed9f550d22",
+      "bytes": 215198
+    },
+    "benchmarks/everyday/items.jsonl": {
+      "sha256": "7063e9311e9cfaeb81ef6a0490a0546112a72c2fc0267b445390f428deb753cf",
+      "bytes": 725760
+    }
+  }
+}
