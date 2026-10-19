@@ -24,7 +24,7 @@ The dashed green border is the privacy boundary: the app, the engine and the mod
 - the hourly update check (Sparkle fetches `appcast.xml` from the latest GitHub release and verifies EdDSA signatures; it can be turned off in Settings; see [releases](releases.md)). The bottom row of the diagram shows it: Sparkle in the app, a plain HTTPS GET of the feed about once an hour, no system profile, and only an update whose EdDSA signature verifies is installed;
 - the one-time download of the model pack (below), from release assets whose SHA-256 hashes are compiled into the app.
 
-Parzr sends no reports of any kind. Anonymous wrong-suggestion reports (opt-out) are planned for a later release and are not in this one.
+The one other request is an anonymous wrong-suggestion report (on by default, off in Settings, Privacy), sent only when the writer clicks "Report wrong suggestion": the suggestion and the text around it, redacted on the Mac, as an HTTPS POST to `reports.parzr.app`. What it holds and how long it is kept: [privacy](privacy.md) and [worker/](../worker/README.md).
 
 ## Models
 
