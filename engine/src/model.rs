@@ -587,6 +587,10 @@ fn worked_examples(mode: Mode) -> &'static [(&'static str, &'static str)] {
                 "I can't make the call.",
                 "Unfortunately, I can't make the call.",
             ),
+            (
+                "I wanted to take a moment to let you know that the invoice was paid on Monday.",
+                "Just a quick note: the invoice was paid on Monday. Thanks!",
+            ),
         ],
         Mode::Concise => &[
             (
@@ -676,6 +680,13 @@ fn generate_with(
                 .map_or(output.clone(), |rest| rest.trim_start().to_owned()),
             _ => output,
         };
+        // A rewrite opens with a greeting only when the writer wrote one ("Hello, I would
+        // appreciate..." for "can u send me the file" is the model's, not the writer's).
+        let output = if req.mode == Mode::Fix {
+            output
+        } else {
+            drop_new_greeting(&masked, &output)
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -691,6 +702,43 @@ fn generate_with(
     Ok(format!("{prefix}{body}{suffix}"))
 }
 
+/// Greetings a rewrite may open with.
+const GREETINGS: &[&str] = &[
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "hello there",
+    "hi there",
+    "hey there",
+    "greetings",
+    "hello",
+    "hiya",
+    "hey",
+    "hi",
+    "dear",
+];
+/// The greeting `text` opens with, if any ("Hello," "Hi there!").
+fn greeting(text: &str) -> Option<&'static str> {
+    let lower = text.trim_start().to_lowercase();
+    GREETINGS.iter().copied().find(|g| {
+        lower
+            .strip_prefix(g)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with([',', '!', '.', ' ', '\n']))
+    })
+}
+/// `output` without a greeting it opens with when `masked` (the passage) opened with none. A
+/// greeting before a name placeholder ("Hi ZXQPARZRKEEP0QXZ,") stays: the name is the writer's.
+fn drop_new_greeting(masked: &str, output: &str) -> String {
+    let Some(g) = greeting(output).filter(|_| greeting(masked).is_none()) else {
+        return output.to_owned();
+    };
+    let body = output.trim_start();
+    let rest = body[g.len()..].trim_start_matches([',', '!', '.', ' ']);
+    if rest.starts_with("ZXQPARZRKEEP") || rest.trim().is_empty() {
+        return output.to_owned();
+    }
+    capitalize_first(rest)
+}
 /// `output` without the articles it puts right before a name placeholder where `masked` has
 /// none ("the ZXQPARZRKEEP0QXZ" for a name the passage wrote bare).
 fn drop_new_articles(masked: &str, output: &str, literals: &[Literal]) -> String {
@@ -2251,7 +2299,8 @@ fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
             let shorthand = if mode == Mode::Professional {
                 2 * less(s.chat, o.chat) - more(s.exclaims, o.exclaims)
             } else {
-                0
+                // Friendly: padding said plainly ("Just a quick note: …").
+                less(s.padding, o.padding) / 2
             };
             3 * less(s.rude, o.rude) + reworded + shorthand
                 - 2 * more(s.emphasis, o.emphasis)
@@ -2291,7 +2340,14 @@ fn weak(mode: Mode, source: &str, output: &str) -> bool {
         Mode::Professional => {
             unchanged && complaint || o.rude > 0 || o.chat > 0 || o.emphasis > s.emphasis
         }
-        Mode::Friendly => unchanged && complaint || o.rude > 0 || o.emphasis > s.emphasis,
+        // A padded message whose padding all stayed ("I wanted to take a moment to let you know…")
+        // can be said more warmly and plainly.
+        Mode::Friendly => {
+            unchanged && complaint
+                || s.padding >= 3 && o.padding >= s.padding
+                || o.rude > 0
+                || o.emphasis > s.emphasis
+        }
         Mode::Concise | Mode::Direct => unchanged && s.words >= 8,
         Mode::Fix => false,
     }
@@ -2540,7 +2596,8 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let (failed, gain) = candidate_score(req, &all, false);
         let first_output = apply_edits(&req.text, &all)?.0;
         // A Professional or Friendly second answer can only earn its place by removing an
-        // insult or chat shorthand (gain 2 or more): without one in the text, it is not asked.
+        // insult, chat shorthand (Professional) or padding (Friendly), gain 2 or more: without
+        // one in the text, it is not asked.
         let marks = crate::meaning::tone_marks(&req.text);
         let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
             || 3 * marks.rude
@@ -2548,7 +2605,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                 + if req.mode == Mode::Professional {
                     2 * marks.chat
                 } else {
-                    0
+                    marks.padding / 2
                 }
                 >= 2;
         let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
@@ -2559,7 +2616,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                 let (failed2, gain2) = candidate_score(req, e, true);
                 // Never more failed segments than the first; better on tone, or as good with fewer
                 // failures. A Professional or Friendly one must also take out what its tone
-                // removes (an insult, chat shorthand): rewording alone ("known for its delicious
+                // removes (an insult, chat shorthand, padding): rewording alone ("known for its delicious
                 // food") is how examples-led answers embellish neutral text.
                 let earned = !matches!(req.mode, Mode::Professional | Mode::Friendly) || gain2 >= 2;
                 earned && failed2 <= failed && (gain2 > gain || gain2 == gain && failed2 < failed)
@@ -3877,6 +3934,40 @@ mod tests {
         assert!(weak(Direct, padded, padded));
         assert!(!weak(Concise, "Fix it now.", "Fix it now."));
         assert!(!weak(Direct, padded, "The budget is still $450."));
+    }
+
+    #[test]
+    fn a_rewrite_opens_with_a_greeting_only_when_the_writer_did() {
+        let cases = [
+            (
+                "Can you send me the deck?",
+                "Hello, could you please send me the deck?",
+                "Could you please send me the deck?",
+            ),
+            (
+                "Hey can you send me the deck?",
+                "Hello, could you please send me the deck?",
+                "Hello, could you please send me the deck?",
+            ),
+            (
+                "Thanks for the deck.",
+                "Hi there! Thanks so much for the deck.",
+                "Thanks so much for the deck.",
+            ),
+            (
+                "Send it to ZXQPARZRKEEP0QXZ.",
+                "Hi ZXQPARZRKEEP0QXZ, please send it.",
+                "Hi ZXQPARZRKEEP0QXZ, please send it.",
+            ),
+            (
+                "His team is ready.",
+                "His team is ready.",
+                "His team is ready.",
+            ),
+        ];
+        for (masked, output, expected) in cases {
+            assert_eq!(drop_new_greeting(masked, output), expected, "{output}");
+        }
     }
 
     #[test]
