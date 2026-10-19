@@ -49,11 +49,17 @@ final class ClipboardTransaction {
     }
     static func paste(to pid: pid_t) throws { try key(9, to: pid, failure: "macOS could not send the paste shortcut.") }
     private static func key(_ code: CGKeyCode, to pid: pid_t, failure: String) throws {
+        guard let (down, up) = shortcut(code) else { throw ParzrError.message(failure) }
+        down.postToPid(pid); up.postToPid(pid)
+    }
+    /// Cmd plus the key, down and up, tagged as Parzr's own (9 is V, 8 is C).
+    static func shortcut(_ code: CGKeyCode) -> (CGEvent, CGEvent)? {
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { throw ParzrError.message(failure) }
+              let up = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false) else { return nil }
         down.flags = .maskCommand; up.flags = .maskCommand
-        down.postToPid(pid); up.postToPid(pid)
+        SyntheticEvent.mark(down); SyntheticEvent.mark(up)
+        return (down, up)
     }
     /// Copies the app's current selection with Cmd+C and returns it, or nil if the clipboard never changed.
     /// The user's clipboard is always restored. Canvas editors such as Google Docs expose no AX text.

@@ -45,6 +45,8 @@ final class PassiveObserver {
         // Some editors omit AX value notifications after paste. Native input events
         // schedule the same bounded check; event text is never stored, and only used to tell whether the key ended a word.
         inputMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Parzr's own typed replacement or paste shortcut: the value change it causes still schedules a check, but it is not the writer typing.
+            guard !SyntheticEvent.isParzr(event.cgEvent) else { return }
             let wordEnd = CheckPacer.endsWord(event.characters)
             MainActor.assumeIsolated { self?.noteKeystroke(); self?.keyPressed(wordEnd: wordEnd) }
         }

@@ -168,9 +168,29 @@ enum ReplacePlan {
     }
 }
 
+/// Parzr's own key events (typed replacements, Cmd+C and Cmd+V) carry this value in the event's source user-data field,
+/// so Parzr's monitors can tell them from the writer's keys: Parzr's typing never counts as the writer typing.
+enum SyntheticEvent {
+    /// "Parzr" in ASCII, then a fixed tail: any value works as long as nothing else posts it.
+    static let tag: Int64 = 0x5061_727A_7200_51A7
+    static func mark(_ event: CGEvent) { event.setIntegerValueField(.eventSourceUserData, value: tag) }
+    static func isParzr(_ event: CGEvent?) -> Bool { event?.getIntegerValueField(.eventSourceUserData) == tag }
+}
+
 enum TypedReplacement {
     enum Event: Equatable { case text([UInt16]), delete }
     static let chunkSize = 20
+    /// The key down and up for one event, tagged as Parzr's own.
+    static func keyEvents(for event: Event) -> [CGEvent] {
+        [true, false].compactMap { down in
+            let key: CGKeyCode = { if case .delete = event { return 51 } else { return 0 } }()
+            guard let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { return nil }
+            keyEvent.flags = [] // never inherit the Option held for the Parzr shortcut
+            if case .text(let units) = event { keyEvent.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units) }
+            SyntheticEvent.mark(keyEvent)
+            return keyEvent
+        }
+    }
     /// Whole characters per event, at most `chunk` UTF-16 units each (a longer character is sent alone); deleting needs a Delete key press.
     static func events(for replacement: String, chunk: Int = chunkSize) -> [Event] {
         guard !replacement.isEmpty else { return [.delete] }
@@ -336,12 +356,6 @@ extension AX {
         return verdict
     }
     private static func post(_ event: TypedReplacement.Event, to pid: pid_t) {
-        for down in [true, false] {
-            let key: CGKeyCode = { if case .delete = event { return 51 } else { return 0 } }()
-            guard let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { continue }
-            keyEvent.flags = [] // never inherit the Option held for the Parzr shortcut
-            if case .text(let units) = event { keyEvent.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units) }
-            keyEvent.postToPid(pid)
-        }
+        for keyEvent in TypedReplacement.keyEvents(for: event) { keyEvent.postToPid(pid) }
     }
 }
