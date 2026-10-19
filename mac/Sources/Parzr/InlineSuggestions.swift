@@ -156,12 +156,29 @@ final class InlineSuggestions {
         if edits.isEmpty { overlay.clear(); return true }
         overflow = max(0, edits.count - maxMarks)
         var probe: (range: NSRange, rect: CGRect)?
-        let placed: [(edit: WritingEdit, global: NSRange, bounds: CGRect)] = edits.prefix(maxMarks).compactMap { edit in
-            let local = edit.range.length > 0 ? edit.range : (snapshot.text as NSString).rangeOfComposedCharacterSequence(at: min(edit.start_utf16, max(0, snapshot.text.utf16.count - 1)))
+        let placed: [Placed] = edits.prefix(maxMarks).compactMap { edit in
+            let text = snapshot.text as NSString
+            let local = edit.range.length > 0 ? edit.range : text.rangeOfComposedCharacterSequence(at: min(edit.start_utf16, max(0, snapshot.text.utf16.count - 1)))
             let global = NSRange(location: snapshot.selection.location + local.location, length: local.length)
             guard let bounds = AX.bounds(snapshot.element, global), bounds.width > 0, bounds.height < 70,
                   SelfTestTarget.shows(bounds) else { return nil }
-            return (edit, global, bounds)
+            // The underline covers only the words the fix changes, one stroke per visual line; the highlight covers the whole edit.
+            let original = text.substring(with: local)
+            let span = edit.range.length > 0 ? MarkSpan.changed(original: original, replacement: edit.replacement) : NSRange(location: 0, length: local.length)
+            let changed = NSRange(location: global.location + span.location, length: span.length)
+            @MainActor func rects(_ range: NSRange, whole: CGRect?) -> [CGRect] {
+                let words = (snapshot.text as NSString).substring(with: NSRange(location: range.location - snapshot.selection.location, length: range.length))
+                if MarkSpan.mayWrap(words) {
+                    let lines = AX.lineRects(snapshot.element, range).filter { $0.width > 0 && $0.height < 70 && SelfTestTarget.shows($0) }
+                    if lines.count > 1 { return lines }
+                }
+                if let whole { return [whole] }
+                guard let rect = AX.bounds(snapshot.element, range), rect.width > 0, rect.height < 70, SelfTestTarget.shows(rect) else { return [] }
+                return [rect]
+            }
+            let highlights = Preferences.shared.highlightFill || changed == global ? rects(global, whole: bounds) : [bounds]
+            let underlines = changed == global ? highlights : rects(changed, whole: nil)
+            return (edit, global, bounds, underlines.isEmpty ? highlights : underlines, highlights)
         }
         let fresh = revealAfter > 0 ? MarkReveal.fresh(placed.map(\.edit), at: snapshot.selection.location, visible: onScreen) : []
         let now = placed.filter { !fresh.contains($0.edit.id) }
@@ -180,7 +197,8 @@ final class InlineSuggestions {
         return true
     }
     /// Washes, highlights and underlines for the placed edits of one check.
-    private func items(for placed: [(edit: WritingEdit, global: NSRange, bounds: CGRect)], snapshot: SelectionSnapshot, result: RewriteResult) -> [MarkItem] {
+    private typealias Placed = (edit: WritingEdit, global: NSRange, bounds: CGRect, underlines: [CGRect], highlights: [CGRect])
+    private func items(for placed: [Placed], snapshot: SelectionSnapshot, result: RewriteResult) -> [MarkItem] {
         var items: [MarkItem] = []
         if Preferences.shared.highlightFill, !placed.isEmpty {
             var washes = 0
@@ -194,13 +212,15 @@ final class InlineSuggestions {
                 }
             }
         }
-        for (edit, global, bounds) in placed {
+        for (edit, global, bounds, underlines, highlights) in placed {
             let style = ["Style", "Tone"].contains(edit.category)
-            if Preferences.shared.highlightFill { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: bounds, style: style), owner: edit.id)) }
-            items.append(MarkItem(shape: MarkShape(kind: .underline, rect: bounds, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
-                guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
-                self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
-            })
+            if Preferences.shared.highlightFill { for rect in highlights { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: rect, style: style), owner: edit.id)) } }
+            for rect in underlines {
+                items.append(MarkItem(shape: MarkShape(kind: .underline, rect: rect, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
+                    guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
+                    self?.present(snapshot: snapshot, result: result, focused: edit, anchor: rect)
+                })
+            }
         }
         return items
     }

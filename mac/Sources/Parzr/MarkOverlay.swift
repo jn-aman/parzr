@@ -122,8 +122,10 @@ final class MarkView: NSView, NSViewToolTipOwner {
     func element(for owner: String) -> MarkElement? { accessibilityElements().first { $0.accessibilityIdentifier() == owner } }
     private func accessibilityElements() -> [MarkElement] {
         if elements.isEmpty {
+            // An edit wrapped onto two lines has two strokes but is one button.
+            var owners: Set<String> = []
             elements = items.compactMap { item in
-                guard item.shape.kind == .underline else { return nil }
+                guard item.shape.kind == .underline, owners.insert(item.owner).inserted else { return nil }
                 let element = MarkElement()
                 element.setAccessibilityRole(.button); element.setAccessibilityLabel(item.label); element.setAccessibilityIdentifier(item.owner)
                 element.setAccessibilityParent(self); element.setAccessibilityFrame(item.shape.hit); element.press = item.press

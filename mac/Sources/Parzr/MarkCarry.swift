@@ -64,3 +64,35 @@ enum MarkReveal {
         Set(edits.filter { !visible.contains(Key($0, at: origin)) }.map(\.id))
     }
 }
+
+/// Where an underline goes inside an edit: only the words the fix changes ("a" in "a apple" → "an apple", the second "the" in
+/// "the the"), so the stroke says what will change while the highlight shows the whole edit.
+enum MarkSpan {
+    /// The changed part of `original` (UTF-16, local to it), widened to whole words and without edge spaces; all of it when nothing narrower fits.
+    static func changed(original: String, replacement: String) -> NSRange {
+        let a = Array(original.utf16), b = Array(replacement.utf16), shared = min(a.count, b.count)
+        guard !a.isEmpty else { return NSRange(location: 0, length: 0) }
+        var prefix = 0, suffix = 0
+        while prefix < shared, a[prefix] == b[prefix] { prefix += 1 }
+        while suffix < shared - prefix, a[a.count - 1 - suffix] == b[b.count - 1 - suffix] { suffix += 1 }
+        var start = prefix, end = a.count - suffix
+        // A cut inside a word takes the whole word: "teh" → "the" underlines "teh", not "eh".
+        while start > 0, start < a.count, isWord(a[start]), isWord(a[start - 1]) { start -= 1 }
+        while end > 0, end < a.count, isWord(a[end - 1]), isWord(a[end]) { end += 1 }
+        // A pure insertion ("a" → "an", a missing comma) marks the word it attaches to.
+        if start == end {
+            if start > 0 { start -= 1; while start > 0, isWord(a[start - 1]), isWord(a[start]) { start -= 1 } }
+            else { end += 1; while end < a.count, isWord(a[end - 1]), isWord(a[end]) { end += 1 } }
+        }
+        while start < end, isSpace(a[start]) { start += 1 }
+        while end > start, isSpace(a[end - 1]) { end -= 1 }
+        return start < end ? NSRange(location: start, length: end - start) : NSRange(location: 0, length: a.count)
+    }
+    /// Text that can break across lines: it has a space or a line break in it.
+    static func mayWrap(_ text: String) -> Bool { text.unicodeScalars.contains { CharacterSet.whitespacesAndNewlines.contains($0) } }
+    private static func isSpace(_ unit: UInt16) -> Bool { Unicode.Scalar(unit).map { CharacterSet.whitespacesAndNewlines.contains($0) } ?? false }
+    private static func isWord(_ unit: UInt16) -> Bool {
+        guard let scalar = Unicode.Scalar(unit) else { return true } // half of a surrogate pair: an emoji or a rare letter
+        return CharacterSet.alphanumerics.contains(scalar) || scalar == "'" || scalar == "\u{2019}" || scalar == "-"
+    }
+}
