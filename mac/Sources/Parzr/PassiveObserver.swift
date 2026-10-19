@@ -12,6 +12,9 @@ final class PassiveObserver {
     private var observed: [(AXUIElement, String)] = []
     private var work: Task<Void, Never>?
     private var pacer = CheckPacer()
+    private var typing = TypingMonitor()
+    /// How long marks that are new to the writer wait before they show, given how fast they are typing (ms).
+    var revealDelay: Double { typing.delay(at: ProcessInfo.processInfo.systemUptime) }
     /// A check is waiting out its delay; false once it has started reading the editor.
     private var pending = false
     /// Quiet re-checks after a typing check left sentence swaps for the model (cold, busy or over budget),
@@ -108,7 +111,9 @@ final class PassiveObserver {
     func keyPressed(wordEnd: Bool) {
         guard !stopped, let attachedPID, SelfTestTarget.watched?.processIdentifier == attachedPID else { return }
         pacer.ceiling = Preferences.shared.boundedCheckingDelay
-        schedule(pacer.key(at: ProcessInfo.processInfo.systemUptime, wordEnd: wordEnd))
+        let now = ProcessInfo.processInfo.systemUptime
+        typing.key(at: now)
+        schedule(pacer.key(at: now, wordEnd: wordEnd))
     }
     private func add(_ element: AXUIElement, _ notification: String) {
         guard let observer else { return }

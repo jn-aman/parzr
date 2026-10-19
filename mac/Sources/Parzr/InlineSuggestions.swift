@@ -28,7 +28,9 @@ final class InlineSuggestions {
     private var stopped = false
     /// Headless tests never watch global events or order the invisible warm-up card on screen.
     private let headless: Bool
-    private var shown: (snapshot: SelectionSnapshot, result: RewriteResult, probe: (range: NSRange, rect: CGRect)?)?
+    /// `visible`: ids of the edits whose marks are on screen; the rest of a fresh check may still be waiting out the typing delay.
+    private var shown: (snapshot: SelectionSnapshot, result: RewriteResult, probe: (range: NSRange, rect: CGRect)?, visible: Set<String>)?
+    private var reveal: Task<Void, Never>?
     private(set) var overflow = 0
     private var relayout: Task<Void, Never>?
     private let maxMarks = 32
@@ -101,7 +103,7 @@ final class InlineSuggestions {
     }
     func dismiss() { overlay.clear(); reset() }
     /// Forgets the shown result and the card but leaves the marks on screen, so the next show can keep the unchanged ones.
-    private func reset() { closeCard(); shown = nil; overflow = 0; relayout?.cancel(); relayout = nil }
+    private func reset() { closeCard(); shown = nil; overflow = 0; relayout?.cancel(); relayout = nil; reveal?.cancel(); reveal = nil }
     func dismissIfStale() {
         // Marks and an open card persist across clicks and caret moves; they go only
         // when the text, focus, position or the passive/app settings no longer match.
@@ -115,10 +117,10 @@ final class InlineSuggestions {
     /// Typing changed the text under the marks: the marks the change did not touch move with the text and stay on screen until the next
     /// check replaces them, instead of all vanishing on every keystroke. False when nothing could be carried (the caller then clears).
     private func carryOver() -> Bool {
-        guard let s = shown?.snapshot, s.automatic, s.headlessEditor == nil, s.expectedSelection.length == 0, let old = s.fullText, s.checkingEnabled,
+        guard let s = shown?.snapshot, let visible = shown?.visible, s.automatic, s.headlessEditor == nil, s.expectedSelection.length == 0, let old = s.fullText, s.checkingEnabled,
               !s.app.isTerminated, s.app == SelfTestTarget.watched, s.automaticEditorIsCurrent(), let now = AX.text(s.element), now != old,
               let caret = AX.selection(s.element), caret.length == 0, let result = shown?.result,
-              let carried = MarkCarry.remap(edits: result.edits, selection: s.selection, inlineBreaks: s.inlineBreaks, from: old, to: now), !carried.edits.isEmpty else { return false }
+              let carried = MarkCarry.remap(edits: result.edits.filter { visible.contains($0.id) }, selection: s.selection, inlineBreaks: s.inlineBreaks, from: old, to: now), !carried.edits.isEmpty else { return false }
         let text = WebGeometry.joining((now as NSString).substring(with: carried.selection), origin: carried.selection.location, breaks: carried.inlineBreaks)
         let moved = SelectionSnapshot(app: s.app, element: s.element, selection: carried.selection, expectedSelection: caret, text: text, fullText: now, bounds: s.bounds,
                                       richText: nil, copied: false, canPatch: s.canPatch, docs: s.docs, inlineBreaks: carried.inlineBreaks, automatic: true)
@@ -134,17 +136,23 @@ final class InlineSuggestions {
         let next = IgnoreRevision(pid: snapshot.app.processIdentifier, element: CFHash(snapshot.element))
         if revision != next { ignored = []; revision = next }
     }
+    /// `revealAfter` (ms): how long marks that were not already on screen wait while the writer types fast (`TypingMonitor`); marks already shown stay put.
     @discardableResult
-    func show(snapshot: SelectionSnapshot, result: RewriteResult) -> Bool {
+    func show(snapshot: SelectionSnapshot, result: RewriteResult, revealAfter: Double = 0) -> Bool {
         guard snapshot.checkingEnabled, snapshot.automaticEditorIsCurrent() else { dismiss(); return false }
-        if let current = shown, overlay.hasMarks, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
+        if let current = shown, overlay.hasMarks || reveal != nil, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
            current.snapshot.selection == snapshot.selection, current.result.edits == result.edits, marksAreCurrent {
-            shown = (snapshot, result, current.probe); return true
+            shown = (snapshot, result, current.probe, current.visible); return true
         }
+        // Marks already on screen over this same text, in document offsets: they are not new to the writer.
+        let onScreen: Set<MarkReveal.Key> = shown.flatMap { current in
+            guard CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText else { return nil }
+            return Set(current.result.edits.filter { current.visible.contains($0.id) }.map { MarkReveal.Key($0, at: current.snapshot.selection.location) })
+        } ?? []
         reset(); prepareRevision(snapshot)
         guard snapshot.app == SelfTestTarget.watched, !snapshot.text.isEmpty else { overlay.clear(); return false }
         let edits = result.edits.filter { !ignored.contains(IgnoreKey.of($0)) }
-        shown = (snapshot, result, nil)
+        shown = (snapshot, result, nil, [])
         if edits.isEmpty { overlay.clear(); return true }
         overflow = max(0, edits.count - maxMarks)
         var probe: (range: NSRange, rect: CGRect)?
@@ -155,6 +163,24 @@ final class InlineSuggestions {
                   SelfTestTarget.shows(bounds) else { return nil }
             return (edit, global, bounds)
         }
+        let fresh = revealAfter > 0 ? MarkReveal.fresh(placed.map(\.edit), at: snapshot.selection.location, visible: onScreen) : []
+        let now = placed.filter { !fresh.contains($0.edit.id) }
+        overlay.apply(items(for: now, snapshot: snapshot, result: result))
+        if let first = now.first ?? placed.first { probe = (first.global, first.bounds) }
+        shown = (snapshot, result, probe, Set(now.map(\.edit.id)))
+        guard !fresh.isEmpty else { return overlay.hasMarks }
+        // New marks land when typing slows, unless the text moves first (then the carried marks and the next check take over).
+        reveal = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(Int(revealAfter.rounded())))
+            guard !Task.isCancelled, let self, let current = self.shown, current.snapshot.selection == snapshot.selection, current.snapshot.fullText == snapshot.fullText, self.textIsCurrent else { return }
+            self.reveal = nil
+            self.overlay.apply(self.items(for: placed, snapshot: snapshot, result: result))
+            self.shown = (snapshot, result, current.probe, Set(placed.map(\.edit.id)))
+        }
+        return true
+    }
+    /// Washes, highlights and underlines for the placed edits of one check.
+    private func items(for placed: [(edit: WritingEdit, global: NSRange, bounds: CGRect)], snapshot: SelectionSnapshot, result: RewriteResult) -> [MarkItem] {
         var items: [MarkItem] = []
         if Preferences.shared.highlightFill, !placed.isEmpty {
             var washes = 0
@@ -175,11 +201,8 @@ final class InlineSuggestions {
                 guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
                 self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
             })
-            if probe == nil { probe = (global, bounds) }
         }
-        overlay.apply(items)
-        shown = (snapshot, result, probe)
-        return overlay.hasMarks
+        return items
     }
     private func card() -> FloatingPanel {
         if let correction { return correction }

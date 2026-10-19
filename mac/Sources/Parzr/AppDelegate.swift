@@ -236,7 +236,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 _ = self.inline.present(snapshot: snapshot, result: result, anchor: anchor, activate: false)
                 return
             }
-            if !self.inline.show(snapshot: snapshot, result: result) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
+            if !self.inline.show(snapshot: snapshot, result: result, revealAfter: self.passive?.revealDelay ?? 0) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
         // The selection card offers one rewrite after a Fix check; the Studio's checks do not.

@@ -51,3 +51,16 @@ enum MarkCarry {
         return nil
     }
 }
+/// Which marks of a new check are new to the writer. Marks already on screen (carried over typing or from the last check) show at once;
+/// new ones wait out the typing-speed delay (`TypingMonitor`).
+enum MarkReveal {
+    /// What identifies a mark across checks of the same text: where it sits in the document and what it would change.
+    struct Key: Hashable {
+        let start: Int, end: Int, replacement: String, rule: String
+        init(_ edit: WritingEdit, at origin: Int) { start = origin + edit.start_utf16; end = origin + edit.end_utf16; replacement = edit.replacement; rule = edit.rule_id }
+    }
+    /// Ids of the `edits` (local to a paragraph at `origin`) that were not already on screen.
+    static func fresh(_ edits: [WritingEdit], at origin: Int, visible: Set<Key>) -> Set<String> {
+        Set(edits.filter { !visible.contains(Key($0, at: origin)) }.map(\.id))
+    }
+}
