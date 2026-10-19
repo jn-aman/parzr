@@ -28,7 +28,7 @@ struct SuggestionReview: View {
                                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore(edit) }).fixedSize()
                                 if let name = edit.nameCandidate { NativeButton(title: "This is a name", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); ignore(edit) }).fixedSize() }
                                 else if edit.canAddToDictionary { NativeButton(title: "Save word", kind: .utility, label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore(edit) }).fixedSize() }
-                                if let report { NativeButton(title: "Report", kind: .utility, label: "Report wrong suggestion", action: { report(edit) }).fixedSize().help("Report this suggestion as wrong. Sends it anonymously, with names, numbers, emails and links removed.") }
+                                if let report { NativeButton(title: "Report", kind: .utility, label: "Report wrong suggestion", action: { report(edit) }).fixedSize().help("Report this suggestion as wrong. Sends it and the text around it anonymously, after removing names Parzr recognises, emails, phone numbers, other numbers, links and keys.") }
                                 Spacer()
                                 NativeButton(title: "Apply", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", enabled: !model.busy, action: { apply(edit) }).fixedSize()
                             }

@@ -117,7 +117,7 @@ struct OnboardingView: View {
                 }
             }
             if Reports.configured {
-            row("exclamationmark.bubble", "Send anonymous suggestion reports", "When you ignore or report a suggestion, its sentence is sent with names, emails, numbers and links removed on your Mac first. Change it any time in Settings, Privacy.") {
+            row("exclamationmark.bubble", "Send anonymous suggestion reports", "Only when you click Report wrong suggestion, Parzr sends it with the text around it, after removing names it recognises, emails, numbers, links and keys; the rest is sent as written. Kept 180 days. Change it any time in Settings, Privacy.") {
                 Toggle("Send anonymous suggestion reports", isOn: $preferences.shareReports).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize()
             }.graphiteSurface().frame(maxWidth: 480).help(StudioView.reportsDetail)
             }

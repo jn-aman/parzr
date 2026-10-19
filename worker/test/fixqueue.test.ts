@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { build, isoWeek, previousWeek, toJSONL, toMarkdown, weekRange, type Row } from '../src/fixqueue.ts';
+import { build, DAY_CAP, isoWeek, previousWeek, toJSONL, toMarkdown, weekRange, type Row } from '../src/fixqueue.ts';
 
 const row = (over: Partial<Row> = {}): Row => ({
   received_day: '2026-10-14',
@@ -32,22 +32,27 @@ test('ISO weeks', () => {
 });
 
 test('suggestions are grouped, scored and ranked', () => {
+  const typo = { rule: 'spelling.typo', original: 'teh', replacement: 'the', start_utf16: 0, end_utf16: 3 };
   const rows = [
-    row(), row({ action: 'dismissed', sentence: 'So I has a plan.', start_utf16: 5, end_utf16: 8 }), row({ action: 'dismissed', app: 'com.apple.Notes' }),
-    row({ rule: 'spelling.typo', original: 'teh', replacement: 'the', action: 'dismissed', sentence: 'teh end', start_utf16: 0, end_utf16: 3 }),
-    row({ rule: 'spelling.typo', original: 'teh', replacement: 'the', action: 'dismissed', sentence: 'teh end', start_utf16: 0, end_utf16: 3 }),
+    // has -> have: three distinct sentences over two days.
+    row(), row({ sentence: 'So I has a plan.', start_utf16: 5, end_utf16: 8 }), row({ received_day: '2026-10-15', app: 'com.apple.Notes' }),
+    // teh -> the: one sentence sent five times on one day (a retry storm or a script) counts once.
+    ...Array.from({ length: 5 }, () => row({ ...typo, sentence: 'teh end' })),
+    // Ignored suggestions are no longer reported; old rows are skipped.
+    row({ action: 'dismissed', sentence: 'I has it.' }),
+    row({ action: 'dismissed', rule: 'style.other', original: 'x', replacement: 'y', sentence: 'x y' }),
   ];
   const entries = build(rows, '2026-W42');
   assert.deepEqual(entries.map((e) => e.rule), ['grammar.i_agreement', 'spelling.typo']);
   const top = entries[0];
   assert.equal(top.id, '2026-W42-001');
-  assert.deepEqual(top.counts, { reported: 1, dismissed: 2 });
-  assert.equal(top.score, 5);
-  assert.equal(entries[1].score, 2);
-  assert.ok(!('wrong_rate' in top));
+  assert.deepEqual(top.counts, { reported: 3, sentences: 2, days: 2 });
+  assert.equal(top.score, 3, '2 distinct sentences on one day + 1 on another');
+  assert.deepEqual(entries[1].counts, { reported: 5, sentences: 1, days: 1 });
+  assert.equal(entries[1].score, 1);
   assert.deepEqual(top.apps, { 'com.apple.mail': 2, 'com.apple.Notes': 1 });
-  assert.equal(top.examples[0].action, 'reported', 'reported sentences come first');
   assert.equal(top.examples.length, 2, 'repeated sentences are listed once');
+  assert.ok(!top.examples.some((e) => e.text === 'I has it.'), 'dismissed rows are not examples');
   assert.equal(top.item.text, 'I has [number] dogs.');
   assert.equal(top.item.expected, null);
   const lines = toJSONL(entries).trim().split('\n');
@@ -55,9 +60,19 @@ test('suggestions are grouped, scored and ranked', () => {
   assert.equal(JSON.parse(lines[1]).rule, 'spelling.typo');
   const md = toMarkdown(entries, '2026-W42', rows.length);
   assert.match(md, /# Parzr fix queue 2026-W42/);
-  assert.match(md, /2026-10-12 to 2026-10-18: 5 reports, 2 suggestions/);
-  assert.match(md, /\| 001 \| 5 \| `grammar.i_agreement` \| rules \| has → have \| 1 \| 2 \|/);
-  assert.ok(!/Accepted/.test(md));
+  assert.match(md, /2026-10-12 to 2026-10-18: 10 reports, 2 suggestions/);
+  assert.match(md, /\| 001 \| 3 \| `grammar.i_agreement` \| rules \| has → have \| 2 \| 2 \|/);
+  assert.ok(!/Accepted|Dismissed/.test(md));
+});
+
+test('one day cannot top the queue: each day adds at most DAY_CAP', () => {
+  const burst = Array.from({ length: 40 }, (_, i) => row({ rule: 'spelling.burst', original: 'a', replacement: 'b', sentence: `a ${'x'.repeat(i)}`, start_utf16: 0, end_utf16: 1 }));
+  const steady = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15'].map((d) => row({ received_day: d }));
+  const entries = build([...burst, ...steady], '2026-W42');
+  assert.equal(entries[0].rule, 'grammar.i_agreement', 'four days beat one noisy day');
+  assert.equal(entries[0].score, 4);
+  assert.equal(entries[1].score, DAY_CAP);
+  assert.equal(entries[1].counts.sentences, 40);
 });
 
 test('the export script writes the week from an input file', () => {

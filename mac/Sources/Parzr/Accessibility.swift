@@ -245,6 +245,9 @@ struct SelectionSnapshot {
     var automatic = false
     /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
     var headlessEditor: NSTextView?
+    /// Whether "Report wrong suggestion" may send this text: decided at capture, never for an app on the exclusion list, a
+    /// field the host rules or sensitive-field keywords block, a secure field, or text read by copying (its field is unknown).
+    var reportable = false
     var checkingEnabled: Bool { Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) }
     func validateCheckingEligibility(preferences: Preferences = .shared) throws {
         guard preferences.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) else { throw ParzrError.message("Checking is paused or disabled for this app.") }
@@ -298,7 +301,15 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive)
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive,
+                                 reportable: reportable(app, element))
+    }
+    /// The same rules for Option+Space and automatic checks: the explicit shortcut may read a field automatic checking skips
+    /// (a search box, a form field), but a report never comes from one.
+    static func reportable(_ app: NSRunningApplication, _ element: AXUIElement) -> Bool {
+        let bundle = app.bundleIdentifier
+        return Compat.reportsAllowed(bundle: bundle, excludedByRules: HostRules.shared.excludesApp(bundle), enabled: Preferences.shared.enabled(for: bundle ?? ""),
+                                     secure: AX.isSecure(element) || IsSecureEventInputEnabled(), verdict: AX.hostVerdict(element), copied: false)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -386,7 +397,7 @@ struct SelectionSnapshot {
         SelectionSnapshot(app: app, element: editor, selection: selection, expectedSelection: expectedSelection, text: text, fullText: fullText, bounds: bounds,
                           richText: richText, copied: copied,
                           canPatch: fullText != nil && ReplacePlan.first(textSettable: AX.settable(editor, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(editor), docs: docs) != nil,
-                          docs: docs, inlineBreaks: inlineBreaks, automatic: automatic)
+                          docs: docs, inlineBreaks: inlineBreaks, automatic: automatic, reportable: reportable && Self.reportable(app, editor))
     }
     /// Run once the card has handed the keyboard back (`AppModel.handOff`), before anything is written. The editor's window needs a moment to
     /// take the keyboard again, and Chromium reports no focused field until it has, so focus is polled rather than read once. An inline mark's

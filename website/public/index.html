@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Parzr: an offline writing assistant for Mac</title>
-<meta name="description" content="Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Anonymous reports of ignored or wrong suggestions carry only redacted sentences.">
+<meta name="description" content="Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Optional anonymous reports, sent only when you report a wrong suggestion, are redacted on your Mac first.">
 <link rel="canonical" href="https://parzr.app/">
 <meta name="theme-color" content="#202629">
 <meta name="color-scheme" content="dark">
@@ -33,7 +33,7 @@
     src="https://rybbit.aman.wiki/api/script.js?siteId=836549889db5"
     defer
 ></script>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://parzr.app/#app","name":"Parzr","url":"https://parzr.app/","description":"Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Optional anonymous reports carry only redacted sentences.","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later, Apple Silicon","image":"https://parzr.app/assets/og-image.png","downloadUrl":"https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg","license":"https://github.com/jn-aman/parzr/blob/main/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Aman Jain"}},{"@type":"WebSite","@id":"https://parzr.app/#website","name":"Parzr","url":"https://parzr.app/","inLanguage":"en"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://parzr.app/#app","name":"Parzr","url":"https://parzr.app/","description":"Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Optional anonymous reports, sent only when you report a wrong suggestion, are redacted on your Mac first.","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later, Apple Silicon","image":"https://parzr.app/assets/og-image.png","downloadUrl":"https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg","license":"https://github.com/jn-aman/parzr/blob/main/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Aman Jain"}},{"@type":"WebSite","@id":"https://parzr.app/#website","name":"Parzr","url":"https://parzr.app/","inLanguage":"en"}]}</script>
 </head>
 <body>
 <!-- Shared SVG symbols (the ParzrMark ported from Design.swift, plus mode icons). -->
@@ -233,7 +233,7 @@
     <div class="layer d1 glow g4" aria-hidden="true"></div>
     <div class="priv-in">
       <p class="eyebrow">Privacy</p>
-      <h2 id="priv-h" class="manifesto" data-manifesto>Your writing is checked on this Mac.<br class="lg"> <span class="nw">No account.</span> <span class="nw">No cloud checking.</span><br class="lg"> <span class="nw">Redacted reports,</span> <span class="nw">off with one switch.</span></h2>
+      <h2 id="priv-h" class="manifesto" data-manifesto>Your writing is checked on this Mac.<br class="lg"> <span class="nw">No account.</span> <span class="nw">No cloud checking.</span><br class="lg"> <span class="nw">Reports only when you ask,</span> <span class="nw">off with one switch.</span></h2>
     </div>
   </div>
 </section>
@@ -319,11 +319,11 @@
 
       <article class="bt bt-priv">
         <div class="bt-vis priv-vis" aria-hidden="true">
-          <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">names, numbers or links</span></p>
+          <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">reports unless you click Report</span></p>
           <svg class="off"><use href="#i-lock"/></svg>
         </div>
         <h3 class="bt-t">Sent from your Mac.</h3>
-        <p class="bt-d">Checking runs on your Mac: no account, no HTTP service and no writing history. The two models download once from GitHub when you set Parzr up, are checked against pinned hashes, then run locally: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds. The app also checks hourly for a new version. To help fix wrong suggestions, Parzr sends an anonymous report only when you ignore a suggestion or report it as wrong, never for one you accept: the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on your Mac first, plus the suggestion, the rule or model behind it, whether you ignored or reported it, the app's bundle ID and Parzr's version. Nothing else, and no IP address is kept. Reports are on by default; one switch in the welcome guide or Settings, Privacy turns them off and deletes any not yet sent.</p>
+        <p class="bt-d">Checking runs on your Mac: no account, no HTTP service and no writing history. The two models download once from GitHub when you set Parzr up, are checked against pinned hashes, then run locally: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds. The app also checks hourly for a new version. To help fix wrong suggestions, Parzr sends an anonymous report only when you click Report wrong suggestion; ignoring or accepting a suggestion sends nothing. A report holds the suggestion and the text around it (up to about 240 characters on each side). Parzr removes names it recognises, emails, phone numbers, other numbers, links and keys on your Mac before sending; the rest of the text around the suggestion is sent as written, so personal details in ordinary words can't be reliably caught. It also holds the rule or model behind the suggestion, the app's bundle ID and Parzr's version. Reports are kept 180 days on Cloudflare, which runs the report server for Parzr, with no IP address or account, so a sent report can't be deleted individually. Reports are on by default; one switch in the welcome guide or Settings, Privacy turns them off and deletes any not yet sent. <a href="/privacy" class="inl">Privacy details</a></p>
       </article>
 
       <article class="bt bt-src">
@@ -469,7 +469,7 @@ python3 scripts/package.py</code></pre>
         <li><a class="fl" href="https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg" data-link="release" data-rybbit-event="Download clicked" data-rybbit-prop-placement="Footer" rel="noopener">Download</a></li>
         <li><a class="fl" href="#try" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Try it">Try it</a></li>
         <li><a class="fl" href="#names" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Names">Names</a></li>
-        <li><a class="fl" href="#privacy" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Privacy">Privacy</a></li>
+        <li><a class="fl" href="/privacy" data-rybbit-event="Privacy page opened" data-rybbit-prop-placement="Footer">Privacy</a></li>
       </ul>
     </nav>
     <nav class="foot-col" aria-labelledby="fo-h">
@@ -483,7 +483,7 @@ python3 scripts/package.py</code></pre>
     </nav>
   </div>
   <div class="wrap foot-base"><span>© 2026 Parzr · Apache-2.0</span><a class="up fl" href="#top">Back to top<svg aria-hidden="true"><use href="#i-up"/></svg></a></div>
-  <div class="wrap"><p class="fine foot-note">This website counts visits with Rybbit, cookieless and privacy-friendly. The Parzr app checks your writing on your Mac. It sends only an hourly update check and, unless you turn them off, anonymous reports of suggestions you ignore or report as wrong, with names, emails, numbers and links removed first.</p></div>
+  <div class="wrap"><p class="fine foot-note">This website counts visits with Rybbit, cookieless and privacy-friendly. The Parzr app checks your writing on your Mac. It sends an hourly update check and, only when you click Report wrong suggestion (unless you turn reports off), that suggestion with the text around it, after removing names it recognises, emails, phone numbers, other numbers, links and keys; the rest is sent as written and kept 180 days. <a href="/privacy">Privacy details</a>.</p></div>
   <div class="mk" id="mk" aria-hidden="true"><span class="mk-in" id="mk-in"><span class="mk-l" data-c="P">P</span><span class="mk-pair"><span class="mk-l mk-a" data-c="a">a</span><span class="mk-l mk-r" data-c="r">r</span></span><span class="mk-l" data-c="z">z</span><span class="mk-l" data-c="r">r</span></span></div>
 </footer>
 </body>

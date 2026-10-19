@@ -3,13 +3,19 @@ import NaturalLanguage
 
 /// On-device redaction for wrong-suggestion reports. Nothing reaches the network until it has passed through here.
 ///
-/// Links, email addresses, phone numbers, every other number (any token with a digit) and names are replaced by
-/// placeholders (`[link]`, `[email]`, `[phone]`, `[number]`, `[name]`). It errs towards redacting too much: a capitalized
-/// word in the middle of a sentence is treated as a name, and so is an `@handle`.
+/// Links, email addresses (also "name at host dot com"), keys and tokens, phone numbers, every other number (any token
+/// with a digit, and three or more number words in a row) and names are replaced by placeholders (`[link]`, `[email]`,
+/// `[key]`, `[phone]`, `[number]`, `[name]`). It errs towards redacting too much: a capitalized word in the middle of a
+/// sentence is treated as a name, and so are an `@handle`, a `#hashtag`, a word after a greeting, a word the English
+/// lexicon knows only as a proper noun ("rahul"), and a word it does not know at all ("priya").
+///
+/// What it cannot find: names that are also ordinary words ("will", "rose") and not in the writer's known names, and
+/// sensitive content written in ordinary words (health, money, relationships). `isClean` refuses a few health terms
+/// outright; the rest of the text around a suggestion is sent as written.
 public enum Redactor {
     public enum Kind: String, Sendable, CaseIterable, Comparable {
         // Declared in priority order: when two findings overlap, the earlier kind names the merged span.
-        case email, link, phone, number, name
+        case email, link, key, phone, number, name
         public var placeholder: String { "[\(rawValue)]" }
         var priority: Int { Self.allCases.firstIndex(of: self)! }
         public static func < (a: Kind, b: Kind) -> Bool { a.priority < b.priority }
@@ -17,7 +23,10 @@ public enum Redactor {
     public struct Span: Equatable, Sendable {
         public let range: NSRange
         public let kind: Kind
-        public init(_ range: NSRange, _ kind: Kind) { self.range = range; self.kind = kind }
+        /// A guess that yields to the suggestion itself: a word the lexicon does not know is redacted elsewhere in the
+        /// sentence, but kept when it is the word being corrected (a typo is what a spelling report is about).
+        public let weak: Bool
+        public init(_ range: NSRange, _ kind: Kind, weak: Bool = false) { self.range = range; self.kind = kind; self.weak = weak }
     }
     /// The placeholders, so a report can be checked for them (and the server can tell redaction from raw text).
     public static let placeholders = Set(Kind.allCases.map(\.placeholder))
@@ -41,14 +50,43 @@ public enum Redactor {
     /// Any token holding a digit, with its separators: "42", "3.5", "1,200", "10:30", "2026-10-19", "4th", "B12", "v2".
     static let number = regex(#"[\p{L}\p{N}_]*\p{N}[\p{L}\p{N}_]*(?:[.,:/\-][\p{L}\p{N}_]*\p{N}[\p{L}\p{N}_]*)*"#)
     static let word = regex(#"\p{L}[\p{L}\p{M}'’\-]*"#)
+    /// "aman at gmail dot com", "aman (at) gmail (dot) com".
+    static let spelledEmail = regex(#"[\p{L}\p{N}._%+\-]{1,64}\s{0,3}(?:\bat\b|\(at\)|\[at\])\s{0,3}[\p{L}\p{N}\-]{1,63}(?:\s{0,3}(?:\bdot\b|\(dot\)|\[dot\])\s{0,3}[\p{L}\p{N}\-]{1,63})+"#, [.caseInsensitive])
+    /// "#rahulsharma": a hashtag can name a person. "#42" and "#A12" are numbers.
+    static let hashtag = regex(#"(?<![\p{L}\p{N}_&#])#[\p{L}_]+(?![\p{L}\p{N}_\-])"#)
+    /// Keys and tokens with a well-known prefix: Stripe, GitHub, Slack, GitLab, AWS, Google, OpenAI-style, JWTs.
+    static let keyPrefix = regex(#"\b(?:(?:sk|pk|rk)_(?:live|test)_|sk-(?:proj-|ant-)?|gh[pousr]_|github_pat_|xox[abposr]-|glpat-|AKIA|ASIA|AIza|eyJ)[A-Za-z0-9_\-]{4,}"#, [.caseInsensitive])
+    /// Any unbroken run of 20 or more key characters; `isKeyLike` decides.
+    static let longToken = regex(#"(?<![A-Za-z0-9_+/=\-])[A-Za-z0-9_+/=\-]{20,}(?![A-Za-z0-9_+/=\-])"#)
+    /// A long run that mixes digits, underscores or cases is a key, not a word ("internationalization" is a word).
+    static func isKeyLike(_ token: String) -> Bool {
+        token.contains(where: \.isNumber) || token.contains("_") || (token.contains(where: \.isLowercase) && token.dropFirst().contains(where: \.isUppercase))
+    }
+    static let numberWord = "(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|double|triple)"
+    /// Three or more number words in a row: a PIN, a phone or account number read out ("four four two one").
+    static let spelledNumbers = regex(#"\b"# + numberWord + #"(?:[\s,\-]{1,3}(?:and\s{1,3})?"# + numberWord + #"){2,}\b"#, [.caseInsensitive])
+    /// Words that open a greeting or a message to someone: the word after one is a name unless it is a common word.
+    static let greetings: Set<String> = ["hi", "hello", "hey", "heya", "hiya", "yo", "dear", "thanks", "thx", "ty", "cheers", "bye", "congrats", "congratulations", "welcome", "cc", "dm", "ping", "attn"]
+    /// Words that follow a greeting without naming anyone.
+    static let greetingFollowers: Set<String> = ["there", "all", "everyone", "everybody", "guys", "team", "folks", "again", "so", "and", "you", "yall", "y'all", "both", "friends", "friend", "sir", "madam", "maam", "ma'am", "mate", "dude", "buddy", "bud", "man", "boss", "babe", "baby", "love", "dear", "honey", "the", "a", "an", "my", "your", "for", "to", "back", "i", "we", "me", "it", "how", "what", "much", "lot", "very", "people", "world", "gang", "fam", "bro", "sis", "ladies", "gents", "gentlemen", "colleagues", "class", "sweetie", "darling", "just", "please", "but", "in", "on", "from", "with", "about", "now", "today", "tomorrow", "tonight", "here", "y", "u", "ya", "pal", "chief", "captain", "doc", "doctor", "prof", "professor", "mr", "mrs", "ms", "miss", "dr", "anyway", "though", "up", "out"]
+    /// Reports that mention one of these are not sent at all: health content cannot be redacted word by word, and
+    /// these few are too sensitive to risk. (Most sensitive content cannot be detected; the copy says so.)
+    static let sensitiveTerms: Set<String> = ["hiv", "aids", "std", "stds", "sti", "stis", "herpes", "hepatitis", "cancer", "tumor", "tumour", "chemo", "chemotherapy", "biopsy", "diagnosis", "diagnosed", "pregnant", "pregnancy", "miscarriage", "abortion", "ivf", "depression", "depressed", "anxiety", "bipolar", "schizophrenia", "adhd", "autism", "autistic", "suicide", "suicidal", "self-harm", "overdose", "rehab", "addiction", "therapist", "therapy", "psychiatrist", "antidepressant", "antidepressants", "medication", "medications", "prescription", "dementia", "alzheimer's", "alzheimers", "epilepsy", "seizure", "seizures", "diabetes", "disability", "transgender", "hiv-positive"]
     private static let detector: NSDataDetector? = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue | NSTextCheckingResult.CheckingType.phoneNumber.rawValue)
     /// Weekdays and months are not names, and the capitalization rules need them intact.
     static let calendarWords: Set<String> = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
     /// Lowercase words that are also common first names ("will", "may", "mark"): a known name redacts them only when capitalized, so "I will go" survives a contact called Will.
-    static let lowercaseWords: Set<String> = [
-        "a", "an", "the", "and", "or", "but", "if", "so", "to", "of", "in", "on", "at", "by", "for", "with", "from", "as", "is", "am", "are", "was", "were", "be", "been", "it", "its", "my", "me", "we", "us", "you", "he", "she", "they", "them", "his", "her", "our", "your", "their", "this", "that", "not", "no", "yes", "do", "did", "can", "will", "may", "might", "must", "shall", "should", "would", "could", "have", "has", "had", "go", "get", "got", "see", "say", "all", "any", "one", "new", "now", "out", "up", "down", "over", "just", "very", "here", "there", "when", "then", "than", "who", "what", "how", "why",
+    static let lowercaseWords = functionWords.union(nameWords)
+    /// Function words and very common verbs: never a name, not even after a greeting ("hey can you").
+    static let functionWords: Set<String> = [
+        "a", "an", "the", "and", "or", "but", "if", "so", "to", "of", "in", "on", "at", "by", "for", "with", "from", "as", "is", "am", "are", "was", "were", "be", "been", "it", "its", "my", "me", "we", "us", "you", "he", "she", "they", "them", "his", "her", "our", "your", "their", "this", "that", "not", "no", "yes", "do", "did", "can", "will", "may", "might", "must", "shall", "should", "would", "could", "have", "has", "had", "go", "get", "got", "see", "say", "all", "any", "one", "new", "now", "out", "up", "down", "over", "just", "very", "here", "there", "when", "then", "than", "who", "what", "how", "why"
+    ]
+    /// Ordinary words that are also first names: after a greeting ("hi mark") they are names.
+    static let nameWords: Set<String> = [
         "mark", "bill", "art", "rose", "grace", "hope", "faith", "joy", "sky", "rich", "frank", "jack", "bob", "sue", "pat", "don", "ken", "ray", "dawn", "eve", "iris", "lily", "ruby", "amber", "autumn", "summer", "winter", "max", "rob", "guy", "drew", "chase", "hunter", "cliff", "gene", "earl", "sandy", "rusty", "chip", "penny", "holly", "ivy", "jade", "pearl", "violet", "daisy", "heather", "angel", "baby", "honey", "sunny", "storm", "river", "brook", "glen", "dale", "wood", "page", "case", "major", "young", "king", "wade", "lane", "miles", "rex", "sterling", "carter", "mason", "cook", "baker", "smith", "price", "bell", "hall", "long", "short", "white", "black", "brown", "green", "gray", "grey", "golden", "love", "star", "else"
     ]
+    /// Lowercase words English's lemma lexicon does not know but that name no one: chat shorthand and common tech words.
+    static let commonUnknownWords: Set<String> = ["api", "apis", "doc", "docs", "aws", "jwt", "json", "yaml", "csv", "pdf", "pdfs", "url", "urls", "wifi", "ok", "okay", "lol", "btw", "imo", "imho", "fyi", "asap", "tbh", "idk", "thx", "pls", "plz", "gonna", "wanna", "gotta", "kinda", "sorta", "yeah", "yep", "nope", "hmm", "uh", "um", "ui", "ux", "app", "apps", "repo", "repos", "config", "env", "dev", "devs", "prod", "auth", "login", "signup", "admin", "inbox", "emoji", "emojis", "online", "offline", "website", "webpage", "email", "emails", "blog", "vlog", "podcast", "laptop", "smartphone", "selfie", "hashtag", "username", "password", "screenshot", "ebook", "e-mail", "faq"]
 
     /// Words that open a sentence before a name, which Apple's tagger reads as part of it.
     static let openers: Set<String> = ["hi", "hello", "hey", "dear", "call", "ask", "tell", "thanks", "thank", "email", "mail", "text", "message", "ping", "meet", "see", "cc", "welcome", "congrats", "congratulations", "sorry", "please", "and", "but", "so", "yes", "no", "ok", "okay", "good", "morning", "evening", "bye", "cheers", "regards", "with", "from", "to", "for", "via", "team", "folks", "all", "dm", "invite", "remind", "send", "loop", "update", "fyi", "re", "attn", "per", "like", "when", "if", "after", "before", "then", "also", "maybe", "let", "tag", "add", "only"]
@@ -68,11 +106,16 @@ public enum Redactor {
             }
         }
         add(email, .email)
+        add(spelledEmail, .email)
         add(schemeLink, .link, trimTrailing: true)
         add(bareDomain, .link, trimTrailing: true)
+        add(keyPrefix, .key)
+        for match in longToken.matches(in: text, range: all) where isKeyLike(ns.substring(with: match.range)) { found.append(Span(match.range, .key)) }
         add(handle, .name)
+        add(hashtag, .name)
         add(phone, .phone)
         add(number, .number)
+        add(spelledNumbers, .number)
         if let detector {
             for match in detector.matches(in: text, range: all) {
                 let kind: Kind = match.resultType == .phoneNumber ? .phone : match.url?.scheme?.lowercased() == "mailto" ? .email : .link
@@ -96,7 +139,7 @@ public enum Redactor {
         for span in sorted {
             if let last = out.last, span.range.location < NSMaxRange(last.range) {
                 let end = max(NSMaxRange(last.range), NSMaxRange(span.range))
-                out[out.count - 1] = Span(NSRange(location: last.range.location, length: end - last.range.location), min(last.kind, span.kind))
+                out[out.count - 1] = Span(NSRange(location: last.range.location, length: end - last.range.location), min(last.kind, span.kind), weak: last.weak && span.weak)
             } else { out.append(span) }
         }
         return out
@@ -129,6 +172,41 @@ public enum Redactor {
             // "OK", "US": short all-caps words are abbreviations far more often than names.
             if token.count <= 3, token.allSatisfy({ !$0.isLowercase }) { return true }
             if token.contains(where: \.isUppercase), !calendarWords.contains(lower), !isFirstPerson(lower) { out.append(Span(span, .name)) }
+            return true
+        }
+        return out + lexiconNameSpans(in: text)
+    }
+    /// Lowercase names, which capitals cannot reveal. English's lemma lexicon answers for each word: a lemma that is a
+    /// proper noun ("rahul" to "Rahul", "jain" to "Jain") is a name; no lemma at all ("priya", "sharma", or a typo) is
+    /// treated as one too, but weakly, so the word being corrected survives. The word after a greeting ("hi mark") is a
+    /// name unless it is a common follower ("hi there", "thanks so much").
+    static func lexiconNameSpans(in text: String) -> [Span] {
+        let ns = text as NSString
+        let tagger = NLTagger(tagSchemes: [.lemma, .lexicalClass])
+        tagger.string = text
+        tagger.setLanguage(.english, range: text.startIndex..<text.endIndex)
+        var out: [Span] = []
+        var previous: String?
+        tagger.enumerateTags(in: text.startIndex..<text.endIndex, unit: .word, scheme: .lemma, options: [.omitWhitespace, .omitPunctuation, .omitOther]) { lemma, range in
+            let token = String(text[range]), lower = token.lowercased(), span = NSRange(range, in: text)
+            defer { previous = lower }
+            let letters = token.filter(\.isLetter)
+            // Placeholders ("[name]") and their insides, the word "I", contractions' tails ("'s"), acronyms and single letters stay.
+            let inPlaceholder = span.location > 0 && ns.character(at: span.location - 1) == UInt16(UInt8(ascii: "[")) && placeholders.contains("[\(lower)]")
+            guard !inPlaceholder, letters.count >= 2, letters.count == token.count || token.contains("-") || token.contains("'") || token.contains("’"),
+                  !isFirstPerson(lower), !calendarWords.contains(lower), !(token.count <= 5 && token.allSatisfy { !$0.isLowercase }) else { return true }
+            if let lemma = lemma?.rawValue, !lemma.isEmpty {
+                // A proper-noun lemma for a word written in lowercase.
+                if token == lower, lemma.first?.isUppercase == true, lemma.lowercased() == lower { out.append(Span(span, .name)); return true }
+                if let previous, greetings.contains(previous), token == lower, !greetingFollowers.contains(lower), !functionWords.contains(lower) || nameWords.contains(lower) {
+                    let (lexical, _) = tagger.tag(at: range.lowerBound, unit: .word, scheme: .lexicalClass)
+                    if ![.determiner, .pronoun, .preposition, .adverb, .conjunction, .particle, .interjection, .number].contains(lexical) { out.append(Span(span, .name)) }
+                }
+                return true
+            }
+            // Unknown to the lexicon: a name, a typo, slang. Strong after a greeting, weak anywhere else.
+            if commonUnknownWords.contains(lower) { return true }
+            out.append(Span(span, .name, weak: !(previous.map(greetings.contains) ?? false)))
             return true
         }
         return out
@@ -172,7 +250,13 @@ public enum Redactor {
     public static func redact(sentence: String, edit: NSRange, replacement: String, names: [String] = []) -> Suggestion? {
         let ns = sentence as NSString
         guard edit.location >= 0, NSMaxRange(edit) <= ns.length else { return nil }
-        let found = spans(in: sentence, names: names)
+        var found = spans(in: sentence, names: names)
+        // A word the lexicon does not know stays when it is the word being corrected (the typo a report is about), unless
+        // the fix only re-cases it: re-casing an unknown word is how a lowercase name gets capitalized.
+        let original = ns.substring(with: edit)
+        if original.lowercased() != replacement.lowercased() {
+            found.removeAll { $0.weak && NSIntersectionRange($0.range, edit).length > 0 }
+        }
         // Grow the edit over every span it touches.
         var (a, b) = (edit.location, NSMaxRange(edit))
         var touchesName = false
@@ -213,7 +297,7 @@ public enum Redactor {
         }
         return out as String
     }
-    static let placeholderPattern = regex(#"\[(?:email|link|phone|number|name)\]"#)
+    static let placeholderPattern = regex(#"\[(?:email|link|key|phone|number|name)\]"#)
     static func distance(_ a: String, _ b: String) -> Int {
         let (a, b) = (Array(a), Array(b))
         if a.isEmpty || b.isEmpty { return max(a.count, b.count) }
@@ -224,10 +308,20 @@ public enum Redactor {
         }
         return row[b.count]
     }
-    /// True when `text` still holds something redaction removes: a check run on every report before it is queued.
+    /// True when `text` still holds something redaction removes, or a sensitive term no report may carry: a check run on
+    /// every report before it is queued, and again on every report loaded from disk.
     public static func isClean(_ text: String) -> Bool {
         let stripped = placeholders.reduce(text) { $0.replacingOccurrences(of: $1, with: " ") }
         let ns = stripped as NSString, all = NSRange(location: 0, length: ns.length)
-        return [email, schemeLink, bareDomain, number].allSatisfy { $0.firstMatch(in: stripped, range: all) == nil }
+        guard [email, spelledEmail, schemeLink, bareDomain, keyPrefix, handle, hashtag, number, spelledNumbers].allSatisfy({ $0.firstMatch(in: stripped, range: all) == nil }) else { return false }
+        guard !longToken.matches(in: stripped, range: all).contains(where: { isKeyLike(ns.substring(with: $0.range)) }) else { return false }
+        return !mentionsSensitiveTerm(stripped)
+    }
+    static func mentionsSensitiveTerm(_ text: String) -> Bool {
+        let ns = text as NSString
+        return word.matches(in: text, range: NSRange(location: 0, length: ns.length)).contains { match in
+            let token = ns.substring(with: match.range).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "-'’"))
+            return sensitiveTerms.contains(token) || sensitiveTerms.contains(stripPossessive(token))
+        }
     }
 }

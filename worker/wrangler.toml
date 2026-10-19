@@ -17,11 +17,19 @@ database_name = "parzr-reports"
 database_id = "01da2683-fd5d-4948-8850-05750a027744"
 migrations_dir = "migrations"
 
-# Per-client request limit (keyed by a salted, daily hash of the address; nothing is stored).
+# Per-client request limit: 4 requests a minute, keyed by a salted, daily hash of the IPv4 address or IPv6 /64
+# (nothing is stored). With at most 25 reports a request, one network can add 100 rows a minute; DAILY_ROW_CAP bounds
+# the total.
 [[ratelimits]]
 name = "REPORTS_LIMITER"
 namespace_id = "4201"
-simple = { limit = 20, period = 60 }
+simple = { limit = 4, period = 60 }
+
+# The deployed version id, which /v1/health returns so a deploy can check it is the one answering.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+# CPU: the Workers Free plan already caps each request at 10 ms; a [limits] cpu_ms block needs a paid plan.
 
 # Daily retention clean-up.
 [triggers]
@@ -29,6 +37,8 @@ crons = ["17 3 * * *"]
 
 [vars]
 RETENTION_DAYS = "180"
+# Report rows stored per UTC day across every client; past it the Worker answers 503 until midnight UTC.
+DAILY_ROW_CAP = "20000"
 
 # Secret, set with: npx wrangler secret put RATE_LIMIT_SALT
 # RATE_LIMIT_SALT = "..."

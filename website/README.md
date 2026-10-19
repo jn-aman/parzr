@@ -1,6 +1,6 @@
 # Parzr website
 
-Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app checks writing on the Mac; its network requests are the optional hourly update check, the one-time model download, and anonymous reports of suggestions the writer ignores or reports as wrong (never accepted ones; redacted on the Mac, on by default, off in Settings, Privacy; see worker/README.md).
+Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app checks writing on the Mac; its network requests are the optional hourly update check, the one-time model download, and anonymous reports sent only when the writer clicks "Report wrong suggestion" (redacted on the Mac, on by default, off in Settings, Privacy; see public/privacy.html, docs/privacy.md and worker/README.md).
 
 ```
 public/
@@ -8,6 +8,7 @@ public/
   styles.css      tokens from mac/Sources/Parzr/Design.swift
   main.js         vanilla motion engine (requestAnimationFrame, IntersectionObserver, CSS custom properties)
   404.html        not found page
+  privacy.html    what the app sends and keeps (served at /privacy; source text in docs/privacy.md)
   _headers        CSP and cache policy (Cloudflare static assets)
   assets/         WebP renders of the real app, favicon.svg, icon-192.png, icon-512.png, og-image.png
   favicon.ico     16, 32 and 48 px PNGs (the icon services, such as DuckDuckGo's, ask for /favicon.ico)
