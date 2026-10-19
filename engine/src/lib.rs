@@ -1141,6 +1141,8 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
                 || capitalization::interjection(&token.normalized)
+                // "yaar kal meeting hai": a Hinglish sentence takes its capital too.
+                || spelling::hinglish(&token.normalized)
                 || req.capitalize_names && level[index] >= names::MEDIUM)
             // Every sentence takes its capital, finished or not and in chat too ("yeah I think",
             // "the link? Thanks"): only a line of code or a command keeps its lowercase start.
@@ -2817,13 +2819,14 @@ mod tests {
             "We pin it in requirements.txt today.",
             "I can not believe it.",
             "Bhai yaar kya hai.",
-            "bas, that's it",
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
+        // A Hinglish sentence keeps its words and takes its capital like any other.
+        assert_eq!(fix("bas, that's it"), "Bas, that's it");
         // A short Roman Hindi word alone in English is a slip; beside Roman Hindi it stays.
         assert_eq!(fix("I like aur house."), "I like our house.");
-        assert_eq!(fix("aur kya chal raha hai"), "aur kya chal raha hai");
+        assert_eq!(fix("aur kya chal raha hai"), "Aur kya chal raha hai");
     }
     #[test]
     fn valid_uses_of_rare_words_are_kept() {

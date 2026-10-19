@@ -14,7 +14,7 @@ fn fix(text: &str) -> String {
 }
 
 #[test]
-fn everyday_hinglish_stays_as_typed() {
+fn everyday_hinglish_keeps_its_words() {
     for text in [
         "yaar kal meeting hai, theek hai?",
         "haan bhai, main aa raha hoon.",
@@ -35,7 +35,10 @@ fn everyday_hinglish_stays_as_typed() {
         "haan ji, done kar diya",
         "tension mat lo, ho jayega",
     ] {
-        assert_eq!(fix(text), text, "{text}");
+        // Hindi words keep their spelling; the sentence start takes its capital like any other.
+        let mut expected = text[..1].to_uppercase();
+        expected.push_str(&text[1..]);
+        assert_eq!(fix(text), expected, "{text}");
     }
 }
 
@@ -43,7 +46,7 @@ fn everyday_hinglish_stays_as_typed() {
 fn english_slips_in_hinglish_are_still_fixed() {
     assert_eq!(
         fix("sab theek hai, dont worry"),
-        "sab theek hai, don't worry"
+        "Sab theek hai, don't worry"
     );
     assert_eq!(fix("I recieved the file yaar"), "I received the file yaar");
 }

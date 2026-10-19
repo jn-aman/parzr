@@ -169,9 +169,11 @@ final class LearningTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["PARZR_ENGINE_PATH"] != nil else { throw XCTSkip("Supply the built engine library with PARZR_ENGINE_PATH.") }
         for text in ["yaar kal meeting hai, theek hai?", "tum kaha ho, call karo", "client ko call karna hai", "please ek baar check kar lo", "PR review kar lena", "haan bhai, main aa raha hoon."] {
             let result = try await WritingEngine.typing.rewrite(EngineRequest(text: text))
-            XCTAssertEqual(result.text, text, "\(text): \(result.edits.map { "\($0.original)→\($0.replacement) \($0.rule_id)" })")
+            // Hindi words are never respelled; the sentence start takes a capital like any other.
+            let expected = text.prefix(1).uppercased() + text.dropFirst()
+            XCTAssertEqual(result.text, expected, "\(text): \(result.edits.map { "\($0.original)→\($0.replacement) \($0.rule_id)" })")
         }
         let mixed = try await WritingEngine.typing.rewrite(EngineRequest(text: "sab theek hai, dont worry"))
-        XCTAssertEqual(mixed.text, "sab theek hai, don't worry", "an English slip in Hinglish is still fixed")
+        XCTAssertEqual(mixed.text, "Sab theek hai, don't worry", "an English slip in Hinglish is still fixed")
     }
 }
