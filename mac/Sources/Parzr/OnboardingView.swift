@@ -223,7 +223,7 @@ struct OnboardingView: View {
                 divider
                 HStack(spacing: 12) {
                     Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 13, weight: .medium)).foregroundStyle(Color.mintAccent).frame(width: 20)
-                    Text("Parzr checks GitHub once a day for a new version. It sends nothing about you or your writing.").font(.system(size: 12)).lineSpacing(2).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Parzr asks GitHub every hour whether a new version is out. It sends nothing about you or your writing.").font(.system(size: 12)).lineSpacing(2).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                     Toggle("Check for updates automatically", isOn: $updates.automaticChecks).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize()
                 }.padding(.horizontal, 16).padding(.vertical, 11)
                 if !granted {

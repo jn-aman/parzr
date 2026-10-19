@@ -3,9 +3,33 @@
 <plist version="1.0"><dict>
 <key>NSPrivacyTracking</key><false/>
 <key>NSPrivacyTrackingDomains</key><array/>
-<key>NSPrivacyCollectedDataTypes</key><array/>
-<key>NSPrivacyAccessedAPITypes</key><array><dict>
+<!-- Anonymous suggestion reports (on unless turned off in Settings, Privacy): the redacted sentence around a suggestion the writer
+     ignored or reported as wrong, sent to reports.parzr.app so wrong suggestions can be fixed. No identifier links it to the writer. -->
+<key>NSPrivacyCollectedDataTypes</key><array><dict>
+<key>NSPrivacyCollectedDataType</key><string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+<key>NSPrivacyCollectedDataTypeLinked</key><false/>
+<key>NSPrivacyCollectedDataTypeTracking</key><false/>
+<key>NSPrivacyCollectedDataTypePurposes</key><array><string>NSPrivacyCollectedDataTypePurposeAnalytics</string></array>
+</dict></array>
+<key>NSPrivacyAccessedAPITypes</key><array>
+<dict>
 <key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
 <key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array>
-</dict></array>
+</dict>
+<!-- ProcessInfo.systemUptime and monotonic clocks: time between events (typing pauses, retries), never sent. -->
+<dict>
+<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+<key>NSPrivacyAccessedAPITypeReasons</key><array><string>35F9.1</string></array>
+</dict>
+<!-- Free space on the models volume before a model download. -->
+<dict>
+<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+<key>NSPrivacyAccessedAPITypeReasons</key><array><string>E174.1</string></array>
+</dict>
+<!-- Size, inode and modification time of Parzr's own files (model packs, partial downloads, the report queue). -->
+<dict>
+<key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+<key>NSPrivacyAccessedAPITypeReasons</key><array><string>C617.1</string></array>
+</dict>
+</array>
 </dict></plist>

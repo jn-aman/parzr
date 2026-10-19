@@ -18,8 +18,8 @@ from release_notes import is_internal  # scripts/ is on sys.path when this scrip
 
 REPO = 'jn-aman/parzr'
 PUBLIC_KEY = 'j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0='  # SUPublicEDKey in Info.plist
-SPARKLE_VERSION = '2.9.5'
-SPARKLE_SHA256 = '015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc'
+SPARKLE_VERSION = '2.9.6'
+SPARKLE_SHA256 = '52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192'
 SPARKLE_URL = f'https://github.com/sparkle-project/Sparkle/releases/download/{SPARKLE_VERSION}/Sparkle-{SPARKLE_VERSION}.tar.xz'
 MIN_OS = '13.0'
 MAX_DELTAS = 8
@@ -78,7 +78,7 @@ def _dec(s):
     return pt
 
 
-def ed25519_verify(public, sig, msg_path):
+def _verify(public, sig, chunks):
     if len(public) != 32 or len(sig) != 64:
         return False
     try:
@@ -89,11 +89,60 @@ def ed25519_verify(public, sig, msg_path):
     if s >= _Q:
         return False
     h = hashlib.sha512(sig[:32] + public)
-    with open(msg_path, 'rb') as f:
-        for chunk in iter(lambda: f.read(1 << 20), b''):
-            h.update(chunk)
+    for chunk in chunks:
+        h.update(chunk)
     k = int.from_bytes(h.digest(), 'little') % _Q
     return _mul(_B, s) == _add(r, _mul(a, k))
+
+
+def ed25519_verify(public, sig, msg_path):
+    with open(msg_path, 'rb') as f:
+        return _verify(public, sig, iter(lambda: f.read(1 << 20), b''))
+
+
+def ed25519_verify_data(public, sig, data):
+    return _verify(public, sig, [data])
+
+
+def _enc(p):
+    x, y = p
+    return (y | ((x & 1) << 255)).to_bytes(32, 'little')
+
+
+def _ed25519_sign(seed, msg):
+    """RFC 8032 signing, for the self test only (releases are signed by Sparkle's sign_update)."""
+    h = hashlib.sha512(seed).digest()
+    a = int.from_bytes(h[:32], 'little') & ((1 << 254) - 8) | (1 << 254)
+    public = _enc(_mul(_B, a))
+    r = int.from_bytes(hashlib.sha512(h[32:] + msg).digest(), 'little') % _Q
+    big_r = _enc(_mul(_B, r))
+    k = int.from_bytes(hashlib.sha512(big_r + public + msg).digest(), 'little') % _Q
+    return public, big_r + ((r + k * a) % _Q).to_bytes(32, 'little')
+
+
+# ---- signed feed (Sparkle 2.9+: SURequireSignedFeed) ----
+# sign_update embeds the feed's own signature as a trailing comment over the first `length` bytes of the file.
+_FEED_SIG = re.compile(rb'<!-- sparkle-signatures:\s*\nedSignature: ([A-Za-z0-9+/=]+)\s*\nlength: (\d+)\s*\n-->\s*\Z')
+
+
+def feed_signature(path_or_data):
+    """(signed bytes, signature) of a signed feed, or None. Only whitespace may follow the signature block, and the
+    signed length must end exactly where the block starts, so no unsigned XML is accepted."""
+    data = path_or_data if isinstance(path_or_data, bytes) else pathlib.Path(path_or_data).read_bytes()
+    m = _FEED_SIG.search(data)
+    if not m or int(m.group(2)) != m.start():
+        return None
+    try:
+        sig = base64.b64decode(m.group(1), validate=True)
+    except ValueError:
+        return None
+    return data[:m.start()], sig
+
+
+def check_feed_signature(path_or_data, public):
+    signed = feed_signature(path_or_data)
+    check(signed is not None, 'the feed carries no Sparkle feed signature (the app sets SURequireSignedFeed)')
+    check(ed25519_verify_data(public, signed[1], signed[0]), 'the feed signature does NOT verify against the public key')
 
 
 def self_test():
@@ -105,6 +154,20 @@ def self_test():
         assert not ed25519_verify(pub, sig[:-1] + b'\x0c', f.name)
         f.write(b'x'); f.flush()
         assert not ed25519_verify(pub, sig, f.name)
+    # A feed signed as sign_update signs it verifies; any change, unsigned trailing XML or another key does not.
+    body = b'<?xml version="1.0"?><rss><channel><item/></channel></rss>'
+    public, s = _ed25519_sign(bytes(range(32)), body)
+    assert ed25519_verify_data(public, s, body)
+    signed = body + b'<!-- sparkle-signatures:\nedSignature: ' + base64.b64encode(s) + b'\nlength: ' + str(len(body)).encode() + b'\n-->\n'
+    assert feed_signature(signed) == (body, s)
+    assert feed_signature(body) is None
+    assert feed_signature(signed + b'<item/>') is None
+    assert feed_signature(signed.replace(str(len(body)).encode(), str(len(body) - 1).encode())) is None
+    changed = body.replace(b'<item/>', b'<item>x</item>')
+    found = feed_signature(changed + b'<!-- sparkle-signatures:\nedSignature: ' + base64.b64encode(s) + b'\nlength: ' + str(len(changed)).encode() + b'\n-->')
+    assert found and not ed25519_verify_data(public, found[1], found[0])
+    other, _ = _ed25519_sign(bytes(32), body)
+    assert not ed25519_verify_data(other, s, body)
 
 
 # ---- tools ----
@@ -142,6 +205,18 @@ def sign(tools, path, key_file):
     sig = out.strip()
     check(len(base64.b64decode(sig)) == 64, 'sign_update did not return a 64 byte signature')
     return sig
+
+
+def sign_feed(tools, path, key_file):
+    """Embeds the feed's own EdDSA signature (sign_update, Sparkle 2.9+), which the app requires (SURequireSignedFeed).
+    The key reaches sign_update as a file or on stdin, never on the command line."""
+    if key_file:
+        run([str(tools / 'sign_update'), '--ed-key-file', key_file, str(path)])
+    else:
+        key = os.environ.get('SPARKLE_ED_PRIVATE_KEY')
+        check(key, 'no signing key: set SPARKLE_ED_PRIVATE_KEY or pass --key-file')
+        run([str(tools / 'sign_update'), '--ed-key-file', '-', str(path)], input=key)
+    check(feed_signature(path) is not None, 'sign_update did not embed a feed signature')
 
 
 # ---- app helpers ----
@@ -232,6 +307,8 @@ def write_appcast(path, version, build, items, notes, critical, interval, now):
 
 def verify_appcast(appcast, fetch, public_key, version=None, critical=None, build=None):
     """Return (item facts). fetch(url) -> local path of the enclosure. Dies on any mismatch."""
+    check_feed_signature(appcast, base64.b64decode(public_key))
+    print('  ok feed signature verifies')
     root = ET.parse(appcast).getroot()
     items = root.findall('./channel/item')
     check(len(items) == 1, f'appcast must hold exactly one item, found {len(items)}')
@@ -310,6 +387,7 @@ def cmd_build(a):
     now = datetime.datetime.now(datetime.timezone.utc)
     write_appcast(out / 'appcast.xml', a.version, build, (zip_path.name, zip_len, zip_sig, deltas),
                   bullets(a.notes, a.git_range), a.critical, a.phased_interval, now)
+    sign_feed(tools, out / 'appcast.xml', a.key_file)
 
     # Verify our own output from the files on disk, as a client would receive them.
     print('verifying output')

@@ -141,7 +141,7 @@ def main():
     library = args.app / "Contents/Frameworks/libparzr_engine.dylib"
     sources = [ROOT / "mac/Sources/ParzrCore/Models.swift", ROOT / "mac/Sources/ParzrCore/WritingEngine.swift", ROOT / "mac/Sources/ParzrCore/LinguisticHints.swift", ROOT / "scripts/benchmark-native.swift"]
     harness = args.output / "native-benchmark"
-    subprocess.run(["swiftc", "-O", "-parse-as-library", *map(str, sources), "-o", str(harness)], check=True)
+    subprocess.run(["swiftc", "-O", "-D", "PARZR_QA", "-parse-as-library", *map(str, sources), "-o", str(harness)], check=True)
     combined = args.output / "inputs.jsonl"
     combined.write_text("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in cases))
     runs, started = {}, time.time()

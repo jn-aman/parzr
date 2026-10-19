@@ -155,6 +155,57 @@ final class LearningTests: XCTestCase {
         prefs.keepsWritingSummary = true; prefs.noteFixes([edit("teh", "the", category: "Spelling", rule: "r")]); prefs.clearWritingSummary()
         XCTAssertTrue(prefs.stats.isEmpty)
     }
+    func testTurningTheSummaryOffErasesItsStoredRecords() throws {
+        let name = "app.parzr.tests.summary-off"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name)); defaults.removePersistentDomain(forName: name); defer { defaults.removePersistentDomain(forName: name) }
+        let prefs = Preferences(defaults: defaults)
+        prefs.noteFixes([edit("teh", "the", category: "Spelling", rule: "r")]); prefs.noteIgnored(edit("go", "goes"))
+        XCTAssertFalse(Preferences(defaults: defaults).stats.isEmpty, "kept between launches while on")
+        prefs.keepsWritingSummary = false
+        XCTAssertTrue(Preferences(defaults: defaults).stats.isEmpty, "off erases the stored tally, not just the one in memory")
+    }
+    func testEraseAllDataForgetsEverythingButSetupAndTheReportsChoice() throws {
+        let name = "app.parzr.tests.erase"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name)); defaults.removePersistentDomain(forName: name); defer { defaults.removePersistentDomain(forName: name) }
+        let prefs = Preferences(defaults: defaults)
+        prefs.onboardingCompleted = true; prefs.shareReports = false
+        prefs.saveWord("kubectl"); _ = prefs.learnName("Anaya"); _ = prefs.learnWord("pgvector"); prefs.toggleApp("com.example.chat")
+        prefs.appearance = "paper"; prefs.checkingDelay = 300; prefs.shortcutKey = 12; prefs.useContactNames = true; prefs.keepsWritingSummary = true
+        prefs.pauseAutomaticChecking(for: "com.example.mail", duration: .oneHour)
+        for _ in 0..<SuggestionMutes.ignoresToMute { prefs.noteIgnored(edit("go", "goes")) }
+        prefs.noteFixes([edit("teh", "the", category: "Spelling", rule: "r")])
+        prefs.noteSighting("zarkon", app: "com.example.a", day: 1)
+        defaults.set(true, forKey: "someOtherKey")
+        let known = FileManager.default.temporaryDirectory.appendingPathComponent("parzr-erase-\(UUID().uuidString)/known-words.json")
+        try KnownWordsFile.write(dictionary: ["kubectl"], names: ["Anaya"], to: known)
+        var purged = 0
+        XCTAssertFalse(prefs.stats.isEmpty); XCTAssertFalse(prefs.mutes.muted.isEmpty)
+        prefs.eraseAllData(knownWords: known, purgeReports: { purged += 1 })
+        XCTAssertEqual(purged, 1, "queued reports are purged through the reports queue")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: known.path), "known-words.json is gone")
+        XCTAssertNil(defaults.object(forKey: "someOtherKey"))
+        XCTAssertTrue(prefs.onboardingCompleted, "setup stays finished")
+        XCTAssertFalse(prefs.shareReports, "erasing never turns reports back on")
+        // Everything else matches a first launch, in memory and on disk.
+        let empty = try XCTUnwrap(UserDefaults(suiteName: name + ".fresh")); empty.removePersistentDomain(forName: name + ".fresh"); defer { empty.removePersistentDomain(forName: name + ".fresh") }
+        for (label, current) in [("now", prefs), ("reloaded", Preferences(defaults: defaults))] {
+            let fresh = Preferences(defaults: empty)
+            XCTAssertEqual(current.dictionary, fresh.dictionary, label); XCTAssertEqual(current.learnedNames, fresh.learnedNames, label); XCTAssertEqual(current.learnedWords, fresh.learnedWords, label)
+            XCTAssertEqual(current.disabledApps, fresh.disabledApps, label); XCTAssertEqual(current.automaticAppPauses, fresh.automaticAppPauses, label)
+            XCTAssertEqual(current.mutes, fresh.mutes, label); XCTAssertEqual(current.stats, fresh.stats, label); XCTAssertEqual(current.ledger, fresh.ledger, label)
+            XCTAssertEqual(current.passive, fresh.passive, label); XCTAssertEqual(current.paused, fresh.paused, label); XCTAssertEqual(current.dialect, fresh.dialect, label)
+            XCTAssertEqual(current.defaultMode, fresh.defaultMode, label); XCTAssertEqual(current.clipboardFallback, fresh.clipboardFallback, label)
+            XCTAssertEqual(current.shortcutKey, fresh.shortcutKey, label); XCTAssertEqual(current.shortcutModifiers, fresh.shortcutModifiers, label); XCTAssertEqual(current.shortcutLabel, fresh.shortcutLabel, label)
+            XCTAssertEqual(current.checkingDelay, fresh.checkingDelay, label); XCTAssertEqual(current.selectedTextPopover, fresh.selectedTextPopover, label); XCTAssertEqual(current.highlightFill, fresh.highlightFill, label)
+            XCTAssertEqual(current.editorFontSize, fresh.editorFontSize, label); XCTAssertEqual(current.editorLineSpacing, fresh.editorLineSpacing, label); XCTAssertEqual(current.appearance, fresh.appearance, label)
+            XCTAssertEqual(current.reduceMotion, fresh.reduceMotion, label); XCTAssertEqual(current.contextRefinement, fresh.contextRefinement, label); XCTAssertEqual(current.smartGrammar, fresh.smartGrammar, label)
+            XCTAssertEqual(current.toneCheck, fresh.toneCheck, label); XCTAssertEqual(current.slipCheck, fresh.slipCheck, label); XCTAssertEqual(current.showWordCount, fresh.showWordCount, label)
+            XCTAssertEqual(current.showInDock, fresh.showInDock, label); XCTAssertEqual(current.checkVSCode, fresh.checkVSCode, label)
+            XCTAssertEqual(current.firefoxHintDismissed, fresh.firefoxHintDismissed, label); XCTAssertEqual(current.docsHintDismissed, fresh.docsHintDismissed, label)
+            XCTAssertEqual(current.useContactNames, fresh.useContactNames, label); XCTAssertEqual(current.nameCapitalization, fresh.nameCapitalization, label)
+            XCTAssertEqual(current.keepsWritingSummary, fresh.keepsWritingSummary, label)
+        }
+    }
     func testLocalDaysTurnOverAtLocalMidnight() throws {
         let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
         // 2026-10-18 20:00 UTC is 01:30 on the 19th in India.

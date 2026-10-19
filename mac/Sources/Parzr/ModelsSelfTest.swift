@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import Foundation
 import ParzrCore
 
@@ -75,3 +77,4 @@ func runModelsTest(reportDirectory: String) async throws {
     try save()
     guard problems.isEmpty else { throw ParzrError.message(problems.joined(separator: "\n")) }
 }
+#endif

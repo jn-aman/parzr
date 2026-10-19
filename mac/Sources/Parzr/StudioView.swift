@@ -53,6 +53,7 @@ struct StudioView: View {
     @State private var appliedCount = 0
     @State private var reviewVisible = false
     @State private var statsVisible = false
+    @State private var confirmErase = false
     @State private var focusedWriting = false
     private var activeRoute: StudioRoute { route ?? model.studioRoute }
     private var animate: Bool { !systemReduceMotion && !preferences.reduceMotion && !renderingSnapshot }
@@ -240,7 +241,7 @@ struct StudioView: View {
                     settingRow("Quit Parzr", detail: "Stops checking until you open Parzr again.") { NativeButton(title: "Quit", label: "Quit Parzr", action: { NSApp.terminate(nil) }).fixedSize() }
                 }
                 group("UPDATES") {
-                    settingRow("Check for updates automatically", detail: "Parzr checks GitHub once a day for a new version. It sends nothing about you or your writing.") { toggle("Check for updates automatically", $updates.automaticChecks) }
+                    settingRow("Check for updates automatically", detail: "Parzr asks GitHub every hour whether a new version is out. It sends nothing about you or your writing.") { toggle("Check for updates automatically", $updates.automaticChecks) }
                     divider
                     settingRow("Download and install automatically", detail: "New versions download quietly and install when you quit Parzr or step away. You can cancel the restart.") { toggle("Download and install automatically", $updates.automaticDownloads).disabled(!updates.automaticChecks) }
                 }
@@ -338,7 +339,7 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your writing is checked on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
                         Text("Grammar and rewrites run locally. No account and no writing history. Your dictionary, learned names and words, preferences and, if you keep it, a private weekly tally of fixes are saved on this Mac only.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
-                        Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the hourly update check, and the one-time download of its models (Settings, Models). Suggestion reports, while on, go to reports.parzr.app.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
                 if Reports.configured {
@@ -354,6 +355,15 @@ struct StudioView: View {
                     settingRow("Clear this draft", detail: "Clear the current writing session and its Undo history.") { NativeButton(title: "Clear this writing session", action: { model.clearSession(); draft = "" }).fixedSize() }
                 }
                 Text("Copy uses the system clipboard. Restoration cannot erase text another app has already read. Editor Undo can revert corrections; some editors use a separate step for each edit.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(3)
+                group("YOUR DATA ON THIS MAC") {
+                    settingRow("Erase all Parzr data", detail: "Removes your dictionary, learned names and words, muted suggestions, the weekly summary, queued suggestion reports and every preference from this Mac. Downloaded models stay; remove them in Models.") {
+                        NativeButton(title: "Erase…", label: "Erase all Parzr data", action: { confirmErase = true }).fixedSize()
+                            .confirmationDialog("Erase all Parzr data?", isPresented: $confirmErase) {
+                                Button("Erase", role: .destructive) { preferences.eraseAllData(); model.clearSession(); draft = "" }
+                                Button("Cancel", role: .cancel) {}
+                            } message: { Text("Parzr forgets everything it learned and counted on this Mac and returns to its default settings. This cannot be undone.") }
+                    }
+                }
             case .compatibility:
                 group("EDITOR ACCESS") {
                     settingRow(preferences.permissionGranted ? "Accessibility is enabled" : "Enable Accessibility", detail: "macOS requires this permission for corrections in other apps.") { NativeButton(title: preferences.permissionGranted ? "Refresh" : "Enable…", action: { if preferences.permissionGranted { preferences.refreshPermission() } else { preferences.requestPermission() } }).fixedSize() }

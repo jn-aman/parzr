@@ -196,7 +196,7 @@ final class UpdatePresenter {
     /// Focus is taken once per request. Download progress republishes the phase many times a second, and
     /// re-taking focus on each one pulled the keyboard away from whatever the writer was typing in.
     private var focusGranted = false
-    #if DEBUG
+    #if DEBUG || PARZR_QA
     var debugPanel: NSPanel? { panel }
     /// Off only for the debug update test, which must never take the keyboard from someone working.
     var allowsFocus = true

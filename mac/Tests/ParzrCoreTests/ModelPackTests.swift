@@ -4,7 +4,7 @@ import XCTest
 
 /// A transport that serves bytes from memory and can go offline, cut a download short, ignore ranges or corrupt a file.
 final class FakeTransport: ModelTransport, @unchecked Sendable {
-    enum Behavior { case serve, offline, notFound, ignoreRange, cutAfter(Int), corrupt, corruptOnce, diskFull, slow }
+    enum Behavior { case serve, offline, notFound, ignoreRange, cutAfter(Int), corrupt, corruptOnce, diskFull, slow, oversize }
     private let lock = NSLock()
     private var files: [String: Data] = [:]
     private var behaviors: [String: Behavior] = [:]
@@ -30,6 +30,7 @@ final class FakeTransport: ModelTransport, @unchecked Sendable {
         case .slow:
             for byte in data[Int(offset)...] { try await Task.sleep(for: .milliseconds(20)); try Task.checkCancellation(); try sink.write(Data([byte])) }
             return
+        case .oversize: data.append(Data(repeating: 7, count: 64))
         case .serve: break
         }
         try sink.write(data.subdata(in: Int(offset)..<data.count))
@@ -235,6 +236,90 @@ final class ModelPackTests: XCTestCase {
         XCTAssertFalse(store.isInstalled(Self.pack)); XCTAssertFalse(FileManager.default.fileExists(atPath: final.path))
         XCTAssertEqual((try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("essential").path)) ?? [], [])
     }
+    func testInstallWritesTheMarkerTheEngineRequires() async throws {
+        let store = store(transport())
+        let result = await store.install(Self.pack)
+        XCTAssertEqual(result, .ready)
+        let data = try Data(contentsOf: final.appendingPathComponent(ModelStore.marker))
+        let marker = try JSONDecoder().decode(VerifiedMarker.self, from: data)
+        XCTAssertEqual(marker.schema, 1); XCTAssertEqual(marker.pack, "essential"); XCTAssertEqual(marker.version, "2")
+        XCTAssertEqual(marker.files.map(\.path), Self.pack.files.map(\.path))
+        XCTAssertEqual(marker.files.map(\.sha256), Self.pack.files.map(\.sha256))
+        for entry in marker.files {
+            let identity = try XCTUnwrap(FileIdentity.of(final.appendingPathComponent(entry.path)))
+            XCTAssertEqual(entry.bytes, identity.bytes); XCTAssertEqual(entry.inode, identity.inode); XCTAssertEqual(entry.mtimeNs, identity.mtimeNs)
+        }
+        // The engine reads these keys (engine/src/packs.rs).
+        let json = String(decoding: data, as: UTF8.self)
+        for key in ["\"schema\"", "\"pack\"", "\"version\"", "\"files\"", "\"path\"", "\"sha256\"", "\"bytes\"", "\"inode\"", "\"mtime_ns\""] { XCTAssertTrue(json.contains(key), key) }
+        XCTAssertTrue(store.verifiedThisRun(Self.pack), "the install hashed every file")
+    }
+    func testEachRunChecksTheInstalledFilesOnceAndSetsAChangedPackAside() async throws {
+        let installed = await store(transport()).install(Self.pack)
+        XCTAssertEqual(installed, .ready)
+        // The next launch: nothing is known about the files until they are hashed again.
+        var next = store(transport()); next.verified = VerifiedFiles()
+        XCTAssertTrue(next.isInstalled(Self.pack)); XCTAssertFalse(next.verifiedThisRun(Self.pack))
+        try FileManager.default.removeItem(at: final.appendingPathComponent(ModelStore.marker))
+        XCTAssertEqual(try next.verify(Self.pack), .verified)
+        XCTAssertTrue(next.verifiedThisRun(Self.pack))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: final.appendingPathComponent(ModelStore.marker).path), "the check writes the marker again")
+        // Changed on disk at the same size: the next run's check finds it, and the pack is set aside.
+        var tampered = Self.model; tampered[10] ^= 0xFF
+        try tampered.write(to: final.appendingPathComponent("writer.gguf"))
+        XCTAssertFalse(next.verifiedThisRun(Self.pack), "a new identity voids this run's verdict")
+        var later = store(transport()); later.verified = VerifiedFiles()
+        XCTAssertEqual(try later.verify(Self.pack), .mismatch("writer.gguf"))
+        try later.quarantine(Self.pack)
+        XCTAssertFalse(later.isInstalled(Self.pack)); XCTAssertFalse(FileManager.default.fileExists(atPath: final.path))
+        // A symbolic link in place of a file is never verified.
+        let fake = transport(); let fresh = store(fake)
+        _ = await fresh.install(Self.pack)
+        let labels = final.appendingPathComponent("gector/labels.txt"), elsewhere = root.appendingPathComponent("labels.txt")
+        try FileManager.default.moveItem(at: labels, to: elsewhere)
+        try FileManager.default.createSymbolicLink(at: labels, withDestinationURL: elsewhere)
+        var linked = store(fake); linked.verified = VerifiedFiles()
+        XCTAssertEqual(try linked.verify(Self.pack), .mismatch("gector/labels.txt"))
+        // Installing again replaces a pack that fails its check instead of trusting the folder.
+        let reinstalled = await linked.install(Self.pack)
+        XCTAssertEqual(reinstalled, .ready)
+        XCTAssertNotNil(FileIdentity.of(labels), "a regular file again, downloaded and checked")
+    }
+    func testNothingPastThePinnedSizeIsWritten() async throws {
+        let fake = transport(.oversize), store = store(fake)
+        let result = await store.install(Self.pack)
+        XCTAssertEqual(result, .failed(.corrupt("writer.gguf")))
+        XCTAssertEqual(fake.requests.filter { $0.name == "writer.gguf" }.count, 2, "fetched once more from the start, then refused")
+        XCTAssertNil(ModelStore.size(staging.appendingPathComponent("writer.gguf.partial")), "an oversized download is never kept")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: final.path))
+    }
+    func testAResumeAcceptsOnlyTheRangeItAskedFor() {
+        XCTAssertTrue(ModelStore.contentRangeMatches("bytes 1500-3999/4000", offset: 1500, total: 4000))
+        XCTAssertTrue(ModelStore.contentRangeMatches("bytes 1500-3999/*", offset: 1500, total: 4000))
+        XCTAssertFalse(ModelStore.contentRangeMatches(nil, offset: 1500, total: 4000))
+        XCTAssertFalse(ModelStore.contentRangeMatches("bytes 0-3999/4000", offset: 1500, total: 4000), "another start")
+        XCTAssertFalse(ModelStore.contentRangeMatches("bytes 1500-2000/4000", offset: 1500, total: 4000), "not to the end")
+        XCTAssertFalse(ModelStore.contentRangeMatches("bytes 1500-4999/5000", offset: 1500, total: 4000), "another file")
+        XCTAssertFalse(ModelStore.contentRangeMatches("bytes 1500-3999/9999", offset: 1500, total: 4000))
+        XCTAssertFalse(ModelStore.contentRangeMatches("items 1500-3999/4000", offset: 1500, total: 4000))
+        XCTAssertFalse(ModelStore.contentRangeMatches("bytes */4000", offset: 1500, total: 4000))
+    }
+    @MainActor func testDevelopmentOverridesAreIgnoredWhereTheyAreOff() {
+        let environment = ["PARZR_MODELS_DIR": "/tmp/elsewhere", "PARZR_MODELS_BASE_URL": "file:///tmp/pack/", "PARZR_ENGINE_PATH": "/tmp/engine.dylib", "HOME": "/Users/x"]
+        XCTAssertTrue(DevOverrides.enabled, "debug builds and swift test honour them")
+        XCTAssertEqual(DevOverrides.value("PARZR_MODELS_DIR", in: environment, enabled: true), "/tmp/elsewhere")
+        XCTAssertNil(DevOverrides.value("PARZR_MODELS_DIR", in: ["PARZR_MODELS_DIR": ""], enabled: true))
+        // A release build: every PARZR_* variable is gone, nothing else.
+        for name in ["PARZR_MODELS_DIR", "PARZR_MODELS_BASE_URL", "PARZR_ENGINE_PATH", "PARZR_MODEL_PATH", "PARZR_GEC_DIR", "PARZR_SLIP_DIR", "PARZR_TONE_DIR"] {
+            XCTAssertNil(DevOverrides.value(name, in: [name: "/x"], enabled: false), name)
+        }
+        let release = DevOverrides.environment(environment, enabled: false)
+        XCTAssertEqual(release, ["HOME": "/Users/x"])
+        XCTAssertEqual(ModelStore.defaultRoot(environment: release), ModelStore.defaultRoot(environment: [:]))
+        XCTAssertNotEqual(ModelStore.defaultRoot(environment: environment), ModelStore.defaultRoot(environment: [:]))
+        XCTAssertNil(ModelCenter.liveStore(release).baseURL)
+        XCTAssertNotNil(ModelCenter.liveStore(environment).baseURL)
+    }
     func testFileCopiesCanStandInForTheRelease() async throws {
         // A local copy of the pack (file:// URLs): the end-to-end test and development use this, with the same hash checks.
         let assets = root.appendingPathComponent("assets"); try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
@@ -406,6 +491,37 @@ final class ModelCenterTests: XCTestCase {
         XCTAssertEqual(slips.state, .ready)
         let dev = ModelCenter(pack: tonePack, store: ModelStore(root: root, transport: transport), defaults: defaults, development: true, optional: .tone)
         XCTAssertEqual(dev.statusLine, "Using the model named by PARZR_TONE_DIR.")
+    }
+    func testTheNextLaunchChecksTheInstalledPackBeforeUsingIt() async throws {
+        let first = center(fake()); first.start(); await wait(first, for: .ready)
+        // A new launch: this run has not hashed the files yet.
+        func launch(_ transport: FakeTransport) -> ModelCenter {
+            var store = ModelStore(root: root, transport: transport); store.verified = VerifiedFiles()
+            return ModelCenter(pack: ModelPackTests.pack, store: store, defaults: defaults)
+        }
+        let transport = fake()
+        let next = launch(transport)
+        var ready = 0; next.onReady = { ready += 1 }
+        XCTAssertEqual(next.state, .verifying)
+        XCTAssertEqual(next.unavailableNote, "Smart grammar is getting ready. Checked with the rules for now.")
+        XCTAssertTrue(PackHold.shared.held, "the engine uses no pack until the check is done")
+        next.start(); XCTAssertTrue(transport.requests.isEmpty, "a check in progress is not a download")
+        await wait(next, for: .ready)
+        XCTAssertEqual(ready, 1); XCTAssertTrue(transport.requests.isEmpty)
+        for _ in 0..<50 where PackHold.shared.held { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(PackHold.shared.held)
+        // Changed on disk: set aside, never used, and offered for download again.
+        let model = root.appendingPathComponent("essential/2/writer.gguf")
+        var bytes = try Data(contentsOf: model); bytes[0] ^= 0xFF; try bytes.write(to: model)
+        let changed = launch(transport)
+        await wait(changed, for: .failed(.changedOnDisk("writer.gguf")))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("essential/2").path), "set aside")
+        XCTAssertFalse(ModelPackFailure.changedOnDisk("x").retriesAutomatically)
+        XCTAssertTrue(changed.statusLine.contains("Download them again"))
+        changed.start(userInitiated: true)
+        await wait(changed, for: .ready)
+        XCTAssertEqual(try Data(contentsOf: model), ModelPackTests.model)
+        XCTAssertFalse((try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("essential").path)).contains { $0.hasPrefix(".quarantine") }, "the set-aside copy goes once a new one verifies")
     }
     func testDevelopmentModelsNeedNoDownload() {
         let center = ModelCenter(pack: ModelPackTests.pack, store: ModelStore(root: root, transport: fake()), defaults: defaults, development: true)

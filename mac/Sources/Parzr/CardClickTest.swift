@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ParzrCore
 
@@ -71,3 +73,4 @@ func runCardClickTest(host: NSView, window: NSWindow, surface: String, typing: S
     try NativeControls.snapshot(host, to: target.appendingPathComponent("\(surface)-after.png"))
     guard probes > 0, failures.isEmpty else { throw ParzrError.message(failures.first ?? "\(surface): no marks were probed.") }
 }
+#endif

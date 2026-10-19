@@ -607,14 +607,13 @@ void gecRelease(Gec &g) {
     g.model = nil; g.directory.clear();
     malloc_zone_pressure_relief(nullptr, 0);
 }
-// The folder the engine names (the downloaded pack's), else the last one it named, else PARZR_GEC_DIR, else `gector` beside the Qwen model file (PARZR_MODEL_PATH), else beside this library (dist/model).
+// The folder the engine names (the downloaded pack's, or a development override the engine honours), else the last one it named, else beside this library (dist/model).
+// The runtime reads no environment variables: overrides are the engine's, and a release engine ignores them (engine/src/overrides.rs).
 std::string gecDirectory(const char *given, const std::string &remembered) {
     if (given && *given) return given;
     if (!remembered.empty()) return remembered;
-    if (const char *env = std::getenv("PARZR_GEC_DIR"); env && *env) return env;
     NSFileManager *files = NSFileManager.defaultManager;
     NSMutableArray<NSString *> *candidates = [NSMutableArray array];
-    if (const char *model = std::getenv("PARZR_MODEL_PATH"); model && *model) [candidates addObject:[[@(model) stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"gector"]];
     Dl_info info;
     if (dladdr(reinterpret_cast<const void *>(&gecDirectory), &info) && info.dli_fname) {
         NSString *library = [@(info.dli_fname) stringByDeletingLastPathComponent];

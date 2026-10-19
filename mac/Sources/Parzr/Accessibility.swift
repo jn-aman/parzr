@@ -263,9 +263,12 @@ struct SelectionSnapshot {
         // Check app policy before resolving the focused text, which itself reads editor attributes.
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         guard Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: passive) else { throw ParzrError.message("Automatic checking is paused for this app.") }
+        // Password managers, authenticators and security panes are never read, on request or not.
+        guard !HostRules.shared.excludesApp(app.bundleIdentifier) else { throw ParzrError.message("Parzr does not read this app.") }
         guard let element = AX.focusedText(app, automatic: passive),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        if !passive, Compat.blocksExplicitCheck(bundle: app.bundleIdentifier, verdict: AX.hostVerdict(element)) { throw ParzrError.message("Parzr does not read this field.") }
         // Another app's secure input hides this plain field's typing too: name that app instead of blaming the field.
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
@@ -318,6 +321,8 @@ struct SelectionSnapshot {
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         let element = AX.focusedText(app) ?? AX.focused(app) ?? AXUIElementCreateApplication(app.processIdentifier)
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        // Cmd+C goes only to an app Parzr checks and a field no rule blocks (never a password manager, a terminal or a sign-in field).
+        guard Compat.allowsCopyFallback(bundle: app.bundleIdentifier, verdict: AX.hostVerdict(element), secure: false) else { throw ParzrError.message("Parzr does not read this field.") }
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         let text = try await ClipboardTransaction.copySelection(from: app.processIdentifier) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
@@ -530,7 +535,7 @@ struct SelectionSnapshot {
                 // The typed replacement left the caret after the earliest edit; walk it back to the writer's place (see docsMoveCaret).
                 let after = min(selection.location + first.start_utf16 + first.replacement.utf16.count, expected.utf16.count)
                 let span = NSRange(location: min(after, target), length: abs(target - after))
-                await AX.docsMoveCaret(app, by: ((expected as NSString).substring(with: span).count) * (target >= after ? 1 : -1))
+                await AX.docsMoveCaret(app, element: element, automatic: automatic, by: ((expected as NSString).substring(with: span).count) * (target >= after ? 1 : -1))
             } else {
                 _ = AX.select(element, NSRange(location: target, length: 0))
             }

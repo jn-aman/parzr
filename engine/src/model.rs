@@ -56,9 +56,10 @@ unsafe extern "C" {
 }
 /// The engine's answer while the writing model is not on this Mac (the app downloads it).
 pub const MODEL_MISSING: &str = "The writing model is not downloaded yet.";
-/// The native runtime library: PARZR_MODEL_RUNTIME, else the app's Frameworks folder beside the executable.
+/// The native runtime library: PARZR_MODEL_RUNTIME (a development override), else the app's
+/// Frameworks folder beside the executable.
 fn library_path() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os("PARZR_MODEL_RUNTIME") {
+    if let Some(path) = crate::overrides::var("PARZR_MODEL_RUNTIME") {
         return Ok(PathBuf::from(path));
     }
     let executable = std::env::current_exe().map_err(|_| "Could not locate the model runtime.")?;
@@ -67,10 +68,9 @@ fn library_path() -> Result<PathBuf, String> {
         .ok_or("Could not locate the model runtime.")?;
     Ok(directory.join("../Frameworks/libparzr_model.dylib"))
 }
-/// The writing model: PARZR_MODEL_PATH (development and tests), else the downloaded pack's file.
+/// The writing model: PARZR_MODEL_PATH (a development override), else the downloaded pack's file.
 pub fn model_file() -> Option<PathBuf> {
-    std::env::var_os("PARZR_MODEL_PATH")
-        .filter(|p| !p.is_empty())
+    crate::overrides::var("PARZR_MODEL_PATH")
         .map(PathBuf::from)
         .or_else(|| crate::packs::installed("writing_model"))
 }
@@ -235,7 +235,7 @@ fn gec_api() -> Option<&'static GecApi> {
     GEC.get_or_init(|| {
         use std::os::unix::ffi::OsStrExt;
         // PARZR_GEC_RUNTIME points development runs at a separate build of the grammar model's runtime.
-        let library = std::env::var_os("PARZR_GEC_RUNTIME")
+        let library = crate::overrides::var("PARZR_GEC_RUNTIME")
             .map(PathBuf::from)
             .or_else(|| library_path().ok())?;
         let path = CString::new(library.as_os_str().as_bytes()).ok()?;
@@ -262,10 +262,10 @@ fn gec_api() -> Option<&'static GecApi> {
 /// Where the grammar model's files live: PARZR_GEC_DIR, else `gector` beside PARZR_MODEL_PATH
 /// (development), else the downloaded pack's folder. None while the pack is not on this Mac.
 pub fn gec_dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("PARZR_GEC_DIR").filter(|d| !d.is_empty()) {
+    if let Some(dir) = crate::overrides::var("PARZR_GEC_DIR") {
         return Some(PathBuf::from(dir));
     }
-    if let Some(model) = std::env::var_os("PARZR_MODEL_PATH").filter(|p| !p.is_empty()) {
+    if let Some(model) = crate::overrides::var("PARZR_MODEL_PATH") {
         return Some(PathBuf::from(model).parent()?.join("gector"));
     }
     crate::packs::installed("grammar_model")
@@ -312,7 +312,7 @@ static MLM: OnceLock<Option<MlmApi>> = OnceLock::new();
 fn mlm_api() -> Option<&'static MlmApi> {
     MLM.get_or_init(|| {
         use std::os::unix::ffi::OsStrExt;
-        let library = std::env::var_os("PARZR_GEC_RUNTIME")
+        let library = crate::overrides::var("PARZR_GEC_RUNTIME")
             .map(PathBuf::from)
             .or_else(|| library_path().ok())?;
         let path = CString::new(library.as_os_str().as_bytes()).ok()?;
