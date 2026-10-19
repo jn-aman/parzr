@@ -61,8 +61,40 @@ public struct ModelManifest: Codable, Equatable, Sendable {
     }
     /// The pack that holds the models for typing and Option+Space (the one that provides the writing model).
     public var essential: ModelPack? { packs.first { $0.provides["writing_model"] != nil } ?? packs.first }
-    /// The optional pack of the typing-time slip check (the one that provides the slip model).
-    public var slips: ModelPack? { packs.first { $0.provides["slip_model"] != nil } }
+    /// The pack that provides `role` (an optional pack's role, such as "slip_model" or "tone_model"), if this manifest has one.
+    public func pack(providing role: String) -> ModelPack? { packs.first { $0.provides[role] != nil } }
+    /// The optional pack of the typing-time slip check.
+    public var slips: ModelPack? { pack(providing: OptionalPack.slips.role) }
+    /// The optional pack of the tone check.
+    public var tone: ModelPack? { pack(providing: OptionalPack.tone.role) }
+}
+
+/// A pack beyond the essential one: a feature of its own, with its own download, Remove and Settings section. Every
+/// optional pack is described here and driven by the same `ModelCenter`; adding one is a value below plus its catalog entry.
+public struct OptionalPack: Sendable, Equatable, Identifiable {
+    /// What the pack provides in engine/models.json ("slip_model", "tone_model").
+    public let role: String
+    /// The feature in the surfaces' words ("Slip check", "Tone check").
+    public let feature: String
+    /// Development: this variable points at local files instead, so nothing is downloaded.
+    public let developmentVariable: String
+    /// Downloads on its own once the essential pack is ready (true), or only when the user asks or turns its feature on.
+    public let automatic: Bool
+    /// What Parzr does without it, while it is missing and after the user removed it.
+    public let missingNote: String
+    public let removedNote: String
+    public var id: String { role }
+    public init(role: String, feature: String, developmentVariable: String, automatic: Bool, missingNote: String, removedNote: String) {
+        self.role = role; self.feature = feature; self.developmentVariable = developmentVariable; self.automatic = automatic; self.missingNote = missingNote; self.removedNote = removedNote
+    }
+    public static let slips = OptionalPack(role: "slip_model", feature: "Slip check", developmentVariable: "PARZR_SLIP_DIR", automatic: true,
+                                           missingNote: "Word-choice slips are checked on Option+Space until it arrives.",
+                                           removedNote: "Word-choice slips are checked only on Option+Space until you download it.")
+    public static let tone = OptionalPack(role: "tone_model", feature: "Tone check", developmentVariable: "PARZR_TONE_DIR", automatic: false,
+                                          missingNote: "Downloaded when you turn on Tone check in Settings, Writing.",
+                                          removedNote: "Tone check is off until you download it again.")
+    /// Every optional pack, in the order Settings lists them.
+    public static let all: [OptionalPack] = [.slips, .tone]
 }
 
 /// Why a pack is not ready. Every case leaves Parzr working with its rules.

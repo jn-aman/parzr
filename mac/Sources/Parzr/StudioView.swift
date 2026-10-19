@@ -41,6 +41,8 @@ struct StudioView: View {
     @ObservedObject var preferences = Preferences.shared
     @ObservedObject var updates = UpdateModel.shared
     @ObservedObject var models: ModelCenter = .app
+    /// The tone check's pack, so its Settings line follows the download (the essential center stands in when a build pins no tone pack).
+    @ObservedObject var toneModels: ModelCenter = ModelCenter.tone ?? .app
     var route: StudioRoute?
     var renderingSnapshot: Bool
     @State private var draft: String
@@ -190,6 +192,13 @@ struct StudioView: View {
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.hairline, lineWidth: 0.7)).padding(.horizontal, 28)
             if let error = model.error {
                 HStack { Text(error).font(.system(size: 11)).foregroundStyle(Color.errorInk); Spacer(); NativeButton(title: "Retry", action: { model.playground(draft) }).fixedSize() }.padding(.horizontal, 28).padding(.top, 10)
+            } else if let flag = model.toneFlag, model.source == draft, let tone = model.softenTone {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.exclamationmark.bubble.right").foregroundStyle(Color.correctionInk).accessibilityHidden(true)
+                    (Text(flag.title + ". ").font(.system(size: 11, weight: .semibold)).foregroundColor(Color.textPrimary) + Text(flag.reason).font(.system(size: 11)).foregroundColor(Color.textSecondary)).lineLimit(2)
+                    Spacer(minLength: 8)
+                    NativeButton(title: "Soften", label: "Soften: rewrite as \(tone.title)", enabled: !model.busy, action: { model.soften() }).fixedSize().help("Rewrite the draft as \(tone.title)")
+                }.padding(.horizontal, 28).padding(.top, 8)
             } else if let warning = models.explain(model.result?.warnings)?.first(where: { $0 != "context.pending" }) ?? (preferences.smartGrammar ? models.unavailableNote : nil) { Text(warning).font(.system(size: 10)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 28).padding(.top, 8) }
             HStack {
                 Text("Select text anywhere · \(preferences.shortcutDisplay)")
@@ -254,6 +263,8 @@ struct StudioView: View {
                     divider
                     settingRow("Context refinement", detail: "Use the larger on-device model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
                     divider
+                    settingRow("Tone check", detail: "Flags a message that may read as rude, passive-aggressive, curt or overly apologetic, with a reason and a Soften button. \(ToneModel.status)") { toggle("Tone check", $preferences.toneCheck) }
+                    divider
                     settingRow("Smart grammar (on-device model)", detail: models.isReady ? "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. It runs entirely on your Mac." : "A small model on your Mac's Neural Engine catches grammar the rules miss. \(models.unavailableNote ?? "")") { toggle("Smart grammar", $preferences.smartGrammar) }
                 }
                 group("PERSONAL DICTIONARY") {
@@ -281,7 +292,7 @@ struct StudioView: View {
             case .learning:
                 learning
             case .models:
-                ModelsSettings(center: models, slips: ModelCenter.slips)
+                ModelsSettings(center: models, optional: ModelCenter.optionalCenters)
             case .appearance:
                 group("LOOK & FEEL") {
                     settingRow("Appearance", detail: "Graphite, Paper, or your Mac’s appearance.") { ChoiceStrip(label: "Appearance", choices: [("Graphite", "graphite"), ("Paper", "paper"), ("System", "system")], selection: $preferences.appearance) }

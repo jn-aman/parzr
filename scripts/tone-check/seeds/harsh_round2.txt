@@ -1,0 +1,92 @@
+# Round 2 harsh lines (label<TAB>text): blame generalizations, belittling comparisons, sarcasm, ultimatums and bossy
+# imperatives, in many settings. Written for Parzr's tone check (synthetic; no real messages).
+rude	You always find a way to mess things up.
+rude	You never think before you act.
+rude	Why is it always your section that's wrong?
+rude	Every time you touch the schedule, it breaks.
+rude	Your department keeps screwing up and we pay for it.
+rude	Your crew can't do a single job right.
+rude	I can't believe I have to explain basic arithmetic to a manager.
+rude	I shouldn't have to teach a nurse how to read a chart.
+rude	A first-week trainee would know better than this.
+rude	My grandmother types faster than you.
+rude	This looks like it was drawn by a kid with a crayon.
+rude	Your cooking tastes like cardboard.
+rude	Your proposal is waffle and nonsense.
+rude	This article is tripe.
+rude	That's the most brainless thing you've done yet.
+rude	Hey Einstein, the meeting was yesterday.
+rude	Nice going, genius, you locked us all out.
+rude	Are you capable of doing anything right?
+rude	Do you ever listen, or do you just wait for your turn to talk?
+rude	You talk a lot for someone who never delivers.
+rude	Get out of my sight.
+rude	Buzz off, I'm busy.
+rude	Piss off with your complaints.
+rude	What the f is this mess?
+rude	wtf is wrong with the delivery team
+rude	Your excuses are pathetic.
+rude	Every single thing you send me is wrong.
+rude	You're a waste of a salary.
+rude	Honestly, you're the weakest link on this team.
+rude	Is anyone in accounting capable of basic math?
+passive_aggressive	It must be wonderful to have such a flexible schedule.
+passive_aggressive	It must be so relaxing to never check your email.
+passive_aggressive	I just love finding out about changes after everyone else.
+passive_aggressive	Love how the plan changes every time I leave the room.
+passive_aggressive	I see the kitchen cleaned itself again. Oh wait.
+passive_aggressive	Interesting how the paperwork disappears on your shift.
+passive_aggressive	Oh, you're early! Is it a holiday?
+passive_aggressive	Look at you, replying within a week.
+passive_aggressive	Your report was surprisingly readable this time.
+passive_aggressive	That was almost competent.
+passive_aggressive	It's cute that you think the client will pay on time.
+passive_aggressive	Adorable plan. Let me know how that works out.
+passive_aggressive	I enjoy doing my job and yours, really.
+passive_aggressive	Oh no, don't worry, I love working weekends.
+passive_aggressive	Please, go ahead and take credit, you're good at it.
+passive_aggressive	So we just ignore the rota now? Good to know.
+passive_aggressive	I guess we're not labelling the boxes anymore.
+passive_aggressive	As I said at the briefing you didn't attend, the gate code changed.
+passive_aggressive	Like I told you twice already, the form goes to HR.
+passive_aggressive	Again, for the people in the back: shoes off in the studio.
+passive_aggressive	Once more, since it didn't stick: the sink is not a storage area.
+passive_aggressive	Whenever you find a moment to do what you said you'd do in spring.
+passive_aggressive	Not to nag, but this is the fourth time I've asked.
+passive_aggressive	I'm sure you have a perfectly good explanation for the empty shelves.
+passive_aggressive	No worries, I'll cancel my plans again.
+passive_aggressive	Thanks for the help, said no one ever.
+passive_aggressive	Wow, a whole sentence in your reply. Progress.
+passive_aggressive	Good of you to grace the staff room with your presence.
+passive_aggressive	Shocking, the van is late. Truly unprecedented.
+passive_aggressive	Great, I'll just add that to the pile of things I do for you.
+curt	Be here at seven or don't come at all.
+curt	Do it properly or don't do it.
+curt	Finish the order or I'll give it to someone who will.
+curt	Don't text me on weekends.
+curt	Don't bother me with this.
+curt	Don't ask me again.
+curt	Clean it up. Then we'll talk.
+curt	Sweep the floor. Now.
+curt	Get back to work.
+curt	Get off your phone.
+curt	Hang up and help me.
+curt	Move it.
+curt	Take your stuff and go.
+curt	Leave the report and get out.
+curt	The forms. Friday. No exceptions.
+curt	Rewrite it. Shorter.
+curt	Wrong again. Fix it.
+curt	Not my job. Ask the office.
+curt	Don't care, figure it out.
+curt	Stop calling me about this.
+curt	I'm not repeating myself.
+curt	Just sign it and send it back.
+curt	Just answer the phone.
+curt	Hurry up with the delivery.
+curt	Be quiet and listen.
+curt	Do as you're told.
+curt	I don't want to hear it.
+curt	No more questions. Do the work.
+curt	Pick a slot and stop emailing me.
+curt	Send the receipts. Not excuses.

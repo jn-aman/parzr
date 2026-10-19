@@ -1,0 +1,186 @@
+# passive_aggressive: indirect hostility. Sarcasm, pointed reminders, backhanded compliments, guilt trips,
+# fake politeness covering annoyance. Written for Parzr's tone check (synthetic; no real messages).
+Per my last email, the deadline was Friday.
+As I already mentioned twice, the file is in the shared drive.
+Thanks for finally getting back to me.
+Glad you could eventually join us.
+No worries, I'll just do it myself like always.
+Must be nice to leave at 4 every day.
+Just a friendly reminder that I asked for this last week.
+As previously stated, we are not changing the scope.
+I guess my messages aren't important enough to answer.
+Thanks for reading my email so carefully.
+Wow, great of you to show up.
+I'm sure you had a very good reason for missing the deadline.
+Interesting choice to ignore the style guide.
+Not sure if you saw my last three messages.
+Bumping this again, since apparently nobody reads Slack.
+It would be great if someone could actually read the doc for once.
+Happy to explain it a fourth time.
+Let me know if you need me to do your job for you too.
+I'll take care of it, since no one else will.
+Thanks for the heads-up. Two hours after the meeting.
+Oh, so now it's urgent?
+Funny how this only becomes a priority when the client complains.
+Fine. Do it your way, then.
+Sure, because that worked so well last time.
+Kudos for finally fixing the bug you introduced.
+Nice of you to reply.
+As per my previous message, which you clearly didn't read.
+I'm not mad, I'm just disappointed.
+Love how I find out about this from the client.
+Gentle reminder that this was due yesterday.
+Sorry, I didn't realize I had to remind you to do your job.
+I'll just assume you're too busy, as usual.
+Must have gotten lost in your inbox again.
+Thanks for the last-minute notice, really appreciate it.
+Great, another meeting that could have been an email.
+I'm sure you'll get to it eventually.
+Whenever you get around to it is fine. No rush. It's only been a month.
+Just checking in again for the fifth time.
+Hope you enjoyed your long lunch.
+Some of us actually have deadlines.
+If it's not too much trouble, could you maybe do what we agreed on?
+Thanks for doing the bare minimum.
+I see you've decided to reinvent the process again.
+Bold of you to estimate two days.
+Wow, it only took you three weeks.
+I appreciate you eventually responding.
+Noted. Again.
+Just to reiterate what I said in the meeting you weren't paying attention in.
+I didn't realize we were changing the plan without telling anyone.
+Interesting that you remember this differently.
+Thanks for throwing me under the bus in front of the VP.
+Per our conversation, which you apparently forgot.
+Going forward, it'd be nice to be included before decisions are made.
+Not to be that person, but I did flag this in March.
+Correct me if I'm wrong, but didn't I already send you this?
+Must be nice to have so much free time.
+It's fine. I'll stay late again.
+Don't worry about me, I'll figure it out on my own, as always.
+I'm sure the client won't mind waiting another week.
+Thanks for your input. We'll do it the right way.
+Great job on the slides. Shame about the numbers.
+Your presentation was good for a first try.
+Looks good for something done in an afternoon.
+Nice work, I'm surprised you managed it.
+Not bad, considering.
+Oh good, you're awake.
+Look who decided to show up.
+Thanks for cc'ing my manager on that, very helpful.
+So glad we spent an hour discussing something that was already decided.
+Thanks for letting me know at 6pm on a Friday.
+I'll wait. I'm used to it.
+It's okay, I didn't need a weekend anyway.
+Clearly my time is less important than yours.
+Must be hard keeping track of all those deadlines you miss.
+Just making sure this doesn't fall through the cracks like last time.
+Since nobody seems to know, the password reset steps are in the wiki.
+Thanks for the feedback. I'll be sure to ignore it.
+I'm sure you meant to reply to my email last week.
+In case it got buried under all your other priorities, here it is again.
+Reattaching the file for the third time.
+Sending this again in case you lost it. Again.
+I'll just go ahead and assume silence means yes.
+Let's try to stick to the agenda this time, if that's possible.
+Happy to hop on a call if reading the thread is too hard.
+Per the doc that nobody read, launch is on the 12th.
+I thought we were all adults here.
+Thanks so much for fixing my code without asking.
+I'd love to know who decided this, since it wasn't me.
+Good to know my approval is optional.
+I see the meeting went ahead without me. Cool.
+Must be nice not to be on call.
+Totally fine that nobody told me the demo moved.
+Oh, you're asking me now? Great timing.
+Funny, that's exactly what I suggested last month.
+Glad you finally agree with what I said in June.
+Took you long enough.
+Better late than never, I suppose.
+Thanks for showing up to your own meeting.
+Wow, a reply. I'm honored.
+I'll put it in writing this time so there's no confusion later.
+Not sure why I'm the only one who seems to care about the deadline.
+I'm sure you're very busy, but some of us need this to do our jobs.
+No, it's fine, I love redoing work.
+Sure, let's change the requirements again. Why not.
+Can't wait to hear what changed this time.
+Yes, I did read your message. All four paragraphs of it.
+Interesting how the numbers only matter when they look bad for me.
+Thanks for the reminder. I can read a calendar.
+Appreciate you reminding me of something I told you.
+I guess the process only applies to some people.
+It's almost like someone didn't read the instructions.
+Shocking, the build is broken again.
+What a surprise, the vendor missed the date again.
+You must be so proud of that commit message.
+Must be nice having a manager who covers for you.
+Don't mind me, I only wrote the spec.
+Hope the rest of your team is as attentive as you.
+If you'd read the brief, you'd know.
+As anyone who read the email would know, the office is closed Monday.
+Let me spell it out for you one more time.
+Since you asked so nicely, here it is.
+Great, thanks for nothing.
+Thanks for the help. Oh wait, there wasn't any.
+I'll take your silence as agreement, as usual.
+Not that anyone asked me, but the API is down.
+Apparently I'm the only one who reads the release notes.
+I'm thrilled to be the last to know.
+Super helpful to find this out the day of.
+Love the enthusiasm. Shame about the follow-through.
+Oh, so you DO check Slack.
+Nice to see you in the office for once.
+Thanks for gracing us with your presence.
+Glad to see someone finally read the ticket.
+Per my calendar invite, which you declined, the review is today.
+As stated in the email I sent three times.
+Interesting that you're only raising this now.
+No offense, but did you even look at it?
+With all due respect, that's not how any of this works.
+I'm just saying, if it had been done right the first time.
+Must be nice to just ignore emails.
+Must be nice to work from the beach.
+Not to point fingers, but this is the second time your team broke staging.
+You're welcome, by the way.
+I'll just add it to the list of things I do that aren't my job.
+Hope you had a nice relaxing week while the rest of us fixed your bug.
+Really looking forward to cleaning up after this one.
+Oh great, more feedback after the deadline.
+Thanks for the extremely detailed reply of "ok".
+Thanks for the thorough review. All one comment of it.
+So we're just ignoring the retro action items now? Cool.
+Just wondering if anyone plans to answer this.
+Still waiting, no pressure.
+No pressure, but the whole team is blocked on you.
+Not sure how else to say this, but the deadline is real.
+I'll keep reminding you until you actually do it.
+I'm sure it's my fault somehow.
+I guess I'll just stay quiet next time.
+Oh sorry, was I supposed to read your mind?
+Let me guess, you didn't have time.
+Hmm, interesting interpretation of "done".
+Love that "quick fix" took the whole sprint.
+Glad someone finally noticed.
+Per my last three emails, please send the invoice.
+Kindly refer to my previous email, which answers your question.
+Kindly read the thread before asking.
+As discussed (repeatedly), the scope is fixed.
+For the record, I said this would happen.
+Just so we're clear, I told you this in writing.
+I'm sure you didn't mean to take credit for my work in the meeting.
+Cool, so my input didn't matter at all.
+Fine, whatever you think is best. You always do.
+Thanks for the vote of confidence.
+Great timing as always.
+Classic.
+Of course it broke right after you touched it.
+Must be my imagination that this was promised last quarter.
+Thanks for the update I asked for two weeks ago.
+Oh, now you have questions?
+Nice of you to let me know after I already finished it.
+I wasn't aware that "end of day" meant end of week.
+Thanks for letting the whole thread know I made a typo.
+Hey, just circling back on my circling back.
+Following up on my follow-up.
+Reminder number six.

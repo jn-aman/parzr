@@ -225,6 +225,78 @@
           "purpose": "Word-choice slips while you type"
         }
       ]
+    },
+    {
+      "id": "tone",
+      "version": "1",
+      "title": "Tone check",
+      "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded only when Tone check is on.",
+      "license": "Apache-2.0 (fine-tuned from all-MiniLM-L6-v2, Apache-2.0; training data synthetic or openly licensed, see scripts/tone-check)",
+      "provides": {
+        "tone_model": "tone"
+      },
+      "files": [
+        {
+          "path": "tone/tone-config.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.tone-config.json",
+          "bytes": 132,
+          "sha256": "55592120813334224e521d23cca98b101f0f2f926c91fb40d9bfb4b80b856b1f",
+          "name": "Tone check settings",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/analytics/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.tone.mlmodelc.analytics.coremldata.bin",
+          "bytes": 243,
+          "sha256": "cc4924c7fc3de8b2ca013f561304e6141e34c01373b89ace7af67c34aa35ec46",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.tone.mlmodelc.coremldata.bin",
+          "bytes": 559,
+          "sha256": "30312e81c679aef29d23471936eb8aed6861b14db557203d632d52f57f397e0c",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/model.mil",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.tone.mlmodelc.model.mil",
+          "bytes": 94767,
+          "sha256": "6fa2da2f70fc222f667aa2414d99463db16aca6c762ea6c66abf646a5333f12c",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/weights/weight.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.tone.mlmodelc.weights.weight.bin",
+          "bytes": 22595840,
+          "sha256": "7f0476c6d145b88de7dddba18af4e793a0e6f4374c6eca157087b7ce2618f438",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/vocab.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-1/tone.vocab.txt",
+          "bytes": 231508,
+          "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+          "name": "Tone check vocabulary (BERT uncased WordPiece)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        }
+      ]
     }
   ]
 }

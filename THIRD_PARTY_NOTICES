@@ -134,6 +134,18 @@ masked-language-model head scored at one position per row) made by
 scripts/convert-slips.py; revisions, versions and SHA-256 hashes are in the pack's
 slips/manifest.json. The model runs entirely on the device; nothing is sent.
 
+Tone check model (the optional "tone" pack, downloaded only when Tone check is on)
+Fine-tuned from sentence-transformers/all-MiniLM-L6-v2, revision
+1110a243fdf4706b3f48f1d95db1a4f5529b4d41, https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+(based on microsoft/MiniLM-L6-H384-uncased). Apache License 2.0. Its BERT uncased
+WordPiece vocabulary (vocab.txt) ships with the model, unchanged. The fine-tuned
+network is converted to Core ML with 8-bit weights by scripts/tone-check.
+Training data: lines written for Parzr (synthetic), the Stanford Politeness Corpus
+(Danescu-Niculescu-Mizil et al., 2013, CC BY 4.0), ParaDetox (s-nlp/paradetox,
+Logacheva et al., 2022, OpenRAIL++) and the Civil Comments validation shard
+(google/civil_comments, CC0). No private writing was used.
+The model runs entirely on the device; nothing is sent.
+
 The engine tokenizes sentences for the model as spaCy 3.8 does. Its English tokenizer rules
 (engine/rules/gec-tokenizer.json: prefix, suffix and infix patterns and the special-case table)
 are exported from spaCy, Copyright Explosion. MIT license. https://github.com/explosion/spaCy

@@ -49,6 +49,9 @@ final class Preferences: ObservableObject {
     @Published var contextRefinement: Bool { didSet { defaults.set(contextRefinement, forKey: "contextRefinement") } }
     /// The on-device grammar model (GECToR) beside the rules, for typing and explicit Fix checks.
     @Published var smartGrammar: Bool { didSet { defaults.set(smartGrammar, forKey: "smartGrammar") } }
+    /// Opt-in: a small on-device classifier flags a message that may read as rude, passive-aggressive, curt or overly apologetic,
+    /// with a Soften button that runs the matching tone rewrite. Its model is a separate download (the "tone" pack).
+    @Published var toneCheck: Bool { didSet { defaults.set(toneCheck, forKey: "toneCheck") } }
     @Published var showWordCount: Bool { didSet { defaults.set(showWordCount, forKey: "showWordCount") } }
     /// Anonymous suggestion reports (see `Reports`): on unless the writer turns them off. Off stops sending and erases the queue at once.
     @Published var shareReports: Bool { didSet { defaults.set(shareReports, forKey: "shareReports"); if shareReports != oldValue { Reports.setEnabled(shareReports) } } }
@@ -121,6 +124,7 @@ final class Preferences: ObservableObject {
         reduceMotion = defaults.bool(forKey: "reduceMotion")
         contextRefinement = defaults.object(forKey: "contextRefinement") as? Bool ?? true
         smartGrammar = defaults.object(forKey: "smartGrammar") as? Bool ?? true
+        toneCheck = defaults.bool(forKey: "toneCheck")
         showWordCount = defaults.object(forKey: "showWordCount") as? Bool ?? true
         shareReports = defaults.object(forKey: "shareReports") as? Bool ?? true
         showInDock = defaults.object(forKey: "showInDock") as? Bool ?? true

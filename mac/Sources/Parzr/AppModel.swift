@@ -22,6 +22,8 @@ final class AppModel: ObservableObject {
     @Published var selectionHint = false
     /// The rewrite offered after a Fix check (the selection card only), in the tone that fits the app; written in the background.
     @Published var suggestion: SuggestedVersion?
+    /// Tone check (opt-in): set after a Fix check when the text may read as rude, passive-aggressive, curt or overly apologetic.
+    @Published var toneFlag: ToneFlag?
     /// Set for the selection card: a Fix check of a few words or more also offers one rewrite.
     var offersRewrite = false
     /// What the writer does with this model's suggestions is reported (when reports are on). The welcome guide's sample turns it off.
@@ -34,6 +36,7 @@ final class AppModel: ObservableObject {
     var pasteboard = NSPasteboard.general
     private var analysisTask: Task<Void, Never>?
     private var suggestionTask: Task<Void, Never>?
+    private var toneTask: Task<Void, Never>?
     private var generation = 0
     private var clipboard: ClipboardTransaction?
     var chosenEdits: [WritingEdit] { result?.edits.filter { selectedEdits.contains($0.id) } ?? [] }
@@ -78,6 +81,7 @@ final class AppModel: ObservableObject {
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
         provisional = false; busy = false; engineReady = true; error = nil; status = nil
         status = Self.statusText(result.warnings)
+        toneFlag = nil; checkTone(source, generation: generation)
     }
     func playground(_ text: String, debounce: Bool = false) {
         let old = source
@@ -106,9 +110,10 @@ final class AppModel: ObservableObject {
         let current = generation; let original = source; let checkingSnapshot = snapshot
         error = nil; status = nil
         // An explicit check clears the old answer and shows Checking at once; typing keeps its marks and only shows Checking if the wait is long.
-        if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true }
+        if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true; toneFlag = nil }
         // Typing always takes the fast grammar path. Tone and passage review are explicit.
         let requestMode: RewriteMode = debounce ? .fix : mode
+        if requestMode != .fix { toneTask?.cancel(); toneFlag = nil }
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
         let capitalize = Preferences.shared.capitalizeNames(for: snapshot?.app.bundleIdentifier)
         // A tone rewrite starts with the same correction pass as Fix, so Smart grammar applies to it too; a chat app's Friendly rewrite may end with an emoji.
@@ -131,6 +136,7 @@ final class AppModel: ObservableObject {
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
                 self.status = Self.statusText(result.warnings)
                 if !debounce, requestMode == .fix, offersRewrite, SuggestedRewrite.offered(for: original) { suggest(original, generation: current) }
+                if requestMode == .fix { checkTone(original, generation: current) }
                 didAnalyze?()
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
@@ -160,6 +166,25 @@ final class AppModel: ObservableObject {
             suggestion?.result = written; suggestion?.done = true
         }
     }
+    /// Asks the tone classifier about `original` (a few milliseconds, off the main actor) and shows its flag if the text is still current.
+    private func checkTone(_ original: String, generation current: Int) {
+        toneTask?.cancel()
+        // Off, or checking paused or disabled for this app: no flag.
+        guard Preferences.shared.toneCheck, snapshot?.checkingEnabled != false else { toneFlag = nil; return }
+        toneTask = Task { @MainActor in
+            let flag = await ToneChecker.shared.check(original)
+            guard !Task.isCancelled, current == generation, source == original else { return }
+            toneFlag = flag
+        }
+    }
+    /// The tone that softens the flagged text where it is written.
+    var softenTone: RewriteMode? { toneFlag.map { $0.category.softenMode(bundle: snapshot?.app.bundleIdentifier, text: source) } }
+    /// One tap: rewrite in the tone that softens the flagged text, through the usual tone rewrite (and its meaning guard).
+    func soften() {
+        guard !busy, let tone = softenTone else { return }
+        toneFlag = nil
+        changeMode(tone)
+    }
     /// Puts the offered rewrite on the card as that tone's result and applies all of it.
     func useSuggestion() {
         guard suggestionReady, !busy, let offered = suggestion, let written = offered.result else { return }
@@ -169,8 +194,8 @@ final class AppModel: ObservableObject {
     /// A tone's finished result shown without a new check.
     private func show(_ written: RewriteResult, as tone: RewriteMode) {
         guard snapshot?.checkingEnabled != false else { return }
-        analysisTask?.cancel(); suggestionTask?.cancel(); generation += 1
-        mode = tone; result = written; suggestion = nil
+        analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); generation += 1
+        mode = tone; result = written; suggestion = nil; toneFlag = nil
         selectedEdits = Set(written.edits.map(\.id)); focusedEditID = written.edits.first?.id
         provisional = false; busy = false; error = nil
         status = Self.statusText(written.warnings)
@@ -254,7 +279,7 @@ final class AppModel: ObservableObject {
             } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
         }
     }
-    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); toneFlag = nil; suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
 }
 
 /// The rewrite a Fix check offers: its tone, the text it was written for, and the result once written (nil when it failed).

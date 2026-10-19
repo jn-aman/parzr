@@ -253,23 +253,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
             .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar(); await WritingEngine.warmSlips() } }.store(in: &subscriptions)
         // Models are downloaded on demand (ModelCenter): until they arrive Parzr checks with its rules. Smart grammar warms the moment they do.
-        // The slip-check pack (about 84 MB) follows the essential pack, one download at a time, and warms when it arrives.
-        let models = ModelCenter.app, slips = ModelCenter.slips
+        // Optional packs: an automatic one (the slip check, about 84 MB) follows the essential pack, one download at a time,
+        // and warms when it arrives; the tone check's downloads only when its setting is on (below).
+        let models = ModelCenter.app, optional = ModelCenter.optionalCenters, automatic = optional.filter { $0.optional?.automatic == true }
         let allowed = ModelCenter.downloadsAllowed
         models.onReady = {
             if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } }
-            if allowed { slips?.startIfNeeded() }
+            if allowed { automatic.forEach { $0.startIfNeeded() } }
         }
-        slips?.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } } }
+        ModelCenter.slips?.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } } }
         if allowed {
-            models.watchNetwork(); slips?.watchNetwork()
+            models.watchNetwork(); optional.forEach { $0.watchNetwork() }
             // A finished welcome guide (an existing user after an update, or a returning one) downloads in the background without showing anything;
             // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
             Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2)); models.startIfNeeded()
-                if models.isReady { slips?.startIfNeeded() }
+                if models.isReady { automatic.forEach { $0.startIfNeeded() } }
             } }.store(in: &subscriptions)
         }
+        // Tone check (opt-in): its model is its own small pack, fetched when the setting is turned on and loaded once it is on disk.
+        ModelCenter.tone?.onReady = { ToneModel.load() }
+        ModelCenter.tone?.onRemove = { Task { await ToneChecker.shared.unload() } }
+        ToneModel.apply(Preferences.shared.toneCheck, userInitiated: false)
+        Preferences.shared.$toneCheck.dropFirst().removeDuplicates().sink { enabled in Task { @MainActor in ToneModel.apply(enabled, userInitiated: true) } }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
@@ -353,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return main
     }
     @objc private func activated() {
-        Preferences.shared.refreshPermission(); ModelCenter.app.refresh(); ModelCenter.slips?.refresh()
+        Preferences.shared.refreshPermission(); ModelCenter.app.refresh(); ModelCenter.optionalCenters.forEach { $0.refresh() }
         if let app = NSWorkspace.shared.frontmostApplication, let snapshot = panelModel.snapshot, app.processIdentifier != snapshot.app.processIdentifier && app.bundleIdentifier != Bundle.main.bundleIdentifier { closePanel() }
         passive?.attach()
     }

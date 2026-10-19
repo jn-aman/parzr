@@ -5,10 +5,49 @@ import SwiftUI
 extension ModelCenter {
     /// The app's model pack. Self tests, snapshots and `swift test` use the throwaway preferences suite and never start a download on their own.
     static let app = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard)
-    /// The optional slip-check pack (the typing-time word-choice check), downloaded after the essential pack is ready.
-    static let slips = ModelCenter.liveSlips(defaults: Preferences.selfTestDefaults ?? .standard)
+    /// One center per optional pack (`OptionalPack.all`), in Settings order; a pack this build does not pin is left out.
+    static let optionalCenters: [ModelCenter] = OptionalPack.all.compactMap { ModelCenter.live($0, defaults: Preferences.selfTestDefaults ?? .standard) }
+    /// The slip check's pack (the typing-time word-choice check), downloaded after the essential pack is ready.
+    static var slips: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.slips } }
+    /// The tone check's pack, downloaded only once the user turns Tone check on. PARZR_TONE_DIR points at a local copy instead.
+    static var tone: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.tone } }
     /// A normal launch may download (never a self test, a snapshot or `swift test`).
     static var downloadsAllowed: Bool { !Preferences.isSelfTest && !Preferences.underXCTest && !CommandLine.arguments.contains("--health-check") }
+}
+
+/// Keeps the tone classifier in step with the setting: on downloads the pack (if needed) and loads it, off unloads it
+/// (the files stay until removed).
+@MainActor
+enum ToneModel {
+    static var center: ModelCenter? { .tone }
+    /// The installed classifier folder, or PARZR_TONE_DIR in development.
+    static func folder() -> URL? {
+        if let custom = ProcessInfo.processInfo.environment["PARZR_TONE_DIR"], !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
+        guard let center, center.state == .ready, let pack = center.pack, let store = center.store, let relative = pack.provides[OptionalPack.tone.role] else { return nil }
+        return store.folder(pack).appendingPathComponent(relative, isDirectory: true)
+    }
+    static func load() {
+        guard Preferences.shared.toneCheck, let folder = folder() else { return }
+        Task.detached(priority: .utility) { try? await ToneChecker.shared.load(folder: folder) }
+    }
+    /// `userInitiated`: the user just switched it on, which also clears an earlier Remove of the pack.
+    static func apply(_ enabled: Bool, userInitiated: Bool) {
+        guard enabled else { Task { await ToneChecker.shared.unload() }; return }
+        guard let center else { return }
+        center.refresh()
+        if center.isReady { load(); return }
+        guard ModelCenter.downloadsAllowed else { return }
+        if userInitiated { center.start(userInitiated: true) } else { center.startIfNeeded() }
+    }
+    /// One line for Settings.
+    static var status: String {
+        guard let center else { return "This copy of Parzr has no tone model." }
+        return switch center.state {
+        case .ready, .development: "Checks a selection when you press your shortcut, and the playground as you type. It runs entirely on your Mac."
+        case .missing: Preferences.shared.toneCheck ? "Getting the tone model ready (\(center.sizeText))." : "Uses a small extra model (\(center.sizeText)), downloaded when you turn this on."
+        default: center.statusLine
+        }
+    }
 }
 
 /// A thin progress bar in the accent colour; indeterminate stripes are avoided so snapshots and reduced motion stay still.
@@ -48,6 +87,7 @@ struct ModelStatus: View {
         case .downloading(_, let total): compact ? "\(center.feature) is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
         case .verifying: compact ? "\(center.feature) · checking the download" : "Checking the download…"
         case .missing where center.removedByUser: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
+        case .missing where center.optional?.automatic == false: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
         case .missing: compact ? "\(center.feature) downloads soon" : "Waiting to download"
         case .failed: compact ? "\(center.feature) isn't downloaded" : "Download paused"
         }
@@ -57,7 +97,7 @@ struct ModelStatus: View {
         case .ready: "\(center.sizeText) on this Mac, each file checked against its pinned SHA-256."
         case .development: center.statusLine
         case .downloading, .verifying: nil
-        case .missing where center.pack?.provides["slip_model"] != nil: center.removedByUser ? "Word-choice slips are checked only on Option+Space until you download it." : "Word-choice slips are checked on Option+Space until it arrives."
+        case .missing where center.optional != nil: center.removedByUser ? center.optional?.removedNote : center.optional?.missingNote
         case .missing: center.removedByUser ? "Parzr checks with its rules only until you download it." : "Parzr checks with its rules until it arrives."
         case .failed(let failure): failure.message
         }
@@ -83,13 +123,13 @@ struct ModelStatus: View {
 /// Settings, Models: what is on this Mac, how big, under which license, and Re-download / Remove.
 struct ModelsSettings: View {
     @ObservedObject var center: ModelCenter
-    /// The optional slip-check pack, listed below the essential one with its own Download / Remove.
-    var slips: ModelCenter? = nil
+    /// The optional packs (slip check, tone check), each listed below the essential one with its own Download / Remove.
+    var optional: [ModelCenter] = []
     @State private var confirmRemove = false
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             PackSection(center: center)
-            if let slips { PackSection(center: slips, removable: true) }
+            ForEach(Array(optional.enumerated()), id: \.offset) { _, pack in PackSection(center: pack, removable: true) }
             section("MANAGE") {
                 row("Download again", detail: "Deletes the downloaded files and fetches them again from GitHub, checking each one.") {
                     NativeButton(title: "Re-download", label: "Download the models again", enabled: center.pack != nil && !center.state.isWorking && center.state != .development, action: { center.redownload() }).fixedSize()
@@ -158,7 +198,7 @@ struct PackSection: View {
         .confirmationDialog("Remove the \(center.feature.lowercased()) model?", isPresented: $confirmRemove) {
             Button("Remove", role: .destructive) { center.remove() }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("Word-choice slips are then checked only on Option+Space, until you download it again (\(center.sizeText)).") }
+        } message: { Text("\(center.optional?.removedNote ?? "Parzr checks with its rules only until you download it again.") (\(center.sizeText))") }
     }
     private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
 }

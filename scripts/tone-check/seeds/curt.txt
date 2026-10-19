@@ -1,0 +1,155 @@
+# curt: brusque, cold, dismissive or bossy. Bare orders in an annoyed register, brush-offs, ultimatums.
+# Not curt: ordinary short replies ("ok", "on it", "sounds good", "Running late, start without me").
+# Written for Parzr's tone check (synthetic; no real messages).
+Fix it.
+Just get it done.
+Not my problem.
+Figure it out yourself.
+Do it now.
+I don't care. Just ship it.
+Stop asking me.
+Handle it.
+Send it. Now.
+Not interested.
+That's your job, not mine.
+Read the doc.
+Google it.
+Deal with it.
+Don't bother.
+No. Stop asking.
+I said no.
+Because I said so.
+Just do what I told you.
+Not now.
+Later. I'm busy.
+Make it work.
+Get it done by tonight. No excuses.
+Answer the question.
+Cut it out.
+Drop it.
+Enough.
+Just fix the bug, I don't need an explanation.
+Stop overthinking it and ship.
+Do your job.
+I don't have time for this.
+Go ask someone else.
+Not my department.
+Take it up with HR.
+Why is this still not done?
+Where is the report?
+Where's my invoice?
+Why haven't you replied?
+Update the ticket. Today.
+Do it again. Properly this time.
+This needs to be fixed by noon. Period.
+I want it on my desk by 5.
+Redo it.
+Change it back.
+Revert it.
+Don't touch my branch.
+Don't message me about this again.
+Stop pinging me.
+Remove me from this thread.
+Take me off this email chain.
+I'm not discussing this.
+End of discussion.
+Final answer: no.
+We're not doing that.
+Not happening.
+Next time, ask before you change things.
+Just send the file.
+Just answer yes or no.
+Yes or no?
+Hurry up.
+Be on time tomorrow.
+Show up to the meeting.
+Stop being late.
+Read my message again.
+I already answered that.
+Already told you.
+Look it up.
+Do it the way I showed you.
+Don't argue, just do it.
+Just stop.
+I need this yesterday.
+I don't want excuses, I want results.
+Not good enough.
+Unacceptable. Fix it.
+Try again.
+Wrong. Redo it.
+That's wrong.
+No, that's not what I asked for.
+Did I ask?
+Who asked?
+Your point?
+Get to the point.
+Make it quick.
+Can't. Busy.
+Busy. Ask someone else.
+I'm not your assistant.
+Do it yourself.
+Your call. I don't care.
+Whatever you want.
+Fine, do whatever.
+Sure. Whatever.
+ok. whatever.
+Noted. Don't do it again.
+Call me. Now.
+Come to my office.
+My office. Five minutes.
+We need to talk.
+Explain this.
+Explain yourself.
+Why would you do that?
+What now?
+What is it this time?
+What do you want?
+Not my concern.
+Sounds like a you problem.
+Not my circus.
+Escalate it somewhere else.
+Stop wasting time and finish the deck.
+Finish it tonight.
+Get the numbers. Now.
+Send me the numbers by end of day, no later.
+I expect this fixed before I log in tomorrow.
+Don't make me ask again.
+This is the last time I'm asking.
+Last warning.
+Do it or I'll find someone who will.
+Approve it already.
+Merge it already.
+Just pick one.
+Decide. Now.
+Stop talking and start working.
+Less talking, more fixing.
+Skip the details.
+Spare me the details.
+Don't care how. Just make it pass.
+I don't need your opinion, I need the file.
+Just send what I asked for.
+Did you do it or not?
+Is it done or not?
+Done yet?
+Any update or not?
+Reply.
+Respond to my email.
+Call the client back. Today.
+Tell him to stop.
+Don't CC me on this stuff.
+Stop sending me these.
+Unsubscribe me.
+Leave me out of it.
+Not my fault. Sort it out.
+Sort it out.
+Whatever works. Just don't break anything.
+Don't ask me, ask your manager.
+Ask your lead.
+We're done here.
+That's it. Meeting over.
+Go away.
+Not interested in your excuses.
+You heard me.
+Do I need to repeat myself?
+Just listen.
+Pay attention.
