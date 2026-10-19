@@ -24,9 +24,11 @@ Names, numbers, code, URLs, addresses, handles, all-caps words and one-letter wo
 Score with the held-out runner (see `benchmarks/README.md` for the app-path harness and environment):
 
 ```sh
-python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/test.jsonl \
-  --clean benchmarks/typo-fuzz/test-clean.jsonl --split all --layers rules,gec
-python3 scripts/typo-fuzz-report.py benchmarks/typo-fuzz/test.jsonl dist/qa/heldout   # type x frequency matrix
+python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/dev.jsonl \
+  --clean benchmarks/typo-fuzz/dev-clean.jsonl --split all --layers rules,gec --output dist/qa/typo-fuzz-dev
+python3 scripts/typo-fuzz-report.py benchmarks/typo-fuzz/dev.jsonl dist/qa/typo-fuzz-dev   # type x frequency matrix
 ```
+
+The test set is sealed like the held-out test split: the runner scores `test.jsonl` only on CI or with `PARZR_RELEASE_GATE=1`, and then writes totals and per-type, per-bucket counts (`summary.json`, `summary.md`) but no per-item results, so the report script works on dev runs only. CI also compares the test totals with `benchmarks/baselines.json` and uploads the summary (artifact `quality-summaries-SHA`).
 
 Real-word results (a slip that lands on another word, "this" → "thus") are much harder than non-words and are reported separately by the report script.

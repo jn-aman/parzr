@@ -1,0 +1,126 @@
+{
+  "about": "Accepted quality and performance baselines. Gated by scripts/quality_gates.py (CI verify); changed only with scripts/update-baselines.py and a reason. See benchmarks/README.md, \"Quality gates\".",
+  "tolerance": {
+    "fix_rate_points": 0.5,
+    "false_alarm_items": 2,
+    "performance_factor": 1.5,
+    "latency_slack_ms": 2
+  },
+  "suites": {
+    "heldout-test": {
+      "updated": "2026-10-19",
+      "reason": "CI verify of ece7c66 (run 39274643182), the code reports-live builds on: totals only",
+      "layers": {
+        "rules": {
+          "errors": 686,
+          "clean": 287,
+          "fixed": 336,
+          "fix_rate": 0.4898,
+          "false_alarms": 1,
+          "false_alarm_rate": 0.0035
+        },
+        "gec": {
+          "errors": 686,
+          "clean": 287,
+          "fixed": 458,
+          "fix_rate": 0.6676,
+          "false_alarms": 1,
+          "false_alarm_rate": 0.0035
+        }
+      }
+    },
+    "typo-fuzz-test": {
+      "updated": "2026-10-19",
+      "reason": "local release-gate run on quality-gates (CI run 39274643182 logged 81.0% / 85.9% fixed, 1.5% false alarms)",
+      "layers": {
+        "rules": {
+          "errors": 10765,
+          "clean": 200,
+          "fixed": 8720,
+          "fix_rate": 0.81,
+          "false_alarms": 3,
+          "false_alarm_rate": 0.015
+        },
+        "gec": {
+          "errors": 10765,
+          "clean": 200,
+          "fixed": 9240,
+          "fix_rate": 0.8583,
+          "false_alarms": 3,
+          "false_alarm_rate": 0.015
+        }
+      }
+    },
+    "names": {
+      "updated": "2026-10-19",
+      "reason": "local run on quality-gates (2 / 2 damaged, recall 294/306) with held-out damage at CI's 17 / 1,144 (run 39274643182 logged 1.49%; the local run damages 12)",
+      "controls": 306,
+      "control_fixed": 294,
+      "control_recall": 0.9608,
+      "errors": 0,
+      "damaged": {
+        "all": 2,
+        "case:lower": 2,
+        "heldout": 17
+      },
+      "names": {
+        "all": 6120,
+        "case:lower": 2723,
+        "heldout": 1144
+      }
+    },
+    "everyday": {
+      "updated": "2026-10-19",
+      "reason": "quality-gates build: typing on all 2,870 items, Option+Space on the 40-item sample (per-item labels in benchmarks/everyday/baseline.json)",
+      "items": 2870,
+      "paths": {
+        "typing": {
+          "counts": {
+            "correct": 2679,
+            "missed": 113,
+            "wrong": 70,
+            "false_alarm": 8
+          },
+          "correct_rate": 0.9334
+        },
+        "deep": {
+          "counts": {
+            "correct": 37,
+            "missed": 1,
+            "wrong": 2
+          },
+          "correct_rate": 0.925
+        }
+      }
+    }
+  },
+  "performance": {
+    "local-apple-m5": {
+      "typo-fuzz-test/rules": {
+        "p50_ms": 0.65,
+        "p95_ms": 1.34,
+        "max_rss_mb": 77.5
+      },
+      "typo-fuzz-test/gec": {
+        "p50_ms": 10.05,
+        "p95_ms": 27.61,
+        "max_rss_mb": 231.4
+      },
+      "names/engine": {
+        "p50_ms": 0.36,
+        "p95_ms": 0.98,
+        "max_rss_mb": 92.4
+      },
+      "everyday/typing": {
+        "p50_ms": 10.06,
+        "p95_ms": 32.68,
+        "max_rss_mb": 1150.8
+      },
+      "everyday/deep": {
+        "p50_ms": 469.16,
+        "p95_ms": 1532.91,
+        "max_rss_mb": 1150.8
+      }
+    }
+  }
+}
