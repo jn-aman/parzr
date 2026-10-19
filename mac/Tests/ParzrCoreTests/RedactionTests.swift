@@ -52,7 +52,65 @@ final class RedactionTests: XCTestCase {
         XCTAssertEqual(r("card 4111 1111 1111 1111"), "card [phone]", "long digit runs are redacted whatever they are")
         XCTAssertEqual(r("COVID-19 cases"), "COVID-[number] cases")
         XCTAssertEqual(r("Arabic-Indic ٣ and full-width ７"), "Arabic-Indic [number] and full-width [number]")
-        XCTAssertEqual(r("an api key sk-live-9f8a7b6c5d"), "an api key sk-live-[number]")
+        XCTAssertEqual(r("an api key sk-live-9f8a7b6c5d"), "an api key [key]")
+    }
+    func testSpelledOutNumbersAreRedacted() {
+        XCTAssertEqual(r("pin is four four two one"), "pin is [number]")
+        XCTAssertEqual(r("call nine eight seven, six five"), "call [number]")
+        XCTAssertEqual(r("Code Seven-Two-Nine works"), "Code [number] works")
+        XCTAssertEqual(r("one or two things"), "one or two things", "two number words are ordinary prose")
+        XCTAssertEqual(r("one of the two"), "one of the two")
+    }
+
+    // MARK: Keys and tokens
+    func testKeysAndTokensAreRedacted() {
+        XCTAssertEqual(r("token sk_live_abcdefghijk"), "token [key]")
+        XCTAssertEqual(r("use pk_test_abcdEFGH here"), "use [key] here")
+        XCTAssertEqual(r("ghp_abcdefghijklmnopqrstuvwxyz0123 works"), "[key] works")
+        XCTAssertEqual(r("slack xoxb-abc-def-ghi ok"), "slack [key] ok")
+        XCTAssertEqual(r("aws AKIAABCDEFGHIJKLMNOP"), "aws [key]")
+        XCTAssertEqual(r("jwt eyJhbGciOiJIUzI1NiJ9.e30 sent"), "jwt [key] sent")
+        XCTAssertEqual(r("secret AbCdEfGhIjKlMnOpQrStUvWx"), "secret [key]", "long mixed-case runs are keys")
+        XCTAssertEqual(r("id abc_def_ghi_jkl_mno_pqr"), "id [key]")
+        XCTAssertEqual(r("internationalization matters"), "internationalization matters", "a long word is not a key")
+    }
+
+    // MARK: Emails spelled out, hashtags
+    func testSpelledOutEmailsAreRedacted() {
+        XCTAssertEqual(r("aman at gmail dot com"), "[email]")
+        XCTAssertEqual(r("write to aman (at) gmail (dot) com"), "write to [email]")
+        XCTAssertEqual(r("meet at home"), "meet at home")
+    }
+    func testHashtagsAreRedacted() {
+        XCTAssertEqual(r("ping #rahulsharma today"), "ping [name] today")
+        XCTAssertEqual(r("order #A12B-77 shipped"), "order #[number] shipped")
+    }
+
+    // MARK: Lowercase names
+    func testLowercaseNamesTheLexiconKnowsAreRedacted() {
+        XCTAssertEqual(r("rahul has the keys"), "[name] has the keys")
+        XCTAssertEqual(r("met mary and jain today"), "met [name] and [name] today")
+    }
+    func testWordsTheLexiconDoesNotKnowAreRedacted() {
+        XCTAssertEqual(r("i has told priya about it"), "i has told [name] about it")
+        XCTAssertEqual(r("with neha and vikram"), "with [name] and [name]")
+    }
+    func testTheWordAfterAGreetingIsAName() {
+        XCTAssertEqual(r("hi rahul, i has told priya about it"), "hi [name], i has told [name] about it")
+        XCTAssertEqual(r("hey mark, can you"), "hey [name], can you")
+        XCTAssertEqual(r("thanks bob for this"), "thanks [name] for this")
+        XCTAssertEqual(r("hi there, thanks so much"), "hi there, thanks so much")
+        XCTAssertEqual(r("hey guys, thanks for coming"), "hey guys, thanks for coming")
+    }
+    func testOrdinaryLowercaseProseIsKept() {
+        XCTAssertEqual(r("i went to the cafe yesterday and it was good"), "i went to the cafe yesterday and it was good")
+        XCTAssertEqual(r("please send the report by friday"), "please send the report by friday")
+    }
+    func testIsCleanRefusesWhatTheNewDetectorsFind() {
+        for leak in ["pin is four four two one", "aman at gmail dot com", "#rahulsharma", "token sk_live_abcdefghijk", "@rahul", "AbCdEfGhIjKlMnOpQrStUvWx", "my HIV test", "her cancer", "she is pregnant"] {
+            XCTAssertFalse(Redactor.isClean(leak), leak)
+        }
+        XCTAssertTrue(Redactor.isClean("hi [name], the [key] is at [link]"))
     }
     func testNoDigitSurvives() {
         let samples = ["Room 101, floor 3", "IP 192.168.0.1", "ZIP 94103-1234", "sent 1/2/24 at 5pm", "x=12;y=3", "€5,00", "2nd and 3rd", "a1b2c3", "#42"]
