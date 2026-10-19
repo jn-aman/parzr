@@ -675,6 +675,51 @@ fn sentence_boundaries(req: &Request, edits: &mut Vec<Edit>) {
         if capitalized_opener && title {
             continue;
         }
+        // "a list of RSVP's I have received so far": a relative clause without "that", whose
+        // verb has no object of its own.
+        let contact_clause = {
+            let mut k = i + 1;
+            if tokens.get(k).is_some_and(|x| {
+                ["have", "has", "had", "'ve", "’ve"].contains(&x.normalized.as_str())
+            }) {
+                k += 1;
+            }
+            tokens.get(k).is_some_and(|v| {
+                [
+                    "received",
+                    "sent",
+                    "got",
+                    "made",
+                    "wrote",
+                    "written",
+                    "bought",
+                    "found",
+                    "mentioned",
+                    "attached",
+                    "requested",
+                    "asked",
+                    "seen",
+                    "saw",
+                    "collected",
+                    "prepared",
+                    "reviewed",
+                    "used",
+                    "booked",
+                    "ordered",
+                ]
+                .contains(&v.normalized.as_str())
+            }) && tokens.get(k + 1).is_none_or(|a| {
+                !a.is_word
+                    || [
+                        "so", "already", "yet", "recently", "from", "for", "in", "at", "on",
+                        "last", "this", "today", "earlier", "before", "since", "by", "to", "with",
+                    ]
+                    .contains(&a.normalized.as_str())
+            })
+        };
+        if contact_clause {
+            continue;
+        }
         if !capitalized_opener
             && (words(&tokens[start..i]) < left
             || OPENERS.contains(&run_first)

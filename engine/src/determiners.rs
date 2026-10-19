@@ -390,6 +390,25 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if verb_object && !prep {
             continue;
         }
+        // "similar to those that you put together": a pronoun before a relative clause.
+        if ["that", "who", "which", "whom", "whose", "where", "when"]
+            .contains(&noun.normalized.as_str())
+        {
+            continue;
+        }
+        // "see that final agreements are forwarded": a "that" with a clause after it is the
+        // conjunction.
+        if d == "that"
+            && i > 0
+            && !prep
+            && [
+                "are", "were", "have", "is", "was", "will", "can", "could", "should", "would",
+                "must", "may", "might", "do", "don't", "get", "go",
+            ]
+            .contains(&word(s, n + 1))
+        {
+            continue;
+        }
         let fix = match d {
             "this" if plural_here && ends => "these",
             // "that" also opens a clause ("I know that kids love it"): only as a determiner.

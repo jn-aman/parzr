@@ -596,8 +596,17 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     let casual = tokens[..=s]
         .iter()
         .find(|t| t.is_word && t.paragraph == tokens[s].paragraph)
-        .is_some_and(|t| t.surface.starts_with(char::is_lowercase));
+        // A capital this engine gave the sentence's first word still means it was typed lowercase.
+        .is_some_and(|t| {
+            t.surface.starts_with(char::is_lowercase) || t.pos == crate::AUTO_CAPITAL_HINT
+        });
+    // A message that stops without a full stop is chat, where the comma is the writer's choice
+    // ("thanks for dinner last night, it was lovely").
+    let unfinished = !tokens[end..e]
+        .iter()
+        .any(|t| [".", "!", "?"].contains(&t.surface));
     if question && inverted_question(tokens, r, end)
+        || unfinished
         || ["let's", "lets", "don't", "dont"].contains(&right)
         || ["where", "whereas", "while", "which", "who", "whom", "whose"].contains(&right)
         || casual

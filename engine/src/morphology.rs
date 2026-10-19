@@ -92,6 +92,9 @@ sweep sweeps swept swept sweeping
 dig digs dug dug digging
 weep weeps wept wept weeping
 bleed bleeds bled bled bleeding
+feed feeds fed fed feeding
+breed breeds bred bred breeding
+speed speeds sped sped speeding
 flee flees fled fled fleeing";
         ROWS.lines()
             .map(|line| {
