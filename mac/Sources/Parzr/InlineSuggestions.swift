@@ -108,9 +108,21 @@ final class InlineSuggestions {
         let prefs = Preferences.shared
         guard prefs.passive, !prefs.paused else { dismiss(); return }
         if let snapshot = shown?.snapshot ?? model.snapshot, !snapshot.checkingEnabled { dismiss(); return }
-        if shown != nil, !marksAreCurrent { dismiss(); return }
+        if shown != nil, !marksAreCurrent { if !carryOver() { dismiss() }; return }
         if isPresenting, (try? model.snapshot?.validate()) == nil { if shown != nil { closeCard() } else { dismiss() }; return }
         if shown == nil, !isPresenting { dismiss() }
+    }
+    /// Typing changed the text under the marks: the marks the change did not touch move with the text and stay on screen until the next
+    /// check replaces them, instead of all vanishing on every keystroke. False when nothing could be carried (the caller then clears).
+    private func carryOver() -> Bool {
+        guard let s = shown?.snapshot, s.automatic, s.headlessEditor == nil, s.expectedSelection.length == 0, let old = s.fullText, s.checkingEnabled,
+              !s.app.isTerminated, s.app == SelfTestTarget.watched, s.automaticEditorIsCurrent(), let now = AX.text(s.element), now != old,
+              let caret = AX.selection(s.element), caret.length == 0, let result = shown?.result,
+              let carried = MarkCarry.remap(edits: result.edits, selection: s.selection, inlineBreaks: s.inlineBreaks, from: old, to: now), !carried.edits.isEmpty else { return false }
+        let text = WebGeometry.joining((now as NSString).substring(with: carried.selection), origin: carried.selection.location, breaks: carried.inlineBreaks)
+        let moved = SelectionSnapshot(app: s.app, element: s.element, selection: carried.selection, expectedSelection: caret, text: text, fullText: now, bounds: s.bounds,
+                                      richText: nil, copied: false, canPatch: s.canPatch, docs: s.docs, inlineBreaks: carried.inlineBreaks, automatic: true)
+        return show(snapshot: moved, result: result.replacingEdits(carried.edits))
     }
     func stop() {
         stopped = true; relayout?.cancel(); dismiss()

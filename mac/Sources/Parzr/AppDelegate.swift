@@ -226,6 +226,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if let self, self.inline.hasMarks, self.inline.overflow > 0 { return }
             self?.marker?.orderOut(nil); self?.marker?.contentView = nil
         }
+        passive.onClear = { [weak self] in
+            guard let self, !self.inline.isPresenting else { return }
+            self.inline.dismiss(); self.passive?.onDismiss?()
+        }
         passive.onSuggestion = { [weak self] snapshot, result in
             guard let self, !self.isShown(self.panel), !self.inline.isPresenting else { return }
             if Preferences.shared.selectedTextPopover, snapshot.expectedSelection.length > 0, let anchor = snapshot.bounds {

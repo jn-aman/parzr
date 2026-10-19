@@ -6,6 +6,8 @@ import ParzrCore
 final class PassiveObserver {
     var onSuggestion: ((SelectionSnapshot, RewriteResult) -> Void)?
     var onDismiss: (() -> Void)?
+    /// A check found nothing (or could not read the paragraph): marks carried over typing are now stale, so they go.
+    var onClear: (() -> Void)?
     private var observer: AXObserver?
     private var observed: [(AXUIElement, String)] = []
     private var work: Task<Void, Never>?
@@ -186,7 +188,8 @@ final class PassiveObserver {
                 self?.pending = false
                 // A follow-up re-check keeps the marks on screen until its own result replaces them.
                 if !followUp { self?.onDismiss?() }
-                let snapshot = try SelectionSnapshot.capture(passive: true)
+                let snapshot: SelectionSnapshot
+                do { snapshot = try SelectionSnapshot.capture(passive: true) } catch { self?.onClear?(); return }
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
                                             dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar)
@@ -203,7 +206,7 @@ final class PassiveObserver {
                 if !result.edits.isEmpty {
                     if followUp { self?.onDismiss?() }
                     self?.onSuggestion?(snapshot, result)
-                }
+                } else if !followUp { self?.onClear?() }
                 if again, let self { self.followUps += 1; self.schedule(.restart(ms: Self.followUpDelay), followUp: true) }
             } catch { /* Passive failures are quiet and never log writing text. */ }
         }
