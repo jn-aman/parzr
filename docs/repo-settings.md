@@ -152,15 +152,28 @@ gh api repos/$R/immutable-releases   # {"enabled":true,...}
 
 ## 5. Environments
 
-Each secret lives in the one environment whose jobs need it, each environment accepts only its ref, and admins
-cannot skip the protection rules. GitHub never shows a secret's value again, so moving a secret means setting it
-again from its source (the keychain, the password manager or the provider) and then deleting the old copy.
+Each environment accepts only its ref and admins cannot skip its protection rules. No existing secret moves:
+GitHub cannot copy a secret's value, so the signing secrets stay where they are and the workflow limits who sees them
+instead.
 
-**`release`** (Developer ID certificate and notarization key; the `release-build` job): tag `v*` only (already set),
-the owner as required reviewer and a 5 minute wait timer, so every signing run needs the owner's approval and can be
-cancelled before it starts.
+**`release`** (all release signing secrets, already there: the Developer ID certificate, the notarization key and
+`SPARKLE_ED_PRIVATE_KEY`): tag `v*` only (already set). Two jobs use it, `release-build` and `release-sparkle`, on
+separate runners, and each secret is mapped only into the `env` of the one step that uses it: the certificate and
+notary secrets into `release-build`'s keychain and signing steps (after every unsigned build and package step), the
+Sparkle key into `release-sparkle`'s feed-signing step. `release-build` never references the Sparkle key and
+`release-sparkle` never references the Developer ID secrets. Nothing maps a secret at job or workflow level.
+
+Add a wait timer, and optionally the owner as required reviewer. A reviewer approves each job that reaches the
+environment, so a release then needs two approvals (`release-build` at the start, `release-sparkle` about 30 minutes
+later); leave `reviewers` out to keep releases fully automatic with only the wait timer as a window to cancel.
 
 ```sh
+# Fully automatic: a 5 minute window to cancel each signing job, no approval.
+gh api -X PUT repos/$R/environments/release --input - <<'JSON'
+{"wait_timer": 5, "can_admins_bypass": false,
+ "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
+JSON
+# Or with the owner's approval of both signing jobs:
 gh api -X PUT repos/$R/environments/release --input - <<JSON
 {"wait_timer": 5, "prevent_self_review": false, "can_admins_bypass": false,
  "reviewers": [{"type": "User", "id": $OWNER_ID}],
@@ -169,22 +182,13 @@ JSON
 gh api repos/$R/environments/release/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'   # tag v*
 ```
 
-**`release-sparkle`** (new; only `SPARKLE_ED_PRIVATE_KEY`; the `release-sparkle` job): tag `v*` only. It runs only
-after `release-build`, which the owner already approved for the same run, and only the deploy key can create a `v*`
-tag (section 3), so it has no reviewer of its own; add `"reviewers"` as for `release` to approve it separately
-(a second approval about 30 minutes into each release). Then move the key out of `release`.
-
 ```sh
-gh api -X PUT repos/$R/environments/release-sparkle --input - <<'JSON'
-{"wait_timer": 0, "can_admins_bypass": false,
+gh api -X PUT repos/$R/environments/release --input - <<JSON
+{"wait_timer": 5, "prevent_self_review": false, "can_admins_bypass": false,
+ "reviewers": [{"type": "User", "id": $OWNER_ID}],
  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
-gh api -X POST repos/$R/environments/release-sparkle/deployment-branch-policies -f name='v*' -f type=tag
-# The key from the owner's keychain (account app.parzr.desktop); see releases.md, "Update signing key".
-generate_keys --account app.parzr.desktop -x "$TMPDIR/parzr-ed.key"
-gh secret set SPARKLE_ED_PRIVATE_KEY --env release-sparkle -R $R < "$TMPDIR/parzr-ed.key"
-rm -P "$TMPDIR/parzr-ed.key"
-gh secret delete SPARKLE_ED_PRIVATE_KEY --env release -R $R
+gh api repos/$R/environments/release/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'   # tag v*
 ```
 
 **`release-push`** (`RELEASE_PUSH_KEY`; the Release workflow): branch `main` only (already set); admins cannot bypass.
@@ -196,9 +200,10 @@ gh api -X PUT repos/$R/environments/release-push --input - <<'JSON'
 JSON
 ```
 
-**`website-production`** (new; `CLOUDFLARE_API_TOKEN`; `website.yml`): branch `main` only. Create a fresh token in
-the Cloudflare dashboard (Workers Scripts edit on the account, scoped to the parzr.app zone), set it here, then
-delete the repository-level secret and revoke the old token.
+**`website-production`** (new; `CLOUDFLARE_API_TOKEN`; `website.yml`): branch `main` only. The coordinating agent
+sets the token in this environment itself (a Cloudflare token with Workers Scripts edit on the account, scoped to the
+parzr.app zone); no one re-enters it by hand. Until it is set, `website.yml` skips with a notice. Delete the
+repository-level copy once the environment's copy exists.
 
 ```sh
 gh api -X PUT repos/$R/environments/website-production --input - <<'JSON'
@@ -206,14 +211,14 @@ gh api -X PUT repos/$R/environments/website-production --input - <<'JSON'
  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 gh api -X POST repos/$R/environments/website-production/deployment-branch-policies -f name=main -f type=branch
-gh secret set CLOUDFLARE_API_TOKEN --env website-production -R $R   # paste the new token
-gh secret delete CLOUDFLARE_API_TOKEN -R $R                         # the old repository-level copy
+gh secret set CLOUDFLARE_API_TOKEN --env website-production -R $R   # set by the coordinating agent
+gh secret delete CLOUDFLARE_API_TOKEN -R $R                         # then drop the repository-level copy
 ```
 
-**`reports-production`** (new; `REPORTS_CLOUDFLARE_API_TOKEN`; `worker.yml`): branch `main` only, same steps with a
-fresh token (Workers Scripts edit, D1 edit, Workers Routes and zone read on parzr.app). `worker.yml`'s deploy job
-must name `environment: reports-production` (changed on the `reports-hardening` branch); set the secret there before
-that change merges, and delete the repository-level secret only after it has.
+**`reports-production`** (new; `REPORTS_CLOUDFLARE_API_TOKEN`; `worker.yml`): branch `main` only. The coordinating
+agent sets the token here itself (Workers Scripts edit, D1 edit, Workers Routes and zone read on parzr.app).
+`worker.yml`'s deploy job must name `environment: reports-production` (changed on the `reports-hardening` branch); set
+the secret before that change merges, and delete the repository-level secret only after it has.
 
 ```sh
 gh api -X PUT repos/$R/environments/reports-production --input - <<'JSON'
@@ -221,7 +226,7 @@ gh api -X PUT repos/$R/environments/reports-production --input - <<'JSON'
  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 gh api -X POST repos/$R/environments/reports-production/deployment-branch-policies -f name=main -f type=branch
-gh secret set REPORTS_CLOUDFLARE_API_TOKEN --env reports-production -R $R   # paste the new token
+gh secret set REPORTS_CLOUDFLARE_API_TOKEN --env reports-production -R $R   # set by the coordinating agent
 gh secret delete REPORTS_CLOUDFLARE_API_TOKEN -R $R                         # after worker.yml uses the environment
 ```
 
@@ -255,11 +260,11 @@ gh api repos/$R/actions/permissions/fork-pr-contributor-approval
 gh api repos/$R/rulesets --jq '.[] | "\(.id) \(.target) \(.enforcement) \(.name)"'
 gh api repos/$R/immutable-releases
 gh api repos/$R/environments --jq '.environments[] | {name, rules: [.protection_rules[].type], can_admins_bypass}'
-for e in release release-sparkle release-push website-production reports-production; do echo "== $e"; gh secret list --env $e -R $R; done
+for e in release release-push website-production reports-production; do echo "== $e"; gh secret list --env $e -R $R; done
 gh secret list -R $R            # no repository-level secrets left
 gh api repos/$R --jq .security_and_analysis
 gh api repos/$R/code-scanning/default-setup --jq '{state, languages}'
 ```
 
-Then run the Release workflow once and confirm that `release-build` waits for approval, that
+Then run the Release workflow once and confirm that the signing jobs wait for the timer (and approval, if set), that
 the draft is verified before it is published, and that `website.yml` runs on main after `release-publish`.

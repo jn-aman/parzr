@@ -5,11 +5,14 @@ name: Verify and release Parzr
 # and GitHub counts a skipped required check as passed.
 #
 # A version tag then runs the release in four jobs, each with only what it needs (docs/releases.md):
-#   release-build    `release` environment: builds everything unsigned and packages the extensions with no
-#                    secret in the job's reach, then creates the signing keychain, signs, notarizes, staples and
-#                    deletes the keychain. Hands on the files with their SHA-256s (a job output, not the artifact).
-#   release-sparkle  `release-sparkle` environment, the only job with the EdDSA update key: checks the hashes,
-#                    builds and signs the update zip, deltas and appcast.xml.
+#   release-build    `release` environment: builds everything unsigned and packages the extensions before any
+#                    secret is mapped, then creates the signing keychain, signs, notarizes, staples and deletes the
+#                    keychain. Hands on the files with their SHA-256s (a job output, not the artifact). Never maps
+#                    SPARKLE_ED_PRIVATE_KEY.
+#   release-sparkle  `release` environment too (where the key lives), a separate job and runner: the only job that
+#                    maps the EdDSA update key, and only in its signing step. Checks the hashes, builds and signs
+#                    the update zip, deltas and appcast.xml.
+# Secrets are mapped only in the env of the steps that use them, never at job or workflow level.
 #   release-publish  no signing secrets: checks every hash, makes an SBOM and provenance attestations, creates a
 #                    DRAFT release, downloads it back and verifies it, then publishes it and re-checks the live feed.
 #   website          after a published release only: starts website.yml on main.
@@ -333,12 +336,14 @@ jobs:
             dist/app-notarization.json
             dist/dmg-notarization.json
   release-sparkle:
-    # The only job that sees the Sparkle EdDSA private key: it receives the notarized app by hash, nothing else runs.
+    # The only job that maps the Sparkle EdDSA private key, and only in its feed-signing step: it runs on a fresh
+    # runner that never held the Developer ID keychain, receives the notarized app by hash, and builds nothing.
+    # It uses the `release` environment because that is where SPARKLE_ED_PRIVATE_KEY lives (docs/repo-settings.md).
     if: startsWith(github.ref, 'refs/tags/v')
     needs: release-build
     runs-on: macos-26
     timeout-minutes: 30
-    environment: release-sparkle
+    environment: release
     permissions:
       contents: read
     outputs:

@@ -10,8 +10,8 @@ The release runs in four jobs, each holding only what it needs:
 
 | Job | Environment and secrets | What it does |
 |---|---|---|
-| `release-build` | `release`: Developer ID certificate and notarization key; owner approval | Checks the tag's commit is on `main`, builds the engine, the model runtime and the app unsigned and packages both extensions while no credential exists on the runner, then creates the signing keychain, signs (`build.py --sign --skip-build`: no compiler runs), notarizes, staples and deletes the keychain. Hands the DMG, the extensions, `SHA256SUMS` and the stapled app on as an artifact, with every file's SHA-256 as a job output |
-| `release-sparkle` | `release-sparkle`: only `SPARKLE_ED_PRIVATE_KEY` | Checks the hand-off against those hashes, builds and signs the update zip, deltas and `appcast.xml`, and hands them on the same way |
+| `release-build` | `release`; maps only the Developer ID and notarization secrets, in the keychain and signing steps | Checks the tag's commit is on `main`, builds the engine, the model runtime and the app unsigned and packages both extensions while no credential exists on the runner, then creates the signing keychain, signs (`build.py --sign --skip-build`: no compiler runs), notarizes, staples and deletes the keychain. Hands the DMG, the extensions, `SHA256SUMS` and the stapled app on as an artifact, with every file's SHA-256 as a job output |
+| `release-sparkle` | `release`, on its own runner; maps only `SPARKLE_ED_PRIVATE_KEY`, in its feed-signing step | Checks the hand-off against those hashes, builds and signs the update zip, deltas and `appcast.xml`, and hands them on the same way |
 | `release-publish` | none; contents, id-token and attestations write | Checks both hand-offs, makes the SBOM and provenance attestations, creates a draft release, downloads it back and verifies it, publishes it, then re-checks the live feed |
 | `website` | none; actions write | Starts `website.yml` on `main` |
 
@@ -21,7 +21,7 @@ The release runs in four jobs, each holding only what it needs:
 
 Every job's token is read-only unless it says otherwise: only `release-publish` may write contents (to publish) and mint attestations, and the `website` job and the Release workflow may start workflows (actions write). The Release workflow holds no signing secrets and its token is read-only for contents: it pushes the version commit and tag with `RELEASE_PUSH_KEY`, a write deploy key kept in the `release-push` environment, which only the default branch can use; that key and the owner are the only actors the default branch ruleset lets push without passing checks.
 
-Set the `release` environment secrets (the `release-build` job):
+Set the `release` environment secrets. Two jobs use the environment, each on its own runner, and each secret is mapped only into the step that uses it: the first six into `release-build`'s keychain and signing steps, `SPARKLE_ED_PRIVATE_KEY` into `release-sparkle`'s feed-signing step. Nothing maps a secret at job level.
 
 | Secret | Value |
 |---|---|
@@ -31,11 +31,6 @@ Set the `release` environment secrets (the `release-build` job):
 | PARZR_NOTARY_KEY_BASE64 | Base64-encoded App Store Connect notarization API private key |
 | PARZR_NOTARY_KEY_ID | API key identifier |
 | PARZR_NOTARY_ISSUER | API issuer identifier |
-
-and the `release-sparkle` environment secret (the `release-sparkle` job, which receives nothing else):
-
-| Secret | Value |
-|---|---|
 | SPARKLE_ED_PRIVATE_KEY | Sparkle EdDSA private key (the base64 text `generate_keys -x` writes), used only to sign update files; see [Update signing key](#update-signing-key) |
 
 Optional variable PARZR_BUNDLE_ID defaults to app.parzr.desktop. Keep credentials in the CI secret store or local keychain; never in source files, release notes or attachments.
@@ -171,7 +166,7 @@ From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no up
 
 **Phased rollout.** Normal releases carry `sparkle:phasedRolloutInterval` 43200 (12 hours): automatic checks open the update to a new seventh of users every 12 hours from the item's publication date, so it spreads over about 3.5 days. A user who clicks Check for Updates gets it at once. This is also the safety net: yank a bad release (below) within the first day and most users never see it.
 
-**What CI verifies.** [scripts/make-appcast.py](../scripts/make-appcast.py) `build` refuses an app that is not stapled and Gatekeeper-approved, lacks `Sparkle.framework`, or whose `SUPublicEDKey` is not the pinned public key. It signs the zip and deltas, writes the appcast, and then re-reads its own output: XML shape (one item, versions, URLs under the release's download path, lengths on disk), every EdDSA signature checked against the public key with a stdlib Ed25519 verifier (independent of Sparkle's tools), the zip extracted and compared with the app, and every delta applied to the previous app and compared with the new app byte for byte. Sparkle's `BinaryDelta` and `sign_update` come from the pinned Sparkle 2.9.5 tarball: on every run the tarball (downloaded once per runner) is re-hashed against its pinned SHA-256 and the two tools are extracted from those exact bytes into a fresh private folder, so the tool the private key is piped to is never a cached copy. This runs in `release-sparkle`, the only job with the key, which receives the notarized app from `release-build` and checks it against that job's hashes first. Before publishing, `make-appcast.py verify` checks the draft's downloaded `appcast.xml` and files; after publishing, it downloads the live `appcast.xml` and every file it points to, re-verifies lengths and signatures, and checks that `releases/latest/download/appcast.xml` is byte-identical. If that fails, the workflow drafts the release (so the feed falls back) and goes red.
+**What CI verifies.** [scripts/make-appcast.py](../scripts/make-appcast.py) `build` refuses an app that is not stapled and Gatekeeper-approved, lacks `Sparkle.framework`, or whose `SUPublicEDKey` is not the pinned public key. It signs the zip and deltas, writes the appcast, and then re-reads its own output: XML shape (one item, versions, URLs under the release's download path, lengths on disk), every EdDSA signature checked against the public key with a stdlib Ed25519 verifier (independent of Sparkle's tools), the zip extracted and compared with the app, and every delta applied to the previous app and compared with the new app byte for byte. Sparkle's `BinaryDelta` and `sign_update` come from the pinned Sparkle 2.9.5 tarball: on every run the tarball (downloaded once per runner) is re-hashed against its pinned SHA-256 and the two tools are extracted from those exact bytes into a fresh private folder, so the tool the private key is piped to is never a cached copy. This runs in `release-sparkle`, the only job that maps the key, which receives the notarized app from `release-build` and checks it against that job's hashes first. Before publishing, `make-appcast.py verify` checks the draft's downloaded `appcast.xml` and files; after publishing, it downloads the live `appcast.xml` and every file it points to, re-verifies lengths and signatures, and checks that `releases/latest/download/appcast.xml` is byte-identical. If that fails, the workflow drafts the release (so the feed falls back) and goes red.
 
 Run the same checks by hand against any published release (no key needed):
 
@@ -215,7 +210,7 @@ Sparkle accepts an update only if its EdDSA signature verifies against `SUPublic
 Where it lives:
 
 - The owner's login keychain, account `app.parzr.desktop` (item "Private key for signing Sparkle updates").
-- The GitHub `release-sparkle` environment secret `SPARKLE_ED_PRIVATE_KEY`, the base64 text that `generate_keys --account app.parzr.desktop -x FILE` writes. Only the `release-sparkle` job can read that environment (tag `v*` only), and only its feed-signing step receives the key; the workflow gives it to `sign_update` on stdin, and it is never written to disk or printed.
+- The GitHub `release` environment secret `SPARKLE_ED_PRIVATE_KEY`, the base64 text that `generate_keys --account app.parzr.desktop -x FILE` writes. The environment accepts only `v*` tags, and only the feed-signing step of the `release-sparkle` job maps the key (`release-build`, the other job in the environment, never references it); the workflow gives it to `sign_update` on stdin, and it is never written to disk or printed.
 - Back it up in a password manager as a secure note. Export, store, then delete the file:
 
 ```sh
@@ -229,7 +224,7 @@ Use a throwaway account (for example `--account parzr-update-test`) for any expe
 If the key is lost or leaked, rotate it with an update (Sparkle's "Rotating signing keys"): Sparkle accepts a release that changes the EdDSA key as long as it keeps the same Apple Developer ID signing identity (it allows changing the certificate or the EdDSA key in one release, never both).
 
 1. Generate a new key: `generate_keys --account app.parzr.desktop-2`, export it with `-x`, and note the new public key.
-2. In one commit set the new `SUPublicEDKey` in `resources/Info.plist` and `PUBLIC_KEY` in `scripts/make-appcast.py`, and replace the `SPARKLE_ED_PRIVATE_KEY` secret of the `release-sparkle` environment with the new private key.
+2. In one commit set the new `SUPublicEDKey` in `resources/Info.plist` and `PUBLIC_KEY` in `scripts/make-appcast.py`, and replace the `SPARKLE_ED_PRIVATE_KEY` secret of the `release` environment with the new private key.
 3. Release normally. The update zip, deltas and appcast are signed with the new key; existing installs, which still hold the old public key, accept it because the app is signed with the unchanged Developer ID identity, and from then on trust the new key. Do not change the Developer ID certificate in this release.
 4. If the app ever enables `SUVerifyUpdateBeforeExtraction`, Sparkle only allows an EdDSA rotation through a Developer ID signed DMG update archive; this repository does not enable it.
 5. A leaked key (as opposed to a lost one) also needs the old key treated as hostile: yank releases signed after the leak, and rotate before the attacker can also control the feed (the feed is only the owner's GitHub releases, so the attacker needs that too). Once everyone has updated past the rotation, delete the old key from the keychain and password manager.
