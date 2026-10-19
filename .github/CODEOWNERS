@@ -1,0 +1,17 @@
+# Changes to CI, release and signing code, the toolchain and dependency policy, the pinned model manifest, the app's
+# identity and entitlements, and the reports Worker need the owner's review. The default-branch ruleset's
+# "require review from Code Owners" enforces it for pull requests (docs/repo-settings.md).
+/.github/                             @jn-aman
+/scripts/                             @jn-aman
+/rust-toolchain.toml                  @jn-aman
+/engine/models.json                   @jn-aman
+/engine/deny.toml                     @jn-aman
+/engine/Cargo.lock                    @jn-aman
+/resources/Info.plist                 @jn-aman
+/resources/Parzr.entitlements         @jn-aman
+/worker/                              @jn-aman
+/website/package.json                 @jn-aman
+/website/package-lock.json            @jn-aman
+/extensions/vscode/package.json       @jn-aman
+/extensions/vscode/package-lock.json  @jn-aman
+/SECURITY.md                          @jn-aman
