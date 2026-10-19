@@ -14,7 +14,7 @@ signature against the pinned PUBLIC key, using a stdlib Ed25519 verifier (no Spa
 import argparse, base64, datetime, email.utils, hashlib, os, pathlib, plistlib, re, shutil, subprocess, sys, tempfile, time
 import urllib.request, xml.etree.ElementTree as ET
 from xml.sax.saxutils import quoteattr
-from release_notes import is_internal  # scripts/ is on sys.path when this script runs
+from release_notes import is_internal, plain  # scripts/ is on sys.path when this script runs
 
 REPO = 'jn-aman/parzr'
 PUBLIC_KEY = 'j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0='  # SUPublicEDKey in Info.plist
@@ -116,19 +116,28 @@ def run(cmd, **kw):
 
 
 def sparkle_bin(given):
-    """Directory with BinaryDelta and sign_update: --sparkle-bin, else the pinned download."""
+    """Directory with BinaryDelta and sign_update: --sparkle-bin, else the pinned download.
+
+    Nothing cached is trusted: the tarball (downloaded once per runner, kept in the cache) is re-hashed against the
+    pinned SHA-256 on every run, and the two tools are extracted from it into a fresh private directory each time,
+    so a tool the private key is piped to is always the one inside the verified tarball."""
     if given:
         return pathlib.Path(given)
     cache = pathlib.Path(os.environ.get('RUNNER_TEMP') or tempfile.gettempdir()) / f'parzr-sparkle-{SPARKLE_VERSION}'
-    if (cache / 'bin/sign_update').exists():
-        return cache / 'bin'
     cache.mkdir(parents=True, exist_ok=True)
     tarball = cache / 'sparkle.tar.xz'
-    urllib.request.urlretrieve(SPARKLE_URL, tarball)
-    got = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    if not tarball.is_file() or hashlib.sha256(tarball.read_bytes()).hexdigest() != SPARKLE_SHA256:
+        tarball.unlink(missing_ok=True)
+        urllib.request.urlretrieve(SPARKLE_URL, tarball)
+    data = tarball.read_bytes()
+    got = hashlib.sha256(data).hexdigest()
     check(got == SPARKLE_SHA256, f'Sparkle tarball sha256 {got} != pinned {SPARKLE_SHA256}')
-    run(['tar', '-xJf', str(tarball), '-C', str(cache), './bin/BinaryDelta', './bin/sign_update'])
-    return cache / 'bin'
+    fresh = pathlib.Path(tempfile.mkdtemp(prefix='parzr-sparkle-bin-'))  # mode 0700
+    verified = fresh / 'sparkle.tar.xz'
+    verified.write_bytes(data)  # extract exactly the bytes that were hashed, not a path that could change meanwhile
+    run(['tar', '-xJf', str(verified), '-C', str(fresh), './bin/BinaryDelta', './bin/sign_update'])
+    verified.unlink()
+    return fresh / 'bin'
 
 
 def sign(tools, path, key_file):
@@ -185,7 +194,9 @@ def bullets(notes, git_range):
     if not items and git_range:
         r = subprocess.run(['git', 'log', '--no-merges', '--format=%s', git_range], capture_output=True, text=True)
         # Internal areas (CI, Tests, Docs...) are left out, the same test as the GitHub release notes.
-        items = [s for s in r.stdout.splitlines() if s and not s.startswith('Release v') and not is_internal(s)]
+        # Commit subjects are plain text in the update panel: links, HTML and Markdown markup are stripped (plain).
+        items = [plain(s) for s in r.stdout.splitlines() if s and not s.startswith('Release v') and not is_internal(s)]
+        items = [s for s in items if s]
     items = [s if len(s) <= 160 else s[:157].rstrip() + '...' for s in items[:6]]
     return items or ['Bug fixes and improvements.']
 

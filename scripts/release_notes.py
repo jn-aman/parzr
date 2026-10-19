@@ -28,9 +28,27 @@ def is_internal(subject):
     return a in INTERNAL or a.endswith((' test', ' tests'))
 
 
+_LINK = re.compile(r'!?\[([^\]]*)\]\([^)]*\)')  # [text](url) and ![alt](url) keep only their text
+_URL = re.compile(r'(?:\b(?:https?|ftp|file|javascript|data|vbscript):|\bwww\.)\S*', re.I)
+_TAG = re.compile(r'</?[A-Za-z!?][^>]*>?')  # HTML tags and comments; a lone < or > ("Settings > Writing") stays
+_MARKUP = re.compile(r'[*`~\[\]\\]|^[#>!=+|-]+\s*|(?<!\w)_+|_+(?!\w)')
+
+
+def plain(subject):
+    """A commit subject as plain text for release notes and the in-app update notes: no links, URLs, HTML or
+    Markdown markup, so a commit message cannot add a link, image, heading or formatting to what users read."""
+    s = _LINK.sub(r'\1', subject)
+    s = _TAG.sub('', s)
+    s = _URL.sub('', s)
+    s = _MARKUP.sub('', s)
+    s = re.sub(r'@(?=\w)', '', s)  # no @mentions
+    return re.sub(r'\s+', ' ', s).strip()
+
+
 def subjects(git_range):
     r = subprocess.run(['git', 'log', '--no-merges', '--format=%s', git_range], capture_output=True, text=True, check=True)
-    return [s for s in r.stdout.splitlines() if s and not re.match(r'^Release v\d', s)]
+    found = [plain(s) for s in r.stdout.splitlines() if s and not re.match(r'^Release v\d', s)]
+    return [s for s in found if s]
 
 
 def split_notes(notes):

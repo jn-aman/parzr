@@ -99,7 +99,7 @@ if (ROOT/'resources/ThirdParty').exists(): shutil.copytree(ROOT/'resources/Third
 shutil.copy2(model_cache/'llama-LICENSE.txt',stage/'Contents/Resources/ThirdParty/llama-LICENSE.txt')
 shutil.copy2(ROOT/'engine/rules/frequency.json',stage/'Contents/Resources/ThirdParty/EnglishFrequency-data.json')
 integrations = stage/'Contents/Resources/Integrations'; integrations.mkdir()
-shutil.copytree(ROOT/'extensions',integrations/'extensions', ignore=shutil.ignore_patterns('node_modules', '.git', '.DS_Store', '*.vsix', '.env', '.env.*', '*.p12', '*.p8', '*.key', '*.pem'))
+shutil.copytree(ROOT/'extensions',integrations/'extensions', ignore=shutil.ignore_patterns('node_modules', 'package-lock.json', '.git','.DS_Store', '*.vsix', '.env', '.env.*', '*.p12', '*.p8', '*.key', '*.pem'))
 shutil.copy2(ROOT/'scripts/connect-browser.py',integrations/'connect-browser.py')
 if (ROOT/'docs/integrations.md').exists(): shutil.copy2(ROOT/'docs/integrations.md',integrations/'README.md')
 identity = args.identity if args.sign else '-'
