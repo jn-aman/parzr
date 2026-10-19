@@ -632,13 +632,24 @@ pub fn combine_using(
     plan: Vec<Edit>,
     scorers: Scorers,
 ) -> Vec<Edit> {
-    let text = req.text.as_str();
-    let started = Instant::now();
     let total = if req.deep {
         EXPLICIT_BUDGET_MS
     } else {
         TYPING_BUDGET_MS
     };
+    combine_within(req, protected, plan, scorers, total)
+}
+/// `combine_using` with a budget of `total` ms for the whole check (tests shrink it to simulate a
+/// cold start that spends it before any sentence is scored).
+fn combine_within(
+    req: &Request,
+    protected: &[TextRange],
+    plan: Vec<Edit>,
+    scorers: Scorers,
+    total: u32,
+) -> Vec<Edit> {
+    let text = req.text.as_str();
+    let started = Instant::now();
     // Everything that must stay, as UTF-16 ranges of the request.
     let mut shielded: Vec<TextRange> = protected.to_vec();
     // Every name candidate, even a guess from context ("will", "mark" written lowercase).
@@ -670,10 +681,6 @@ pub fn combine_using(
         let verdict = match cached(&scorers.key(req.deep, window)) {
             Some((hit, complete)) if complete || !req.deep => hit,
             _ => {
-                let spent = started.elapsed().as_millis() as u32;
-                if spent >= total {
-                    continue;
-                }
                 let swaps: Vec<Swap> = sentence_swaps(piece, &[])
                     .into_iter()
                     .map(|mut w| {
@@ -684,6 +691,15 @@ pub fn combine_using(
                     .collect();
                 if swaps.is_empty() {
                     remember(&scorers.key(req.deep, window), None, true);
+                    continue;
+                }
+                let spent = started.elapsed().as_millis() as u32;
+                if spent >= total {
+                    // The budget went before this sentence was scored (a cold start loading the word
+                    // lists, or earlier sentences): a typing check asks the app to look again.
+                    if !req.deep {
+                        PENDING.with(|p| p.set(true));
+                    }
                     continue;
                 }
                 let verdict = if req.deep {
@@ -1209,6 +1225,61 @@ mod tests {
     /// writing model, though present, is never asked while typing), a check it outlasts reports
     /// pending, a follow-up reads the verdict from the cache, and an explicit check of the same
     /// text scores it again with the writing model confirming.
+    #[test]
+    fn a_cold_typing_check_that_spends_its_budget_asks_for_a_follow_up() {
+        static SCORED: AtomicBool = AtomicBool::new(false);
+        fn counted(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
+            SCORED.store(true, Ordering::SeqCst);
+            slips_fake(sentence, swaps, how)
+        }
+        let scorers = Scorers {
+            slips: Some(counted),
+            model: None,
+        };
+        let req = Request {
+            text: "Cold start here. I hat the wait.".into(),
+            gec: true,
+            ..Request::default()
+        };
+        // A cold start: the budget is gone before the first sentence is scored (0 ms left).
+        take_pending();
+        assert!(combine_within(&req, &[], vec![], scorers, 0).is_empty());
+        assert!(
+            take_pending(),
+            "a skipped sentence asks the app to look again"
+        );
+        assert!(!SCORED.load(Ordering::SeqCst));
+        // The app's follow-up, with the usual budget, scores it and finds the slip.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut edits = vec![];
+        while edits.is_empty() && Instant::now() < deadline {
+            take_pending();
+            edits = combine_using(&req, &[], vec![], scorers);
+            if edits.is_empty() {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        assert_eq!(
+            edits
+                .iter()
+                .map(|e| (
+                    e.original.as_str(),
+                    e.replacement.as_str(),
+                    e.rule_id.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            [("hat", "hate", SLIPS_RULE)]
+        );
+        assert!(!take_pending());
+        // A sentence with nothing to swap never asks for a follow-up, however late it comes.
+        let plain = Request {
+            text: "Zzzq qqzz.".into(),
+            gec: true,
+            ..Request::default()
+        };
+        assert!(combine_within(&plain, &[], vec![], scorers, 0).is_empty());
+        assert!(!take_pending());
+    }
     #[test]
     fn typing_scores_slips_in_the_background_and_a_follow_up_reads_the_verdict() {
         static MODEL_ASKED: AtomicBool = AtomicBool::new(false);

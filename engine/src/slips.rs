@@ -78,8 +78,16 @@ fn load(dir: &Path) -> Result<Slips, String> {
         bpe: Bpe::new(&read("vocab.json")?, &read("merges.txt")?)?,
     })
 }
-/// Loads everything now so the first check does not pay for it (the app calls this in the background).
+/// Loads everything now so the first check does not pay for it (the app calls this in the background):
+/// the model and its vocabulary, and the word lists the candidates and the name guard read, which
+/// would otherwise spend a cold first typing check's whole budget.
 pub fn warm() -> bool {
+    let probe = crate::Request {
+        text: "Warm the word lists up, Sam.".into(),
+        ..crate::Request::default()
+    };
+    let _ = crate::name_guard_ranges(&probe);
+    let _ = crate::confusion::sentence_swaps(&probe.text, &[]);
     shared().is_some()
 }
 
@@ -570,10 +578,8 @@ mod tests {
     #[ignore = "needs the slip checker and the native runtime"]
     fn typing_route_fixes_a_slip_with_the_real_pack() {
         assert!(available(), "no slip checker pack");
-        // Load the word lists and Smart grammar first, as the app does at launch: a cold first check spends the
-        // whole typing budget loading them and leaves the slip check for a later keystroke without asking for a
-        // follow-up, which is not the route under test.
-        let _ = typing_check("Load the lists once.");
+        // Cold: the first check of the process may spend its whole budget loading the word lists; it then
+        // asks for a follow-up, which finds the verdict.
         let (edits, follow_ups) = typing_check("This is so bad. I hat it.");
         let slip: Vec<_> = edits
             .iter()
