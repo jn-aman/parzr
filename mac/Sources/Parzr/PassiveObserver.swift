@@ -26,6 +26,10 @@ final class PassiveObserver {
     private var firefoxKeystrokes = 0, docsKeystrokes = 0
     /// Counts monitor (re)installs; a grant after launch must install fresh ones, since monitors made before the grant never deliver.
     private(set) var monitorInstalls = 0
+    private var checkingEnabled: Bool {
+        guard let bundle = SelfTestTarget.watched?.bundleIdentifier else { return false }
+        return Preferences.shared.checkingEnabled(for: bundle, automatic: true)
+    }
     /// VS Code and Cursor are checked only after the user opts in (Apps settings).
     private func isExcluded(_ bundle: String) -> Bool {
         Compat.isExcluded(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
@@ -56,6 +60,7 @@ final class PassiveObserver {
             Task { @MainActor in self?.attach() }
         }.store(in: &subscriptions)
         Preferences.shared.$checkVSCode.dropFirst().removeDuplicates().sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
+        Preferences.shared.$automaticAppPauses.dropFirst().sink { [weak self] _ in Task { @MainActor in self?.attach() } }.store(in: &subscriptions)
     }
     func attach() {
         guard !stopped else { return }
@@ -67,7 +72,7 @@ final class PassiveObserver {
         observer = nil; observed = []; attachedPID = nil
         guard Preferences.shared.setupFinished, Preferences.shared.passive, !Preferences.shared.paused, AXIsProcessTrusted(),
               let app = SelfTestTarget.watched, let bundle = app.bundleIdentifier,
-              bundle != Bundle.main.bundleIdentifier, Preferences.shared.enabled(for: bundle),
+              bundle != Bundle.main.bundleIdentifier, Preferences.shared.checkingEnabled(for: bundle, automatic: true),
               !isExcluded(bundle) else { return }
         AX.prepare(app, force: true)
         var created: AXObserver?
@@ -75,6 +80,7 @@ final class PassiveObserver {
             guard let context else { return }
             MainActor.assumeIsolated {
                 let owner = Unmanaged<PassiveObserver>.fromOpaque(context).takeUnretainedValue()
+                guard owner.checkingEnabled else { return }
                 if notification as String == kAXFocusedUIElementChangedNotification {
                     AX.forgetFocus()
                     if let app = SelfTestTarget.watched { AX.prepare(app, force: true) }
@@ -108,6 +114,7 @@ final class PassiveObserver {
     }
     /// Firefox stays silent when the user blocked accessibility services: after several keystrokes with no text field resolved, offer the hint.
     private func noteKeystroke() {
+        guard checkingEnabled else { return }
         noteDocsKeystroke()
         guard !stopped, let app = SelfTestTarget.watched, Compat.isFirefox(app.bundleIdentifier), !Preferences.shared.firefoxHintDismissed, !Preferences.shared.firefoxHint else { return }
         firefoxKeystrokes += 1
@@ -134,8 +141,8 @@ final class PassiveObserver {
             }
         }
         observed.removeAll { $0.1 != kAXFocusedUIElementChangedNotification }
-        guard let app = SelfTestTarget.watched else { return }
-        guard let focused = AX.focusedText(app), !AX.isSecure(focused), !AX.isSearch(focused) else {
+        guard checkingEnabled, let app = SelfTestTarget.watched else { return }
+        guard let focused = AX.focusedText(app, automatic: true) else {
             // The first queries after activation can see only the menu bar while Firefox or VS Code switch accessibility on; look once more.
             if retry, Compat.needsFocusRetry(bundle: app.bundleIdentifier, vscodeEnabled: Preferences.shared.checkVSCode) {
                 focusRetry?.cancel()
@@ -161,7 +168,10 @@ final class PassiveObserver {
         schedule(plan)
     }
     private func schedule(_ plan: CheckPacer.Plan, followUp: Bool = false) {
-        guard Preferences.shared.passive, !Preferences.shared.paused else { work?.cancel(); pending = false; return }
+        guard checkingEnabled else { work?.cancel(); pending = false; return }
+        guard let app = SelfTestTarget.watched, AX.focusedText(app, automatic: true) != nil else {
+            work?.cancel(); pending = false; onDismiss?(); return
+        }
         let delay: Double
         switch plan {
         case .restart(let ms): delay = ms
@@ -184,6 +194,7 @@ final class PassiveObserver {
                 // the engine scores short-word swaps with it only when it is already loaded and free, within a small
                 // budget; a cold model starts loading in the background and stays loaded while the person keeps typing.
                 // Rewrites run only for explicit checks and tone changes.
+                try Task.checkCancellation(); try snapshot.validateCheckingEligibility()
                 let engine = WritingEngine.typing
                 let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: request.text)
                 try Task.checkCancellation(); try snapshot.validate()

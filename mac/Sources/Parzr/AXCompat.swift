@@ -84,6 +84,30 @@ enum Compat {
             return label == "search" || label.hasPrefix("search ") || label.contains("address and search") || label.hasSuffix(" search")
         }
     }
+    enum EditorEligibility: Equatable { case editor, ancestor, blocked }
+    /// A writable selection range can move the caret in readonly text, so automatic checks require text mutation capability.
+    static func editorEligibility(role: String?, enabled: Bool?, valueSettable: Bool, textSettable: Bool, markerEditor: Bool, search: Bool) -> EditorEligibility {
+        guard enabled != false, !search else { return .blocked }
+        if ["AXWindow", "AXApplication"].contains(role ?? "") { return .blocked }
+        if ["AXStaticText", "AXInlineTextBox"].contains(role ?? "") { return .ancestor }
+        if ["AXTextArea", "AXTextField"].contains(role ?? "") || markerEditor {
+            return valueSettable || textSettable ? .editor : .blocked
+        }
+        return role == "AXWebArea" ? .blocked : .ancestor
+    }
+    static func editableAncestor<Element>(_ focused: Element, eligibility: (Element) -> EditorEligibility, parent: (Element) -> Element?) -> Element? {
+        var element = focused
+        for _ in 0..<8 {
+            switch eligibility(element) {
+            case .editor: return element
+            case .blocked: return nil
+            case .ancestor:
+                guard let next = parent(element) else { return nil }
+                element = next
+            }
+        }
+        return nil
+    }
     /// An empty web composer (Teams, Slack, Chrome) can report its placeholder ("Message in devops-general") as its
     /// text: Chromium exposes CSS-generated placeholder content. Text that is exactly the field's placeholder, label or
     /// title is no writing of the user's.
@@ -136,6 +160,11 @@ enum ReplacePlan {
     static func verdict(before: String, after: String?, expected: String) -> Verdict {
         guard let after else { return .diverged }
         return after == expected ? .applied : after == before ? .unchanged : .diverged
+    }
+    /// A readable leaf can differ from its writable ancestor, so fallback focus must use the snapshot's resolution mode.
+    static func focusMatches<Element>(_ element: Element, automatic: Bool = false, resolve: (Bool) -> Element?, same: (Element, Element) -> Bool) -> Bool {
+        guard let focus = resolve(automatic) else { return false }
+        return same(focus, element)
     }
 }
 
@@ -259,7 +288,7 @@ extension AX {
     // MARK: Replacement
 
     /// Replaces `range`: AXSelectedText when the editor honours it, otherwise Unicode key events posted to the app. Verified by re-reading the text.
-    static func replace(_ element: AXUIElement, in app: NSRunningApplication, range: NSRange, with replacement: String, before: String, expected: String) async throws {
+    static func replace(_ element: AXUIElement, in app: NSRunningApplication, range: NSRange, with replacement: String, before: String, expected: String, automatic: Bool = false) async throws {
         guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: isDocsText(element)), select(element, range) else {
             throw ParzrError.message("The editor refused a range edit.")
         }
@@ -274,7 +303,8 @@ extension AX {
         // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
         let docs = isDocsText(element)
         guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
-              let focus = focusedText(app), CFEqual(focus, element), docs || select(element, range) else {
+              ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }),
+              docs || select(element, range) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }
         // A Chromium composer must hold exactly the words being replaced before anything is typed: a selection that landed elsewhere would be overwritten.

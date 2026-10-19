@@ -56,6 +56,7 @@ final class InlineSuggestions {
         Preferences.shared.$permissionGranted.removeDuplicates().sink { [weak self] granted in
             if granted { MainActor.assumeIsolated { self?.installMonitor() } }
         }.store(in: &subscriptions)
+        Preferences.shared.$automaticAppPauses.dropFirst().sink { [weak self] _ in Task { @MainActor in self?.dismissIfStale() } }.store(in: &subscriptions)
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification).sink { [weak self] _ in MainActor.assumeIsolated { self?.dismiss() } }.store(in: &subscriptions)
     }
     private var subscriptions: Set<AnyCancellable> = []
@@ -82,8 +83,8 @@ final class InlineSuggestions {
         }
     }
     private var textIsCurrent: Bool {
-        guard let s = shown?.snapshot, !s.app.isTerminated, s.app == SelfTestTarget.watched,
-              let focused = AX.focusedText(s.app), CFEqual(focused, s.element) else { return false }
+        guard let s = shown?.snapshot, s.checkingEnabled, !s.app.isTerminated, s.app == SelfTestTarget.watched, s.automaticEditorIsCurrent(),
+              s.automatic || AX.focusedText(s.app).map({ CFEqual($0, s.element) }) == true else { return false }
         if let full = s.fullText { return AX.text(s.element) == full }
         return AX.string(s.element, kAXSelectedTextAttribute) == s.text
     }
@@ -106,7 +107,7 @@ final class InlineSuggestions {
         // when the text, focus, position or the passive/app settings no longer match.
         let prefs = Preferences.shared
         guard prefs.passive, !prefs.paused else { dismiss(); return }
-        if let app = shown?.snapshot.app ?? model.snapshot?.app, !prefs.enabled(for: app.bundleIdentifier ?? "") { dismiss(); return }
+        if let snapshot = shown?.snapshot ?? model.snapshot, !snapshot.checkingEnabled { dismiss(); return }
         if shown != nil, !marksAreCurrent { dismiss(); return }
         if isPresenting, (try? model.snapshot?.validate()) == nil { if shown != nil { closeCard() } else { dismiss() }; return }
         if shown == nil, !isPresenting { dismiss() }
@@ -123,6 +124,7 @@ final class InlineSuggestions {
     }
     @discardableResult
     func show(snapshot: SelectionSnapshot, result: RewriteResult) -> Bool {
+        guard snapshot.checkingEnabled, snapshot.automaticEditorIsCurrent() else { dismiss(); return false }
         if let current = shown, overlay.hasMarks, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
            current.snapshot.selection == snapshot.selection, current.result.edits == result.edits, marksAreCurrent {
             shown = (snapshot, result, current.probe); return true
@@ -158,7 +160,7 @@ final class InlineSuggestions {
             let style = ["Style", "Tone"].contains(edit.category)
             if Preferences.shared.highlightFill { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: bounds, style: style), owner: edit.id)) }
             items.append(MarkItem(shape: MarkShape(kind: .underline, rect: bounds, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
-                guard let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
+                guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
                 self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
             })
             if probe == nil { probe = (global, bounds) }

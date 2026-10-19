@@ -61,8 +61,15 @@ enum AX {
         guard AXUIElementCopyMultipleAttributeValues(element, attributes as CFArray, [], &values) == .success, let array = values as? [AnyObject], array.count == attributes.count else { return attributes.map { get(element, $0) } }
         return array.map { value in CFGetTypeID(value) == AXValueGetTypeID() && AXValueGetType(value as! AXValue) == .axError ? nil : value }
     }
-    static func focusedText(_ app: NSRunningApplication) -> AXUIElement? {
+    static func focusedText(_ app: NSRunningApplication, automatic: Bool = false) -> AXUIElement? {
         guard let focused = focused(app), !isSecure(focused) else { return nil }
+        if automatic {
+            // AX objects can become readonly without changing identity, so automatic eligibility is never cached.
+            return Compat.editableAncestor(focused, eligibility: automaticEligibility, parent: { element in
+                guard let parent = get(element, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
+                return (parent as! AXUIElement)
+            })
+        }
         let now = ProcessInfo.processInfo.systemUptime
         if let known = resolved, now - known.time < verdictLifetime, CFEqual(known.raw, focused) { return known.text }
         var cursor: AXUIElement? = focused
@@ -78,6 +85,12 @@ enum AX {
             cursor = (parent as! AXUIElement)
         }
         return nil
+    }
+    static func automaticEligibility(_ element: AXUIElement) -> Compat.EditorEligibility {
+        guard !isSecure(element) else { return .blocked }
+        return Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
+                                        valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
+                                        markerEditor: isMarkerEditor(element), search: isSearch(element))
     }
     static func isSecure(_ element: AXUIElement) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
@@ -175,8 +188,14 @@ struct SelectionSnapshot {
     let docs: Bool
     /// Document offsets of line breaks Chromium wrote around an inline image inside this paragraph: `text` has spaces there, and they are protected.
     var inlineBreaks: [Int] = []
+    /// Automatic results keep their origin so a new pause also blocks pending display and application.
+    var automatic = false
     /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
     var headlessEditor: NSTextView?
+    var checkingEnabled: Bool { Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) }
+    func validateCheckingEligibility(preferences: Preferences = .shared) throws {
+        guard preferences.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) else { throw ParzrError.message("Checking is paused or disabled for this app.") }
+    }
     /// The Studio writing space: the card is a key window of this same app, so the app's focus is then the card, not the editor.
     var own: Bool { app.processIdentifier == ProcessInfo.processInfo.processIdentifier }
     var bundle: String { app.bundleIdentifier ?? "pid.\(app.processIdentifier)" }
@@ -184,12 +203,15 @@ struct SelectionSnapshot {
     var markDrift: CGFloat { docs ? 4 : 1.5 }
     static func capture(passive: Bool = false) throws -> SelectionSnapshot {
         guard AXIsProcessTrusted() else { throw ParzrError.message("Allow Accessibility to use Parzr in your editors.") }
-        guard let app = SelfTestTarget.watched, let element = AX.focusedText(app),
+        guard let app = SelfTestTarget.watched else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
+        // Check app policy before resolving the focused text, which itself reads editor attributes.
+        guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
+        guard Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: passive) else { throw ParzrError.message("Automatic checking is paused for this app.") }
+        guard let element = AX.focusedText(app, automatic: passive),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
         // Another app's secure input hides this plain field's typing too: name that app instead of blaming the field.
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
-        guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
         guard let selectedRange = AX.selection(element) else { throw ParzrError.message("This editor hides its selection. Use the Parzr editor extension, or copy text into the playground.") }
         let full = AX.text(element)
@@ -223,7 +245,7 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks)
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -245,7 +267,17 @@ struct SelectionSnapshot {
         return trimmed(a) == trimmed(b)
     }
 
-    func validate() throws {
+    func automaticEditorIsCurrent() -> Bool {
+        guard automatic else { return true }
+        if let editor = headlessEditor { return editor.isEditable }
+        // The Studio card takes focus inside this app without changing its writing space.
+        if own { return AX.automaticEligibility(element) == .editor }
+        guard app == SelfTestTarget.watched else { return false }
+        return ReplacePlan.focusMatches(element, automatic: true, resolve: { automatic in AX.focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) })
+    }
+    func validate(preferences: Preferences = .shared) throws {
+        try validateCheckingEligibility(preferences: preferences)
+        guard automaticEditorIsCurrent() else { throw ParzrError.message("Your selection changed. Select the text again.") }
         if let editor = headlessEditor {
             guard editor.string == fullText, editor.selectedRange() == expectedSelection else { throw ParzrError.message("Your selection changed. Select the text again.") }
             return
@@ -255,7 +287,7 @@ struct SelectionSnapshot {
             return
         }
         guard !app.isTerminated, !IsSecureEventInputEnabled(), !AX.isSecure(element),
-              own || AX.focusedText(app).map({ CFEqual($0, element) }) == true,
+              own || automatic || AX.focusedText(app).map({ CFEqual($0, element) }) == true,
               let current = AX.selection(element), current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
             throw ParzrError.message("Your selection changed. Select the text again.")
         }
@@ -304,13 +336,14 @@ struct SelectionSnapshot {
         var expected = fullText
         var applied = 0
         for edit in edits.reversed() {
+            guard checkingEnabled else { throw ParzrError.message("Checking is paused or disabled for this app. \(applied) edits applied; use the editor's Undo if needed.") }
             // Verify between every range patch; never replace the entire document.
             guard AX.text(element) == expected else {
                 throw ParzrError.message("The editor changed during replacement. \(applied) edits applied; use the editor's Undo to revert.")
             }
             let global = NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)
             let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement)
-            do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String) }
+            do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String, automatic: automatic) }
             catch {
                 _ = AX.select(element, expectedSelection)
                 throw ParzrError.message("\(error.localizedDescription) \(applied) edits applied; use the editor's Undo if needed.")

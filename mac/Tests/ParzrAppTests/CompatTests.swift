@@ -5,6 +5,129 @@ import ParzrCore
 
 @MainActor
 final class CompatTests: XCTestCase {
+    private struct EditorSurface {
+        var role = "AXTextArea"
+        var enabled: Bool? = true
+        var valueSettable = false
+        var textSettable = true
+        var markerEditor = false
+        var search = false
+        var parent: Int?
+        var eligibility: Compat.EditorEligibility {
+            Compat.editorEligibility(role: role, enabled: enabled, valueSettable: valueSettable, textSettable: textSettable, markerEditor: markerEditor, search: search)
+        }
+    }
+    private func automaticEditor(_ surfaces: [Int: EditorSurface], focus: Int = 0) -> Int? {
+        Compat.editableAncestor(focus, eligibility: { surfaces[$0]?.eligibility ?? .blocked }, parent: { surfaces[$0]?.parent })
+    }
+    func testAutomaticStaticSelectableTextIsNotAnEditor() {
+        // Readable or settable selection ranges do not establish that text can be changed.
+        for role in ["AXStaticText", "AXInlineTextBox"] {
+            XCTAssertNil(automaticEditor([0: EditorSurface(role: role, valueSettable: true, markerEditor: true)]))
+        }
+    }
+    func testAutomaticReadonlyAndDisabledEditorsStopTheAncestryWalk() {
+        let parent = EditorSurface()
+        XCTAssertNil(automaticEditor([0: EditorSurface(textSettable: false, markerEditor: true, parent: 1), 1: parent]))
+        XCTAssertNil(automaticEditor([0: EditorSurface(enabled: false, valueSettable: true, parent: 1), 1: parent]))
+    }
+    func testAutomaticStaticLeafResolvesAnEditableComposer() {
+        var surfaces = [0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1),
+                        1: EditorSurface(role: "AXGroup", textSettable: false, parent: 2), 2: EditorSurface()]
+        XCTAssertEqual(automaticEditor(surfaces), 2, "Writable selected text is enough when AXValue is not writable.")
+        surfaces[2] = EditorSurface(valueSettable: true, textSettable: false)
+        XCTAssertEqual(automaticEditor(surfaces), 2, "Chromium contenteditable fields can expose a writable value.")
+        surfaces[1] = EditorSurface(role: "AXGroup", markerEditor: true, parent: 2)
+        XCTAssertEqual(automaticEditor(surfaces), 1, "A writable marker editor keeps its existing support.")
+    }
+    func testAutomaticEditorVerdictIsFreshAfterReadonlyOrFocusChange() {
+        var surfaces = [0: EditorSurface(), 1: EditorSurface(role: "AXStaticText", textSettable: false), 2: EditorSurface()]
+        let captured = automaticEditor(surfaces)
+        XCTAssertEqual(captured, 0)
+        surfaces[0]?.textSettable = false
+        XCTAssertNil(automaticEditor(surfaces), "A pending result loses eligibility when its editor becomes readonly.")
+        surfaces[0]?.textSettable = true
+        XCTAssertNotEqual(automaticEditor(surfaces, focus: 1), captured)
+        XCTAssertNotEqual(automaticEditor(surfaces, focus: 2), captured, "Identical text in another editor is not the captured editor.")
+    }
+    func testAutomaticSearchReachedWithoutAnAttachedObserverIsNotAnEditor() {
+        let search = Compat.isSearchField(role: "AXTextField", subrole: nil, labels: ["Search"])
+        let field = EditorSurface(role: "AXTextField", valueSettable: true, search: search, parent: 1)
+        XCTAssertNil(automaticEditor([0: field, 1: EditorSurface()]), "Global input must apply the same policy as observer attachment.")
+        XCTAssertNil(automaticEditor([0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1), 1: field]))
+    }
+    func testAutomaticEditorTraversalStopsAtDocumentBoundariesAndIsBounded() {
+        for role in ["AXWebArea", "AXWindow", "AXApplication"] {
+            XCTAssertNil(automaticEditor([0: EditorSurface(role: role, valueSettable: true, parent: 1), 1: EditorSurface()]))
+        }
+        let surfaces = Dictionary(uniqueKeysWithValues: (0..<10).map { ($0, EditorSurface(role: "AXGroup", parent: $0 + 1)) })
+        XCTAssertNil(automaticEditor(surfaces))
+    }
+    func testAutomaticSelectableNotificationSubtreeRejectsFallbackAndStaleDisplay() throws {
+        var surfaces = [
+            0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1),
+            1: EditorSurface(role: "AXGroup", textSettable: false, markerEditor: true, parent: 2),
+            2: EditorSurface(markerEditor: true, parent: 3),
+            3: EditorSurface(role: "AXWebArea", textSettable: false)
+        ]
+        let initialEditor = try XCTUnwrap(surfaces[2])
+        XCTAssertEqual(initialEditor.eligibility, .editor)
+        let capturedEditor = try XCTUnwrap(automaticEditor(surfaces, focus: 2))
+        XCTAssertEqual(capturedEditor, 2)
+        // The same synthetic node now exposes only readable/selectable notification content.
+        surfaces[2]?.textSettable = false
+        let readableAndSelectable: Set<Int> = [0, 1, 2]
+        func resolve(_ automatic: Bool) -> Int? {
+            automatic ? self.automaticEditor(surfaces) : (readableAndSelectable.contains(0) ? 0 : nil)
+        }
+        for focused in readableAndSelectable {
+            XCTAssertNil(automaticEditor(surfaces, focus: focused), "Neither selection nor marker ranges make a readonly notification node writable.")
+        }
+        XCTAssertNil(resolve(true), "Automatic focused-text routing must not fall back to the readable leaf.")
+        XCTAssertFalse(ReplacePlan.focusMatches(capturedEditor, automatic: true, resolve: resolve, same: { $0 == $1 }), "The shared typed-fallback and stale-display focus gate must reject the now-readonly subtree.")
+        XCTAssertEqual(resolve(false), 0)
+        XCTAssertTrue(ReplacePlan.focusMatches(0, resolve: resolve, same: { $0 == $1 }), "Explicit manual selection remains available on readable notification text.")
+    }
+    func testAutomaticTypedFallbackKeepsWritableAncestorAndExplicitReadableLeaf() throws {
+        var surfaces = [0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1), 1: EditorSurface()]
+        var focused = 0, modes: [Bool] = []
+        func resolve(_ automatic: Bool) -> Int? {
+            modes.append(automatic)
+            return automatic ? self.automaticEditor(surfaces, focus: focused) : focused
+        }
+        let capturedAncestor = try XCTUnwrap(automaticEditor(surfaces))
+        XCTAssertEqual(capturedAncestor, 1)
+        XCTAssertTrue(ReplacePlan.focusMatches(capturedAncestor, automatic: true, resolve: resolve, same: { $0 == $1 }))
+        XCTAssertFalse(ReplacePlan.focusMatches(capturedAncestor, resolve: resolve, same: { $0 == $1 }), "Explicit resolution returns the readable leaf, not the automatically captured ancestor.")
+        XCTAssertTrue(ReplacePlan.focusMatches(0, resolve: resolve, same: { $0 == $1 }), "Explicit snapshots retain their default leaf resolution.")
+        XCTAssertEqual(modes, [true, false, false])
+        surfaces[1]?.textSettable = false
+        XCTAssertFalse(ReplacePlan.focusMatches(capturedAncestor, automatic: true, resolve: resolve, same: { $0 == $1 }), "A now-readonly ancestor must still fail fallback validation.")
+        surfaces[2] = EditorSurface()
+        focused = 2
+        XCTAssertFalse(ReplacePlan.focusMatches(capturedAncestor, automatic: true, resolve: resolve, same: { $0 == $1 }), "A different writable field is not the captured ancestor.")
+    }
+    func testAutomaticSnapshotRejectsReadonlyPendingResultsButExplicitSelectionStillWorks() throws {
+        let suite = "app.parzr.tests.AutomaticEditorSnapshot.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "onboardingCompleted")
+        defaults.set(true, forKey: "passive")
+        defaults.set(false, forKey: "paused")
+        defaults.set([String](), forKey: "disabledApps")
+        defaults.set([String: Date](), forKey: "automaticAppPauses")
+        let preferences = Preferences(defaults: defaults, permissionGranted: false)
+        let editor = NSTextView(frame: .zero)
+        editor.string = "Synthetic editable sentence."
+        editor.setSelectedRange(NSRange(location: 0, length: editor.string.utf16.count))
+        var snapshot = SelectionSnapshot(app: .current, element: AXUIElementCreateSystemWide(), selection: editor.selectedRange(), expectedSelection: editor.selectedRange(), text: editor.string, fullText: editor.string, bounds: nil, richText: nil, copied: false, canPatch: true, docs: false, automatic: true, headlessEditor: editor)
+        try snapshot.validate(preferences: preferences)
+        editor.isEditable = false
+        XCTAssertFalse(snapshot.automaticEditorIsCurrent())
+        XCTAssertThrowsError(try snapshot.validate(preferences: preferences))
+        snapshot.automatic = false
+        XCTAssertNoThrow(try snapshot.validate(preferences: preferences), "Explicit checks can still inspect readonly selected text.")
+    }
     func testAnIgnoreOutlivesMoreTypingAndAFreshCheck() {
         let first = WritingEdit(start: 20, end: 27, replacement: "Jn-Aman", original: "jn-aman", category: "Style", ruleID: "names.capitalize")
         let moved = WritingEdit(start: 31, end: 38, replacement: "Jn-Aman", original: "jn-aman", category: "Style", ruleID: "names.capitalize")

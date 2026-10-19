@@ -545,7 +545,7 @@ pub fn combine_with(
         let (s, e) = (to16(from + swap.start), to16(from + swap.end));
         if shielded
             .iter()
-            .any(|r| s < r.end_utf16 && e > r.start_utf16)
+            .any(|r| s == r.start_utf16 || (s < r.end_utf16 && e > r.start_utf16))
         {
             continue;
         }
@@ -737,6 +737,84 @@ mod tests {
             Err(Unscored::Unavailable)
         }
         assert!(combine_with(&req, &[], vec![], cold).is_empty());
+    }
+    #[test]
+    fn context_swap_does_not_share_start_with_insertion() {
+        fn knew(_: &str, swaps: &[Swap], _: Use) -> Result<Scored, Unscored> {
+            Ok(Scored {
+                gains: swaps
+                    .iter()
+                    .map(|swap| (swap.candidate == "knew").then_some(12.0))
+                    .collect(),
+                complete: true,
+            })
+        }
+        let req = Request {
+            text: "That's not fair. He new about it the whole time.".into(),
+            deep: true,
+            ..Request::default()
+        };
+        let expected = "That's not fair. He knew about it the whole time.";
+        let context_only = combine_with(&req, &[], vec![], knew);
+        assert_eq!(context_only.len(), 1);
+        assert_eq!(context_only[0].start_utf16, 20);
+        assert_eq!(context_only[0].end_utf16, 23);
+        assert_eq!(context_only[0].original, "new");
+        assert_eq!(context_only[0].replacement, "knew");
+        assert_eq!(
+            crate::apply_edits(&req.text, &context_only).unwrap().0,
+            expected
+        );
+
+        let insertion = Edit {
+            start_utf16: 20,
+            end_utf16: 20,
+            original: String::new(),
+            replacement: "k".into(),
+            category: "Grammar".into(),
+            rule_id: "model.grammar".into(),
+            explanation: "Insert the missing letter.".into(),
+            confidence: 1.0,
+            group_id: None,
+        };
+        let edits = combine_with(&req, &[], vec![insertion], knew);
+        assert_eq!(edits.len(), 1, "same-start edits: {edits:?}");
+        assert_eq!(edits[0].rule_id, "model.grammar");
+        assert_eq!(crate::apply_edits(&req.text, &edits).unwrap().0, expected);
+    }
+    #[test]
+    fn actual_plan_collision_keeps_ungrammatical_model_insertion() {
+        let req = Request {
+            text: "That's not fair. He new about it the whole time.".into(),
+            deep: true,
+            ..Request::default()
+        };
+        let insertion = Edit {
+            start_utf16: 20,
+            end_utf16: 20,
+            original: String::new(),
+            replacement: "was ".into(),
+            category: "Grammar".into(),
+            rule_id: "local-model".into(),
+            explanation: "Add “was”.".into(),
+            confidence: 1.0,
+            group_id: None,
+        };
+        let edits = combine_with(&req, &[], vec![insertion], |_, swaps, _| {
+            Ok(Scored {
+                gains: swaps
+                    .iter()
+                    .map(|swap| (swap.candidate == "knew").then_some(12.0))
+                    .collect(),
+                complete: true,
+            })
+        });
+        assert_eq!(edits.len(), 1, "same-start edits: {edits:?}");
+        assert_eq!(edits[0].rule_id, "local-model");
+        assert_eq!(edits[0].replacement, "was ");
+        let (text, _) = crate::apply_edits(&req.text, &edits).unwrap();
+        assert_eq!(text, "That's not fair. He was new about it the whole time.");
+        assert_ne!(text, "That's not fair. He knew about it the whole time.");
     }
     #[test]
     fn typing_never_waits_past_its_budget_and_the_answer_comes_from_the_cache() {
