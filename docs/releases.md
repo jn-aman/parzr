@@ -1,16 +1,27 @@
 # Releases
 
-The workflow in [.github/workflows/ci-release.yml](../.github/workflows/ci-release.yml) verifies pull requests and pushes to the default branch (except changes that only touch `website/**`, `docs/**` or Markdown), builds a development DMG, and runs the distribution job for version tags. It also runs on demand; a manual run on a branch verifies only. The [Release workflow](../.github/workflows/release.yml) bumps versions, tags and starts that distribution job. The [website workflow](../.github/workflows/website.yml) deploys `website/` to Cloudflare Workers when it changes on the default branch. Remote execution requires a GitHub repository with Actions enabled.
+The workflow in [.github/workflows/ci-release.yml](../.github/workflows/ci-release.yml) verifies pull requests and pushes to the default branch (except changes that only touch `website/**`, `docs/**` or Markdown), builds a development DMG, and runs the distribution job for version tags. It also runs on demand; a manual run on a branch verifies only. The [Release workflow](../.github/workflows/release.yml) bumps versions, tags and starts that distribution job. The [website workflow](../.github/workflows/website.yml) deploys `website/` to Cloudflare Workers after each published release, and on demand (see [Website](#website)). Remote execution requires a GitHub repository with Actions enabled. The GitHub settings these workflows rely on (rulesets, environments, immutable releases, Actions policy, Dependabot, CodeQL, secret scanning) are in [repo-settings.md](repo-settings.md).
 
 ![How a release ships and the site deploys: the owner-only Release workflow bumps, tags and pushes atomically, ci-release verifies then signs, notarizes and publishes the DMG, the extension files, the update zip, deltas and a signed appcast.xml, re-checks the live feed and drafts the release if it fails, and website.yml deploys parzr.app](media/release.png)
 
-The diagram reads top to bottom; the release job has two rows (sign and package, then the update feed, publish and the post-publish feed check). Only the owner can start a release: `release.yml` runs only for the repository owner on the default branch, and the signing job in `ci-release.yml` runs only for a `v*` tag started by the owner or by `github-actions[bot]`, inside the `release` environment that holds the signing secrets. Pull requests and pushes to the default branch run the `verify` job and nothing else. A ruleset on the default branch makes `verify` a required check, so a pull request cannot merge while it fails; a pull request that only touches docs, the website or Markdown reports it as skipped, which counts as passed. The owner and the Release workflow's bot may push to the default branch directly, and those pushes run `verify` too.
+The diagram reads top to bottom (it predates the split of the release job; the steps are the same, now in the four jobs described below). Only the owner can start a release: `release.yml` runs only for the repository owner on the default branch, and the release jobs in `ci-release.yml` run only for a `v*` tag started by the owner or by `github-actions[bot]`, whose commit must already be on `main`. Pull requests and pushes to the default branch run `verify` and `dependencies` and nothing else. A ruleset on the default branch makes both required checks, so a pull request cannot merge while one fails; a pull request that only touches docs, the website or Markdown reports them as skipped, which counts as passed. The owner and the Release workflow's deploy key may push to the default branch directly, and those pushes run the checks too; nobody can force-push or delete it.
+
+The release runs in four jobs, each holding only what it needs:
+
+| Job | Environment and secrets | What it does |
+|---|---|---|
+| `release-build` | `release`: Developer ID certificate and notarization key; owner approval | Checks the tag's commit is on `main`, builds the engine, the model runtime and the app unsigned and packages both extensions while no credential exists on the runner, then creates the signing keychain, signs (`build.py --sign --skip-build`: no compiler runs), notarizes, staples and deletes the keychain. Hands the DMG, the extensions, `SHA256SUMS` and the stapled app on as an artifact, with every file's SHA-256 as a job output |
+| `release-sparkle` | `release-sparkle`: only `SPARKLE_ED_PRIVATE_KEY` | Checks the hand-off against those hashes, builds and signs the update zip, deltas and `appcast.xml`, and hands them on the same way |
+| `release-publish` | none; contents, id-token and attestations write | Checks both hand-offs, makes the SBOM and provenance attestations, creates a draft release, downloads it back and verifies it, publishes it, then re-checks the live feed |
+| `website` | none; actions write | Starts `website.yml` on `main` |
 
 ## Repository setup
 
-Protect the default branch and the release environment. Limit release credentials to trusted maintainers and approved tags. Keep workflow changes under review. Third-party Actions are pinned to commits. Verification runs with read-only repository permissions; the release job receives contents write access to publish assets. The Release workflow needs actions write (to start the build) and holds no signing secrets. It pushes the version commit and tag with `RELEASE_PUSH_KEY`, a write deploy key kept in the `release-push` environment, which only the default branch can use; that key and the owner are the only actors the default branch ruleset lets push without a passing `verify`.
+[repo-settings.md](repo-settings.md) has the exact commands. In short: rulesets keep `main` and every `v*`, `models-*` and `gector-*` tag permanent (no force-push, move or deletion, with no bypass), only the Release workflow's deploy key creates `v*` tags, releases are immutable once published, every environment accepts only its own ref and admins cannot skip it, Actions must be pinned to commit SHAs, and workflows from outside contributors' pull requests wait for approval. `.github/CODEOWNERS` names the owner for CI, release scripts, the model manifest, the app's identity and entitlements and the Worker, and every pull request that touches those files gets a warning listing them (a pull request runs its own copy of the workflows, so read those changes line by line).
 
-Set the release environment secrets:
+Every job's token is read-only unless it says otherwise: only `release-publish` may write contents (to publish) and mint attestations, and the `website` job and the Release workflow may start workflows (actions write). The Release workflow holds no signing secrets and its token is read-only for contents: it pushes the version commit and tag with `RELEASE_PUSH_KEY`, a write deploy key kept in the `release-push` environment, which only the default branch can use; that key and the owner are the only actors the default branch ruleset lets push without passing checks.
+
+Set the `release` environment secrets (the `release-build` job):
 
 | Secret | Value |
 |---|---|
@@ -20,11 +31,16 @@ Set the release environment secrets:
 | PARZR_NOTARY_KEY_BASE64 | Base64-encoded App Store Connect notarization API private key |
 | PARZR_NOTARY_KEY_ID | API key identifier |
 | PARZR_NOTARY_ISSUER | API issuer identifier |
+
+and the `release-sparkle` environment secret (the `release-sparkle` job, which receives nothing else):
+
+| Secret | Value |
+|---|---|
 | SPARKLE_ED_PRIVATE_KEY | Sparkle EdDSA private key (the base64 text `generate_keys -x` writes), used only to sign update files; see [Update signing key](#update-signing-key) |
 
 Optional variable PARZR_BUNDLE_ID defaults to app.parzr.desktop. Keep credentials in the CI secret store or local keychain; never in source files, release notes or attachments.
 
-The signing helper imports credentials into an ephemeral keychain, masks its generated password and omits secret command arguments from error logs. Cleanup runs even when a job fails. Fork pull requests never receive release secrets.
+The signing helper (`scripts/ci-signing.py`) imports credentials into an ephemeral keychain only after every build and package step has run, lets only `codesign` and `security` use the private key (`-T`, never `-A`), sets the keychain to lock itself after 40 idle minutes, masks its generated password and omits secret command arguments from error logs. The job deletes the keychain as soon as notarization is done, and also when anything fails. Fork pull requests never receive release secrets.
 
 ## Publishing a version
 
@@ -45,9 +61,20 @@ The workflow runs on a cheap Linux runner with no signing credentials and does t
 3. Commits "Release vX.Y.Z" as the person who started the workflow (no co-author or bot trailers), creates the annotated tag `vX.Y.Z`, and pushes the commit and tag together.
 4. Starts [ci-release.yml](../.github/workflows/ci-release.yml) on the new tag with `gh workflow run` (passing `critical` and `notes` through), and links the run in the job summary. The version commit carries `[skip ci]`, so the deploy key push starts no workflow of its own and this dispatch is the one signed build.
 
-On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below), and only then publishes the DMG, SHA-256 checksums, licenses, update zip, deltas, `appcast.xml` and the optional extension files as one release. The extension files come from `scripts/package-extensions.py` (the same script runs on every pull request, so a packaging break shows before a tag): `parzr-vscode-X.Y.Z.vsix` is built with the pinned `@vscode/vsce` 4.0.0 on Node 22, and `parzr-browser-extension-X.Y.Z.zip` is the contents of `extensions/browser` with fixed timestamps. Both versions come from the manifests that `check-release-version.py` already tied to the tag, and both are appended to `SHA256SUMS`. The DMG and both extension files are also published under fixed names (`Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip`, also in `SHA256SUMS`), so `releases/latest/download/<name>` is a direct download of the newest release: the website, README and integration guide link there. After publishing, the job fetches one byte of each through `releases/latest` and drafts the release if one is missing.
+On the tag, ci-release.yml verifies, builds the Apple Silicon app, signs and notarizes the app and DMG, staples, runs Gatekeeper checks, then builds and verifies the update feed (below). It uploads the DMG, SHA-256 checksums, licenses, update zip, deltas, `appcast.xml`, the optional extension files and an SBOM to a **draft** release, downloads every asset back from GitHub and verifies it (below), and only then publishes. The extension files come from `scripts/package-extensions.py` (the same script runs on every pull request, so a packaging break shows before a tag): `parzr-vscode-X.Y.Z.vsix` is built with `@vscode/vsce` 4.0.0, a pinned devDependency of `extensions/vscode` installed from its committed `package-lock.json` with `npm ci --ignore-scripts` and run from `node_modules/.bin` (never `npx --yes`), and `parzr-browser-extension-X.Y.Z.zip` is the contents of `extensions/browser` with fixed timestamps. Both versions come from the manifests that `check-release-version.py` already tied to the tag (it also checks the version in `extensions/vscode/package-lock.json`, which `bump-version.py` updates), and both are listed in `SHA256SUMS`. The DMG and both extension files are also published under fixed names (`Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip`, also in `SHA256SUMS`), so `releases/latest/download/<name>` is a direct download of the newest release: the website, README and integration guide link there. After publishing, the job downloads each through `releases/latest` and compares it with the file it uploaded.
 
-**Release notes.** `scripts/release_notes.py` writes the release body (also shown in the run's summary): the `notes` input as Highlights, then What's new from the commit subjects since the previous tag, with subjects whose area is internal (CI, Tests, Self tests, Docs, README, Website and similar; `INTERNAL` in the script) folded into a collapsed Under the hood list, then a download table with sizes and requirements, install and update steps, the checksums and the compare link. Write subjects as `Area: what changed for the user`; the area becomes the bold label. `make-appcast.py` uses the same test, so the in-app notes skip internal commits too. Preview with `python3 scripts/release_notes.py --version X.Y.Z --git-range vA.B.C..HEAD`. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
+**Publishing order and checks.**
+
+1. `gh release create --draft`: the draft is invisible to `releases/latest`, so the update feed and the download links do not move.
+2. `gh release download` of the draft into an empty folder, then: the same file names as uploaded; `shasum -a 256 -c SHA256SUMS` (it lists every DMG, extension, update zip, delta, `appcast.xml` and the SBOM); `make-appcast.py verify` on the downloaded `appcast.xml` and files (signatures against the pinned public key, lengths, versions); `xcrun stapler validate` and `spctl -a -t open --context context:primary-signature` on both downloaded DMGs. A failure leaves the draft unpublished and the run red.
+3. `gh release edit --draft=false --latest`.
+4. The live feed check: `make-appcast.py verify` against the public URL, `releases/latest/download/appcast.xml` byte-identical to the tag's, and each fixed-name download identical to the uploaded file. A failure turns the release back into a draft (or says to delete it, if GitHub refuses) and goes red.
+
+**Provenance and SBOM.** `release-publish` attests every file listed in `SHA256SUMS` with `actions/attest-build-provenance` (Sigstore, tied to the workflow run, the commit and the tag) and attaches `parzr-vX.Y.Z.spdx.json`, an SPDX SBOM of the tagged sources' locked dependencies (`engine/Cargo.lock`, `mac/Package.resolved`, the npm lockfiles; made by syft through `anchore/sbom-action`, both pinned). Check a download with `gh attestation verify Parzr-X.Y.Z.dmg --repo jn-aman/parzr`.
+
+**A draft left behind** (the draft check failed): read the run's log, then delete the draft (`gh release delete vX.Y.Z --yes`; the tag stays) and release the next version once fixed. A draft never reaches users.
+
+**Release notes.** `scripts/release_notes.py` writes the release body (also shown in the run's summary): the `notes` input as Highlights, then What's new from the commit subjects since the previous tag, with subjects whose area is internal (CI, Tests, Self tests, Docs, README, Website and similar; `INTERNAL` in the script) folded into a collapsed Under the hood list, then a download table with sizes and requirements, install and update steps, the checksums and the compare link. Write subjects as `Area: what changed for the user`; the area becomes the bold label. Subjects are rendered as plain text (`plain()` in the script): links keep only their text, URLs, HTML tags, `@` mentions and Markdown markup are removed, so a commit message cannot put a link, image or formatting into the release page or the update panel. `make-appcast.py` uses the same test and the same cleaning, so the in-app notes skip internal commits too. Preview with `python3 scripts/release_notes.py --version X.Y.Z --git-range vA.B.C..HEAD`. An existing release is not overwritten. Dispatching on a tag makes `github.ref` equal `refs/tags/vX.Y.Z`, so the release job condition and the `release` environment tag rule (`v*`) both apply as they do for a tag push.
 
 Preview a bump locally without writing anything:
 
@@ -59,7 +86,7 @@ Do not run it without `--dry-run` and push by hand unless the workflow is unavai
 
 If the signed build fails after the tag is pushed, fix the problem on the default branch and release the next version. Delete a failed tag only if no release was published for it.
 
-If the default branch is protected against direct pushes, allow the GitHub Actions app to bypass that rule for this workflow; otherwise the push step fails and nothing is released (the push is atomic, so no tag is left behind).
+The default branch ruleset lets the `RELEASE_PUSH_KEY` deploy key push without passing checks, and the tag ruleset lets only that key create `v*` tags ([repo-settings.md](repo-settings.md)); without those bypasses the push step fails and nothing is released (the push is atomic, so no tag is left behind). The version commit is not signed: it is made on a GitHub runner and pushed with the deploy key, and the tag is annotated, not signed.
 
 The fixture-editor tests (`--paste-test`, `--typing-test`, `--grammar-typing-test`, `--integration-test`) need Accessibility but show nothing on screen and take no focus; installed-browser and editor UI checks require a real desktop session and are not established by headless CI alone. Track compatibility evidence in [integrations](integrations.md). Required hosted checks and a protected release environment should enforce the final acceptance gate.
 
@@ -81,7 +108,7 @@ python3 scripts/model-pack.py publish               # gh release create models-1
 python3 scripts/model-pack.py fetch --models-dir "$(mktemp -d)" --verify   # downloads it back from GitHub and checks every hash
 ```
 
-`publish` refuses to touch a tag that exists: a published pack is immutable (consider turning on immutable releases in the repository settings). Check that `https://github.com/jn-aman/parzr/releases/latest` still shows the app release.
+`publish` refuses to touch a tag that exists: a published pack is immutable (immutable releases and the tag ruleset in [repo-settings.md](repo-settings.md) also enforce it on GitHub's side). Besides the model files it attaches `NOTICE-<pack>-<version>.txt` (the `THIRD_PARTY_NOTICES` paragraphs for the pack's models and training data; publishing fails if one is missing) and the full licence texts (`LICENSE-Apache-2.0.txt`, and for `essential` also `LICENSE-Qwen3.5.txt` and `LICENSE-GECToR-Grammarly-Apache-2.0.txt`), and the release notes carry the same attribution. These extra assets are not in `engine/models.json`; the app never downloads them. `PACK_NOTICES` in `scripts/model-pack.py` maps each pack to its paragraphs and licence files: a new pack needs an entry there. Check that `https://github.com/jn-aman/parzr/releases/latest` still shows the app release.
 
 **A new pack version** (Phase 2's fine-tuned Qwen3.5-2B, the slip detector, the tone classifier): put the files in a new pack version in `engine/models.json` (new `version`, URLs under a new tag such as `models-2`, hashes, sizes, licenses, purposes, and `provides` naming what the engine looks up), stage them with `--from-dir`, publish, and only then release the app that pins them. On their first launch, updated apps download the new version beside the old one and delete the old one only after the new one verifies. Never re-upload an asset under an existing tag.
 
@@ -109,7 +136,7 @@ python3 scripts/model-pack.py fetch --pack tone --models-dir "$(mktemp -d)" --ve
 
 Tone check is on by default, so publish `models-tone-2` before the app release that pins it. Until it is published, the app reports the tone model as not available yet and retries hourly. No flags appear until then, and nothing else changes.
 
-**CI** downloads the pinned pack into `dist/models` (cached by the hash of `engine/models.json`) and runs every model test against it through `PARZR_MODELS_DIR`; before the pack's release exists it rebuilds the pack from the pinned upstream sources with the same hash checks. The bundle audit (`scripts/audit-bundle.py`) fails the build if any model file (by name, format or pinned hash) is in the app, or if the app is over 100 MB.
+**CI** downloads the pinned pack into `dist/models` (cached by the hash of `engine/models.json`; `fetch --verify` re-hashes a restored cache against the pinned SHA-256s instead of trusting file sizes, and downloads again on a mismatch) and runs every model test against it through `PARZR_MODELS_DIR`; before the pack's release exists it rebuilds the pack from the pinned upstream sources with the same hash checks. The bundle audit (`scripts/audit-bundle.py`) fails the build if any model file (by name, format or pinned hash) is in the app, or if the app is over 100 MB.
 
 **Check the download end to end** in a built app, without the release:
 
@@ -128,7 +155,7 @@ From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no up
 
 **The feed.** The app's `SUFeedURL` is `https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml`. Every app release carries an `appcast.xml` asset with exactly one item: that release. GitHub resolves `latest` to the newest published, non-draft, non-prerelease release, so the feed is always the newest release's own file, and deleting or drafting a bad release makes the feed fall back to the previous release by itself. No server, no separate publishing step.
 
-**What a release uploads** (one `gh release create`, so the feed never exists without its files):
+**What a release uploads** (one draft `gh release create`, verified, then published, so the feed never exists without its files):
 
 | Asset | What it is |
 |---|---|
@@ -136,14 +163,15 @@ From 0.3 the app updates itself with Sparkle 2.9.5. Installs of 0.2.x have no up
 | `Parzr.dmg`, `parzr-vscode.vsix`, `parzr-browser-extension.zip` | Fixed-name copies of the DMG and extensions for direct links through `releases/latest/download/` (website, README, docs) |
 | `parzr-vscode-X.Y.Z.vsix`, `parzr-browser-extension-X.Y.Z.zip` | The optional VS Code and browser extensions, for [manual install](integrations.md#install-the-optional-extensions). Not part of the update feed; their lower-case names keep them out of the `Parzr-*.zip` update globs |
 | `Parzr-X.Y.Z.zip` | The update archive: the notarized, stapled `Parzr.app` made with `ditto -c -k --sequesterRsrc --keepParent` |
-| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 3 previous releases that have an update zip (small next to the zip; since the models moved out of the app, the app itself is about 80 MB instead of 773 MB, and the first release without them deltas to a removal) |
+| `Parzr-X.Y.Z-from-A.B.C.delta` | Binary delta from each of the up to 8 previous releases that have an update zip (small next to the zip; since the models moved out of the app, the app itself is about 80 MB instead of 773 MB, and the first release without them deltas to a removal) |
+| `parzr-vX.Y.Z.spdx.json` | SPDX SBOM of the tagged sources' locked dependencies; every file in `SHA256SUMS` also has a provenance attestation (`gh attestation verify FILE --repo jn-aman/parzr`) |
 | `appcast.xml` | One item: `sparkle:version` is the build number (CFBundleVersion, which `bump-version.py` increments), `sparkle:shortVersionString` is X.Y.Z, minimum macOS 13.0, arm64 only, the zip and delta enclosures with EdDSA signatures and lengths, the notes, and either `phasedRolloutInterval` or `criticalUpdate` |
 
 **Notes format.** The item's `<description sparkle:format="markdown">` holds a CDATA Markdown bullet list (`- first point`, `- second point`, at most 6 lines of 160 characters). Sparkle exposes it as `itemDescription` with `itemDescriptionFormat == "markdown"`.
 
 **Phased rollout.** Normal releases carry `sparkle:phasedRolloutInterval` 43200 (12 hours): automatic checks open the update to a new seventh of users every 12 hours from the item's publication date, so it spreads over about 3.5 days. A user who clicks Check for Updates gets it at once. This is also the safety net: yank a bad release (below) within the first day and most users never see it.
 
-**What CI verifies.** [scripts/make-appcast.py](../scripts/make-appcast.py) `build` refuses an app that is not stapled and Gatekeeper-approved, lacks `Sparkle.framework`, or whose `SUPublicEDKey` is not the pinned public key. It signs the zip and deltas, writes the appcast, and then re-reads its own output: XML shape (one item, versions, URLs under the release's download path, lengths on disk), every EdDSA signature checked against the public key with a stdlib Ed25519 verifier (independent of Sparkle's tools), the zip extracted and compared with the app, and every delta applied to the previous app and compared with the new app byte for byte. Sparkle's `BinaryDelta` and `sign_update` come from the pinned Sparkle 2.9.5 tarball, checked against its SHA-256 before use. After publishing, `make-appcast.py verify` downloads the live `appcast.xml` and every file it points to, re-verifies lengths and signatures, and checks that `releases/latest/download/appcast.xml` is byte-identical. If that fails, the workflow drafts the release (so the feed falls back) and goes red.
+**What CI verifies.** [scripts/make-appcast.py](../scripts/make-appcast.py) `build` refuses an app that is not stapled and Gatekeeper-approved, lacks `Sparkle.framework`, or whose `SUPublicEDKey` is not the pinned public key. It signs the zip and deltas, writes the appcast, and then re-reads its own output: XML shape (one item, versions, URLs under the release's download path, lengths on disk), every EdDSA signature checked against the public key with a stdlib Ed25519 verifier (independent of Sparkle's tools), the zip extracted and compared with the app, and every delta applied to the previous app and compared with the new app byte for byte. Sparkle's `BinaryDelta` and `sign_update` come from the pinned Sparkle 2.9.5 tarball: on every run the tarball (downloaded once per runner) is re-hashed against its pinned SHA-256 and the two tools are extracted from those exact bytes into a fresh private folder, so the tool the private key is piped to is never a cached copy. This runs in `release-sparkle`, the only job with the key, which receives the notarized app from `release-build` and checks it against that job's hashes first. Before publishing, `make-appcast.py verify` checks the draft's downloaded `appcast.xml` and files; after publishing, it downloads the live `appcast.xml` and every file it points to, re-verifies lengths and signatures, and checks that `releases/latest/download/appcast.xml` is byte-identical. If that fails, the workflow drafts the release (so the feed falls back) and goes red.
 
 Run the same checks by hand against any published release (no key needed):
 
@@ -168,8 +196,10 @@ The item then carries `<sparkle:criticalUpdate>` instead of a phased rollout: ev
 Do this as soon as a release is found to be bad, before fixing anything:
 
 ```sh
-gh release edit vX.Y.Z --draft      # or: gh release delete vX.Y.Z (keeps the tag; add --cleanup-tag to drop it)
+gh release edit vX.Y.Z --draft=true   # if GitHub refuses (immutable release): gh release delete vX.Y.Z --yes
 ```
+
+With immutable releases on, a published release's assets and tag cannot change, and the tag ruleset blocks moving or deleting `v*` tags: `gh release delete` removes the release but keeps the tag (never pass `--cleanup-tag`), and that version number is spent. Either way `releases/latest` falls back.
 
 `releases/latest` then points at the previous release, whose `appcast.xml` offers only that older version. Effects to know:
 
@@ -185,7 +215,7 @@ Sparkle accepts an update only if its EdDSA signature verifies against `SUPublic
 Where it lives:
 
 - The owner's login keychain, account `app.parzr.desktop` (item "Private key for signing Sparkle updates").
-- The GitHub `release` environment secret `SPARKLE_ED_PRIVATE_KEY`, the base64 text that `generate_keys --account app.parzr.desktop -x FILE` writes. The workflow gives it to `sign_update` on stdin; it is never written to disk or printed, and only the signing step of the release job receives it.
+- The GitHub `release-sparkle` environment secret `SPARKLE_ED_PRIVATE_KEY`, the base64 text that `generate_keys --account app.parzr.desktop -x FILE` writes. Only the `release-sparkle` job can read that environment (tag `v*` only), and only its feed-signing step receives the key; the workflow gives it to `sign_update` on stdin, and it is never written to disk or printed.
 - Back it up in a password manager as a secure note. Export, store, then delete the file:
 
 ```sh
@@ -199,10 +229,40 @@ Use a throwaway account (for example `--account parzr-update-test`) for any expe
 If the key is lost or leaked, rotate it with an update (Sparkle's "Rotating signing keys"): Sparkle accepts a release that changes the EdDSA key as long as it keeps the same Apple Developer ID signing identity (it allows changing the certificate or the EdDSA key in one release, never both).
 
 1. Generate a new key: `generate_keys --account app.parzr.desktop-2`, export it with `-x`, and note the new public key.
-2. In one commit set the new `SUPublicEDKey` in `resources/Info.plist` and `PUBLIC_KEY` in `scripts/make-appcast.py`, and replace the `SPARKLE_ED_PRIVATE_KEY` environment secret with the new private key.
+2. In one commit set the new `SUPublicEDKey` in `resources/Info.plist` and `PUBLIC_KEY` in `scripts/make-appcast.py`, and replace the `SPARKLE_ED_PRIVATE_KEY` secret of the `release-sparkle` environment with the new private key.
 3. Release normally. The update zip, deltas and appcast are signed with the new key; existing installs, which still hold the old public key, accept it because the app is signed with the unchanged Developer ID identity, and from then on trust the new key. Do not change the Developer ID certificate in this release.
 4. If the app ever enables `SUVerifyUpdateBeforeExtraction`, Sparkle only allows an EdDSA rotation through a Developer ID signed DMG update archive; this repository does not enable it.
 5. A leaked key (as opposed to a lost one) also needs the old key treated as hostile: yank releases signed after the leak, and rotate before the attacker can also control the feed (the feed is only the owner's GitHub releases, so the attacker needs that too). Once everyone has updated past the rotation, delete the old key from the keychain and password manager.
+
+## Website
+
+`website.yml` deploys `website/` (Cloudflare Workers static assets) with wrangler pinned in `website/package.json` and locked in `website/package-lock.json`, installed with `npm ci --ignore-scripts`; only the deploy step sees `CLOUDFLARE_API_TOKEN`, a secret of the `website-production` environment, which only `main` can deploy to. It has no push trigger:
+
+- After a release, the `website` job of `ci-release.yml` starts it on `main` once `release-publish` has published and verified the release, so the site's download buttons (`releases/latest/download/...`) never point ahead of the release.
+- For website-only changes between releases, merge them to `main` and start it by hand: Actions, Deploy parzr.app, Run workflow (branch `main`), or `gh workflow run website.yml --ref main`.
+
+## Dependency checks
+
+The `dependencies` job (pull requests and `main`; a required check) fails on:
+
+- a pull request that adds a dependency with a high or critical advisory (`actions/dependency-review-action`);
+- any vulnerable, unsound, yanked or unmaintained crate, a licence outside the allowlist, a banned crate (network or TLS stacks) or a crate from outside crates.io in the engine's shipped graphs, the default one and the app's (`--features external-tables`): `cargo deny` with [engine/deny.toml](../engine/deny.toml);
+- a vulnerable, unsound or yanked crate in those graphs per `cargo audit` ([scripts/cargo-audit-shipped.py](../scripts/cargo-audit-shipped.py) filters cargo-audit's lockfile-wide report to the crates `cargo tree` lists for them, and prints the rest as notes);
+- a high or critical npm advisory in the runtime dependencies of the repository root and `worker/` (`npm audit --omit=dev --audit-level=high`), and in the full trees of `website/` and `extensions/vscode/`, whose dev dependencies are the deploy and packaging tools that run with secrets or produce release files.
+
+The maintainer-only `baseline-harper` feature (harper-core and about 500 crates behind the `parzr-export-lexicon` tool that regenerates engine data) never ships and is checked by neither tool; on 2026-10-19 its graph carried advisories for ammonia, bincode, lru, paste, rustls and zip. Run that tool only on a trusted machine. Dependabot (`.github/dependabot.yml`) proposes weekly updates for Actions, Cargo, npm (root, `worker/`, `extensions/vscode/`, `website/`) and Swift, minor and patch grouped; security updates come as soon as an advisory is published. `python3 scripts/audit-public-repo.py` (run by `verify`) also looks for Cloudflare, AWS, Slack, Hugging Face, npm and GitHub tokens and `.dev.vars` files; `--history` scans every commit on every ref (`git log -p --all`), worth running before publishing a branch with old experiments.
+
+## Toolchains
+
+| Tool | Pinned in | Version |
+|---|---|---|
+| Rust | `rust-toolchain.toml` and `dtolnay/rust-toolchain` (`toolchain: '1.91.0'`) in `ci-release.yml` | 1.91.0 |
+| Node | `NODE_VERSION` in `ci-release.yml`, `node-version` in `website.yml` | 22.23.3 |
+| Xcode | `XCODE_DEVELOPER_DIR` in `ci-release.yml` (exported as `DEVELOPER_DIR`; the job fails if the runner image lacks it) | 26.6 on `macos-26` |
+| Sparkle tools | `SPARKLE_VERSION`/`SPARKLE_SHA256` in `scripts/make-appcast.py` | 2.9.5 |
+| @vscode/vsce, wrangler | `extensions/vscode/package-lock.json`, `website/package-lock.json` | 4.0.0, 4.149.0 |
+
+Bump a pin in all of its places in one pull request. When GitHub drops Xcode 26.6 from the `macos-26` image, the macOS jobs fail at "Pin Xcode" with the path to update (list the installed ones in a run with `ls /Applications | grep Xcode`). The macOS jobs set `SOURCE_DATE_EPOCH` to the commit time for tools that honour it; the browser extension zip uses fixed timestamps already.
 
 ## Local packaging
 
