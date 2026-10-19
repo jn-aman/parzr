@@ -131,6 +131,33 @@ const ONE_THING: [(&str, &str); 6] = [
     ("mac", "cheese"),
     ("rock", "roll"),
 ];
+/// "He and I", "Sarah and I", "My sister and I" opening a clause before the verb at `i`: two
+/// subjects, unlike "the theatre and I was" where "and" joins two clauses.
+fn pair_with_i(tokens: &[Token<'_>], i: usize) -> bool {
+    if i < 3 || tokens[i - 1].normalized != "i" || tokens[i - 2].normalized != "and" {
+        return false;
+    }
+    let opens = |k: usize| {
+        k == 0
+            || tokens[k - 1].sentence != tokens[k].sentence
+            || tokens[k - 1].paragraph != tokens[k].paragraph
+            || [",", ";", ":"].contains(&tokens[k - 1].surface)
+            || [
+                "but", "so", "because", "when", "if", "that", "since", "although", "while",
+            ]
+            .contains(&tokens[k - 1].normalized.as_str())
+    };
+    let x = &tokens[i - 3];
+    let person = ["he", "she", "they", "we", "you"].contains(&x.normalized.as_str())
+        || x.proper_name
+        || x.surface.starts_with(char::is_uppercase) && !spelling::ordinary(&x.normalized);
+    person && opens(i - 3)
+        || i >= 4
+            && x.is_word
+            && ["my", "our", "his", "her", "their", "your", "the"]
+                .contains(&tokens[i - 4].normalized.as_str())
+            && opens(i - 4)
+}
 pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     let word = subject.normalized.as_str();
     // "Physics was my worst class", "Statistics are…": a field ending in -ics may take either.
@@ -1026,9 +1053,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             .is_some_and(|x| ["and", "or"].contains(&x.normalized.as_str()))
             && i >= 3
             && plural(&tokens[i - 3]).is_some()
-            && !(p.normalized == "i"
-                && v.base == "be"
-                && before.last().is_some_and(|x| x.normalized == "and"))
+            && !(v.base == "be" && pair_with_i(&tokens, i))
         {
             continue;
         }
@@ -1085,11 +1110,28 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         // already written in the present ("... yesterday ...; it is only now that it has been").
         let frame = clause_prefix.rsplit([';', ':']).next().unwrap_or("");
         // Nor one before ", yet" or ", but": "last month, yet nothing has happened".
-        let frame = [", yet ", ", but "]
-            .iter()
-            .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
-            .max()
-            .map_or(frame, |at| &frame[at..]);
+        // Nor one before a second clause with its own subject: "I bought it last week and the
+        // screen has a dead pixel".
+        let frame = [
+            ", yet ",
+            ", but ",
+            " and the ",
+            " and my ",
+            " and our ",
+            " and your ",
+            " and it ",
+            " and this ",
+            " and his ",
+            " and her ",
+            " and their ",
+            " but the ",
+            " but my ",
+            " but it ",
+        ]
+        .iter()
+        .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
+        .max()
+        .map_or(frame, |at| &frame[at..]);
         let markers = ["yesterday", "last week", "last month", "last night"];
         let present_frame = markers
             .iter()
@@ -1141,7 +1183,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             .any(|m| clause_prefix.contains(m));
             // "He and I are": "I" closing a pair is one of two subjects, never "I am"; "He and I
             // was" takes "were".
-            let paired_i = p.normalized == "i" && i >= 3 && tokens[i - 2].normalized == "and";
+            let paired_i = pair_with_i(&tokens, i);
             let head = if paired_i {
                 "pair"
             } else {
@@ -1203,6 +1245,17 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                             crate::punctuation::finite(n)
                                 // "Our team lead, along with two engineers, is": a noun before an aside.
                                 || n.surface == ","
+                                // "RSS feed readers have": a noun inside a longer noun phrase.
+                                || (spelling::flags(&n.normalized) & 2 != 0
+                                    || spelling::flags(n.normalized.trim_end_matches('s')) & 2
+                                        != 0)
+                                    && tokens.get(i + 2).is_some_and(|m| {
+                                        [
+                                            "is", "are", "was", "were", "has", "have", "will",
+                                            "can", "should", "must",
+                                        ]
+                                        .contains(&m.normalized.as_str())
+                                    })
                                 || ["about", "on", "of", "for", "in", "at", "by", "from"]
                                     .contains(&n.normalized.as_str())
                         }));

@@ -1724,6 +1724,36 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     {
         return None;
     }
+    // "e-mail" to "email", "Standup" to "Stand-up": a hyphen in a word the writer spelled
+    // correctly is their style.
+    let unhyphened = |s: &str| s.replace('-', "");
+    let part = |c: char| c.is_alphanumeric() || c == '-';
+    let left = &before[before.trim_end_matches(part).len()..];
+    let right = &after[..after.len() - after.trim_start_matches(part).len()];
+    let (wo, wr) = (format!("{left}{o}{right}"), format!("{left}{r}{right}"));
+    if wo != wr
+        && wo.contains('-') != wr.contains('-')
+        && unhyphened(&wo).to_lowercase() == unhyphened(&wr).to_lowercase()
+        && (crate::spelling::known(&unhyphened(&wo).to_lowercase())
+            || wo
+                .split('-')
+                .all(|p| crate::spelling::known(&p.to_lowercase())))
+    {
+        return None;
+    }
+    // "Eugene Water and Electric Board", "Tacoma City Light": no comma inside a capitalized name.
+    let capital_word = |s: &str| s.starts_with(|c: char| c.is_uppercase());
+    if o.is_empty()
+        && r == ","
+        && before
+            .split_whitespace()
+            .next_back()
+            .is_some_and(|w| capital_word(w) && !w.ends_with(['.', ',', ':', ';']))
+        && capital_word(after.trim_start())
+        && !before.trim_end().ends_with(['.', '!', '?'])
+    {
+        return None;
+    }
     // "$PATH", "#general", "@sam", "~/Downloads": a sigil belongs to the code or handle it opens.
     if ["$", "#", "@", "~"]
         .iter()
@@ -1771,6 +1801,22 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     Some(e)
 }
 
+/// A plural verb after a group noun made singular ("The team are" to "is").
+fn group_noun_verb(source: &str, e: &Edit) -> bool {
+    let plural = ["are", "were", "have", "aren't", "weren't", "haven't"];
+    let singular = ["is", "was", "has", "isn't", "wasn't", "hasn't"];
+    let Some(at) = byte_at(source, e.start_utf16) else {
+        return false;
+    };
+    let noun = source[..at]
+        .split_whitespace()
+        .next_back()
+        .unwrap_or("")
+        .to_lowercase();
+    plural.contains(&e.original.trim().to_lowercase().as_str())
+        && singular.contains(&e.replacement.trim().to_lowercase().as_str())
+        && crate::structure::COLLECTIVE.contains(&noun.as_str())
+}
 /// Fix mode keeps only plausible corrections, minus the ones the model gets wrong on correct text.
 fn guard(source: &str, all: Vec<Edit>) -> Vec<Edit> {
     // A rejected edit takes the other half of its move with it.
@@ -2181,7 +2227,12 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     })?;
     let all = keep_names(req, all);
     let (changes, withheld) = if req.mode == Mode::Fix {
-        (guard(&req.text, all), false)
+        let mut kept = guard(&req.text, all);
+        // "The team are working": British English lets a group noun take a plural verb.
+        if req.dialect == "british" {
+            kept.retain(|e| !group_noun_verb(&req.text, e));
+        }
+        (kept, false)
     } else {
         meaning_guard(req, all)
     };
@@ -2839,6 +2890,16 @@ mod tests {
             ),
             s
         );
+        let s = "Tacoma City Light, Eugene Water and Electric Board and others filed.";
+        assert_eq!(
+            guarded(
+                s,
+                "Tacoma City Light, Eugene, Water and Electric Board and others filed."
+            ),
+            s
+        );
+        let s = "I wrote by e-mail before the Standup.";
+        assert_eq!(guarded(s, "I wrote by email before the Stand-up."), s);
         let s = "$PATH is wrong on my machine";
         assert_eq!(
             guarded(s, "PATH is wrong on my machine."),

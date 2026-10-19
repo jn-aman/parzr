@@ -1008,10 +1008,23 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             if let Some(v) = morphology::verb(next)
                 .filter(|v| v.gerund == next && STATES.contains(&v.base.as_str()))
             {
-                let form = if w == "is" {
-                    v.third.clone()
-                } else {
-                    v.base.clone()
+                // "I am knowing him for a long time": a state that lasts up to now takes the perfect.
+                let rest: Vec<&str> = (i + 2..s.len()).map(|k| word(s, k)).collect();
+                let lasting = rest.contains(&"since")
+                    || rest.windows(3).any(|p| {
+                        p[0] == "for"
+                            && (p[1] == "a" && ["while", "year", "decade", "long"].contains(&p[2])
+                                || ["years", "ages", "decades"].contains(&p[1])
+                                || (p[1].chars().all(|c| c.is_ascii_digit())
+                                    || ["two", "three", "four", "five", "ten", "many", "several"]
+                                        .contains(&p[1]))
+                                    && ["years", "months", "weeks", "days"].contains(&p[2]))
+                    });
+                let form = match (lasting, w) {
+                    (true, "is") => format!("has {}", v.participle),
+                    (true, _) => format!("have {}", v.participle),
+                    (false, "is") => v.third.clone(),
+                    (false, _) => v.base.clone(),
                 };
                 fix(
                     edits,

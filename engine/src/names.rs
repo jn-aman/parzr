@@ -309,13 +309,13 @@ pub fn is_shorthand(lower: &str) -> bool {
 /// Chat acronyms ("fyi", "lmk", "idk", "btw"): a capital on the first letter only ("Fyi") is wrong,
 /// so a sentence start leaves them as typed.
 pub fn is_chat_acronym(lower: &str) -> bool {
-    const ACRONYMS: [&str; 66] = [
+    const ACRONYMS: [&str; 71] = [
         "afaict", "afaik", "asap", "atm", "bc", "bcc", "bff", "bffs", "brb", "btw", "cc", "dm",
         "dms", "eod", "eow", "fwiw", "fyi", "g2g", "gtg", "hbu", "idc", "idek", "idk", "iirc",
         "ikr", "ily", "ilysm", "imho", "imo", "irl", "istg", "jk", "lgtm", "lmao", "lmfao", "lmk",
         "lol", "ngl", "np", "nvm", "omg", "omw", "ooo", "otw", "ptal", "pto", "rn", "rofl", "smh",
         "tba", "tbd", "tbh", "tldr", "tmrw", "ttyl", "tysm", "wbu", "wfh", "wip", "wtf", "wyd",
-        "yw", "ty", "tyvm", "thx", "ofc",
+        "yw", "ty", "tyvm", "thx", "ofc", "ie", "eg", "aka", "vs", "etc",
     ];
     ACRONYMS.contains(&lower)
 }

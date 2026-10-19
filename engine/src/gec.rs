@@ -1468,7 +1468,8 @@ fn merge(
         .collect();
     let grammar: Vec<Span> = parzr
         .iter()
-        .filter(|e| ["Grammar", "Repetition"].contains(&e.category.as_str()))
+        // "He has went": a tense or agreement fix is a grammar edit too ("has" stays for "gone").
+        .filter(|e| ["Grammar", "Repetition", "Tense", "Agreement"].contains(&e.category.as_str()))
         .filter_map(|e| span(e.start_utf16, e.end_utf16))
         .collect();
     let mut shielded: Vec<Span> = protected
@@ -1550,7 +1551,20 @@ fn merge(
         let writers_choice = !as_verb
             && pluralizes_after_determiner(text, edit.0, original, &e.replacement)
             || verb_form_after_determiner(text, edit.0, original, &e.replacement);
+        // "love this idea, let's try it": a chat message without a full stop keeps its comma
+        // between clauses, as the rules leave it.
+        // So does a statement before a question ("I can't make it today, can we reschedule?").
+        let chat_comma = original.contains(',')
+            && e.replacement.contains(['.', ';'])
+            && !e.replacement.contains(',')
+            && (!text.trim_end().ends_with(['.', '!', '?'])
+                || text.get(edit.1..end).is_some_and(|rest| {
+                    rest.split(['.', '!', '\n'])
+                        .next()
+                        .is_some_and(|r| r.contains('?'))
+                }));
         let dropped = strange >= CODE_MIXED
+            || chat_comma
             || rules.iter().any(|r| overlaps(text, edit, *r))
             || beside_a_rule(text, edit, original, &e.replacement, &grammar)
             || touches(edit, &shielded)

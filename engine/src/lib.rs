@@ -2260,6 +2260,11 @@ mod tests {
     fn batch_three_grammar_misses_and_false_alarms() {
         for (input, expected) in [
             ("Me and him was late.", "He and I were late."),
+            ("My sister and I was late.", "My sister and I were late."),
+            (
+                "I bought a laptop last week and the screen has a dead pixel.",
+                "I bought a laptop last week, and the screen has a dead pixel.",
+            ),
             (
                 "Him and me are on the same team.",
                 "He and I are on the same team.",
@@ -2320,6 +2325,22 @@ mod tests {
             ),
             ("He is having a car.", "He has a car."),
             ("Sorry for late reply.", "Sorry for the late reply."),
+            (
+                "I am knowing him for a long time.",
+                "I have known him for a long time.",
+            ),
+            (
+                "We are wanting a car for a family trip.",
+                "We want a car for a family trip.",
+            ),
+            (
+                "If it will rain, we will cancel.",
+                "If it rains, we will cancel.",
+            ),
+            (
+                "I think there going to cancel the event.",
+                "I think they're going to cancel the event.",
+            ),
         ] {
             assert_eq!(fix(input), expected, "{input}");
             assert_eq!(fix(expected), expected, "idempotent: {expected}");
@@ -2340,6 +2361,17 @@ mod tests {
             "I'm staying for a few days.",
             "Their coming-of-age film won.",
             "Does that sound right?",
+            // From the 40k correct mined sentences.
+            "I visited your theatre and I was very disappointed.",
+            "Everybody was shocked and I was trying to keep the faith.",
+            "Usually, RSS feed readers have the right menu items.",
+            "I have been keen on mountain biking since three years ago.",
+            "This work, which sold very widely, had a big effect.",
+            "The snowflakes, that look like bees, are called snow bees.",
+            // Batch 3 emails.
+            "This NDA would be similar to those that you put together for DealBench.",
+            "Please see that final agreements are forwarded for signature.",
+            "Attached is a list of RSVP's I have received so far for the seminar.",
         ] {
             assert_eq!(fix(text), text, "{text}");
         }

@@ -2201,14 +2201,14 @@
   },
   {
     "id": "usage.demonstrative_third",
-    "pattern": "(?im)(?:^|[.!?,;]\\s+|\\b(?:and|but|so|because|if) )(?:that|this|it|everything|nothing|something) (?P<target>sound|look|seem|feel|make|mean|work|keep|need|take|cost|matter)\\b(?: (?:great|good|fine|right|bad|wrong|sense|like|amazing|awesome|perfect|nice|weird|strange|easy|hard|to|so|really|a|an|the|me|us|you|him|her|them|it|no|much|more|less|sure|ok|okay|correct|off|better|worse)\\b|[.!?,]|$)",
+    "pattern": "(?im)(?:^|[.!?]\\s+|\\b(?:and|but|so|because|if) )(?:that|this|it|everything|nothing|something) (?P<target>sound|look|seem|feel|make|mean)\\b (?:great|good|fine|right|bad|wrong|sense|like|amazing|awesome|perfect|nice|weird|strange|easy|hard|so|really|sure|ok|okay|correct|off|better|worse)\\b",
     "replacement": "${target}s",
     "category": "Word choice",
     "confidence": 0.95,
     "reason": "Use the -s form with “this”, “that” and “it”.",
     "provenance": "Parzr original real-word and usage rule",
     "positive": "That sound great!",
-    "negative": "Does that sound great? Let that sound settle."
+    "negative": "Does that sound great? Let that sound settle. This work, which sold well, is old. The flakes, that look like bees."
   },
   {
     "id": "usage.possessed_noun_third",
@@ -2278,14 +2278,14 @@
   },
   {
     "id": "usage.since_duration",
-    "pattern": "(?i)\\b(?P<target>since) (?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|\\d+|a few|several|many) (?:hours?|days?|weeks?|months?|years?|minutes?)\\b",
+    "pattern": "(?i)\\b(?P<target>since) (?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|\\d+|a few|several|many) (?:hours?|days?|weeks?|months?|years?|minutes?)(?:[.!?,;:]|$| (?:now|already|and|but|so|in|at|on|with|for|to|here|there|because|when|until|straight|continuously)\\b)",
     "replacement": "for",
     "category": "Word choice",
     "confidence": 0.95,
     "reason": "Use “for” with a length of time; “since” takes a starting point.",
     "provenance": "Parzr original real-word and usage rule",
     "positive": "I am waiting since one hour.",
-    "negative": "I have been waiting since 2019. It has been two hours since lunch."
+    "negative": "I have been waiting since 2019. It has been two hours since lunch. I have been keen on it since three years ago."
   },
   {
     "id": "usage.progressive_since",
@@ -2308,5 +2308,27 @@
     "provenance": "Parzr original real-word and usage rule",
     "positive": "She is living in Pune since three years.",
     "negative": "She is living in Pune for now. She has been living there since 2019."
+  },
+  {
+    "id": "usage.if_will_present",
+    "pattern": "(?im)(?:^|[.!?,;]\\s+)(?:if|when|once|unless) (?:it|he|she) (?P<target>will (?P<v>rain|snow|arrive|happen|work|break|fail|start|finish|end|stop|help|matter|rain|cost|take|get|make|need|want|come|call|reply))\\b",
+    "replacement": "${v}s",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "After “if” or “when”, use the present for the future.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "If it will rain, we will cancel.",
+    "negative": "If it rains, we will cancel. I wonder if it will rain."
+  },
+  {
+    "id": "usage.theyre_going_to_verb",
+    "pattern": "(?i)\\b(?:think|hope|guess|know|said|says|maybe|because|if|when|since|sure|but|so|and) (?P<target>there|their) going to (?:cancel|come|leave|call|send|win|lose|love|hate|like|need|want|make|take|get|have|do|go|start|stop|finish|move|stay|join|help|ask|tell|say|try|pay|buy|sell|fix|change|close|open|announce|launch|release|ship|hire|visit|meet|miss|see|watch|play|bring|keep|give|show|wait|arrive|decide|agree|approve|review)\\b",
+    "replacement": "they're",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use “they’re” (they are).",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "I think there going to cancel the event.",
+    "negative": "I think there's going to be rain. I think there going to be rain."
   }
 ]
