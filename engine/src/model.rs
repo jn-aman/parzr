@@ -1710,6 +1710,27 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     if o.is_empty() && r == "," && optional_comma(before, after) {
         return None;
     }
+    // The writer's line breaks stay: "Thanks for the update\nI'll share it" is two lines of a
+    // thread, not one sentence to join.
+    if o.matches('\n').count() > r.matches('\n').count() {
+        return None;
+    }
+    // "6:30 p.m." takes no comma inside the time.
+    if o.is_empty()
+        && r == ","
+        && before.ends_with(|c: char| c.is_ascii_digit())
+        && after.trim_start().to_lowercase().starts_with(['a', 'p'])
+        && after.trim_start()[1..].starts_with(['.', 'm', 'M'])
+    {
+        return None;
+    }
+    // "$PATH", "#general", "@sam", "~/Downloads": a sigil belongs to the code or handle it opens.
+    if ["$", "#", "@", "~"]
+        .iter()
+        .any(|s| o.matches(s).count() > r.matches(s).count())
+    {
+        return None;
+    }
     if o != r && o.to_lowercase() == r.to_lowercase() {
         let lead = before.trim_end_matches(|c: char| " \"“‘'(".contains(c));
         let starts = (lead.is_empty() || lead.ends_with(['.', '!', '?', '\n']))
@@ -2799,6 +2820,30 @@ mod tests {
     fn a_quote_mark_moved_elsewhere_stays_put() {
         let s = "He called it \"a fine job\", and left early.";
         assert_eq!(guarded(s, "He called it a fine job, and \"left early."), s);
+    }
+    #[test]
+    fn line_breaks_time_commas_and_sigils_survive_the_fix_pass() {
+        // Batch 3: Option+Space joined chat lines and emails into one paragraph.
+        let s = "Thanks for the update\nI'll share it with the team";
+        assert_eq!(
+            guarded(s, "Thanks for the update. I'll share it with the team."),
+            "Thanks for the update\nI'll share it with the team."
+        );
+        let s = "Lunch?\nI'm starving";
+        assert_eq!(guarded(s, "Lunch? I'm starving."), "Lunch?\nI'm starving.");
+        let s = "The mixer runs from 5:00 p.m. until 8:00 p.m. downtown.";
+        assert_eq!(
+            guarded(
+                s,
+                "The mixer runs from 5:00, p.m. until 8:00, p.m. downtown."
+            ),
+            s
+        );
+        let s = "$PATH is wrong on my machine";
+        assert_eq!(
+            guarded(s, "PATH is wrong on my machine."),
+            "$PATH is wrong on my machine."
+        );
     }
     #[test]
     fn dashes_and_ellipses_are_not_rewritten() {

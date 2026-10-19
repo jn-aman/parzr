@@ -1784,7 +1784,7 @@ mod tests {
             ("Hi again,Ken", "Hi again, Ken"),
             (
                 "hey can u text me ur names cuz i got a new phone",
-                "hey can u text me ur names cuz I got a new phone",
+                "Hey can u text me ur names cuz I got a new phone",
             ),
             ("Two PR's are open.", "Two PRs are open."),
         ] {

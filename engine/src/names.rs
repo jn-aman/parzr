@@ -10,7 +10,7 @@
 //! * WEAK: written like a name in context (greeting, sign-off, title, list...); see
 //!   `spelling::lowercase_name`. Weak candidates are only shielded from respelling.
 use crate::{
-    Request, spelling,
+    Request, morphology, spelling,
     tokenizer::{self, Token},
 };
 use regex::Regex;
@@ -257,6 +257,22 @@ const ADDRESS_WORDS: [&str; 113] = [
 ];
 /// A word that, after a greeting or a thank-you, addresses people without naming one ("team",
 /// "everyone", "there", "again") or opens the next clause ("Hey, there's a bug").
+/// "Thanks, your the best", "thanks, merged": a pronoun, determiner or auxiliary, or a verb's past
+/// form, after a greeting goes on with the sentence; it never names the one addressed.
+fn clause_word(lower: &str) -> bool {
+    [
+        "you", "your", "yours", "you're", "youre", "my", "our", "their", "his", "her", "its",
+        "the", "a", "an", "this", "that", "these", "those", "we", "they", "he", "she", "it", "me",
+        "us", "them", "is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "have",
+        "has", "had", "would", "could", "should", "so", "and", "but", "or", "not", "no", "yes",
+    ]
+    .contains(&lower)
+        // A regular past form only: "Rose" and "Drew" are names too.
+        || lower.len() > 4
+            && lower.ends_with("ed")
+            && morphology::verb(lower)
+                .is_some_and(|v| v.base != lower && (v.past == lower || v.participle == lower))
+}
 pub fn address_word(lower: &str) -> bool {
     let lower = base(lower);
     // "guyss", "teamm": a doubled last letter is a slip of the word.
@@ -293,13 +309,13 @@ pub fn is_shorthand(lower: &str) -> bool {
 /// Chat acronyms ("fyi", "lmk", "idk", "btw"): a capital on the first letter only ("Fyi") is wrong,
 /// so a sentence start leaves them as typed.
 pub fn is_chat_acronym(lower: &str) -> bool {
-    const ACRONYMS: [&str; 62] = [
+    const ACRONYMS: [&str; 66] = [
         "afaict", "afaik", "asap", "atm", "bc", "bcc", "bff", "bffs", "brb", "btw", "cc", "dm",
         "dms", "eod", "eow", "fwiw", "fyi", "g2g", "gtg", "hbu", "idc", "idek", "idk", "iirc",
         "ikr", "ily", "ilysm", "imho", "imo", "irl", "istg", "jk", "lgtm", "lmao", "lmfao", "lmk",
         "lol", "ngl", "np", "nvm", "omg", "omw", "ooo", "otw", "ptal", "pto", "rn", "rofl", "smh",
         "tba", "tbd", "tbh", "tldr", "tmrw", "ttyl", "tysm", "wbu", "wfh", "wip", "wtf", "wyd",
-        "yw",
+        "yw", "ty", "tyvm", "thx", "ofc",
     ];
     ACRONYMS.contains(&lower)
 }
@@ -549,6 +565,7 @@ impl NameIndex {
                         // "thanks for", "thank you", "best quality", "dear me": an ordinary word is
                         // a name only behind a comma ("bye, hope.") or a salutation ("hey hope!").
                         && !address_word(&t.normalized)
+                        && !clause_word(b)
                         && (!spelling::ordinary(b)
                             || i > 0 && tokens[i - 1].surface == ","
                             || i > 0
@@ -766,7 +783,8 @@ pub fn capitalizations(
                 || cover[i]
                 || spelling::addressed(tokens, i)
                     && spelling::closes_name(tokens, i)
-                    && !address_word(&t.normalized))
+                    && !address_word(&t.normalized)
+                    && !clause_word(b))
     };
     // A slug or compound glued by hyphens to a word that is no name ("devops-general", "team-aman-notes") is an
     // identifier, never a name to capitalize in part.

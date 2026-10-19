@@ -189,6 +189,29 @@ fn perfect_with_past_time(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>)
         } else {
             s[i - 1].normalized.clone()
         };
+        // "I could have finished it yesterday", "should've gone last week": a modal perfect is
+        // past already and takes a past time.
+        const MODALS: [&str; 16] = [
+            "could",
+            "should",
+            "would",
+            "might",
+            "must",
+            "may",
+            "will",
+            "can",
+            "shall",
+            "couldn't",
+            "shouldn't",
+            "wouldn't",
+            "mightn't",
+            "mustn't",
+            "won't",
+            "not",
+        ];
+        if MODALS.contains(&subject.as_str()) {
+            continue;
+        }
         if !contracted && !SUBJECTS.contains(&subject.as_str()) && plural(&s[i - 1]).is_none() {
             continue;
         }

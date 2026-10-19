@@ -89,8 +89,77 @@ fn emit(
         edits.push(edit);
     }
 }
+/// Group nouns that British English pairs with a plural verb when it means the members.
+pub(crate) const COLLECTIVE: [&str; 30] = [
+    "team",
+    "staff",
+    "family",
+    "government",
+    "committee",
+    "band",
+    "audience",
+    "jury",
+    "crew",
+    "company",
+    "board",
+    "council",
+    "class",
+    "club",
+    "group",
+    "public",
+    "management",
+    "panel",
+    "army",
+    "party",
+    "union",
+    "firm",
+    "department",
+    "couple",
+    "orchestra",
+    "choir",
+    "cast",
+    "squad",
+    "faculty",
+    "community",
+];
+/// Pairs joined by "and" that name one thing and take a singular verb.
+const ONE_THING: [(&str, &str); 6] = [
+    ("fish", "chips"),
+    ("bread", "butter"),
+    ("salt", "pepper"),
+    ("macaroni", "cheese"),
+    ("mac", "cheese"),
+    ("rock", "roll"),
+];
 pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     let word = subject.normalized.as_str();
+    // "Physics was my worst class", "Statistics are…": a field ending in -ics may take either.
+    if [
+        "physics",
+        "mathematics",
+        "economics",
+        "politics",
+        "ethics",
+        "statistics",
+        "athletics",
+        "gymnastics",
+        "linguistics",
+        "electronics",
+        "genetics",
+        "logistics",
+        "aerobics",
+        "acoustics",
+        "robotics",
+        "analytics",
+        "mechanics",
+        "phonetics",
+        "thermodynamics",
+        "aeronautics",
+    ]
+    .contains(&word)
+    {
+        return None;
+    }
     if [
         "i", "you", "we", "they", "people", "children", "men", "women", "police",
     ]
@@ -826,6 +895,17 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let Some(mut is_plural) = plural(p) else {
             continue;
         };
+        // British English lets a group noun take a plural verb ("The team are working on it").
+        if req.dialect == "british" && !is_plural && COLLECTIVE.contains(&p.normalized.as_str()) {
+            continue;
+        }
+        // "Fish and chips is on the menu": one dish, not two subjects.
+        if i >= 3
+            && tokens[i - 2].normalized == "and"
+            && ONE_THING.contains(&(tokens[i - 3].normalized.as_str(), p.normalized.as_str()))
+        {
+            continue;
+        }
         // "Today: emails, code review, gym.", "call mom, finish report": a noun pair that makes up
         // a whole list item is a noun phrase, not a subject and its verb.
         let item_start = i < 2
@@ -940,11 +1020,15 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         }) {
             continue;
         }
+        // "He and I was": a pair closed by "I" is a plural subject the copula check can read.
         if before
             .last()
             .is_some_and(|x| ["and", "or"].contains(&x.normalized.as_str()))
             && i >= 3
             && plural(&tokens[i - 3]).is_some()
+            && !(p.normalized == "i"
+                && v.base == "be"
+                && before.last().is_some_and(|x| x.normalized == "and"))
         {
             continue;
         }
@@ -1055,8 +1139,18 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .iter()
             .any(|m| clause_prefix.contains(m));
-            let replacement = match (w, is_plural, p.normalized.as_str()) {
-                _ if named => None,
+            // "He and I are": "I" closing a pair is one of two subjects, never "I am"; "He and I
+            // was" takes "were".
+            let paired_i = p.normalized == "i" && i >= 3 && tokens[i - 2].normalized == "and";
+            let head = if paired_i {
+                "pair"
+            } else {
+                p.normalized.as_str()
+            };
+            let is_plural = is_plural || paired_i;
+            let replacement = match (w, is_plural, head) {
+                // "Me and him are": the pronoun rules fix the subject first.
+                _ if named || ["me", "him", "us", "them"].contains(&head) => None,
                 ("are", _, "i") => Some("am"),
                 ("was", true, "i") => None,
                 ("was", true, _) => Some("were"),
@@ -1107,9 +1201,29 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     || spelling::flags(w) & 2 != 0
                         && tokens.get(i + 1).is_some_and(|n| {
                             crate::punctuation::finite(n)
+                                // "Our team lead, along with two engineers, is": a noun before an aside.
+                                || n.surface == ","
                                 || ["about", "on", "of", "for", "in", "at", "by", "from"]
                                     .contains(&n.normalized.as_str())
                         }));
+            // "Anyone need anything else?": chat drops the "Does" of a question.
+            let dropped_do = [
+                "anyone",
+                "anybody",
+                "someone",
+                "somebody",
+                "everyone",
+                "everybody",
+            ]
+            .contains(&p.normalized.as_str())
+                && tokens
+                    .iter()
+                    .take(i - 1)
+                    .all(|x| x.sentence != t.sentence || !x.is_word)
+                && tokens[i..]
+                    .iter()
+                    .take_while(|x| x.sentence == t.sentence)
+                    .any(|x| x.surface == "?");
             let narrative = !clause_prefix.contains("if ")
                 && tokens
                     .iter()
@@ -1129,7 +1243,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                             && morphology::verb(&x.normalized)
                                 .is_some_and(|v| x.normalized == v.past && v.past != v.base)
                     });
-            if !subjunctive && !compound && !narrative {
+            if !subjunctive && !compound && !narrative && !dropped_do {
                 emit(
                     req,
                     t,

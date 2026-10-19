@@ -1271,7 +1271,12 @@ fn drops_meaning(text: &str, edit: Span, original: &str, replacement: &str) -> b
 }
 /// "The schedules were" made "was": a clause that opens with a determiner and a noun has that noun
 /// for its subject, and a helping verb rewritten against the noun's number is wrong.
-fn against_head_noun(tokens: &[crate::tokenizer::Token<'_>], at: usize, replacement: &str) -> bool {
+fn against_head_noun(
+    tokens: &[crate::tokenizer::Token<'_>],
+    at: usize,
+    replacement: &str,
+    british: bool,
+) -> bool {
     let singular = match replacement.trim().to_lowercase().as_str() {
         "is" | "was" | "has" | "does" | "doesn't" | "isn't" | "wasn't" | "hasn't" => true,
         "are" | "were" | "have" | "do" | "don't" | "aren't" | "weren't" | "haven't" => false,
@@ -1291,6 +1296,14 @@ fn against_head_noun(tokens: &[crate::tokenizer::Token<'_>], at: usize, replacem
         && det.sentence == noun.sentence
         && ["the", "my", "your", "his", "her", "our", "their"].contains(&det.normalized.as_str())
         && match crate::structure::plural(noun) {
+            // "The government have announced": British English lets a group noun take a plural verb.
+            Some(false)
+                if singular
+                    && british
+                    && crate::structure::COLLECTIVE.contains(&noun.normalized.as_str()) =>
+            {
+                true
+            }
             Some(many) => many == singular,
             // A misspelled noun ("schedles") has no number the model can read, and "data" or "staff"
             // take either: the writer's verb stands.
@@ -1555,7 +1568,7 @@ fn merge(
             || thanks_for(text, edit.0, original)
             || invents_a_word(text, &e.replacement)
             || drops_meaning(text, edit, original, &e.replacement)
-            || against_head_noun(&tokens, edit.0, &e.replacement);
+            || against_head_noun(&tokens, edit.0, &e.replacement, req.dialect == "british");
         number.push(writers_choice);
         verdicts.push(if dropped {
             Verdict::Drop

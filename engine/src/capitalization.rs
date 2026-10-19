@@ -55,27 +55,41 @@ pub fn interjection(word: &str) -> bool {
     ]
     .contains(&word)
 }
-/// A salutation or closing that opens its own line ending in a comma ("dear Ms. Chen,",
-/// "best regards,"): it takes a capital though the line has no sentence punctuation.
-pub fn salutation(text: &str, token: &Token<'_>) -> bool {
-    let line = text[token.start_byte..].split('\n').next().unwrap_or("");
-    [
-        "dear",
-        "hi",
-        "hello",
-        "hey",
-        "greetings",
-        "regards",
-        "sincerely",
-        "best",
-        "cheers",
-        "thanks",
-        "warm",
-        "kind",
-    ]
-    .contains(&token.normalized.as_str())
-        && line.trim_end().ends_with(',')
-        && line.split_whitespace().count() <= 6
+/// A sentence's first word that is code, not prose, so it keeps its lowercase start: glued to code
+/// ("main.py", "x-api-key", "foo()", "key=value", "v2") or opening a line of shell ("make test &&
+/// make lint", "open -a Safari", "echo $PATH | wc").
+pub fn code_start(text: &str, token: &Token<'_>) -> bool {
+    let rest = &text[token.end_byte..];
+    let next = rest.chars().next();
+    let after = rest.chars().nth(1);
+    let before = text[..token.start_byte].chars().next_back();
+    let glued_after = next.is_some_and(|c| "._/(=:[{<\\".contains(c))
+        && after.is_some_and(|c| !c.is_whitespace())
+        || next.is_some_and(|c| c.is_ascii_digit() || c == '_')
+        || next == Some('-') && token.surface.chars().count() == 1;
+    let glued_before = before.is_some_and(|c| "@#$/~.\\-_`".contains(c));
+    let line = rest.split('\n').next().unwrap_or("");
+    let shell = line.contains("&&")
+        || line.contains(" | ")
+        || line.contains(" --")
+        || line.split_whitespace().any(|w| {
+            w.len() >= 2 && w.starts_with('-') && w[1..].chars().all(|c| c.is_ascii_alphabetic())
+        })
+        || line.contains(" $")
+        || line.contains(" ~/")
+        || line.contains(" ./");
+    glued_after || glued_before || shell || list_item(text, token)
+}
+/// The first word after a list number ("1. open the app", "2) tap settings"): a list keeps the case
+/// its writer chose, as items after "-" or "*" do.
+fn list_item(text: &str, token: &Token<'_>) -> bool {
+    let line = text[..token.start_byte].rsplit('\n').next().unwrap_or("");
+    let marker = line.trim();
+    let digits = marker.trim_end_matches(['.', ')']);
+    marker.len() > digits.len()
+        && !digits.is_empty()
+        && digits.len() <= 3
+        && digits.chars().all(|c| c.is_ascii_digit())
 }
 /// A token glued to code, a path, an address or a number ("x.paris", "github.com", "uk_2").
 fn glued(text: &str, token: &Token<'_>) -> bool {
