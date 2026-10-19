@@ -124,7 +124,7 @@ https://github.com/grammarly/gector. Copyright Grammarly, Inc. Apache License 2.
 (resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt).
 The model runs entirely on the device; nothing is sent.
 
-distilroberta-base (the word-choice check while typing, optional "slips" pack)
+distilroberta-base (the word-choice check while typing, optional "slips" pack, downloaded while Slip check is on, the default)
 Weights: distilbert/distilroberta-base, revision
 fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, https://huggingface.co/distilbert/distilroberta-base
 Copyright Hugging Face. Apache License 2.0. Distilled from roberta-base (Facebook
@@ -134,7 +134,7 @@ masked-language-model head scored at one position per row) made by
 scripts/convert-slips.py; revisions, versions and SHA-256 hashes are in the pack's
 slips/manifest.json. The model runs entirely on the device; nothing is sent.
 
-Tone check model (the optional "tone" pack, downloaded only when Tone check is on)
+Tone check model (the optional "tone" pack, downloaded while Tone check is on, the default)
 Fine-tuned from sentence-transformers/all-MiniLM-L6-v2, revision
 1110a243fdf4706b3f48f1d95db1a4f5529b4d41, https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
 (based on microsoft/MiniLM-L6-H384-uncased). Apache License 2.0. Its BERT uncased

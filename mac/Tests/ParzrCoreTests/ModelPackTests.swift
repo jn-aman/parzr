@@ -100,7 +100,8 @@ final class ModelPackTests: XCTestCase {
             XCTAssertFalse(optional.feature.isEmpty); XCTAssertFalse(optional.missingNote.isEmpty); XCTAssertFalse(optional.removedNote.isEmpty)
         }
         XCTAssertTrue(OptionalPack.slips.automatic, "the slip check follows the essential pack on its own")
-        XCTAssertFalse(OptionalPack.tone.automatic, "the tone check downloads only when its setting is on")
+        XCTAssertTrue(OptionalPack.tone.automatic, "the tone check follows the essential pack too (while it is switched on)")
+        XCTAssertTrue(OptionalPack.tone.switchedOffNote.contains("Settings, Writing"))
         let tone = ModelPack(id: "tone", version: "1", provides: ["tone_model": "tone"], files: [Self.file("tone/vocab.txt", Self.grammar)])
         let manifest = ModelManifest(packs: [Self.pack, tone])
         XCTAssertEqual(manifest.tone?.id, "tone"); XCTAssertNil(manifest.slips)
@@ -361,6 +362,32 @@ final class ModelCenterTests: XCTestCase {
         essential.remove(); XCTAssertTrue(essential.removedByUser)
         slips.start(userInitiated: true); XCTAssertFalse(slips.removedByUser); XCTAssertTrue(essential.removedByUser)
         await wait(slips, for: .ready)
+    }
+    func testAnOptionalPackDownloadsOnItsOwnOnlyWhileItsCheckIsOnAndAfterTheEssentialPack() async {
+        let toneData = Data("tone weights".utf8)
+        let tonePack = ModelPack(id: "tone", version: "1", provides: ["tone_model": "tone"], files: [ModelPackTests.file("tone/vocab.txt", toneData)])
+        let transport = fake(); transport.serve("tone.vocab.txt", toneData)
+        let tone = ModelCenter(pack: tonePack, store: ModelStore(root: root, transport: transport), defaults: defaults, optional: .tone)
+        tone.startAutomatically(switchedOn: false, essentialReady: true)
+        XCTAssertEqual(tone.state, .missing, "switched off: no download of its own")
+        tone.startAutomatically(switchedOn: true, essentialReady: false)
+        XCTAssertEqual(tone.state, .missing, "the essential pack comes first")
+        XCTAssertTrue(transport.requests.isEmpty)
+        tone.startAutomatically(switchedOn: true, essentialReady: true)
+        await wait(tone, for: .ready)
+        // Removed: the automatic download leaves it alone, until the user switches the check on again.
+        tone.remove(); XCTAssertTrue(tone.removedByUser)
+        tone.startAutomatically(switchedOn: true, essentialReady: true)
+        XCTAssertEqual(tone.state, .missing, "never again after Remove on its own")
+        tone.checkSwitchedOn(essentialReady: false)
+        XCTAssertFalse(tone.removedByUser, "switching the check on asks for the pack again")
+        XCTAssertEqual(tone.state, .missing, "and it still waits for the essential pack")
+        tone.checkSwitchedOn(essentialReady: true)
+        await wait(tone, for: .ready)
+        // The essential pack is not an optional one: these never start it.
+        let essential = center(fake())
+        essential.startAutomatically(switchedOn: true, essentialReady: true); essential.checkSwitchedOn(essentialReady: true)
+        XCTAssertEqual(essential.state, .missing)
     }
     func testOptionalPacksKeepSeparateRemovesAndSayWhatTheyMiss() async {
         let slipData = Data("slip weights".utf8), toneData = Data("tone weights".utf8)

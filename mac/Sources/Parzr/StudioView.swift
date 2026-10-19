@@ -263,6 +263,8 @@ struct StudioView: View {
                     divider
                     settingRow("Context refinement", detail: "Use the larger on-device model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
                     divider
+                    settingRow("Slip check", detail: "Catches word-choice slips as you type (\u{201C}I hat it\u{201D}, then/than) with a small on-device model. Off, Option+Space still checks word choice.") { toggle("Slip check", $preferences.slipCheck) }
+                    divider
                     settingRow("Tone check", detail: "Flags a message that may read as rude, passive-aggressive, curt or overly apologetic, with a reason and a Soften button. \(ToneModel.status)") { toggle("Tone check", $preferences.toneCheck) }
                     divider
                     settingRow("Smart grammar (on-device model)", detail: models.isReady ? "A small model on your Mac's Neural Engine catches grammar the rules miss, while you type and when you check a selection. It runs entirely on your Mac." : "A small model on your Mac's Neural Engine catches grammar the rules miss. \(models.unavailableNote ?? "")") { toggle("Smart grammar", $preferences.smartGrammar) }

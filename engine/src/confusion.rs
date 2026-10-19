@@ -494,15 +494,24 @@ impl Scorers {
 /// The rules' (and grammar model's) plan plus the swaps the language models find, which never touch
 /// an edit of theirs, a protected range, a name or a user dictionary word.
 pub fn combine(req: &Request, protected: &[TextRange], plan: Vec<Edit>) -> Vec<Edit> {
-    let scorers = Scorers {
-        slips: crate::slips::available().then_some(crate::slips::scores as Scorer),
+    let scorers = scorers_for(
+        req,
+        crate::slips::available(),
         // Before the model pack is downloaded there is nothing to wait for: no pending follow-ups.
-        model: crate::model::model_available().then_some(native as Scorer),
-    };
+        crate::model::model_available(),
+    );
     if scorers.slips.is_none() && scorers.model.is_none() {
         return plan;
     }
     combine_using(req, protected, plan, scorers)
+}
+/// The scorers a request may use: the slip checker only when it is installed and the request has not
+/// switched it off (`Request::slips`); the writing model whenever it is installed.
+fn scorers_for(req: &Request, slips_installed: bool, model_installed: bool) -> Scorers {
+    Scorers {
+        slips: (req.slips && slips_installed).then_some(crate::slips::scores as Scorer),
+        model: model_installed.then_some(native as Scorer),
+    }
 }
 fn found(swaps: &[Swap], gains: &[Option<f64>], d: Decision, rule: &'static str) -> Option<Found> {
     choose_with(swaps, gains, d).map(|(swap, gain)| Found { swap, gain, rule })
@@ -958,6 +967,24 @@ mod tests {
         let swaps = sentence_swaps(text, &[]);
         let (found, complete) = decide(text, &swaps, how, scorers).ok()?;
         found.map(|f| (f.swap.candidate, f.rule, complete))
+    }
+    #[test]
+    fn a_request_with_the_slip_check_off_never_asks_the_slip_checker() {
+        let on = Request::default();
+        assert!(on.slips, "on unless the request says otherwise");
+        assert!(scorers_for(&on, true, false).slips.is_some());
+        assert!(
+            scorers_for(&on, false, false).slips.is_none(),
+            "not installed: nothing to ask"
+        );
+        let off = Request {
+            slips: false,
+            ..Request::default()
+        };
+        let scorers = scorers_for(&off, true, true);
+        assert!(scorers.slips.is_none(), "switched off: never asked");
+        assert!(scorers.model.is_some(), "the writing model is not affected");
+        assert!(scorers_for(&off, true, false).slips.is_none());
     }
     #[test]
     fn typing_uses_the_slip_checker_and_explicit_checks_let_the_writing_model_confirm_it() {

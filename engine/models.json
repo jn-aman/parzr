@@ -230,7 +230,7 @@
       "id": "tone",
       "version": "2",
       "title": "Tone check",
-      "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded only when Tone check is on.",
+      "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded while Tone check is on (the default, in Settings, Writing).",
       "license": "Apache-2.0 (fine-tuned from all-MiniLM-L6-v2, Apache-2.0; training data synthetic or openly licensed, see scripts/tone-check)",
       "provides": {
         "tone_model": "tone"

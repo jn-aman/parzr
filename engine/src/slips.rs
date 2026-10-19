@@ -544,6 +544,25 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(900));
         }
     }
+    /// The same typing check with the slip check switched off (`Request::slips` false, as the app sends
+    /// it): the slip checker is never asked, so no slip edit comes from it.
+    #[test]
+    #[ignore = "needs the slip checker and the native runtime"]
+    fn typing_route_leaves_slips_alone_when_the_switch_is_off() {
+        assert!(available(), "no slip checker pack");
+        let req = crate::Request {
+            text: "This is so bad. I hat it.".into(),
+            gec: true,
+            dialect: "american".into(),
+            slips: false,
+            ..crate::Request::default()
+        };
+        let edits = crate::rewrite(&req).expect("a typing check").edits;
+        assert!(
+            edits.iter().all(|e| e.rule_id != "context.slip_swap"),
+            "{edits:?}"
+        );
+    }
     /// The typing route with the real pack (PARZR_SLIP_DIR or the installed pack, and the native
     /// runtime in PARZR_MODEL_RUNTIME): "I hat it" is fixed by the slip check while typing, whether
     /// or not the writing model is installed, within the app's follow-ups.

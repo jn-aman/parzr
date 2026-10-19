@@ -96,7 +96,7 @@ python3 scripts/model-pack.py publish --pack slips          # gh release create 
 python3 scripts/model-pack.py fetch --pack slips --models-dir "$(mktemp -d)" --verify
 ```
 
-Until it is published the app reports it as not available yet and retries hourly, with the typing-time slip check off (Option+Space still checks word choice with Qwen), and CI's `fetch --derive-fallback` skips it.
+Until it is published the app reports it as not available yet and retries hourly, with the typing-time slip check off (Option+Space still checks word choice with Qwen), and CI's `fetch --derive-fallback` skips it. The Slip check is on by default (Settings, Writing); switched off, the app neither downloads the pack on its own nor lets typing checks use it.
 
 **Publish `models-tone-2`** (the optional tone-check pack, 6 files, 23 MB; before the first app release that pins it). Like the slip pack, its Core ML model is compiled locally, so publish exactly the staged files that match the pins: `dist/tone-pack-v2/release-assets` on the machine that converted it (from `dist/tone-pack-v2/tone-build`), or retrain and convert again and re-pin with `scripts/tone-check/pack_manifest.py`. Version 1 (`models-tone-1`) was never published: it was trained with ParaDetox (OpenRAIL++), and version 2 leaves that corpus out.
 
@@ -107,7 +107,7 @@ python3 scripts/model-pack.py publish --pack tone --assets dist/tone-pack-v2/rel
 python3 scripts/model-pack.py fetch --pack tone --models-dir "$(mktemp -d)" --verify
 ```
 
-Until it is published, turning on Tone check reports that the model is not available yet and retries hourly. Nothing else changes, because Tone check is off by default.
+Tone check is on by default, so publish `models-tone-2` before the app release that pins it. Until it is published, the app reports the tone model as not available yet and retries hourly. No flags appear until then, and nothing else changes.
 
 **CI** downloads the pinned pack into `dist/models` (cached by the hash of `engine/models.json`) and runs every model test against it through `PARZR_MODELS_DIR`; before the pack's release exists it rebuilds the pack from the pinned upstream sources with the same hash checks. The bundle audit (`scripts/audit-bundle.py`) fails the build if any model file (by name, format or pinned hash) is in the app, or if the app is over 100 MB.
 

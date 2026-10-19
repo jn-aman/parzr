@@ -106,6 +106,11 @@ pub struct Request {
     /// with one fitting emoji. Other modes and apps never get one.
     #[serde(default)]
     pub casual: bool,
+    /// Use the typing-time slip checker (the optional slip pack's masked language model) when it is
+    /// on this Mac. The app sends false while the user has switched the slip check off; clients that
+    /// predate the switch (the browser host, the LSP) leave it out and keep the default, on.
+    #[serde(default = "yes")]
+    pub slips: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -141,6 +146,7 @@ impl Default for Request {
             deep: false,
             gec: false,
             casual: false,
+            slips: true,
             name_index: None,
         }
     }
@@ -1769,6 +1775,19 @@ pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_c
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_slip_switch_defaults_on_and_requests_without_it_still_parse() {
+        // The browser host and the LSP never send it: they keep the slip check.
+        let old: Request = serde_json::from_str(r#"{"text":"I hat it."}"#).unwrap();
+        assert!(old.slips);
+        assert!(Request::default().slips);
+        let off: Request = serde_json::from_str(r#"{"text":"I hat it.","slips":false}"#).unwrap();
+        assert!(!off.slips);
+        let on: Request = serde_json::from_str(r#"{"text":"I hat it.","slips":true}"#).unwrap();
+        assert!(on.slips);
+        // Other unknown fields are still refused (deny_unknown_fields), so a misspelt switch is caught.
+        assert!(serde_json::from_str::<Request>(r#"{"text":"x","slip":false}"#).is_err());
+    }
     #[test]
     fn capitalized_known_typos_mid_sentence_get_lowercase_fixes() {
         assert_eq!(typo_capital("The".into(), "Teh", false), "the");

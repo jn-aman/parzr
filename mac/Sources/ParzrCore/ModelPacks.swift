@@ -78,7 +78,8 @@ public struct OptionalPack: Sendable, Equatable, Identifiable {
     public let feature: String
     /// Development: this variable points at local files instead, so nothing is downloaded.
     public let developmentVariable: String
-    /// Downloads on its own once the essential pack is ready (true), or only when the user asks or turns its feature on.
+    /// Downloads on its own once the essential pack is ready, while its check is switched on (true), or only when the
+    /// user asks for it in Settings, Models (false).
     public let automatic: Bool
     /// What Parzr does without it, while it is missing and after the user removed it.
     public let missingNote: String
@@ -90,9 +91,11 @@ public struct OptionalPack: Sendable, Equatable, Identifiable {
     public static let slips = OptionalPack(role: "slip_model", feature: "Slip check", developmentVariable: "PARZR_SLIP_DIR", automatic: true,
                                            missingNote: "Word-choice slips are checked on Option+Space until it arrives.",
                                            removedNote: "Word-choice slips are checked only on Option+Space until you download it.")
-    public static let tone = OptionalPack(role: "tone_model", feature: "Tone check", developmentVariable: "PARZR_TONE_DIR", automatic: false,
-                                          missingNote: "Downloaded when you turn on Tone check in Settings, Writing.",
-                                          removedNote: "Tone check is off until you download it again.")
+    public static let tone = OptionalPack(role: "tone_model", feature: "Tone check", developmentVariable: "PARZR_TONE_DIR", automatic: true,
+                                          missingNote: "Tone check flags nothing until it arrives.",
+                                          removedNote: "Tone check flags nothing until you download it again.")
+    /// Settings, Models, while the check is switched off in Settings, Writing: nothing downloads on its own.
+    public var switchedOffNote: String { "\(feature) is off in Settings, Writing, so it is not downloaded on its own." }
     /// Every optional pack, in the order Settings lists them.
     public static let all: [OptionalPack] = [.slips, .tone]
 }

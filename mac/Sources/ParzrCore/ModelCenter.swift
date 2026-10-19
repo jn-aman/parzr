@@ -102,6 +102,19 @@ public final class ModelCenter: ObservableObject {
             await self?.finish(result, current)
         }
     }
+    /// An optional pack's own download: only an automatic pack whose check is switched on, once the essential pack is
+    /// ready, and never after the user removed it (`startIfNeeded`). The essential pack and other packs ignore this.
+    public func startAutomatically(switchedOn: Bool, essentialReady: Bool) {
+        guard let optional, optional.automatic, switchedOn, essentialReady else { return }
+        startIfNeeded()
+    }
+    /// The user switched this pack's check on: that asks for the pack again, so an earlier Remove no longer holds it back,
+    /// and a missing pack downloads now (or once the essential pack is ready).
+    public func checkSwitchedOn(essentialReady: Bool) {
+        guard optional != nil else { return }
+        defaults.removeObject(forKey: removedKey); failures = 0
+        startAutomatically(switchedOn: true, essentialReady: essentialReady)
+    }
     /// Stops the download and keeps what arrived, so Download resumes it.
     public func cancel() {
         retry?.cancel(); retry = nil

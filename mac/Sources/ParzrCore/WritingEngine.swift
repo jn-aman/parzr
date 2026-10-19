@@ -94,7 +94,7 @@ public actor WritingEngine {
         guard request.text.utf8.count <= 65_536 else { throw ParzrError.message("Select at most 64 KB of text.") }
         var tokens = request.tokens
         if tokens.isEmpty { tokens = Self.linguisticHints(for: request.text, known: await knownWords?(request.text) ?? []) }
-        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep, gec: request.gec, casual: request.casual)
+        let enriched = EngineRequest(text: request.text, mode: request.mode, dictionary: request.dictionary, names: request.names, capitalizeNames: request.capitalize_names, dialect: request.dialect, protectedRanges: request.protected_ranges, tokens: tokens, sentenceStart: request.sentence_start, sentenceEnd: request.sentence_end, deep: request.deep, gec: request.gec, casual: request.casual, slips: request.slips)
         let input = try JSONEncoder().encode(enriched)
         guard let string = String(data: input, encoding: .utf8), let function = rewriteFunction, let cancellation else { throw ParzrError.message("The writing engine could not respond.") }
         let output = try await withTaskCancellationHandler {

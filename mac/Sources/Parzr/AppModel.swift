@@ -127,7 +127,7 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 if debounce { slow = Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); if !Task.isCancelled, current == generation { busy = true } } }
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual, slips: Preferences.shared.slipCheck)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.screened(try await engine.rewrite(request), from: original)
@@ -158,7 +158,7 @@ final class AppModel: ObservableObject {
             do {
                 try checkingSnapshot?.validateCheckingEligibility()
                 let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual, slips: Preferences.shared.slipCheck)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 written = KnownNames.screened(try await WritingEngine.shared.rewrite(request), from: original)
             } catch {}

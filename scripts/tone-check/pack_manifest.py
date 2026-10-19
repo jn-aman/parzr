@@ -30,7 +30,7 @@ def main(pack_dir):
                       "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "name": name, "version": SOURCE,
                       "license": "Apache-2.0", "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"})
     pack = {"id": "tone", "version": VERSION, "title": "Tone check",
-            "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded only when Tone check is on.",
+            "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded while Tone check is on (the default, in Settings, Writing).",
             "license": "Apache-2.0 (fine-tuned from all-MiniLM-L6-v2, Apache-2.0; training data synthetic or openly licensed, see scripts/tone-check)",
             "provides": {"tone_model": "tone"}, "files": files}
     manifest = json.loads(MANIFEST.read_text())

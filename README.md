@@ -113,7 +113,7 @@ Parzr updates itself from 0.3 on, so if you have 0.2.x, install 0.3 once by hand
 
 Then just write. Underlines appear when you pause. Change the shortcut, pause Parzr, turn it off per app, hide it from the Dock, or quit it from Settings, General (Parzr still shows its menus and Dock icon while its window is open).
 
-Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device model)"). Once setup is finished Parzr prepares the model in the background for the Neural Engine, which takes a few seconds the first time, so it is ready before you need it.
+Smart grammar is on by default (Settings, Writing, "Smart grammar (on-device model)"), and so are the Slip check (word-choice slips such as "I hat it" while you type) and the Tone check (a note when a message may read as rude, passive-aggressive, curt or over-apologetic, with a Soften button). Each has its own switch there, and each uses a small extra model that downloads after the main ones. Once setup is finished Parzr prepares the model in the background for the Neural Engine, which takes a few seconds the first time, so it is ready before you need it.
 
 ## Works where you write
 

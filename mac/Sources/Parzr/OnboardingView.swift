@@ -72,6 +72,12 @@ struct OnboardingView: View {
             Spacer(minLength: 0)
         }.padding(.horizontal, 40).padding(.top, 16).frame(maxWidth: .infinity, alignment: .leading)
     }
+    /// The optional checks that follow the models (both on by default), with their size; empty when this build pins none.
+    static var optionalNote: String {
+        let bytes = ModelCenter.optionalCenters.reduce(Int64(0)) { $0 + $1.totalBytes }
+        guard bytes > 0 else { return "" }
+        return " The slip and tone checks follow (\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))); turn either off in Settings, Writing."
+    }
     private func hero(_ symbol: String?, _ title: String, _ detail: String) -> some View {
         VStack(spacing: 0) {
             RoundedRectangle(cornerRadius: 20).fill(Color.accentWash).frame(width: 76, height: 76)
@@ -137,7 +143,7 @@ struct OnboardingView: View {
         }
     }
     private var models: some View {
-        page("STEP 3 · SMART GRAMMAR", "Download the models", "Smart grammar and rewrites run on two models on your Mac. Parzr downloads them once, \(model.models.sizeText), and checks with its rules in the meantime.") {
+        page("STEP 3 · SMART GRAMMAR", "Download the models", "Smart grammar and rewrites run on two models on your Mac. Parzr downloads them once, \(model.models.sizeText), and checks with its rules in the meantime.\(Self.optionalNote)") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(spacing: 0) {
                     row("cpu", model.models.pack?.title ?? "Smart grammar and rewrites", "GECToR catches grammar as you type. Qwen3.5 checks and rewrites what you select.") { EmptyView() }
