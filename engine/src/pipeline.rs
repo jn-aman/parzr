@@ -870,6 +870,14 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     let mut document = Document::new(&req.text);
     document.apply(&fixed.edits)?;
     let mut judge = Judge::new(true, name_score);
+    // The model rewrites finished writing too: "is marketing still waiting on the copy" reaches
+    // it (and the meaning check) as the question it is, with its capital and question mark.
+    let current = document.request(req, &protected, Mode::Fix);
+    let floor = crate::tone_format::floor(&current, &current.protected_ranges);
+    if !floor.is_empty() {
+        document.apply(&floor)?;
+        grammar(&mut document, req, &mut protected, &mut judge)?;
+    }
     // The model gets no instructions about names, so every name candidate is masked.
     let mut masked = protected.clone();
     masked.extend(name_guard_ranges(req));
@@ -884,6 +892,24 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
             warnings.extend(contextual.warnings);
         }
         Err(error) => warnings.push(format!("Kept the corrected text. {error}")),
+    }
+    // The rewrite is finished writing, whatever the model managed: never formatted worse than
+    // Fix (sentence capitals and a final mark, chat included), and a Professional one spells
+    // out chat shorthand. Names and protected text are left as they are.
+    let mut fenced = protected.clone();
+    fenced.extend(name_guard_ranges(req));
+    if req.mode == Mode::Professional {
+        let current = document.request(req, &fenced, Mode::Fix);
+        document.apply(&crate::tone_format::professional_forms(
+            &current,
+            &current.protected_ranges,
+        ))?;
+    }
+    let current = document.request(req, &protected, Mode::Fix);
+    let floor = crate::tone_format::floor(&current, &current.protected_ranges);
+    if !floor.is_empty() {
+        document.apply(&floor)?;
+        grammar(&mut document, req, &mut protected, &mut judge)?;
     }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);
     let (text, source_map) = apply_edits(&req.text, &edits)?;

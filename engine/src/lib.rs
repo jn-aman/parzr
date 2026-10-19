@@ -34,6 +34,8 @@ mod structure;
 mod table;
 pub mod tables;
 mod tokenizer;
+#[cfg(feature = "local-model")]
+mod tone_format;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;

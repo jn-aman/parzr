@@ -444,6 +444,7 @@ fn prompt(
     literals: &[Literal],
     strict: bool,
     careful: Option<&str>,
+    shots: bool,
 ) -> String {
     let context = careful.map(str::trim).filter(|c| !c.is_empty());
     let retry = careful.map(|_| {
@@ -519,13 +520,20 @@ fn prompt(
         _ => format!("Text to edit:\n{passage}"),
     };
     // One worked example per tone: the small model otherwise often answers a short message ("Are you stupid?")
-    // or hands it back unchanged, where the example shows it the rewrite.
-    let shown = match (example(req.mode), careful) {
-        (Some((input, output)), None) => format!(
-            "<|im_start|>user\nText to edit:\n{input}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>\n"
-        ),
-        _ => String::new(),
+    // or hands it back unchanged, where the example shows it the rewrite. A second attempt sees
+    // several (`shots`).
+    let single = example(req.mode);
+    let examples: &[(&str, &str)] = match (careful, shots) {
+        (Some(_), _) => &[],
+        (None, true) => worked_examples(req.mode),
+        (None, false) => single.as_slice(),
     };
+    let shown: String = examples
+        .iter()
+        .map(|(input, output)| format!(
+            "<|im_start|>user\nText to edit:\n{input}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>\n"
+        ))
+        .collect();
     format!(
         "<|im_start|>system\n{instruction}{keep}{dialect}{boundary}{ending}{protection}<|im_end|>\n{shown}<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
@@ -537,6 +545,79 @@ fn example(mode: Mode) -> Option<(&'static str, &'static str)> {
         "this plan is dumb, who even approved it??",
         "I have concerns about this plan. Who approved it?",
     ))
+}
+/// The worked examples a tone's second attempt is shown, when the first one changed what the
+/// text said, answered it, or hardly moved it toward the tone. Each keeps every fact, keeps a
+/// question a question, and moves the text the way its tone should; their words are unlikely in
+/// real text, and a rewrite that borrows them is rejected (`meaning::borrows`).
+fn worked_examples(mode: Mode) -> &'static [(&'static str, &'static str)] {
+    match mode {
+        Mode::Professional => &[
+            (
+                "hey can u check the slides before the call",
+                "Hi, could you please check the slides before the call?",
+            ),
+            (
+                "why is the invoice still wrong??",
+                "Could you explain why the invoice is still incorrect?",
+            ),
+            (
+                "this plan is dumb, who even approved it??",
+                "I have concerns about this plan. Who approved it?",
+            ),
+            (
+                "thx, ill send the spreadsheet tmrw",
+                "Thank you. I will send the spreadsheet tomorrow.",
+            ),
+        ],
+        Mode::Friendly => &[
+            (
+                "Send me the slides by noon.",
+                "Could you send me the slides by noon? Thanks!",
+            ),
+            (
+                "This invoice is wrong again. Fix it today.",
+                "This invoice is wrong again. Could you please fix it today?",
+            ),
+            (
+                "why is the staging server still down?",
+                "Any idea why the staging server is still down?",
+            ),
+            (
+                "I can't make the call.",
+                "Unfortunately, I can't make the call.",
+            ),
+        ],
+        Mode::Concise => &[
+            (
+                "I just wanted to take a moment to let you know that the spreadsheet has been updated with the new numbers.",
+                "The spreadsheet has been updated with the new numbers.",
+            ),
+            (
+                "Would you be able to take a look at the slides today, if possible?",
+                "Could you take a look at the slides today?",
+            ),
+            (
+                "At this point in time, we are not able to offer refunds for orders over $500.",
+                "We cannot offer refunds for orders over $500.",
+            ),
+        ],
+        Mode::Direct => &[
+            (
+                "I was wondering if you could maybe send me the slides by Friday.",
+                "Please send me the slides by Friday.",
+            ),
+            (
+                "I think we should probably move the invoice review to next week.",
+                "We should move the invoice review to next week.",
+            ),
+            (
+                "Is the staging server down again?",
+                "Is the staging server down again?",
+            ),
+        ],
+        Mode::Fix => &[],
+    }
 }
 /// One model call. Output that is blank or carries control tokens is not a suggestion.
 fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
@@ -560,13 +641,21 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     Ok(result)
 }
 fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
+    generate_with(req, passage, careful, false)
+}
+fn generate_with(
+    req: &Request,
+    passage: &str,
+    careful: Option<&str>,
+    shots: bool,
+) -> Result<String, String> {
     let r = runtime()?;
     let (masked, literals) = mask(passage, &kept_spans(req), &name_spans(req))?;
     let mut result = String::new();
     // The first answer must keep every placeholder. If it does not, ask once more with the
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
-        let output = infer(&r, &prompt(req, &masked, &literals, strict, careful))?;
+        let output = infer(&r, &prompt(req, &masked, &literals, strict, careful, shots))?;
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -2069,26 +2158,176 @@ fn hints(text: &str) -> Vec<crate::TokenHint> {
 /// Keeps the rewrite of each sentence that still says what the corrected sentence said; asks
 /// once more, more strictly, for a sentence that does not, and otherwise leaves that sentence
 /// as corrected. Linked edits stay together.
-fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
+fn meaning_guard(req: &Request, all: Vec<Edit>, shots: bool) -> (Vec<Edit>, bool) {
     guard_segments(
         req,
         all,
-        |source, output, elsewhere| {
-            crate::meaning::keeps_meaning(
-                req.mode,
-                source,
-                output,
-                elsewhere,
-                &hints(source),
-                &hints(output),
-            )
-            .and_then(|()| match example(req.mode) {
-                Some((input, _)) => crate::meaning::borrows(input, source, output),
-                None => Ok(()),
-            })
-        },
+        |source, output, elsewhere| segment_keeps(req, shots, source, output, elsewhere),
         |segment| careful(req, segment),
     )
+}
+/// The meaning check of one segment of a tone rewrite, including that it borrows nothing from
+/// the worked examples its prompt showed (`shots`: the second attempt's set).
+fn segment_keeps(
+    req: &Request,
+    shots: bool,
+    source: &str,
+    output: &str,
+    elsewhere: &str,
+) -> Result<(), String> {
+    crate::meaning::keeps_meaning(
+        req.mode,
+        source,
+        output,
+        elsewhere,
+        &hints(source),
+        &hints(output),
+    )?;
+    if shots {
+        for (input, rewrite) in worked_examples(req.mode) {
+            crate::meaning::borrows(&format!("{input} {rewrite}"), source, output)?;
+        }
+        Ok(())
+    } else {
+        match example(req.mode) {
+            Some((input, _)) => crate::meaning::borrows(input, source, output),
+            None => Ok(()),
+        }
+    }
+}
+/// What a candidate rewrite would give before any retry: the number of its segments that fail
+/// the meaning check, and how far the segments that pass move the text toward its tone.
+fn candidate_score(req: &Request, all: &[Edit], shots: bool) -> (usize, i32) {
+    let mut failed = 0;
+    let mut kept = vec![];
+    for segment in crate::meaning::segments(&req.text, all) {
+        let Some((source, output)) = crate::meaning::texts(&req.text, &segment, all) else {
+            continue;
+        };
+        let elsewhere = outside(&req.text, segment.start, segment.end);
+        if segment_keeps(req, shots, &source, &output, &elsewhere).is_ok() {
+            kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
+        } else {
+            failed += 1;
+        }
+    }
+    kept.sort_by_key(|e| (e.start_utf16, e.end_utf16));
+    let output = apply_edits(&req.text, &kept).map_or_else(|_| req.text.clone(), |(t, _)| t);
+    (failed, tone_gain(req.mode, &req.text, &output))
+}
+/// Letters and digits only, lowercased: two texts that differ only here differ in case or
+/// punctuation, not in wording.
+fn wording(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .flat_map(char::to_lowercase)
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+/// How far `output` moves `source` toward `mode`: rude words removed, chat shorthand spelled
+/// out (Professional), hedges and padding cut and length saved (Concise, Direct), minus
+/// emphasis a softening tone added. Only ranks rewrites that already keep the meaning.
+fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
+    let (s, o) = (
+        crate::meaning::tone_marks(source),
+        crate::meaning::tone_marks(output),
+    );
+    let less = |a: usize, b: usize| a as i32 - b as i32;
+    let more = |a: usize, b: usize| (b as i32 - a as i32).max(0);
+    let words = s.words.max(1) as i32;
+    let changed = i32::from(wording(source) != wording(output));
+    // A complaint turned up ("I really hate it", "Are you really that stupid?") is no softening.
+    let harsher = if s.negative + s.rude > 0 {
+        2 * more(s.boosters, o.boosters)
+    } else {
+        0
+    };
+    match mode {
+        Mode::Professional | Mode::Friendly => {
+            // Rewording that leaves the insult in place has not reached the tone.
+            let reworded = if o.rude > 0 { 0 } else { changed };
+            let shorthand = if mode == Mode::Professional {
+                2 * less(s.chat, o.chat) - more(s.exclaims, o.exclaims)
+            } else {
+                0
+            };
+            3 * less(s.rude, o.rude) + reworded + shorthand
+                - 2 * more(s.emphasis, o.emphasis)
+                - harsher
+        }
+        Mode::Concise => {
+            less(s.rude, o.rude)
+                + changed
+                + 10 * less(s.words, o.words) / words
+                + less(s.padding, o.padding) / 2
+                + less(s.hedges, o.hedges)
+        }
+        Mode::Direct => {
+            less(s.rude, o.rude)
+                + changed
+                + 5 * less(s.words, o.words) / words
+                + less(s.padding, o.padding) / 2
+                + 2 * less(s.hedges, o.hedges)
+        }
+        Mode::Fix => 0,
+    }
+}
+/// A first rewrite worth a second attempt even though it keeps the meaning. Professional and
+/// Friendly: it left behind the insult or chat shorthand its tone removes, turned the text up,
+/// or left a complaint as it was; a polite or neutral sentence left as it was is already in
+/// the tone (on 480 everyday tone requests, retrying those added "ever", "successfully" and
+/// "delicious"). Concise and Direct: it left a longer text as it was. Every extra candidate is
+/// one more chance for a wrong one to pass the check.
+fn weak(mode: Mode, source: &str, output: &str) -> bool {
+    let (s, o) = (
+        crate::meaning::tone_marks(source),
+        crate::meaning::tone_marks(output),
+    );
+    let unchanged = wording(source) == wording(output);
+    let complaint = s.rude + s.negative > 0;
+    match mode {
+        Mode::Professional => {
+            unchanged && complaint || o.rude > 0 || o.chat > 0 || o.emphasis > s.emphasis
+        }
+        Mode::Friendly => unchanged && complaint || o.rude > 0 || o.emphasis > s.emphasis,
+        Mode::Concise | Mode::Direct => unchanged && s.words >= 8,
+        Mode::Fix => false,
+    }
+}
+/// Intensifiers the model added to a Professional or Friendly rewrite ("This is definitely wrong
+/// again!"), and an exclamation it put on a negative sentence, are taken back: a softening tone
+/// never makes the text more emphatic than the writer did.
+fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    if !matches!(req.mode, Mode::Professional | Mode::Friendly) {
+        return all;
+    }
+    let lower_words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let marks = crate::meaning::tone_marks(&req.text);
+    let negative = marks.negative + marks.rude > 0;
+    // On a complaint "really" and "so" turn it up too ("I really hate it").
+    let emphatic = |w: &str| {
+        crate::meaning::EMPHASIS.contains(&w) || negative && crate::meaning::BOOSTERS.contains(&w)
+    };
+    all.into_iter()
+        .filter(|e| {
+            let (before, after) = (lower_words(&e.original), lower_words(&e.replacement));
+            let added: Vec<&String> = after.iter().filter(|w| !before.contains(w)).collect();
+            let emphasis_only = !added.is_empty()
+                && added.iter().all(|w| emphatic(w))
+                && before.iter().all(|w| after.contains(w));
+            let exclaims = e.replacement.matches('!').count() > e.original.matches('!').count()
+                && (req.mode == Mode::Professional || negative)
+                && before == after;
+            !(emphasis_only || exclaims)
+        })
+        .collect()
 }
 
 fn guard_segments(
@@ -2242,11 +2481,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     validate(req)?;
     let started = Instant::now();
     let protected = kept_spans(req);
-    let attempt = |careful: Option<&str>| -> Result<(String, Vec<Edit>), String> {
+    let attempt_with = |careful: Option<&str>,
+                        shots: bool|
+     -> Result<(String, Vec<Edit>), String> {
         let text = if req.text.trim().is_empty() {
             req.text.clone()
         } else {
-            generate(req, &req.text, careful)?
+            generate_with(req, &req.text, careful, shots)?
         };
         let all = edits(&req.text, &text, req.mode, &protected);
         if all.len() > 512 {
@@ -2275,6 +2516,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
             .collect();
         Ok((text, all))
     };
+    let attempt = |careful: Option<&str>| attempt_with(careful, false);
     // A tone rewrite that loses or moves a protected element (a number, a link, a name) or runs
     // away is asked once more as a light edit before the request fails.
     let (_, all) = attempt(None).or_else(|error| match req.mode {
@@ -2290,7 +2532,42 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         }
         (kept, false)
     } else {
-        meaning_guard(req, all)
+        // A first rewrite that fails the meaning check somewhere, or barely moves the text toward
+        // its tone, gets one more attempt with worked examples. The candidate whose checked
+        // segments move the text further is kept (the first on a tie, then the one with fewer
+        // failed segments), and is guarded as usual, retries included.
+        let all = drop_added_emphasis(req, all);
+        let (failed, gain) = candidate_score(req, &all, false);
+        let first_output = apply_edits(&req.text, &all)?.0;
+        // A Professional or Friendly second answer can only earn its place by removing an
+        // insult or chat shorthand (gain 2 or more): without one in the text, it is not asked.
+        let marks = crate::meaning::tone_marks(&req.text);
+        let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
+            || 3 * marks.rude
+                + 1
+                + if req.mode == Mode::Professional {
+                    2 * marks.chat
+                } else {
+                    0
+                }
+                >= 2;
+        let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
+            .then(|| attempt_with(None, true).ok())
+            .flatten()
+            .map(|(_, e)| drop_added_emphasis(req, keep_names(req, e)))
+            .filter(|e| {
+                let (failed2, gain2) = candidate_score(req, e, true);
+                // Never more failed segments than the first; better on tone, or as good with fewer
+                // failures. A Professional or Friendly one must also take out what its tone
+                // removes (an insult, chat shorthand): rewording alone ("known for its delicious
+                // food") is how examples-led answers embellish neutral text.
+                let earned = !matches!(req.mode, Mode::Professional | Mode::Friendly) || gain2 >= 2;
+                earned && failed2 <= failed && (gain2 > gain || gain2 == gain && failed2 < failed)
+            });
+        match second {
+            Some(e) => meaning_guard(req, e, true),
+            None => meaning_guard(req, all, false),
+        }
     };
     let changes = match pick_emoji(req, &apply_edits(&req.text, &changes)?.0) {
         Some(emoji) => end_with(&req.text, changes, emoji),
@@ -3527,5 +3804,113 @@ mod tests {
             let kept = keep_names(&req, edits(a, b, Mode::Professional, &[]));
             assert_eq!(apply_edits(a, &kept).unwrap().0, expected, "{a} -> {b}");
         }
+    }
+
+    #[test]
+    fn worked_examples_keep_their_meaning_and_show_in_the_second_prompt() {
+        for mode in [
+            Mode::Professional,
+            Mode::Friendly,
+            Mode::Concise,
+            Mode::Direct,
+        ] {
+            let req = Request {
+                mode,
+                ..Request::default()
+            };
+            let shown = prompt(&req, "the text", &[], false, None, true);
+            let first = prompt(&req, "the text", &[], false, None, false);
+            for (input, output) in worked_examples(mode) {
+                assert_eq!(
+                    crate::meaning::keeps_meaning(mode, input, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {input} -> {output}"
+                );
+                assert!(shown.contains(input) && shown.contains(output), "{mode:?}");
+                assert!(
+                    !first.contains(output) || example(mode).is_some_and(|e| e.1 == *output),
+                    "{mode:?}"
+                );
+            }
+            // A light-edit retry shows no examples at all.
+            let retry = prompt(&req, "the text", &[], false, Some(""), true);
+            assert_eq!(retry.matches("<|im_start|>user").count(), 1, "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn candidates_rank_by_the_marks_their_tone_removes() {
+        use Mode::*;
+        let chat = "hey can u send me the file asap I need it now";
+        assert!(
+            tone_gain(
+                Professional,
+                chat,
+                "Could you please send me the file as soon as possible? I need it now."
+            ) > tone_gain(
+                Professional,
+                chat,
+                "hey can you send me the file ASAP I need it now"
+            )
+        );
+        // Rewording that keeps the insult, or turns the complaint up, gains nothing.
+        let rude = "Are you stupid?";
+        assert!(tone_gain(Friendly, rude, "Are you really that stupid?") <= 0);
+        assert!(
+            tone_gain(
+                Friendly,
+                "This is wrong again.",
+                "This is really wrong again."
+            ) < 0
+        );
+        let padded = "I wanted to take a moment to let you know that the budget is still $450.";
+        assert!(
+            tone_gain(Concise, padded, "The budget is still $450.")
+                > tone_gain(
+                    Concise,
+                    padded,
+                    "I wanted to let you know the budget is still $450."
+                )
+        );
+        assert!(weak(Professional, chat, chat));
+        assert!(weak(Friendly, rude, rude));
+        assert!(weak(Direct, padded, padded));
+        assert!(!weak(Concise, "Fix it now.", "Fix it now."));
+        assert!(!weak(Direct, padded, "The budget is still $450."));
+    }
+
+    #[test]
+    fn softening_tones_take_back_added_emphasis() {
+        let text = "This is wrong again. Fix it before the demo.";
+        let output = "This is definitely wrong again! Please fix it before the demo.";
+        for (mode, expected) in [
+            (
+                Mode::Friendly,
+                "This is wrong again. Please fix it before the demo.",
+            ),
+            (
+                Mode::Professional,
+                "This is wrong again. Please fix it before the demo.",
+            ),
+            (Mode::Concise, output),
+        ] {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            let kept = drop_added_emphasis(&req, edits(text, output, mode, &[]));
+            assert_eq!(apply_edits(text, &kept).unwrap().0, expected, "{mode:?}");
+        }
+        // Good news may stay excited.
+        let text = "The demo went well.";
+        let output = "The demo went really well!";
+        let req = Request {
+            text: text.into(),
+            mode: Mode::Friendly,
+            ..Request::default()
+        };
+        let kept = drop_added_emphasis(&req, edits(text, output, Mode::Friendly, &[]));
+        assert_eq!(apply_edits(text, &kept).unwrap().0, output);
     }
 }

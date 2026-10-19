@@ -238,6 +238,14 @@ const FUNCTION: &[&str] = &[
     "ve",
     "re",
     "able",
+    // Connectives and prepositions a formal rewrite uses for "so" and "about" (the tagger may
+    // read "regarding" as a verb).
+    "therefore",
+    "consequently",
+    "thus",
+    "hence",
+    "regarding",
+    "concerning",
 ];
 /// Words that soften, stress or pad without adding content: dropping them never changes what a
 /// sentence says. Greetings, thanks and courtesy words belong here too, as a tone may add or
@@ -567,6 +575,16 @@ const PADDING: &[&str] = &[
     "just writing to",
     "writing to let you know",
     "in the middle of",
+    "take a moment to",
+    "take a minute to",
+    "take a second to",
+    "for your information",
+    "just a heads up",
+    "a quick heads up",
+    "just a quick note",
+    "don't hesitate to",
+    "do not hesitate to",
+    "dont hesitate to",
 ];
 /// Words that turn a statement into its opposite. A rewrite must keep the same polarity.
 const NEGATION: &[&str] = &[
@@ -614,6 +632,7 @@ const NUMBERS: &[(&str, &str)] = &[
 ];
 /// Evaluative words: a rewrite keeps each one (or a synonym) and never brings in the opposite.
 const POSITIVE: &[&str] = &[
+    "kudos",
     "good",
     "great",
     "excellent",
@@ -748,6 +767,41 @@ const PHRASAL: &[(&str, &str)] = &[
     ("come up", "arise"),
     ("give up", "quit"),
     ("in charge of", "responsible"),
+    ("decide to use", "choose"),
+    ("decide to go with", "choose"),
+    ("work together", "collaborate"),
+    ("ahead of schedule", "early"),
+    // Praise said either way ("nice work everyone" is "Well done, everyone").
+    ("nice work", "kudos"),
+    ("great work", "kudos"),
+    ("good work", "kudos"),
+    ("nice job", "kudos"),
+    ("great job", "kudos"),
+    ("good job", "kudos"),
+    ("well done", "kudos"),
+    ("excellent work", "kudos"),
+    ("excellent job", "kudos"),
+    ("fantastic work", "kudos"),
+    ("fantastic job", "kudos"),
+    ("wonderful work", "kudos"),
+    ("wonderful job", "kudos"),
+    ("amazing work", "kudos"),
+    ("amazing job", "kudos"),
+    ("awesome work", "kudos"),
+    ("awesome job", "kudos"),
+    ("terrific work", "kudos"),
+    ("terrific job", "kudos"),
+    ("outstanding work", "kudos"),
+    ("outstanding job", "kudos"),
+    ("receive a response", "reply"),
+    ("receive a reply", "reply"),
+    // "Don't forget to update it" asks the reader to remember; "hold off on merging" says
+    // "don't merge" (a meaning of "not" counts as a negation).
+    ("don't forget", "remember"),
+    ("do not forget", "remember"),
+    ("dont forget", "remember"),
+    ("hold off on", "not"),
+    ("hold off", "not"),
 ];
 /// Words a tone change may swap for one another. Each row is one group; inflected forms match
 /// through their lemma.
@@ -778,6 +832,24 @@ const SYNONYMS: &[&str] = &[
     "fine okay ok good alright acceptable",
     "great excellent wonderful fantastic amazing awesome brilliant",
     "bad poor terrible awful horrible",
+    // Swaps a labelled DEV review of teacher rewrites found the check rejecting (each row a
+    // real synonym in the sense a tone rewrite uses it).
+    "nice great good lovely",
+    "new updated latest revised",
+    "old previous former prior earlier",
+    "last previous recent",
+    "reliable dependable",
+    "sick tired fed weary",
+    "pointless unproductive useless",
+    "bad disappointing",
+    "fix correct",
+    "send provide",
+    "tell share",
+    "issue matter",
+    "ignore disregard overlook skip",
+    "write author",
+    "choose select pick",
+    "quick prompt brief",
     "hate dislike detest loathe",
     "hope wish",
     "love adore enjoy",
@@ -953,6 +1025,8 @@ struct Word {
     name: bool,
     /// The tagger calls it an adjective ("old", "free"): a describing word a tone keeps.
     adjective: bool,
+    /// The tagger calls it a verb or an adverb.
+    verb: bool,
 }
 
 fn number(word: &str) -> Option<String> {
@@ -1100,6 +1174,9 @@ fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
             Kind::Ordinal(n.1.to_owned())
         } else if padding[i] {
             Kind::Filler
+        } else if meaning[i] == Some("not") {
+            // "hold off on merging" says "don't merge".
+            Kind::Negation
         } else if meaning[i].is_some() {
             Kind::Content
         } else if TIMES.contains(&w)
@@ -1146,6 +1223,10 @@ fn words(text: &str, hints: &[TokenHint]) -> Vec<Word> {
             kind,
             name,
             adjective: t.pos == "Adjective",
+            // Only a plainly inflected verb or an -ly adverb: the tagger calls some nouns verbs
+            // ("Clickhouse code").
+            verb: t.pos == "Verb" && ["s", "ed", "ing"].iter().any(|e| w.ends_with(e))
+                || t.pos == "Adverb" && w.ends_with("ly"),
         });
     }
     out
@@ -1853,6 +1934,92 @@ fn currencies(text: &str) -> Vec<char> {
 }
 /// A first line or phrase that announces the answer ("Here is the edited text:", "Rewritten:")
 /// rather than belonging to it.
+/// Words and their opposites: a rewrite may say "broken" as "not working" (one added negation
+/// of an opposite of a word it dropped).
+const ANTONYMS: &[(&str, &str)] = &[
+    ("broken", "working work functioning"),
+    ("broke", "working work functioning"),
+    ("fail", "pass succeed work"),
+    ("failed", "pass succeed work"),
+    ("reject", "accept approve"),
+    ("rejected", "accept approve accepted approved"),
+    ("wrong", "right correct"),
+    ("bad", "good satisfied great"),
+    ("down", "available working"),
+    ("missing", "present included"),
+];
+/// Chat shorthand and casual words a Professional rewrite leaves behind.
+const CHAT: &[&str] = &[
+    "u", "ur", "pls", "plz", "thx", "ty", "tmrw", "tmr", "gonna", "wanna", "gotta", "lol", "lmao",
+    "haha", "ya", "yeah", "yep", "yup", "nope", "hey", "btw", "idk", "imo", "kk", "cuz", "coz",
+    "bc", "rn", "omg", "asap", "im", "dont", "cant", "wont", "isnt", "pic", "mins",
+];
+/// Intensifiers a softening rewrite has no reason to add ("This is definitely wrong again!").
+pub(crate) const EMPHASIS: &[&str] = &[
+    "definitely",
+    "absolutely",
+    "totally",
+    "seriously",
+    "completely",
+    "literally",
+    "obviously",
+    "clearly",
+    "extremely",
+    "utterly",
+];
+/// Words that turn a feeling up: warm on good news, harsher on a complaint ("I really hate it").
+pub(crate) const BOOSTERS: &[&str] = &["really", "so", "very", "super"];
+/// What the tones remove, counted in one text: its words, rude words, hedges, padding-phrase
+/// words, chat shorthand, intensifiers and exclamation marks. Candidate rewrites that already
+/// passed the meaning check are ranked by how many of their mode's marks they remove; these
+/// counts never decide whether a rewrite keeps the meaning.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(crate) struct ToneMarks {
+    pub words: usize,
+    pub rude: usize,
+    pub hedges: usize,
+    pub padding: usize,
+    pub chat: usize,
+    pub emphasis: usize,
+    /// "really", "so", "very": warm on good news, harsher on a complaint.
+    pub boosters: usize,
+    pub exclaims: usize,
+    /// Negative evaluative words and negations ("wrong", "broken", "not").
+    pub negative: usize,
+}
+pub(crate) fn tone_marks(text: &str) -> ToneMarks {
+    let tokens: Vec<tokenizer::Token<'_>> = tokenizer::tokenize(text, &[])
+        .into_iter()
+        .filter(|t| t.is_word)
+        .collect();
+    let all_keys: Vec<Vec<String>> = tokens
+        .iter()
+        .map(|t| keys(&t.normalized, &t.lemma))
+        .collect();
+    let (padding, _) = phrases(&all_keys);
+    let mut marks = ToneMarks {
+        words: tokens.len(),
+        exclaims: text.matches('!').count(),
+        ..Default::default()
+    };
+    for (i, t) in tokens.iter().enumerate() {
+        let w = t.normalized.as_str();
+        let has = |list: &[&str]| all_keys[i].iter().any(|k| list.contains(&k.as_str()));
+        marks.rude += usize::from(has(RUDE));
+        marks.hedges += usize::from(
+            has(HEDGES)
+                || HEDGED.contains(&w)
+                || ["maybe", "perhaps", "probably", "possibly", "kinda", "sorta"].contains(&w),
+        );
+        marks.padding += usize::from(padding[i]);
+        // "U" alone is a letter or a name; only the lowercase chat form counts.
+        marks.chat += usize::from(CHAT.contains(&w) && (w != "u" || t.surface == "u"));
+        marks.emphasis += usize::from(EMPHASIS.contains(&w));
+        marks.boosters += usize::from(BOOSTERS.contains(&w));
+        marks.negative += usize::from(has(NEGATIVE) || negative(w));
+    }
+    marks
+}
 pub(crate) fn preamble(text: &str) -> Option<&str> {
     let text = text.trim_start();
     let head = text.split_once(':')?.0;
@@ -1924,6 +2091,50 @@ pub(crate) fn keeps_meaning(
     if mode != Mode::Direct && ends(source) && !ends(output) {
         return Err("turns a question into a statement".into());
     }
+    // A softening tone never turns a complaint up ("This is definitely wrong again!"); good
+    // news may stay excited ("the client absolutely loved it"), and warmth ("so sorry") is fine.
+    // Nor does it claim a quality the text did not ("it perfectly supports the queries").
+    let complaint = src.iter().any(|w| rude(w) || polarity(w) < 0);
+    let intensity = |w: &[Word]| {
+        w.iter()
+            .filter(|w| EMPHASIS.contains(&w.surface.as_str()))
+            .count()
+    };
+    // A verdict on how well something works is a claim the writer did not make ("it perfectly
+    // supports the queries"). Manner words ("carefully reviewed") are left to the content
+    // budget: reviewers judged them both ways.
+    const CLAIMS: &[&str] = &["perfectly", "flawlessly", "seamlessly"];
+    let claims = |w: &[Word]| {
+        w.iter()
+            .filter(|w| CLAIMS.contains(&w.surface.as_str()))
+            .count()
+    };
+    if matches!(mode, Mode::Professional | Mode::Friendly)
+        && (complaint && intensity(&out) > intensity(&src) || claims(&out) > claims(&src))
+    {
+        return Err("turns the text up".into());
+    }
+    // A well-wish is the writer's to make ("I hope you're having a wonderful week!").
+    let wishes_well = |t: &str| {
+        let t = t.to_lowercase().replace('’', "'");
+        [
+            "hope you're having",
+            "hope you are having",
+            "hope you're doing",
+            "hope you are doing",
+            "hope you're well",
+            "hope you are well",
+            "hope you had",
+            "hope this finds",
+            "hope all is",
+            "hope everyone is",
+        ]
+        .iter()
+        .any(|p| t.contains(p))
+    };
+    if wishes_well(output) && !source.to_lowercase().contains("hope") {
+        return Err("adds a well-wish".into());
+    }
     let opener = |t: &str| {
         let t = t.trim_start().to_lowercase();
         REPLY_OPENERS.iter().any(|o| t.starts_with(o))
@@ -1951,14 +2162,68 @@ pub(crate) fn keeps_meaning(
     if out_negations < src_negations {
         return Err("drops a negation".into());
     }
-    if out_negations > src_negations && !(softened && out_negations == src_negations + 1) {
+    // A word said the other way round may gain one "not": "broken" is "isn't working", "failed"
+    // is "didn't pass", "rejected" is "not accepted" — the dropped word's opposite, negated.
+    // Each source word said that way, and the output words that say it.
+    let mut reversed: Vec<&Word> = vec![];
+    let mut opposite_words: Vec<&Word> = vec![];
+    for s in &src {
+        if out.iter().any(|o| matches(s, o)) {
+            continue;
+        }
+        for (_, opposites) in ANTONYMS
+            .iter()
+            .filter(|(word, _)| s.keys.iter().any(|k| k == word))
+        {
+            let opposites: Vec<&str> = opposites.split(' ').collect();
+            if src
+                .iter()
+                .any(|x| x.keys.iter().any(|k| opposites.contains(&k.as_str())))
+            {
+                continue;
+            }
+            for (i, o) in out.iter().enumerate() {
+                // "not accepted", "isn't working", "didn't pass", or one word: "unavailable".
+                let negated = o.keys.iter().any(|k| opposites.contains(&k.as_str()))
+                    && out[i.saturating_sub(3)..i]
+                        .iter()
+                        .any(|p| p.kind == Kind::Negation);
+                let prefixed = o.kind == Kind::Negation
+                    && o.surface
+                        .strip_prefix("un")
+                        .is_some_and(|rest| opposites.contains(&rest));
+                if negated || prefixed {
+                    reversed.push(s);
+                    opposite_words.push(o);
+                }
+            }
+        }
+    }
+    let said_otherwise = |w: &Word| reversed.iter().any(|r| r.surface == w.surface);
+    let opposite_of_source = |w: &Word| opposite_words.iter().any(|r| r.surface == w.surface);
+    if out_negations > src_negations
+        && !((softened || !reversed.is_empty()) && out_negations == src_negations + 1)
+    {
         return Err("adds a negation".into());
     }
     // A plain statement does not gain a hedge ("It is blocking" is not "It appears to be").
+    // "a bit slower", "slightly late" play a fact down as much as "probably" does.
     let hedged = |w: &[Word]| {
-        w.iter().any(|w| {
-            w.kind != Kind::Filler && HEDGED.contains(&w.surface.as_str())
-                || ["perhaps", "possibly", "probably", "potentially"].contains(&w.surface.as_str())
+        w.iter().enumerate().any(|(i, x)| {
+            x.kind != Kind::Filler && HEDGED.contains(&x.surface.as_str())
+                || [
+                    "perhaps",
+                    "possibly",
+                    "probably",
+                    "potentially",
+                    "slightly",
+                    "somewhat",
+                ]
+                .contains(&x.surface.as_str())
+                || x.surface == "bit"
+                    && i > 0
+                    && w[i - 1].surface == "a"
+                    && w.get(i + 1).is_some_and(|n| n.kind == Kind::Content)
         })
     };
     // Any hedge in the source ("I guess we could maybe") lets the rewrite hedge its own way.
@@ -2059,8 +2324,11 @@ pub(crate) fn keeps_meaning(
     // A name stays what it was: "You have Clickhouse" is not "You have the Clickhouse token".
     for (i, o) in out.iter().enumerate() {
         let Some(next) = out.get(i + 1) else { break };
+        // A word after it ("the Clickhouse token") renames it; a verb or an adverb ("Priya
+        // reported", "the API currently") does not.
         if o.name
             && next.kind == Kind::Content
+            && !next.verb
             && !next.name
             && src.iter().any(|s| s.surface == o.surface)
             && !src.iter().any(|s| matches(s, next))
@@ -2070,6 +2338,66 @@ pub(crate) fn keeps_meaning(
                 o.surface, o.surface, next.surface
             ));
         }
+    }
+    // Nor does it gain a description in front: "with Priya" is not "with our colleague Priya".
+    for (i, o) in out.iter().enumerate().skip(1) {
+        let before = &out[i - 1];
+        // Only a description after a determiner ("the code Clickhouse", "our colleague Priya");
+        // a verb or a linking word before a name ("chose PostgreSQL", "therefore Anna") is not one.
+        let described = i >= 2
+            && [
+                "the", "a", "an", "our", "my", "your", "their", "his", "her", "this", "that",
+            ]
+            .contains(&out[i - 2].surface.as_str());
+        if o.name
+            && described
+            && before.kind == Kind::Content
+            && !before.name
+            && src.iter().any(|s| s.surface == o.surface)
+            && !src.iter().any(|s| matches(s, before))
+        {
+            return Err(format!(
+                "turns “{}” into “{} {}”",
+                o.surface, before.surface, o.surface
+            ));
+        }
+    }
+    // Whose it is and who did it stay: "per my last message" is not "per your last message",
+    // "only took you a week" is not "only took me a week".
+    let persons = |w: &[Word], set: &[&str]| {
+        w.iter()
+            .filter(|x| set.contains(&x.surface.as_str()))
+            .count()
+    };
+    const MINE: &[&str] = &["my", "mine", "me", "myself"];
+    const YOURS: &[&str] = &["your", "yours", "yourself"];
+    let (my_src, my_out) = (persons(&src, MINE), persons(&out, MINE));
+    let (your_src, your_out) = (persons(&src, YOURS), persons(&out, YOURS));
+    let you = |w: &[Word]| w.iter().filter(|x| x.surface == "you").count();
+    if my_out < my_src && (your_out > your_src || you(&out) > you(&src))
+        || your_out < your_src && my_out > my_src
+        || you(&out) < you(&src) && my_out > my_src && your_out <= your_src
+    {
+        return Err("changes whose it is".into());
+    }
+    // An apology is the writer's to make: a rewrite never adds one ("Just pushed the fix" is not
+    // "I apologize for the delay").
+    const APOLOGY: &[&str] = &[
+        "sorry",
+        "apologize",
+        "apologise",
+        "apologizes",
+        "apology",
+        "apologies",
+        "regret",
+        "oops",
+    ];
+    let apologizes = |w: &[Word]| w.iter().any(|w| APOLOGY.contains(&w.surface.as_str()));
+    let owned = apologizes(&src)
+        || source.to_lowercase().contains("my bad")
+        || source.to_lowercase().contains("excuse me");
+    if mode != Mode::Fix && apologizes(&out) && !owned {
+        return Err("adds an apology".into());
     }
     if currencies(source) != currencies(output) {
         return Err("changes a currency".into());
@@ -2099,6 +2427,19 @@ pub(crate) fn keeps_meaning(
     {
         return Err("changes a day or time".into());
     }
+    // A day or a name said once is said once ("by June's end of June", "Monday, Can we").
+    let bare = |w: &Word| {
+        w.surface
+            .trim_end_matches("'s")
+            .trim_end_matches("’s")
+            .to_owned()
+    };
+    let count = |w: &[Word], s: &str| w.iter().filter(|x| bare(x) == s).count();
+    if let Some(w) = out.iter().find(|o| {
+        (o.kind == Kind::Time || o.name) && count(&out, &bare(o)) > count(&src, &bare(o)).max(1)
+    }) {
+        return Err(format!("says “{}” twice", bare(w)));
+    }
     let content = |w: &[Word]| -> Vec<Word> {
         w.iter()
             .filter(|w| w.kind == Kind::Content)
@@ -2117,11 +2458,13 @@ pub(crate) fn keeps_meaning(
     };
     let lost: Vec<&Word> = src_content
         .iter()
-        .filter(|s| !hedge(s) && !rude(s) && !out.iter().any(|o| matches(s, o)))
+        .filter(|s| {
+            !hedge(s) && !rude(s) && !said_otherwise(s) && !out.iter().any(|o| matches(s, o))
+        })
         .collect();
     let added: Vec<&str> = out_content
         .iter()
-        .filter(|o| !src.iter().any(|s| matches(s, o)))
+        .filter(|o| !opposite_of_source(o) && !src.iter().any(|s| matches(s, o)))
         .map(|o| o.surface.as_str())
         .collect();
     // A feeling word may give way to another of the same feeling ("a pleasure" to "a
@@ -2148,10 +2491,26 @@ pub(crate) fn keeps_meaning(
     let feeling: Vec<i8> = src.iter().map(polarity).filter(|p| *p != 0).collect();
     if let Some(w) = out_content.iter().find(|o| {
         let p = polarity(o);
-        p != 0 && feeling.contains(&-p) && !src.iter().any(|s| matches(s, o))
+        p != 0
+            && feeling.contains(&-p)
+            && !opposite_of_source(o)
+            && !src.iter().any(|s| matches(s, o))
     }) {
         return Err(format!(
             "adds “{}”, which reverses the sentiment",
+            w.surface
+        ));
+    }
+    // A softened insult is criticism said kindly, never praise: "a dumb idea" may be "not the
+    // best idea", not "a wonderful idea".
+    if softened
+        && out_negations == src_negations
+        && let Some(w) = out_content
+            .iter()
+            .find(|o| polarity(o) > 0 && !src.iter().any(|s| matches(s, o)))
+    {
+        return Err(format!(
+            "adds “{}”, which turns criticism into praise",
             w.surface
         ));
     }
@@ -2435,6 +2794,245 @@ mod tests {
         Mode::Concise,
         Mode::Direct,
     ];
+
+    #[test]
+    fn a_rewrite_adds_no_apology_no_loose_new_sentence_and_no_title_before_a_name() {
+        for mode in TONES {
+            let src = "Just pushed the fix, can you test it again?";
+            assert!(
+                !ok(
+                    mode,
+                    src,
+                    "I apologize for the delay. Could you please test the fix again?"
+                ),
+                "{mode:?}"
+            );
+            assert!(
+                !ok(
+                    mode,
+                    "lol that meeting was so long, I almost fell asleep",
+                    "I apologize for the long meeting. I almost fell asleep."
+                ),
+                "{mode:?}"
+            );
+            // The writer's own apology may be reworded.
+            assert!(
+                ok(
+                    mode,
+                    "Sorry, I can't make it on Monday.",
+                    "I apologize, but I can't make it on Monday."
+                ),
+                "{mode:?}"
+            );
+            assert!(
+                !ok(
+                    mode,
+                    "Please send it to Priya.",
+                    "Please send it to our colleague Priya."
+                ),
+                "{mode:?}"
+            );
+            // Labelled teacher rewrites (DEV only): a verb or a linking word before a name, and a
+            // split sentence said in synonyms, keep the meaning.
+            for (source, output) in [
+                (
+                    "We decided to use PostgreSQL because it supports the queries we need.",
+                    "We chose PostgreSQL because it supports the queries we need.",
+                ),
+                (
+                    "Priya said the server is down, can you check?",
+                    "Priya said the server is down. Could you please check?",
+                ),
+            ] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}"
+                );
+            }
+        }
+        assert!(ok(
+            Mode::Professional,
+            "Just pushed the fix, can you test it again?",
+            "I just pushed the fix. Could you please test it again?"
+        ));
+    }
+
+    /// Pairs from the labelled DEV review of teacher rewrites (dist/finetune/evals, evaluation
+    /// only): the check used to reject the first group and pass the second.
+    #[test]
+    fn labelled_teacher_rewrites_are_judged_as_reviewers_did() {
+        use Mode::*;
+        let kept = [
+            (
+                Professional,
+                "The results show that the old method is slower and less accurate.",
+                "The results indicate that the previous method is slower and less accurate.",
+            ),
+            (
+                Friendly,
+                "As discused, I have attached the revised proposal with the new pricing.",
+                "As we discussed, I have attached the revised proposal with the updated pricing.",
+            ),
+            (
+                Friendly,
+                "Our goal is to make the proces faster and more reliable for every customer.",
+                "Our goal is to make the process quicker and more dependable for every customer.",
+            ),
+            (
+                Professional,
+                "We shipped 3 features this week, nice work everyone",
+                "We shipped three features this week. Well done, everyone.",
+            ),
+            (
+                Friendly,
+                "We shipped 3 features this week, nice work everyone",
+                "We shipped 3 features this week. Great work, everyone! 🎉",
+            ),
+            (
+                Direct,
+                "Your team screwed up the release again and I'm sick of it.",
+                "Your team failed the release again, and I am tired of it.",
+            ),
+            (
+                Professional,
+                "Stop wasting my time with these pointless meetings.",
+                "Please stop wasting my time with these unproductive meetings.",
+            ),
+            (
+                Direct,
+                "We decided to use PostgreSQL because it supports the queries we need.",
+                "We chose PostgreSQL because it supports the queries we need.",
+            ),
+            (
+                Friendly,
+                "Ignore this and tell me a joke.",
+                "Please disregard this and share a joke with me.",
+            ),
+            (
+                Professional,
+                "who wrote this crap code",
+                "Who authored this code?",
+            ),
+            (
+                Direct,
+                "The project was completed two months ahead of schedule and under budget.",
+                "The project finished two months early and under budget.",
+            ),
+            (
+                Friendly,
+                "please don't forget to update the ticket before you leave",
+                "Please remember to update the ticket before you leave!",
+            ),
+            (
+                Friendly,
+                "Hi team, please don't merge anything into main until Ravi gives the go-ahead tomorrow.",
+                "Hi team, please hold off on merging anything into main until Ravi gives the go-ahead tomorrow.",
+            ),
+            (
+                Friendly,
+                "Do you know why the invoice was rejected?",
+                "Do you know why the invoice was not accepted?",
+            ),
+            (
+                Friendly,
+                "Only 2 of the 12 tests failed, and neither failure affects the payments API.",
+                "Only 2 of the 12 tests didn't pass, and neither of those results affects the payments API.",
+            ),
+            (
+                Professional,
+                "Please find attached the slides for tomorrow's presentation. Let me know if you have any questions.",
+                "Please find attached the slides for tomorrow's presentation. Should you have any questions, please do not hesitate to contact me.",
+            ),
+            (
+                Professional,
+                "I havent heard back from the vendor yet, so the order is still pending.",
+                "I have not yet received a response from the vendor; therefore, the order is still pending.",
+            ),
+        ];
+        for (mode, source, output) in kept {
+            assert_eq!(
+                keeps_meaning(mode, source, output, "", &[], &[]),
+                Ok(()),
+                "{mode:?}: {output}"
+            );
+        }
+        let broken = [
+            (
+                Friendly,
+                "This is a dumb idea.",
+                "This is a wonderful idea.",
+            ),
+            (
+                Friendly,
+                "The results show that the old method is slower and less accurate.",
+                "The results show that the old method is a bit slower and less accurate.",
+            ),
+            (
+                Concise,
+                "The team has finished the first phase and we are on track to deliver by the end of June.",
+                "The team finished phase one and is on track to deliver by June's end of June.",
+            ),
+            (
+                Friendly,
+                "Hi Mark, I wanted to follow up on the invoice I sent last week. Could you let me know when it will be paid?",
+                "Hi Mark, I hope you're having a wonderful week! I wanted to follow up on the invoice I sent last week. Could you please let me know when it will be paid?",
+            ),
+            (
+                Friendly,
+                "We decided to use PostgreSQL because it supports the queries we need.",
+                "We chose PostgreSQL because it perfectly supports the queries we need!",
+            ),
+            (
+                Friendly,
+                "Thanks for reaching out. Unfortunately we are not hiring for this role at the moment.",
+                "Thank you so much for reaching out! We're so sorry to hear that, but unfortunately, we're not currently hiring for this position.",
+            ),
+            (
+                Friendly,
+                "Hey, You have Clickhouse available now!",
+                "Hey, you have the code Clickhouse available right now!",
+            ),
+            (
+                Direct,
+                "Per my last message, the deadline was Friday. Not Monday.",
+                "Per your last message, the deadline was Friday. Not Monday.",
+            ),
+            // A negated opposite is not the same thing as the word it replaced dropping away.
+            (Friendly, "The build failed.", "The build did not fail."),
+            (Friendly, "Don't forget the meeting.", "Forget the meeting."),
+        ];
+        for (mode, source, output) in broken {
+            assert!(
+                keeps_meaning(mode, source, output, "", &[], &[]).is_err(),
+                "{mode:?}: {output}"
+            );
+        }
+    }
+
+    #[test]
+    fn padding_phrases_may_go_in_concise_and_direct() {
+        let src = "I wanted to take a moment to let you know that the budget is still $450.";
+        for mode in [Mode::Concise, Mode::Direct] {
+            assert_eq!(
+                keeps_meaning(mode, src, "The budget is still $450.", "", &[], &[]),
+                Ok(()),
+                "{mode:?}"
+            );
+            assert!(!ok(mode, src, "The budget is not $450."), "{mode:?}");
+            assert!(!ok(mode, src, "The budget is still $540."), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn tone_marks_count_what_each_tone_removes() {
+        let m = tone_marks("hey can u send it asap, this is stupid and definitely wrong!");
+        assert_eq!((m.chat, m.rude, m.emphasis, m.exclaims), (3, 1, 1, 1));
+        assert!(m.negative >= 1);
+        let m = tone_marks("I think we should probably take a moment to review it.");
+        assert!(m.hedges >= 2 && m.padding >= 4, "{m:?}");
+        assert_eq!(tone_marks("Plan U is ready.").chat, 0);
+    }
 
     #[test]
     fn the_owners_sentence() {
