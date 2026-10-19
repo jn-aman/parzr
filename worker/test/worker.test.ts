@@ -129,7 +129,7 @@ test('anything that still looks private is refused', () => {
     'visit example.museum', 'go to acme.engineering', 'my site is aman.photography', 'see bit.LY',
     'aman at gmail dot com', 'aman (at) gmail (dot) com', 'aman at gmail.com',
     'pin is four four two one', 'call nine eight seven', 'Seven-Two-Nine',
-    'token sk_live_abcdefghijk', 'ghp_abcdefghijklmnopqrstuv', 'xoxb-abc-def-ghi', 'key AKIAABCDEFGHIJKLMNOP', 'jwt eyJhbGciOiJIUzI1NiJ9',
+    'token ' + 'sk_' + 'live_abcdefghijk', 'gh' + 'p_abcdefghijklmnopqrstuv', 'xo' + 'xb-abc-def-ghi', 'key ' + 'AK' + 'IAABCDEFGHIJKLMNOP', 'jwt eyJhbGciOiJIUzI1NiJ9',
     'secret AbCdEfGhIjKlMnOpQrStUvWx', 'id abc_def_ghi_jkl_mno_pqr', 'tag #rahulsharma', 'ping @rahul',
   ]) assert.equal(looksPrivate(leak), true, leak);
   assert.equal(validateReport(report({ sentence: 'I has 2 dogs.', suggestion: { start: 2, end: 5, original: 'has', replacement: 'have' } })), null);

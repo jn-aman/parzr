@@ -64,11 +64,14 @@ final class RedactionTests: XCTestCase {
 
     // MARK: Keys and tokens
     func testKeysAndTokensAreRedacted() {
-        XCTAssertEqual(r("token sk_live_abcdefghijk"), "token [key]")
+        // Fake keys are assembled at run time so the source never holds a token-shaped literal (scripts/audit-public-repo.py).
+        let live = "sk_" + "live_abcdefghijk", github = "gh" + "p_abcdefghijklmnopqrstuvwxyz0123"
+        let slack = "xo" + "xb-abc-def-ghi", aws = "AK" + "IAABCDEFGHIJKLMNOP"
+        XCTAssertEqual(r("token \(live)"), "token [key]")
         XCTAssertEqual(r("use pk_test_abcdEFGH here"), "use [key] here")
-        XCTAssertEqual(r("ghp_abcdefghijklmnopqrstuvwxyz0123 works"), "[key] works")
-        XCTAssertEqual(r("slack xoxb-abc-def-ghi ok"), "slack [key] ok")
-        XCTAssertEqual(r("aws AKIAABCDEFGHIJKLMNOP"), "aws [key]")
+        XCTAssertEqual(r("\(github) works"), "[key] works")
+        XCTAssertEqual(r("slack \(slack) ok"), "slack [key] ok")
+        XCTAssertEqual(r("aws \(aws)"), "aws [key]")
         XCTAssertEqual(r("jwt eyJhbGciOiJIUzI1NiJ9.e30 sent"), "jwt [key] sent")
         XCTAssertEqual(r("secret AbCdEfGhIjKlMnOpQrStUvWx"), "secret [key]", "long mixed-case runs are keys")
         XCTAssertEqual(r("id abc_def_ghi_jkl_mno_pqr"), "id [key]")

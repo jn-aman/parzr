@@ -298,8 +298,8 @@ final class ReportBuilderTests: XCTestCase {
             ("pin is four four two one", "is", "was", ["four four", "two one"]),
             ("aman at gmail dot com", "at", "@", ["aman", "gmail"]),
             ("ping #rahulsharma now", "now", "today", ["rahulsharma"]),
-            ("token sk_live_abcdefghijk", "token", "Token", ["sk_live", "abcdefghijk"]),
-            ("ok ghp_abcdefghijklmnopqrstuvwxyz0123 is set", "is", "was", ["ghp_"]),
+            ("token " + "sk_" + "live_abcdefghijk", "token", "Token", ["sk_" + "live", "abcdefghijk"]),
+            ("ok " + "gh" + "p_abcdefghijklmnopqrstuvwxyz0123 is set", "is", "was", ["gh" + "p_"]),
             ("the key AbCdEfGhIjKlMnOpQrStUvWx is set", "is", "was", ["AbCdEf"]),
             ("[name] [name] said my HIV test came back positive", "came", "come", ["HIV"]),
         ]
