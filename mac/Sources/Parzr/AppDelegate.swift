@@ -184,9 +184,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         panelModel.warm(); studioModel.warm()
         Preferences.shared.purgeMisspelledNames()
         Preferences.shared.syncContacts()
-        // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
+        // known-words.json mirrors the saved dictionary, learned words and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
         let prefs = Preferences.shared
-        Publishers.CombineLatest4(prefs.$dictionary, prefs.$learnedNames, prefs.$contactNames, prefs.$useContactNames).debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+        Publishers.CombineLatest4(prefs.$dictionary.combineLatest(prefs.$learnedWords), prefs.$learnedNames, prefs.$contactNames, prefs.$useContactNames).debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { _ in KnownWordsFile.writeCurrent() }.store(in: &subscriptions)
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
@@ -651,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 tone.status = EmptyCheck.toneWithheld
                 try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-withheld.png"))
                 try cardSnapshots(to: URL(fileURLWithPath: directory))
-                for route in [StudioRoute.general, .writing, .models, .appearance, .privacy, .about] {
+                for route in [StudioRoute.general, .writing, .learning, .models, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))

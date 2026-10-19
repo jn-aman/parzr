@@ -4,13 +4,14 @@ import ParzrCore
 import Pow
 
 enum StudioRoute: String, CaseIterable, Identifiable {
-    case playground = "Editor", general = "General", writing = "Writing", models = "Models", appearance = "Appearance", apps = "Apps", privacy = "Privacy", compatibility = "Integrations", about = "About"
+    case playground = "Editor", general = "General", writing = "Writing", learning = "Learning", models = "Models", appearance = "Appearance", apps = "Apps", privacy = "Privacy", compatibility = "Integrations", about = "About"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .playground: "square.and.pencil"
         case .general: "slider.horizontal.3"
         case .writing: "textformat"
+        case .learning: "brain"
         case .models: "cpu"
         case .appearance: "circle.lefthalf.filled"
         case .apps: "square.grid.2x2"
@@ -24,6 +25,7 @@ enum StudioRoute: String, CaseIterable, Identifiable {
         case .playground: "Write naturally. Catch the details."
         case .general: "Ready when you need it. Quiet when you don’t."
         case .writing: "Your voice. Your words. Your preferences."
+        case .learning: "What Parzr learned from you, and a private look at your week."
         case .models: "On-device models, downloaded once."
         case .appearance: "A writing space that feels like yours."
         case .apps: "Choose where Parzr lends a hand."
@@ -44,6 +46,7 @@ struct StudioView: View {
     @State private var draft: String
     @State private var dictionaryWord = ""
     @State private var nameWord = ""
+    @State private var learnedWord = ""
     @State private var ignored: Set<String> = []
     @State private var appliedCount = 0
     @State private var reviewVisible = false
@@ -75,6 +78,8 @@ struct StudioView: View {
         .onChange(of: preferences.dialect) { _ in model.playground(draft, debounce: true) }
         .onChange(of: preferences.dictionary) { _ in model.playground(draft, debounce: true) }
         .onChange(of: preferences.learnedNames) { _ in model.playground(draft, debounce: true) }
+        .onChange(of: preferences.learnedWords) { _ in model.playground(draft, debounce: true) }
+        .onChange(of: preferences.mutes.muted) { _ in model.playground(draft, debounce: true) }
         .onChange(of: preferences.nameCapitalization) { _ in model.playground(draft, debounce: true) }
     }
     private var sidebar: some View {
@@ -165,8 +170,9 @@ struct StudioView: View {
                         NativeButton(title: "Review", symbol: "list.bullet", label: "Review suggestions", action: { reviewVisible.toggle() }).fixedSize()
                             .popover(isPresented: $reviewVisible, arrowEdge: .bottom) {
                                 SuggestionReview(model: model, apply: { edit in
-                                    guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(EditPlan.related(to: edit, in: model.chosenEdits), to: draft) else { return }
-                                    draft = next
+                                    let related = EditPlan.related(to: edit, in: model.chosenEdits)
+                                    guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(related, to: draft) else { return }
+                                    preferences.noteFixes(related); draft = next
                                 }, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false })
                             }
                     }
@@ -175,7 +181,7 @@ struct StudioView: View {
                         NativeButton(title: "Check passage", symbol: "checkmark", enabled: !model.busy, action: { model.playground(draft) }).fixedSize().help("Review the whole passage with the selected writing mode")
                         NativeButton(title: model.status == "Copied to clipboard" ? "Copied" : "Copy", symbol: model.status == "Copied to clipboard" ? "checkmark" : "doc.on.doc", enabled: model.result != nil && !model.busy, action: { guard model.source == draft else { return }; model.copy() }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: model.status == "Copied to clipboard", isEnabled: animate)
-                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
+                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; preferences.noteFixes(model.chosenEdits); draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: appliedCount, isEnabled: animate)
                     }
                 }.font(.system(size: 11)).foregroundStyle(Color.textSecondary).padding(.horizontal, 16).padding(.vertical, 12)
@@ -265,12 +271,14 @@ struct StudioView: View {
                     if let note = preferences.contactsNote { Text(note).font(.system(size: 11)).foregroundStyle(Color.errorInk).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).padding(.bottom, 12) }
                     divider
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Names Parzr learned. It learns a name when you undo a fix, ignore a flag twice, or choose “This is a name”.").font(.system(size: 11)).foregroundStyle(Color.textSecondary)
+                        Text("Names Parzr learned. It learns a capitalized name when you undo its fix, ignore its flag twice, or choose “This is a name”. Other words it learns are in Learning.").font(.system(size: 11)).foregroundStyle(Color.textSecondary)
                         HStack { TextField("Add a name", text: $nameWord).textFieldStyle(.roundedBorder).onSubmit(addName); NativeButton(title: "Add", enabled: WritingEdit.nameToken(nameWord) != nil, action: addName).fixedSize() }
                         if !preferences.learnedNames.isEmpty { ScrollView { LazyVStack(spacing: 0) { ForEach(preferences.learnedNames, id: \.self) { name in HStack { Text(name).font(.system(size: 12)); Spacer(); NativeButton(title: "", kind: .utility, symbol: "minus.circle", label: "Remove \(name)", action: { preferences.learnedNames.removeAll { $0 == name } }).frame(width: 24, height: 24) } } } }.frame(height: min(200, CGFloat(preferences.learnedNames.count) * 28)) }
                     }.padding(16)
                 }
                 notice("Grammar, spelling, and punctuation are checked in every mode. The model unloads after 30 seconds of inactivity.", symbol: "leaf")
+            case .learning:
+                learning
             case .models:
                 ModelsSettings(center: models)
             case .appearance:
@@ -307,7 +315,7 @@ struct StudioView: View {
                 group("ALWAYS LOCAL") {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your words stay on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
-                        Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary, learned names and preferences are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Grammar and rewrites run locally. No accounts, telemetry, writing history, or text uploads. Only your dictionary, learned names and words, preferences and, if you keep it, a private weekly tally of fixes are saved.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                         Text("Parzr makes two kinds of request, both to GitHub and both carrying nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
@@ -354,6 +362,53 @@ struct StudioView: View {
             }
         }
     }
+    /// Settings, Learning: the private weekly summary, learned words and muted suggestions.
+    @ViewBuilder private var learning: some View {
+        let summary = preferences.stats.summary(today: LearningDay.today())
+        group("YOUR WEEK") {
+            if !preferences.keepsWritingSummary {
+                Text("The weekly summary is off. Turn it on to see the fixes you made and your most common slips.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            } else if summary.fixes == 0 {
+                Text(summary.ignored == 0 ? "No fixes yet this week. Corrections you apply anywhere are counted here." : "No fixes yet this week. You ignored \(summary.ignored) \(summary.ignored == 1 ? "suggestion" : "suggestions").").font(.system(size: 11)).foregroundStyle(Color.textSecondary).frame(maxWidth: .infinity, alignment: .leading).padding(16)
+            } else {
+                WeeklySummaryView(summary: summary).padding(16)
+            }
+            divider
+            settingRow("Keep a private weekly summary", detail: "Counts the fixes you apply by kind and your most common misspellings, for the last four weeks. It stays on this Mac and is never sent anywhere.") { toggle("Keep a private weekly summary", $preferences.keepsWritingSummary) }
+            divider
+            settingRow("Clear the summary", detail: "Forget every count kept so far.") { NativeButton(title: "Clear", enabled: !preferences.stats.isEmpty, action: { preferences.clearWritingSummary() }).fixedSize() }
+        }
+        group("LEARNED WORDS") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Jargon, acronyms and product names Parzr leaves exactly as you type them. It learns one when you ignore its flag twice, undo its fix, or keep typing it in different apps or on different days.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                HStack { TextField("Add a word", text: $learnedWord).textFieldStyle(.roundedBorder).onSubmit(addLearnedWord); NativeButton(title: "Add", enabled: LearnedWord.token(learnedWord) != nil, action: addLearnedWord).fixedSize() }
+                if preferences.learnedWords.isEmpty { Text("Nothing learned yet.").font(.system(size: 11)).foregroundStyle(Color.textSecondary.opacity(0.75)) }
+                else {
+                    ScrollView { LazyVStack(spacing: 0) { ForEach(preferences.learnedWords, id: \.self) { word in HStack { Text(word).font(.system(size: 12)); Spacer(); NativeButton(title: "", kind: .utility, symbol: "minus.circle", label: "Remove \(word)", action: { preferences.learnedWords.removeAll { $0 == word } }).frame(width: 24, height: 24) } } } }.frame(height: min(200, CGFloat(preferences.learnedWords.count) * 28))
+                    NativeButton(title: "Forget all learned words", kind: .utility, action: { preferences.learnedWords = [] }).fixedSize()
+                }
+            }.padding(16)
+        }
+        group("MUTED SUGGESTIONS") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("After you ignore the same kind of suggestion \(SuggestionMutes.ignoresToMute) times, Parzr stops showing it. Unmute it to see it again.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                if preferences.mutes.muted.isEmpty { Text("Nothing muted.").font(.system(size: 11)).foregroundStyle(Color.textSecondary.opacity(0.75)) }
+                ForEach(preferences.mutes.muted) { mute in
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(mute.explanation.isEmpty ? mute.category : mute.explanation).font(.system(size: 12)).lineLimit(2)
+                            Text("\(mute.category) · \(mute.example)").font(.system(size: 10)).foregroundStyle(Color.textSecondary).lineLimit(1)
+                        }
+                        Spacer()
+                        NativeButton(title: "Unmute", kind: .utility, label: "Unmute \(mute.example)", action: { preferences.unmute(mute.key) }).fixedSize()
+                    }
+                }
+                if !preferences.mutes.muted.isEmpty { NativeButton(title: "Unmute all", kind: .utility, action: { preferences.resetMutes() }).fixedSize() }
+            }.padding(16)
+        }
+        notice("Learned names are in Writing, Names. Hinglish such as yaar, accha and theek hai is never treated as a misspelling.", symbol: "person.text.rectangle")
+    }
+    private func addLearnedWord() { if preferences.learnWord(learnedWord) { learnedWord = "" } }
     private func stat(_ name: String, _ value: String) -> some View { HStack { Text(name).foregroundStyle(Color.textSecondary); Spacer(); Text(value).monospacedDigit() }.font(.system(size: 12)) }
     private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

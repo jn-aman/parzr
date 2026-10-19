@@ -185,7 +185,7 @@ final class PassiveObserver {
                 // budget; a cold model starts loading in the background and stays loaded while the person keeps typing.
                 // Rewrites run only for explicit checks and tone changes.
                 let engine = WritingEngine.typing
-                let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: request.text)
+                let result = KnownNames.screened(try await engine.rewrite(request), from: request.text)
                 try Task.checkCancellation(); try snapshot.validate()
                 RepetitionLearning.observe(result.edits, in: snapshot)
                 let again = self.map { Self.shouldFollowUp(warnings: result.warnings, done: $0.followUps) } ?? false

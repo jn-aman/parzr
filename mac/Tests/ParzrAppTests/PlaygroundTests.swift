@@ -494,9 +494,10 @@ final class RepetitionLearningTests: XCTestCase {
         XCTAssertTrue(prefs.learnedNames.isEmpty)
         XCTAssertEqual(Preferences(defaults: defaults).ledger.entries["jatin"]?.keys.count, 2, "the ledger persists")
         prefs.noteSighting("jatin", app: "b", day: 2)
-        XCTAssertEqual(prefs.learnedNames, ["jatin"])
+        // Typed again and again in lowercase: kept exactly as typed (a learned word), never re-cased like a name.
+        XCTAssertEqual(prefs.learnedWords, ["jatin"]); XCTAssertTrue(prefs.learnedNames.isEmpty)
         prefs.noteApplied("teh")
         for day in 1...5 { prefs.noteSighting("teh", app: "a\(day)", day: day) }
-        XCTAssertEqual(prefs.learnedNames, ["jatin"])
+        XCTAssertEqual(prefs.learnedWords, ["jatin"])
     }
 }
