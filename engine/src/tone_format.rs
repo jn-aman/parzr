@@ -195,6 +195,189 @@ fn upper_first(word: &str) -> String {
         .map_or_else(String::new, |c| c.to_uppercase().chain(chars).collect())
 }
 
+/// Actions a request asks the reader to do: "can you send me the file?" asks for a sending,
+/// while "can you make it Friday?" or "can you see the error?" asks a question.
+const REQUEST_VERBS: &[&str] = &[
+    "send", "review", "check", "look", "take", "share", "update", "fix", "call", "email", "help",
+    "grab", "add", "merge", "approve", "confirm", "sign", "schedule", "move", "test", "ping",
+    "forward", "upload", "submit", "finish", "complete", "prepare", "write", "draft", "give",
+    "resend", "cover", "handle", "deploy", "push", "run", "book", "reply", "respond", "rerun",
+    "retest", "clean", "remove", "delete", "rename", "close", "open", "file", "print", "order",
+    "pick", "drop", "bring", "post", "ask", "tell", "remind", "loop", "cc", "invite", "join",
+];
+/// Padding at the end of a request that Direct leaves out ("…, when you get a chance").
+const SOFT_TAILS: &[&str] = &[
+    "when you get a chance",
+    "when you have a chance",
+    "when you have a moment",
+    "when you get a moment",
+    "if you get a chance",
+    "if you have a chance",
+    "if you have a moment",
+    "if possible",
+    "if you can",
+    "when you can",
+];
+
+/// A Direct rewrite asks for an action plainly: "Hey, can you send me the file ASAP?" is
+/// "Send me the file ASAP.", "Could you please review it when you get a chance?" is "Please
+/// review it." Only a request for one of `REQUEST_VERBS` from "you" changes; questions,
+/// requests to someone else ("can someone look") and protected text stay as they are.
+pub(crate) fn direct_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
+    let text = req.text.as_str();
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let mut edits = vec![];
+    let sentences: Vec<usize> = {
+        let mut s: Vec<usize> = tokens.iter().map(|t| t.sentence).collect();
+        s.dedup();
+        s
+    };
+    for sentence in sentences {
+        let part: Vec<&tokenizer::Token<'_>> =
+            tokens.iter().filter(|t| t.sentence == sentence).collect();
+        let Some(last) = part.last() else { continue };
+        if last.surface != "?" {
+            continue;
+        }
+        let lower = |i: usize| part.get(i).map(|t| t.surface.to_lowercase());
+        let mut i = 0;
+        if lower(0)
+            .is_some_and(|w| ["hey", "hi", "hello", "so", "ok", "okay"].contains(&w.as_str()))
+        {
+            i = 1;
+            if lower(1).as_deref() == Some(",") {
+                i = 2;
+            }
+        }
+        if !lower(i).is_some_and(|w| ["can", "could", "would", "will"].contains(&w.as_str()))
+            || lower(i + 1).as_deref() != Some("you")
+        {
+            continue;
+        }
+        let please = lower(i + 2).as_deref() == Some("please");
+        let v = i + 2 + usize::from(please);
+        let Some(verb) = part.get(v) else { continue };
+        if !REQUEST_VERBS.contains(&verb.surface.to_lowercase().as_str())
+            || part.iter().any(|t| {
+                // "can you send it or should I?" is a question with a choice in it.
+                t.surface.eq_ignore_ascii_case("or") || t.surface.eq_ignore_ascii_case("whether")
+            })
+        {
+            continue;
+        }
+        let utf16 = |b: usize| text[..b].encode_utf16().count();
+        // The body runs from the verb to the mark; a soft tail at its end goes with the mark.
+        let body = text[verb.start_byte..last.start_byte].trim_end();
+        let mut body_end = verb.start_byte + body.len();
+        let lower_body = body.to_lowercase();
+        if lower_body.len() == body.len()
+            && let Some(cut) = SOFT_TAILS.iter().find_map(|t| lower_body.strip_suffix(t))
+            && body.is_char_boundary(cut.len())
+        {
+            let kept = body[..cut.len()]
+                .trim_end()
+                .trim_end_matches(',')
+                .trim_end();
+            body_end = verb.start_byte + kept.len();
+        }
+        // "Hey, can you s" becomes "S" (or "Please s"); the tail and "?" become ".".
+        let first = verb.surface.chars().next().map_or(0, char::len_utf8);
+        let head_end = verb.start_byte + first;
+        let letter = &text[verb.start_byte..head_end];
+        let head = if please {
+            format!("Please {}", letter.to_lowercase())
+        } else {
+            letter.to_uppercase()
+        };
+        let spans = [
+            (part[0].start_byte, head_end, head),
+            (body_end, last.end_byte, ".".to_owned()),
+        ];
+        if spans
+            .iter()
+            .any(|(a, b, _)| protected_at(protected, utf16(*a), utf16(*b)))
+        {
+            continue;
+        }
+        for (a, b, replacement) in spans {
+            if text[a..b] != replacement {
+                edits.push(edit(
+                    utf16(a),
+                    utf16(b),
+                    &text[a..b],
+                    replacement,
+                    "tone.direct_request",
+                    "Ask for it directly.",
+                ));
+            }
+        }
+    }
+    edits
+}
+
+fn opener_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(?:i\s+(?:just\s+|simply\s+)?wanted\s+to\s+(?:take\s+a\s+(?:moment|minute|second)\s+to\s+)?(?:let\s+you\s+know|inform\s+you|tell\s+you|mention)|i\s+(?:am|'m|’m)\s+(?:just\s+)?writing\s+to\s+(?:let\s+you\s+know|inform\s+you)|this\s+is\s+(?:just\s+)?to\s+(?:let\s+you\s+know|inform\s+you)|just\s+(?:wanted\s+to\s+)?(?:let\s+you\s+know))(?:\s+that)?[\s,:]+",
+        )
+        .expect("constant opener regex")
+    })
+}
+
+/// The padded opener of a message said plainly. Friendly: "I wanted to take a moment to let
+/// you know that the budget is still $450" is "Just a quick note: the budget is still $450";
+/// Concise and Direct leave the opener out ("The budget is still $450"). Only at a sentence
+/// start, and only when a sentence follows it.
+pub(crate) fn opener_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
+    if !matches!(
+        req.mode,
+        crate::Mode::Friendly | crate::Mode::Concise | crate::Mode::Direct
+    ) {
+        return vec![];
+    }
+    let text = req.text.as_str();
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let mut edits = vec![];
+    let mut previous = usize::MAX;
+    for t in &tokens {
+        if t.sentence == previous || !t.is_word {
+            previous = t.sentence;
+            continue;
+        }
+        previous = t.sentence;
+        let Some(m) = opener_regex().find(&text[t.start_byte..]) else {
+            continue;
+        };
+        let (a, b) = (t.start_byte, t.start_byte + m.end());
+        let rest = &text[b..];
+        // A clause must follow ("I wanted to let you know." alone stays).
+        if rest.split_whitespace().take(3).count() < 3 || !rest.starts_with(char::is_alphanumeric) {
+            continue;
+        }
+        let utf16 = |x: usize| text[..x].encode_utf16().count();
+        // The first word of the rest takes the sentence capital when the opener goes.
+        let first = rest.chars().next().map_or(0, char::len_utf8);
+        let (end, replacement) = if req.mode == crate::Mode::Friendly {
+            (b, "Just a quick note: ".to_owned())
+        } else {
+            (b + first, rest[..first].to_uppercase())
+        };
+        if protected_at(protected, utf16(a), utf16(end)) {
+            continue;
+        }
+        edits.push(edit(
+            utf16(a),
+            utf16(end),
+            &text[a..end],
+            replacement,
+            "tone.plain_opener",
+            "Say it without the padded opener.",
+        ));
+    }
+    edits
+}
+
 /// Sentence capitals and final punctuation, as Fix gives them, for a finished rewrite.
 /// Edits are in `req.text` coordinates; protected text is never touched.
 pub(crate) fn floor(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
@@ -325,23 +508,50 @@ fn final_mark(
         return None;
     }
     let sentence = tokens.last().map(|t| t.sentence)?;
-    let words: Vec<String> = tokens
-        .iter()
-        .filter(|t| t.sentence == sentence && t.is_word)
-        .map(|t| t.surface.to_lowercase())
-        .collect();
-    let lead = words
-        .iter()
-        .take_while(|w| LEAD_INS.contains(&w.as_str()))
-        .count();
-    let asks = words
-        .get(lead)
-        .is_some_and(|w| QUESTION_OPENERS.contains(&w.as_str()))
-        && !words
+    let last: Vec<&tokenizer::Token<'_>> =
+        tokens.iter().filter(|t| t.sentence == sentence).collect();
+    let words_of = |part: &[&tokenizer::Token<'_>]| -> Vec<String> {
+        part.iter()
+            .filter(|t| t.is_word)
+            .map(|t| t.surface.to_lowercase())
+            .collect()
+    };
+    let asks = |words: &[String]| {
+        let lead = words
             .iter()
-            .skip(lead + 2)
-            .any(|w| SUBJECTS.contains(&w.as_str()));
-    let mark = if asks { "?" } else { "." };
+            .take_while(|w| LEAD_INS.contains(&w.as_str()))
+            .count();
+        words
+            .get(lead)
+            .is_some_and(|w| QUESTION_OPENERS.contains(&w.as_str()))
+            && !words
+                .iter()
+                .skip(lead + 2)
+                .any(|w| SUBJECTS.contains(&w.as_str()))
+    };
+    // The sentence, or its last clause after a comma ("the build is broken again, can someone
+    // look"), opens like a question.
+    let clause = last
+        .iter()
+        .rposition(|t| t.surface == ",")
+        .map_or(&last[..0], |i| &last[i + 1..]);
+    // A clause question names who it asks about ("can someone look", "is it done"), unlike
+    // "thanks, will send it tomorrow"; a wh-word needs none ("ok, what time works").
+    let clause_asks = |words: &[String]| {
+        const WH: &[&str] = &["what", "why", "how", "when", "where", "who", "which"];
+        const WHO: &[&str] = &[
+            "you", "we", "i", "someone", "anyone", "somebody", "anybody", "it", "he", "she",
+            "they", "this", "that", "there", "the", "my", "your", "our", "everyone",
+        ];
+        asks(words)
+            && (words.first().is_some_and(|w| WH.contains(&w.as_str()))
+                || words.get(1).is_some_and(|w| WHO.contains(&w.as_str())))
+    };
+    let mark = if asks(&words_of(&last)) || clause.len() > 2 && clause_asks(&words_of(clause)) {
+        "?"
+    } else {
+        "."
+    };
     byte_at(text, end)?;
     Some(edit(
         end,
@@ -390,6 +600,18 @@ mod tests {
             "Thanks for the help. Really appreciate it."
         );
         assert_eq!(floored("fyi the build is green"), "FYI the build is green.");
+        assert_eq!(
+            floored("the build is broken again, can someone look"),
+            "The build is broken again, can someone look?"
+        );
+        assert_eq!(
+            floored("i tried that, it did not work"),
+            "I tried that, it did not work."
+        );
+        assert_eq!(
+            floored("thanks, will send it tomorrow"),
+            "Thanks, will send it tomorrow."
+        );
     }
 
     #[test]
@@ -412,6 +634,70 @@ mod tests {
         ] {
             assert_eq!(floored(text), expected, "{text:?}");
         }
+    }
+
+    fn direct(text: &str) -> String {
+        let req = Request {
+            text: text.into(),
+            ..Default::default()
+        };
+        apply(text, direct_forms(&req, &[]))
+    }
+
+    #[test]
+    fn direct_turns_a_request_for_an_action_into_an_instruction() {
+        for (text, expected) in [
+            (
+                "Hey, can you send me the file ASAP? I need it now.",
+                "Send me the file ASAP. I need it now.",
+            ),
+            (
+                "Could you please review my PR when you get a chance?",
+                "Please review my PR.",
+            ),
+            ("Can you check the logs, if possible?", "Check the logs."),
+            // Questions, choices and requests to someone else stay.
+            ("Can you make it on Friday?", "Can you make it on Friday?"),
+            ("Can you see the error?", "Can you see the error?"),
+            (
+                "Can someone look at the build?",
+                "Can someone look at the build?",
+            ),
+            (
+                "Can you send it, or should I?",
+                "Can you send it, or should I?",
+            ),
+            ("Can you send it.", "Can you send it."),
+        ] {
+            assert_eq!(direct(text), expected, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn padded_openers_are_said_plainly() {
+        let text = "I wanted to take a moment to let you know that the budget is still $450.";
+        for (mode, expected) in [
+            (
+                crate::Mode::Friendly,
+                "Just a quick note: the budget is still $450.",
+            ),
+            (crate::Mode::Concise, "The budget is still $450."),
+            (crate::Mode::Direct, "The budget is still $450."),
+            (crate::Mode::Professional, text),
+        ] {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Default::default()
+            };
+            assert_eq!(apply(text, opener_forms(&req, &[])), expected, "{mode:?}");
+        }
+        let alone = Request {
+            text: "I just wanted to let you know.".into(),
+            mode: crate::Mode::Friendly,
+            ..Default::default()
+        };
+        assert!(opener_forms(&alone, &[]).is_empty());
     }
 
     #[test]

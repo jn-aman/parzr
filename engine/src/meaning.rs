@@ -295,6 +295,8 @@ const FILLER: &[&str] = &[
     "anyways",
     "still",
     "even",
+    // Outside the size budget only: losing "again" is always rejected (keeps_meaning).
+    "again",
     "already",
     "hi",
     "hey",
@@ -332,7 +334,6 @@ const FILLER: &[&str] = &[
     "kindly",
     "appreciate",
     "appreciated",
-    "again",
     "quick",
     "quickly",
 ];
@@ -2135,6 +2136,25 @@ pub(crate) fn keeps_meaning(
     if wishes_well(output) && !source.to_lowercase().contains("hope") {
         return Err("adds a well-wish".into());
     }
+    // Nor a pleasantry the writer did not say ("Geynille, I'm so glad you're here.").
+    let plain = |t: &str| t.to_lowercase().replace('’', "'");
+    let (said, wrote) = (plain(source), plain(output));
+    if let Some(p) = [
+        "glad you're here",
+        "glad you are here",
+        "great to hear from you",
+        "nice to hear from you",
+        "good to hear from you",
+        "nice to meet you",
+        "pleasure to meet you",
+        "glad to hear from you",
+        "hope you're having",
+    ]
+    .iter()
+    .find(|p| wrote.contains(*p) && !said.contains(*p))
+    {
+        return Err(format!("adds “{p}”"));
+    }
     let opener = |t: &str| {
         let t = t.trim_start().to_lowercase();
         REPLY_OPENERS.iter().any(|o| t.starts_with(o))
@@ -2161,6 +2181,35 @@ pub(crate) fn keeps_meaning(
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
     if out_negations < src_negations {
         return Err("drops a negation".into());
+    }
+    // "again" says it happened before: "This is wrong again." is not "This is wrong." It may be
+    // said another way ("another mistake", "once more", "retest", "the fourth time").
+    let repeats = |w: &Word| w.surface == "again";
+    let again_said = |t: &str| {
+        let t = t.to_lowercase();
+        [
+            "again",
+            "another",
+            "once more",
+            "repeatedly",
+            "keeps",
+            "keep ",
+        ]
+        .iter()
+        .any(|p| t.contains(p))
+            || [
+                "second", "third", "fourth", "fifth", "2nd", "3rd", "4th", "5th",
+            ]
+            .iter()
+            .any(|n| t.contains(&format!("{n} time")))
+            || out.iter().any(|o| {
+                o.surface.strip_prefix("re").is_some_and(|rest| {
+                    rest.len() >= 3 && src.iter().any(|s| s.keys.iter().any(|k| k == rest))
+                })
+            })
+    };
+    if mode != Mode::Fix && src.iter().any(repeats) && !again_said(output) {
+        return Err("drops “again”".into());
     }
     // A word said the other way round may gain one "not": "broken" is "isn't working", "failed"
     // is "didn't pass", "rejected" is "not accepted" — the dropped word's opposite, negated.
@@ -2998,6 +3047,11 @@ mod tests {
                 "Per my last message, the deadline was Friday. Not Monday.",
                 "Per your last message, the deadline was Friday. Not Monday.",
             ),
+            (
+                Friendly,
+                "Geynille, I understand you are in charge of recruiting at the UofH.",
+                "Geynille I'm so glad you're here. I understand that you are in charge of recruiting at the UofH.",
+            ),
             // A negated opposite is not the same thing as the word it replaced dropping away.
             (Friendly, "The build failed.", "The build did not fail."),
             (Friendly, "Don't forget the meeting.", "Forget the meeting."),
@@ -3006,6 +3060,33 @@ mod tests {
             assert!(
                 keeps_meaning(mode, source, output, "", &[], &[]).is_err(),
                 "{mode:?}: {output}"
+            );
+        }
+    }
+
+    #[test]
+    fn again_is_kept_or_said_another_way() {
+        for mode in TONES {
+            let src = "This is wrong again. Fix it before the demo.";
+            assert!(
+                !ok(mode, src, "This is wrong. Fix it before the demo."),
+                "{mode:?}"
+            );
+            assert!(
+                ok(
+                    mode,
+                    src,
+                    "This is wrong again. Please fix it before the demo."
+                ),
+                "{mode:?}"
+            );
+            assert!(
+                ok(
+                    mode,
+                    "Your team broke the release again.",
+                    "Your team broke another release."
+                ),
+                "{mode:?}"
             );
         }
     }

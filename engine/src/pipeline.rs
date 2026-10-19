@@ -905,11 +905,28 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
             &current.protected_ranges,
         ))?;
     }
+    // A padded opener the model kept ("I wanted to take a moment to let you know that…") is
+    // said plainly (Friendly, Concise, Direct).
+    let current = document.request(req, &fenced, req.mode);
+    document.apply(&crate::tone_format::opener_forms(
+        &current,
+        &current.protected_ranges,
+    ))?;
     let current = document.request(req, &protected, Mode::Fix);
     let floor = crate::tone_format::floor(&current, &current.protected_ranges);
     if !floor.is_empty() {
         document.apply(&floor)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
+    }
+    // Direct asks for an action plainly ("Hey, can you send me the file?" is "Send me the
+    // file."): the model mostly keeps a polite request as it is.
+    if req.mode == Mode::Direct {
+        let current = document.request(req, &fenced, Mode::Fix);
+        let direct = crate::tone_format::direct_forms(&current, &current.protected_ranges);
+        if !direct.is_empty() {
+            document.apply(&direct)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+        }
     }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);
     let (text, source_map) = apply_edits(&req.text, &edits)?;
