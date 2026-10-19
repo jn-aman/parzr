@@ -54,7 +54,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs(); forgetWeb() }
+    static func forgetFocus() { verdicts = []; resolved = nil; fieldVerdicts = []; forgetDocs(); forgetWeb() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -88,9 +88,44 @@ enum AX {
     }
     static func automaticEligibility(_ element: AXUIElement) -> Compat.EditorEligibility {
         guard !isSecure(element) else { return .blocked }
-        return Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
-                                        valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
-                                        markerEditor: isMarkerEditor(element), search: isSearch(element))
+        let eligibility = Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
+                                                   valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
+                                                   markerEditor: isMarkerEditor(element), search: isSearch(element))
+        // Only a field that already qualifies is asked about: the rules can take it away (a one-time code box, a sign-in form), never add one.
+        return eligibility == .editor ? Compat.applying(hostVerdict(element), to: eligibility) : eligibility
+    }
+    private static var fieldVerdicts: [(element: AXUIElement, verdict: HostRules.Verdict, time: TimeInterval)] = []
+    /// What the host rules say about this field. Reads only names (labels, identifiers, DOM classes, the page URL), never the field's text;
+    /// remembered for as long as the secure-field verdict, or until focus moves.
+    static func hostVerdict(_ element: AXUIElement) -> HostRules.Verdict {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let known = fieldVerdicts.first(where: { now - $0.time < verdictLifetime && CFEqual($0.element, element) }) { return known.verdict }
+        let field = fieldContext(element)
+        let verdict = HostRules.shared.verdict(for: field)
+        fieldVerdicts = Array((fieldVerdicts.filter { now - $0.time < verdictLifetime } + [(element, verdict, now)]).suffix(16))
+        return verdict
+    }
+    static func fieldContext(_ element: AXUIElement) -> HostRules.Field {
+        let attributes = [kAXRoleAttribute, "AXPlaceholderValue", kAXDescriptionAttribute, kAXTitleAttribute, kAXIdentifierAttribute, "AXDOMIdentifier", "AXDOMClassList", kAXParentAttribute]
+        func names(_ values: [CFTypeRef?]) -> (labels: [String], classes: [String]) {
+            (values[1...5].compactMap { $0 as? String }.filter { !$0.isEmpty }, (values[6] as? [String] ?? []).prefix(16).map { $0 })
+        }
+        var pid: pid_t = 0
+        _ = AXUIElementGetPid(element, &pid)
+        let values = multiple(element, attributes), own = names(values)
+        var field = HostRules.Field(bundle: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, role: values[0] as? String, labels: own.labels, markers: own.classes)
+        var parent = values[7]
+        // Up to the page or window: their titles are page and document names, not this field's.
+        for _ in 0..<12 {
+            guard let next = parent, CFGetTypeID(next) == AXUIElementGetTypeID() else { break }
+            let current = next as! AXUIElement, values = multiple(current, attributes), role = values[0] as? String ?? ""
+            if role == "AXWebArea" { field.url = (get(current, "AXURL") as? URL)?.absoluteString; break }
+            if [kAXWindowRole, kAXApplicationRole].contains(role) { break }
+            let around = names(values)
+            if field.ancestors.count < 6 { field.ancestors.append(around.labels + around.classes) }
+            parent = values[7]
+        }
+        return field
     }
     static func isSecure(_ element: AXUIElement) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime

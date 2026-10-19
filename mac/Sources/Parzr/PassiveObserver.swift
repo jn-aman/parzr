@@ -37,7 +37,7 @@ final class PassiveObserver {
     }
     /// VS Code and Cursor are checked only after the user opts in (Apps settings).
     private func isExcluded(_ bundle: String) -> Bool {
-        Compat.isExcluded(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
+        Compat.isExcluded(bundle) || HostRules.shared.excludesApp(bundle) || (Compat.isVSCode(bundle) && !Preferences.shared.checkVSCode)
     }
     func installMonitors() {
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor) }

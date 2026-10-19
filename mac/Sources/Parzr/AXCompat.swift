@@ -95,6 +95,10 @@ enum Compat {
         }
         return role == "AXWebArea" ? .blocked : .ancestor
     }
+    /// The host rules and sensitive-field keywords can only take an editor away from automatic checking, never add one.
+    static func applying(_ verdict: HostRules.Verdict, to eligibility: EditorEligibility) -> EditorEligibility {
+        eligibility == .editor && verdict != .allowed ? .blocked : eligibility
+    }
     static func editableAncestor<Element>(_ focused: Element, eligibility: (Element) -> EditorEligibility, parent: (Element) -> Element?) -> Element? {
         var element = focused
         for _ in 0..<8 {
