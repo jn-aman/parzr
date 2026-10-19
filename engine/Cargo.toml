@@ -41,7 +41,11 @@ name = "parzr-lsp"
 path = "src/lsp.rs"
 
 [features]
-default = ["local-model"]
+default = ["local-model", "dev-overrides"]
+# PARZR_* environment overrides (models folder, model files, runtimes, tables file) for tests,
+# benchmarks and development. scripts/build.py builds the app's engine without it, so a shipped
+# engine ignores them (see src/overrides.rs).
+dev-overrides = []
 local-model = []
 baseline-harper = ["dep:harper-core"]
 # The Mac app bundle: the compiled tables ship once, as Contents/Resources/parzr-tables.dat,

@@ -7,22 +7,51 @@ extension ModelCenter {
     static let app = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard)
     /// One center per optional pack (`OptionalPack.all`), in Settings order; a pack this build does not pin is left out.
     static let optionalCenters: [ModelCenter] = OptionalPack.all.compactMap { ModelCenter.live($0, defaults: Preferences.selfTestDefaults ?? .standard) }
-    /// The slip check's pack (the typing-time word-choice check), downloaded after the essential pack is ready.
+    /// The slip check's pack (the typing-time word-choice check), downloaded after the essential pack while Slip check is on.
     static var slips: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.slips } }
-    /// The tone check's pack, downloaded only once the user turns Tone check on. PARZR_TONE_DIR points at a local copy instead.
+    /// The tone check's pack, downloaded after the essential pack while Tone check is on. PARZR_TONE_DIR points at a local copy instead.
     static var tone: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.tone } }
     /// A normal launch may download (never a self test, a snapshot or `swift test`).
     static var downloadsAllowed: Bool { !Preferences.isSelfTest && !Preferences.underXCTest && !CommandLine.arguments.contains("--health-check") }
 }
 
-/// Keeps the tone classifier in step with the setting: on downloads the pack (if needed) and loads it, off unloads it
-/// (the files stay until removed).
+/// Each optional check's switch in Settings, Writing, and the download policy that follows it. A switched-on check
+/// downloads its pack after the essential pack (never after the user's Remove); switching a check on again asks for a
+/// missing pack; switching it off only stops the check, and its files stay until Remove in Settings, Models.
+@MainActor
+enum OptionalChecks {
+    /// Whether the check that uses `pack` is switched on.
+    static func isOn(_ pack: OptionalPack?, preferences: Preferences = .shared) -> Bool {
+        switch pack?.role {
+        case OptionalPack.slips.role?: preferences.slipCheck
+        case OptionalPack.tone.role?: preferences.toneCheck
+        default: false
+        }
+    }
+    /// After the essential pack is ready (and at launch once it is): every switched-on automatic pack still missing.
+    static func startAutomatic(_ centers: [ModelCenter] = ModelCenter.optionalCenters, essentialReady: Bool = ModelCenter.app.isReady) {
+        guard ModelCenter.downloadsAllowed else { return }
+        for center in centers { center.startAutomatically(switchedOn: isOn(center.optional), essentialReady: essentialReady) }
+    }
+    /// The user flipped a check's switch.
+    static func switched(_ pack: OptionalPack, on: Bool) {
+        let center = ModelCenter.optionalCenters.first { $0.optional == pack }
+        if on, ModelCenter.downloadsAllowed { center?.checkSwitchedOn(essentialReady: ModelCenter.app.isReady) }
+        switch pack.role {
+        case OptionalPack.tone.role: if on { ToneModel.load() } else { Task { await ToneChecker.shared.unload() } }
+        case OptionalPack.slips.role: if on, center?.isReady == true, Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } }
+        default: break
+        }
+    }
+}
+
+/// Loads the tone classifier from the installed tone pack while Tone check is on, and says in Settings where it stands.
 @MainActor
 enum ToneModel {
     static var center: ModelCenter? { .tone }
     /// The installed classifier folder, or PARZR_TONE_DIR in development.
     static func folder() -> URL? {
-        if let custom = ProcessInfo.processInfo.environment["PARZR_TONE_DIR"], !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
+        if let custom = DevOverrides.value("PARZR_TONE_DIR") { return URL(fileURLWithPath: custom, isDirectory: true) }
         guard let center, center.state == .ready, let pack = center.pack, let store = center.store, let relative = pack.provides[OptionalPack.tone.role] else { return nil }
         return store.folder(pack).appendingPathComponent(relative, isDirectory: true)
     }
@@ -30,21 +59,13 @@ enum ToneModel {
         guard Preferences.shared.toneCheck, let folder = folder() else { return }
         Task.detached(priority: .utility) { try? await ToneChecker.shared.load(folder: folder) }
     }
-    /// `userInitiated`: the user just switched it on, which also clears an earlier Remove of the pack.
-    static func apply(_ enabled: Bool, userInitiated: Bool) {
-        guard enabled else { Task { await ToneChecker.shared.unload() }; return }
-        guard let center else { return }
-        center.refresh()
-        if center.isReady { load(); return }
-        guard ModelCenter.downloadsAllowed else { return }
-        if userInitiated { center.start(userInitiated: true) } else { center.startIfNeeded() }
-    }
     /// One line for Settings.
     static var status: String {
         guard let center else { return "This copy of Parzr has no tone model." }
         return switch center.state {
         case .ready, .development: "Checks a selection when you press your shortcut, and the playground as you type. It runs entirely on your Mac."
-        case .missing: Preferences.shared.toneCheck ? "Getting the tone model ready (\(center.sizeText))." : "Uses a small extra model (\(center.sizeText)), downloaded when you turn this on."
+        case .missing where center.removedByUser: "Its model (\(center.sizeText)) was removed. Turn this off and on again, or download it in Settings, Models."
+        case .missing: Preferences.shared.toneCheck ? "Uses a small extra model (\(center.sizeText)), downloaded after the grammar models." : "Uses a small extra model (\(center.sizeText)), downloaded when this is on."
         default: center.statusLine
         }
     }
@@ -87,7 +108,7 @@ struct ModelStatus: View {
         case .downloading(_, let total): compact ? "\(center.feature) is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
         case .verifying: compact ? "\(center.feature) · checking the download" : "Checking the download…"
         case .missing where center.removedByUser: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
-        case .missing where center.optional?.automatic == false: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
+        case .missing where center.optional?.automatic == false || (center.optional != nil && !OptionalChecks.isOn(center.optional)): compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
         case .missing: compact ? "\(center.feature) downloads soon" : "Waiting to download"
         case .failed: compact ? "\(center.feature) isn't downloaded" : "Download paused"
         }
@@ -97,7 +118,7 @@ struct ModelStatus: View {
         case .ready: "\(center.sizeText) on this Mac, each file checked against its pinned SHA-256."
         case .development: center.statusLine
         case .downloading, .verifying: nil
-        case .missing where center.optional != nil: center.removedByUser ? center.optional?.removedNote : center.optional?.missingNote
+        case .missing where center.optional != nil: center.removedByUser ? center.optional?.removedNote : OptionalChecks.isOn(center.optional) ? center.optional?.missingNote : center.optional?.switchedOffNote
         case .missing: center.removedByUser ? "Parzr checks with its rules only until you download it." : "Parzr checks with its rules until it arrives."
         case .failed(let failure): failure.message
         }
@@ -114,6 +135,7 @@ struct ModelStatus: View {
         switch center.state {
         case .downloading: NativeButton(title: "Stop", kind: .utility, label: "Stop the model download", action: { center.cancel() }).fixedSize()
         case .missing: NativeButton(title: "Download", kind: compact ? .secondary : .primary, label: "Download the models", action: { center.start(userInitiated: true) }).fixedSize()
+        case .failed(.changedOnDisk): NativeButton(title: "Download again", label: "Download the models again", action: { center.start(userInitiated: true) }).fixedSize()
         case .failed: NativeButton(title: "Try again", label: "Try the model download again", action: { center.start(userInitiated: true) }).fixedSize()
         case .ready, .verifying, .development: EmptyView()
         }

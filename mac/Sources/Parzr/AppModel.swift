@@ -70,13 +70,13 @@ final class AppModel: ObservableObject {
     }
     func select(_ snapshot: SelectionSnapshot) {
         guard snapshot.checkingEnabled else { clearSession(); return }
-        selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
+        selectionHint = false; self.snapshot = snapshot; sourceReportable = snapshot.reportable; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = Preferences.shared.defaultMode; status = nil; analyze()
     }
     func select(_ snapshot: SelectionSnapshot, result: RewriteResult, focused: WritingEdit?) {
         guard snapshot.checkingEnabled else { clearSession(); return }
         analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1
-        selectionHint = false; self.snapshot = snapshot; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
+        selectionHint = false; self.snapshot = snapshot; sourceReportable = snapshot.reportable; source = snapshot.text; sourceApp = snapshot.app.localizedName ?? "Your editor"
         inspector = snapshot.metadata(); mode = .fix; self.result = result
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
         provisional = false; busy = false; engineReady = true; error = nil; status = nil
@@ -85,7 +85,7 @@ final class AppModel: ObservableObject {
     }
     func playground(_ text: String, debounce: Bool = false) {
         let old = source
-        snapshot = nil; source = text; sourceApp = "Playground"; status = nil
+        snapshot = nil; sourceReportable = true; source = text; sourceApp = "Playground"; status = nil
         if debounce, text != old { carryOver(from: old) }
         analyze(debounce: debounce)
     }
@@ -127,7 +127,7 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 if debounce { slow = Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); if !Task.isCancelled, current == generation { busy = true } } }
                 let request = EngineRequest(text: original, mode: requestMode, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual, slips: Preferences.shared.slipCheck)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
                 let result = KnownNames.screened(try await engine.rewrite(request), from: original)
@@ -158,7 +158,7 @@ final class AppModel: ObservableObject {
             do {
                 try checkingSnapshot?.validateCheckingEligibility()
                 let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
-                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
+                                            dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual, slips: Preferences.shared.slipCheck)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 written = KnownNames.screened(try await WritingEngine.shared.rewrite(request), from: original)
             } catch {}
@@ -214,12 +214,16 @@ final class AppModel: ObservableObject {
     }
     /// The app the text belongs to: the editor's, or Parzr's own for its writing space.
     private var reportApp: String? { snapshot?.app.bundleIdentifier ?? Bundle.main.bundleIdentifier }
-    /// Reports what the writer did with `edits` of the current text. `text` overrides the source (the writing space's draft can be a keystroke ahead).
-    func report(_ edits: [WritingEdit], _ action: ReportAction, text: String? = nil) {
-        guard reports else { return }
-        Reports.record(edits, source: text ?? source, action: action, mode: mode, app: reportApp)
+    /// "Report wrong suggestion" for `edits` of the current text: the only path that sends a report. `text` overrides the
+    /// source (the writing space's draft can be a keystroke ahead).
+    func report(_ edits: [WritingEdit], text: String? = nil) {
+        guard canReport else { return }
+        Reports.record(edits, source: text ?? source, mode: mode, app: reportApp)
     }
-    var canReport: Bool { reports && Reports.available }
+    /// Whether the current text may be reported from: Parzr's own writing space, or another app's field that passed
+    /// `SelectionSnapshot.reportable` at capture. Set with the text, so it survives the snapshot being cleared after an apply.
+    private(set) var sourceReportable = false
+    var canReport: Bool { reports && sourceReportable && (snapshot?.reportable ?? true) && Reports.available }
     func copy() { guard !busy, !provisional, result != nil, snapshot?.checkingEnabled != false else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
@@ -299,7 +303,7 @@ final class AppModel: ObservableObject {
             } catch { transaction.restore(); self.clipboard = nil; failed(error, yielded: yielded) }
         }
     }
-    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); toneFlag = nil; suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+    func clearSession() { sourceReportable = false; analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); toneFlag = nil; suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
 }
 
 /// The rewrite a Fix check offers: its tone, the text it was written for, and the result once written (nil when it failed).

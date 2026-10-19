@@ -1,0 +1,13 @@
+{
+  "name": "parzr-site",
+  "private": true,
+  "description": "parzr.app: static site deployed as Cloudflare Workers static assets; wrangler is pinned here and locked in package-lock.json",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

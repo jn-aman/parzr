@@ -494,15 +494,24 @@ impl Scorers {
 /// The rules' (and grammar model's) plan plus the swaps the language models find, which never touch
 /// an edit of theirs, a protected range, a name or a user dictionary word.
 pub fn combine(req: &Request, protected: &[TextRange], plan: Vec<Edit>) -> Vec<Edit> {
-    let scorers = Scorers {
-        slips: crate::slips::available().then_some(crate::slips::scores as Scorer),
+    let scorers = scorers_for(
+        req,
+        crate::slips::available(),
         // Before the model pack is downloaded there is nothing to wait for: no pending follow-ups.
-        model: crate::model::model_available().then_some(native as Scorer),
-    };
+        crate::model::model_available(),
+    );
     if scorers.slips.is_none() && scorers.model.is_none() {
         return plan;
     }
     combine_using(req, protected, plan, scorers)
+}
+/// The scorers a request may use: the slip checker only when it is installed and the request has not
+/// switched it off (`Request::slips`); the writing model whenever it is installed.
+fn scorers_for(req: &Request, slips_installed: bool, model_installed: bool) -> Scorers {
+    Scorers {
+        slips: (req.slips && slips_installed).then_some(crate::slips::scores as Scorer),
+        model: model_installed.then_some(native as Scorer),
+    }
 }
 fn found(swaps: &[Swap], gains: &[Option<f64>], d: Decision, rule: &'static str) -> Option<Found> {
     choose_with(swaps, gains, d).map(|(swap, gain)| Found { swap, gain, rule })
@@ -623,13 +632,24 @@ pub fn combine_using(
     plan: Vec<Edit>,
     scorers: Scorers,
 ) -> Vec<Edit> {
-    let text = req.text.as_str();
-    let started = Instant::now();
     let total = if req.deep {
         EXPLICIT_BUDGET_MS
     } else {
         TYPING_BUDGET_MS
     };
+    combine_within(req, protected, plan, scorers, total)
+}
+/// `combine_using` with a budget of `total` ms for the whole check (tests shrink it to simulate a
+/// cold start that spends it before any sentence is scored).
+fn combine_within(
+    req: &Request,
+    protected: &[TextRange],
+    plan: Vec<Edit>,
+    scorers: Scorers,
+    total: u32,
+) -> Vec<Edit> {
+    let text = req.text.as_str();
+    let started = Instant::now();
     // Everything that must stay, as UTF-16 ranges of the request.
     let mut shielded: Vec<TextRange> = protected.to_vec();
     // Every name candidate, even a guess from context ("will", "mark" written lowercase).
@@ -661,10 +681,6 @@ pub fn combine_using(
         let verdict = match cached(&scorers.key(req.deep, window)) {
             Some((hit, complete)) if complete || !req.deep => hit,
             _ => {
-                let spent = started.elapsed().as_millis() as u32;
-                if spent >= total {
-                    continue;
-                }
                 let swaps: Vec<Swap> = sentence_swaps(piece, &[])
                     .into_iter()
                     .map(|mut w| {
@@ -675,6 +691,15 @@ pub fn combine_using(
                     .collect();
                 if swaps.is_empty() {
                     remember(&scorers.key(req.deep, window), None, true);
+                    continue;
+                }
+                let spent = started.elapsed().as_millis() as u32;
+                if spent >= total {
+                    // The budget went before this sentence was scored (a cold start loading the word
+                    // lists, or earlier sentences): a typing check asks the app to look again.
+                    if !req.deep {
+                        PENDING.with(|p| p.set(true));
+                    }
                     continue;
                 }
                 let verdict = if req.deep {
@@ -960,6 +985,24 @@ mod tests {
         found.map(|f| (f.swap.candidate, f.rule, complete))
     }
     #[test]
+    fn a_request_with_the_slip_check_off_never_asks_the_slip_checker() {
+        let on = Request::default();
+        assert!(on.slips, "on unless the request says otherwise");
+        assert!(scorers_for(&on, true, false).slips.is_some());
+        assert!(
+            scorers_for(&on, false, false).slips.is_none(),
+            "not installed: nothing to ask"
+        );
+        let off = Request {
+            slips: false,
+            ..Request::default()
+        };
+        let scorers = scorers_for(&off, true, true);
+        assert!(scorers.slips.is_none(), "switched off: never asked");
+        assert!(scorers.model.is_some(), "the writing model is not affected");
+        assert!(scorers_for(&off, true, false).slips.is_none());
+    }
+    #[test]
     fn typing_uses_the_slip_checker_and_explicit_checks_let_the_writing_model_confirm_it() {
         let both = Scorers {
             slips: Some(slips_fake),
@@ -1143,8 +1186,11 @@ mod tests {
     }
     #[test]
     fn typing_never_waits_past_its_budget_and_the_answer_comes_from_the_cache() {
+        // The scorer takes far longer than the typing budget (80 ms), so a check that waited for it would take
+        // over SLOW; one that kept to its budget returns long before, however busy the machine running the tests.
+        const SLOW: Duration = Duration::from_millis(1500);
         fn slow(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
-            std::thread::sleep(Duration::from_millis(300));
+            std::thread::sleep(SLOW);
             fake(sentence, swaps, how)
         }
         let req = Request {
@@ -1160,9 +1206,13 @@ mod tests {
         combine_with(&warm, &[], vec![], fake);
         let started = Instant::now();
         assert!(combine_with(&req, &[], vec![], slow).is_empty());
-        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(
+            started.elapsed() < SLOW / 2,
+            "typing waited {:?} for the scorer",
+            started.elapsed()
+        );
         // The job finishes in the background; a later check reads its verdict.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(10);
         let mut edits = vec![];
         while edits.is_empty() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(50));
@@ -1176,12 +1226,69 @@ mod tests {
     /// pending, a follow-up reads the verdict from the cache, and an explicit check of the same
     /// text scores it again with the writing model confirming.
     #[test]
+    fn a_cold_typing_check_that_spends_its_budget_asks_for_a_follow_up() {
+        static SCORED: AtomicBool = AtomicBool::new(false);
+        fn counted(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
+            SCORED.store(true, Ordering::SeqCst);
+            slips_fake(sentence, swaps, how)
+        }
+        let scorers = Scorers {
+            slips: Some(counted),
+            model: None,
+        };
+        let req = Request {
+            text: "Cold start here. I hat the wait.".into(),
+            gec: true,
+            ..Request::default()
+        };
+        // A cold start: the budget is gone before the first sentence is scored (0 ms left).
+        take_pending();
+        assert!(combine_within(&req, &[], vec![], scorers, 0).is_empty());
+        assert!(
+            take_pending(),
+            "a skipped sentence asks the app to look again"
+        );
+        assert!(!SCORED.load(Ordering::SeqCst));
+        // The app's follow-up, with the usual budget, scores it and finds the slip.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut edits = vec![];
+        while edits.is_empty() && Instant::now() < deadline {
+            take_pending();
+            edits = combine_using(&req, &[], vec![], scorers);
+            if edits.is_empty() {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        assert_eq!(
+            edits
+                .iter()
+                .map(|e| (
+                    e.original.as_str(),
+                    e.replacement.as_str(),
+                    e.rule_id.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            [("hat", "hate", SLIPS_RULE)]
+        );
+        assert!(!take_pending());
+        // A sentence with nothing to swap never asks for a follow-up, however late it comes.
+        let plain = Request {
+            text: "Zzzq qqzz.".into(),
+            gec: true,
+            ..Request::default()
+        };
+        assert!(combine_within(&plain, &[], vec![], scorers, 0).is_empty());
+        assert!(!take_pending());
+    }
+    #[test]
     fn typing_scores_slips_in_the_background_and_a_follow_up_reads_the_verdict() {
         static MODEL_ASKED: AtomicBool = AtomicBool::new(false);
         static SLIPS_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        // Far over the typing budget (80 ms): a check that waited for the job would take over SLOW.
+        const SLOW: Duration = Duration::from_millis(1500);
         fn slow_slips(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
             SLIPS_RUNS.fetch_add(1, Ordering::SeqCst);
-            std::thread::sleep(Duration::from_millis(250));
+            std::thread::sleep(SLOW);
             slips_fake(sentence, swaps, how)
         }
         fn watched_model(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
@@ -1205,12 +1312,14 @@ mod tests {
         let first = combine_using(&req, &[], vec![], scorers);
         assert!(first.is_empty());
         assert!(
-            started.elapsed() < Duration::from_millis(200),
-            "typing waits for its budget only"
+            started.elapsed() < SLOW / 2,
+            "typing waits for its budget only, not the {:?} job (took {:?})",
+            SLOW,
+            started.elapsed()
         );
         assert!(take_pending(), "the app is told to look again");
         // Follow-ups (the app's come 900 ms apart) find the verdict once the job is done.
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(10);
         let mut edits = vec![];
         while edits.is_empty() && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(100));

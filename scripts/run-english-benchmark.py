@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run frozen synthetic fixtures against the packaged engine and native NLP path."""
+"""Run frozen synthetic fixtures against the packaged engine and native NLP path.
+
+--engine/--library measure a development build (engine/target/release) instead of the packaged app; --paths picks the
+runs (rust-cli, native-nlp or both). --require-exact makes the run exit 1 unless every path reproduces every reference
+exactly and leaves every clean control unchanged (CI's English gate: both sets are expected at 100%).
+"""
 import argparse
 import collections
 import csv
@@ -12,8 +17,12 @@ import pathlib
 import platform
 import statistics
 import subprocess
+import sys
 import time
 import zipfile
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import quality_gates  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -75,9 +84,10 @@ def summarize(rows):
 
 
 def report(output, runs, metadata, corpus, controls):
-    sample_count = sum(r["kind"] == "corrupted_paragraph" for r in runs["native-nlp"])
-    clean_count = sum(r["kind"] == "clean_control" for r in runs["native-nlp"])
-    base_count = len({r.get("base_id") for r in runs["native-nlp"] if r.get("base_id")})
+    main = "native-nlp" if "native-nlp" in runs else next(iter(runs))
+    sample_count = sum(r["kind"] == "corrupted_paragraph" for r in runs[main])
+    clean_count = sum(r["kind"] == "clean_control" for r in runs[main])
+    base_count = len({r.get("base_id") for r in runs[main] if r.get("base_id")})
     summary = {"metadata": metadata, "runs": {name: summarize(rows) for name, rows in runs.items()}}
     for name, rows in runs.items():
         summary["runs"][name]["by_family"] = {key: summarize([r for r in rows if r["family"] == key and r["kind"] != "clean_control"]) for key in sorted({r["family"] for r in rows})}
@@ -93,12 +103,12 @@ def report(output, runs, metadata, corpus, controls):
     for name, s in summary["runs"].items():
         c = s["counts"]
         lines.append(f"| {name} | {c.get('exact_match', 0)} | {c.get('changed_nonexact', 0)} | {c.get('no_suggestions', 0)} | {c.get('execution_error', 0)} | {c.get('clean_preserved', 0)} | {s['median_ms']} | {s['p95_ms']} |")
-    lines += ["", "Native NLP uses the application's actual WritingEngine + Apple NaturalLanguage source with the packaged Rust dylib. This measures analysis and edit plans; it does not measure editor highlighting, clicks, permissions, or Undo. The native harness runs separately without opening or closing the user's app.", "", "## Native NLP by error combination", "", "| Combination | Exact | Changed, nonexact | No suggestions | Errors |", "|---|---:|---:|---:|---:|"]
-    for key, s in summary["runs"]["native-nlp"]["by_combination"].items():
+    lines += ["", f"Tables below: {main}.", "Native NLP uses the application's actual WritingEngine + Apple NaturalLanguage source with the packaged Rust dylib. This measures analysis and edit plans; it does not measure editor highlighting, clicks, permissions, or Undo. The native harness runs separately without opening or closing the user's app.", "", "## Native NLP by error combination", "", "| Combination | Exact | Changed, nonexact | No suggestions | Errors |", "|---|---:|---:|---:|---:|"]
+    for key, s in summary["runs"][main]["by_combination"].items():
         c = s["counts"]
         lines.append(f"| {key} | {c.get('exact_match',0)} | {c.get('changed_nonexact',0)} | {c.get('no_suggestions',0)} | {c.get('execution_error',0)} |")
     lines += ["", "## Native NLP by grammar family", "", "Each family contains 50 corrupted paragraphs; grammar and non-grammar combinations are both included.", "", "| Family | Exact | Changed, nonexact | No suggestions |", "|---|---:|---:|---:|"]
-    for key, s in summary["runs"]["native-nlp"]["by_family"].items():
+    for key, s in summary["runs"][main]["by_family"].items():
         c = s["counts"]
         lines.append(f"| {key} | {c.get('exact_match',0)} | {c.get('changed_nonexact',0)} | {c.get('no_suggestions',0)} |")
     lines += ["", "## Reproducibility", "", "```json", json.dumps(metadata, indent=2), "```", "", "Full per-case input, expected correction, actual output and edits are in each results JSONL; CSV contains every input/reference/output. The HTML report embeds both runs and works offline."]
@@ -111,12 +121,12 @@ body{background:#171b1c;color:#edf2ee;font:15px/1.6 system-ui;margin:0}main{max-
 const data=PAYLOAD;let page=0;const el=id=>document.getElementById(id);const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function render(){const query=el('search').value.toLowerCase();const rows=data[el('run').value].filter(r=>(!el('status').value||r.status===el('status').value)&&[r.id,r.family,r.input,r.actual].some(s=>s.toLowerCase().includes(query)));const pages=Math.max(1,Math.ceil(rows.length/25));page=Math.min(page,pages-1);el('count').textContent=rows.length+' matching cases';el('page').textContent=(page+1)+' / '+pages;el('prev').disabled=page===0;el('next').disabled=page===pages-1;el('cases').innerHTML=rows.slice(page*25,page*25+25).map(r=>'<article><h2>'+esc(r.id)+' · '+esc(r.status)+'</h2><small>'+esc(r.family)+' / '+esc(r.combination||'clean control')+' · '+r.wall_ms.toFixed(2)+' ms · '+r.edits.length+' edits</small><dl><dt>Input</dt><dd>'+esc(r.input)+'</dd><dt>Reference</dt><dd>'+esc(r.expected)+'</dd><dt>Actual</dt><dd>'+esc(r.actual)+'</dd></dl><details><summary>Returned edits'+(r.error?' / error':'')+'</summary><pre>'+esc(JSON.stringify(r.error||r.edits,null,2))+'</pre></details></article>').join('')}
 ['run','status','search'].forEach(id=>el(id).addEventListener('input',()=>{page=0;render()}));el('prev').onclick=()=>{page--;render()};el('next').onclick=()=>{page++;render()};render();</script></html>'''
-    (output / "report.html").write_text(page.replace("Parzr / 1,000 English challenges", f"Parzr / {sample_count:,} English challenges").replace("100 base paragraphs × 10 combinations, plus 100 clean controls.", f"{base_count} base paragraphs × 10 combinations, plus {clean_count} clean controls.").replace("HEADER", header).replace("PAYLOAD", payload))
-    corrupted = [r for r in runs["native-nlp"] if r["kind"] == "corrupted_paragraph"]
+    (output / "report.html").write_text(page.replace("Parzr / 1,000 English challenges", f"Parzr / {sample_count:,} English challenges").replace("100 base paragraphs × 10 combinations, plus 100 clean controls.", f"{base_count} base paragraphs × 10 combinations, plus {clean_count} clean controls.").replace("<option>native-nlp</option><option>rust-cli</option>", "".join(f"<option>{name}</option>" for name in runs)).replace("HEADER", header).replace("PAYLOAD", payload))
+    corrupted = [r for r in runs[main] if r["kind"] == "corrupted_paragraph"]
     (output / f"{sample_count}-wrong-paragraphs.txt").write_text("\n\n".join(f"{i}. [{r['id']}] {r['family']} / {r['combination']}\n{r['input']}" for i, r in enumerate(corrupted, 1)) + "\n")
     (output / f"{sample_count}-corrections-and-results.txt").write_text("\n\n".join(f"{i}. [{r['id']}] {r['status']}\nINPUT: {r['input']}\nREFERENCE: {r['expected']}\nPARZR: {r['actual']}" for i, r in enumerate(corrupted, 1)) + "\n")
     with zipfile.ZipFile(output / f"parzr-{sample_count}-tests-and-results.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for name in [f"{sample_count}-wrong-paragraphs.txt", f"{sample_count}-corrections-and-results.txt", "native-nlp-results.csv", "native-nlp-results.jsonl", "rust-cli-results.csv", "rust-cli-results.jsonl", "summary.json", "report.md", "report.html"]:
+        for name in [f"{sample_count}-wrong-paragraphs.txt", f"{sample_count}-corrections-and-results.txt", *(f"{run}-results.{ext}" for run in runs for ext in ("csv", "jsonl")), "summary.json", "report.md", "report.html"]:
             archive.write(output / name, name)
         for path in [corpus, controls, corpus.with_name(corpus.stem + "-manifest.json")]:
             if path.exists(): archive.write(path, f"corpus/{path.name}")
@@ -129,7 +139,13 @@ def main():
     parser.add_argument("--output", type=pathlib.Path, default=ROOT / "dist/qa/english-1000")
     parser.add_argument("--corpus", type=pathlib.Path, default=ROOT / "benchmarks/english-1000.jsonl")
     parser.add_argument("--controls", type=pathlib.Path, default=ROOT / "benchmarks/english-100-clean.jsonl")
+    parser.add_argument("--engine", type=pathlib.Path, help="the parzr-engine CLI (default: the app's)")
+    parser.add_argument("--library", type=pathlib.Path, help="libparzr_engine.dylib for the native path (default: the app's)")
+    parser.add_argument("--paths", default="rust-cli,native-nlp", help="rust-cli, native-nlp or both (comma-separated)")
+    parser.add_argument("--require-exact", action="store_true", help="exit 1 below 100%% exact corrections or 100%% clean controls preserved")
     args = parser.parse_args()
+    paths = args.paths.split(",")
+    assert paths and set(paths) <= {"rust-cli", "native-nlp"}, args.paths
     args.output.mkdir(parents=True, exist_ok=True)
     bad, clean = args.corpus, args.controls
     cases = read_jsonl(bad) + read_jsonl(clean)
@@ -137,40 +153,58 @@ def main():
     for case in cases:
         if case["kind"] != "clean_control":
             validate_edits(case["input"], {"text": case["expected"], "edits": case["expected_edits"]})
-    engine = args.app / "Contents/MacOS/parzr-engine"
-    library = args.app / "Contents/Frameworks/libparzr_engine.dylib"
+    engine = args.engine or args.app / "Contents/MacOS/parzr-engine"
+    library = args.library or args.app / "Contents/Frameworks/libparzr_engine.dylib"
     sources = [ROOT / "mac/Sources/ParzrCore/Models.swift", ROOT / "mac/Sources/ParzrCore/WritingEngine.swift", ROOT / "mac/Sources/ParzrCore/LinguisticHints.swift", ROOT / "scripts/benchmark-native.swift"]
     harness = args.output / "native-benchmark"
-    subprocess.run(["swiftc", "-O", "-parse-as-library", *map(str, sources), "-o", str(harness)], check=True)
+    if "native-nlp" in paths:
+        subprocess.run(["swiftc", "-O", "-D", "PARZR_QA", "-parse-as-library", *map(str, sources), "-o", str(harness)], check=True)
     combined = args.output / "inputs.jsonl"
     combined.write_text("".join(json.dumps(c, ensure_ascii=False) + "\n" for c in cases))
     runs, started = {}, time.time()
-    with subprocess.Popen([str(engine)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as process:
-        records = []
-        for index, case in enumerate(cases):
-            start = time.perf_counter()
-            process.stdin.write(json.dumps({"text": case["input"], "mode": "fix", "dictionary": [], "dialect": "american", "sentence_start": True}) + "\n")
-            process.stdin.flush()
-            result = json.loads(process.stdout.readline())
-            record = {"id": case["id"], "wall_ms": (time.perf_counter() - start) * 1000}
-            record.update({"error": result["error"]} if "error" in result else {"result": result})
-            records.append(record)
-            if (index + 1) % 100 == 0:
-                print(f"Packaged Rust engine: {index + 1}/{len(cases)}", flush=True)
-        process.stdin.close()
-        assert process.wait() == 0
-    runs["rust-cli"] = collect(cases, records)
-    environment = os.environ.copy()
-    environment["PARZR_ENGINE_PATH"] = str(library.resolve())
-    print("Running application NLP path...", flush=True)
-    with (args.output / "native-raw.jsonl").open("w") as stream:
-        subprocess.run([str(harness), str(combined)], env=environment, stdout=stream, check=True)
-    runs["native-nlp"] = collect(cases, read_jsonl(args.output / "native-raw.jsonl"))
-    metadata = {"utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "platform": platform.platform(), "mode": "fix", "dialect": "american", "dictionary": [], "corpus_sha256": sha(bad), "clean_controls_sha256": sha(clean), "packaged_engine_sha256": sha(engine), "packaged_library_sha256": sha(library), "native_sources_sha256": {str(p.relative_to(ROOT)): sha(p) for p in sources}, "engine_versions": sorted({r["version"] for rows in runs.values() for r in rows if r["version"]}), "total_seconds": round(time.time() - started, 2)}
+    if "rust-cli" in paths:
+        with subprocess.Popen([str(engine)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=quality_gates.engine_env()) as process:
+            records = []
+            for index, case in enumerate(cases):
+                start = time.perf_counter()
+                process.stdin.write(json.dumps({"text": case["input"], "mode": "fix", "dictionary": [], "dialect": "american", "sentence_start": True}) + "\n")
+                process.stdin.flush()
+                result = json.loads(process.stdout.readline())
+                record = {"id": case["id"], "wall_ms": (time.perf_counter() - start) * 1000}
+                record.update({"error": result["error"]} if "error" in result else {"result": result})
+                records.append(record)
+                if (index + 1) % 500 == 0:
+                    print(f"Rust engine: {index + 1}/{len(cases)}", flush=True)
+            process.stdin.close()
+            assert process.wait() == 0
+        runs["rust-cli"] = collect(cases, records)
+    if "native-nlp" in paths:
+        environment = quality_gates.engine_env()
+        environment["PARZR_ENGINE_PATH"] = str(library.resolve())
+        print("Running application NLP path...", flush=True)
+        with (args.output / "native-raw.jsonl").open("w") as stream:
+            subprocess.run([str(harness), str(combined)], env=environment, stdout=stream, check=True)
+        runs["native-nlp"] = collect(cases, read_jsonl(args.output / "native-raw.jsonl"))
+    metadata = {"utc": datetime.datetime.now(datetime.timezone.utc).isoformat(), "platform": platform.platform(), "mode": "fix", "dialect": "american", "dictionary": [], "corpus_sha256": sha(bad), "clean_controls_sha256": sha(clean), "packaged_engine_sha256": sha(engine) if "rust-cli" in paths else None, "packaged_library_sha256": sha(library) if "native-nlp" in paths else None, "native_sources_sha256": {str(p.relative_to(ROOT)): sha(p) for p in sources}, "engine_versions": sorted({r["version"] for rows in runs.values() for r in rows if r["version"]}), "total_seconds": round(time.time() - started, 2)}
     summary = report(args.output, runs, metadata, bad, clean)
     for name, s in summary["runs"].items():
         print(name, json.dumps({k: v for k, v in s.items() if not k.startswith("by_")}), flush=True)
     print(f"Full results: {args.output / 'report.html'}")
+    if args.require_exact:
+        corrupted = sum(c["kind"] != "clean_control" for c in cases)
+        controls = len(cases) - corrupted
+        failures = []
+        for name, rows in runs.items():
+            counts = summary["runs"][name]["counts"]
+            if counts.get("exact_match", 0) != corrupted or counts.get("clean_preserved", 0) != controls:
+                bad_rows = [r for r in rows if r["status"] not in ("exact_match", "clean_preserved")]
+                failures.append(f"{name}: {counts.get('exact_match', 0)}/{corrupted} exact, {counts.get('clean_preserved', 0)}/{controls} clean controls kept; "
+                                + ", ".join(f"{r['id']} ({r['status']})" for r in bad_rows[:20]) + (" ..." if len(bad_rows) > 20 else ""))
+        for failure in failures:
+            print(f"ENGLISH GATE FAILED ({args.corpus.name}): {failure}", file=sys.stderr)
+        if failures:
+            sys.exit(1)
+        print(f"English gate passed: {', '.join(runs)} exact on all {corrupted} paragraphs and all {controls} clean controls kept.")
 
 
 if __name__ == "__main__":

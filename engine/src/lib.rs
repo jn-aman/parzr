@@ -22,6 +22,7 @@ mod model;
 mod morphology;
 mod names;
 #[cfg_attr(not(feature = "local-model"), allow(dead_code))]
+mod overrides;
 pub mod packs;
 mod pipeline;
 mod punctuation;
@@ -106,6 +107,11 @@ pub struct Request {
     /// with one fitting emoji. Other modes and apps never get one.
     #[serde(default)]
     pub casual: bool,
+    /// Use the typing-time slip checker (the optional slip pack's masked language model) when it is
+    /// on this Mac. The app sends false while the user has switched the slip check off; clients that
+    /// predate the switch (the browser host, the LSP) leave it out and keep the default, on.
+    #[serde(default = "yes")]
+    pub slips: bool,
     /// Names and dictionary folded once per request and shared by every pass.
     #[serde(skip)]
     #[doc(hidden)]
@@ -141,6 +147,7 @@ impl Default for Request {
             deep: false,
             gec: false,
             casual: false,
+            slips: true,
             name_index: None,
         }
     }
@@ -196,6 +203,13 @@ pub extern "C" fn parzr_slips_warm() -> i32 {
         return 1;
     }
     0
+}
+
+/// The app holds the model packs (1) while it re-hashes them at launch and lets go (0) once they
+/// verified: until then no pack is used in this process, whatever its marker says.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_packs_hold(on: i32) {
+    packs::hold(on != 0);
 }
 
 /// The pinned model manifest compiled into this engine (`engine/models.json`), as JSON. The app
@@ -1632,6 +1646,18 @@ pub fn process_json(input: &str) -> String {
         Err(error) => serde_json::json!({"error":error}).to_string(),
     }
 }
+/// What a request that panicked answers: the process keeps serving the next one.
+pub const PANICKED: &str = r#"{"error":"The writing engine could not complete the request."}"#;
+/// Runs one request's handling and turns a panic into the `PANICKED` error, so one bad request
+/// never takes down a long-lived host (the browser host, the LSP, the stdin engine). The shared
+/// state a request touches tolerates a panic part-way: its locks recover from poisoning.
+pub fn guarded(handle: impl FnOnce() -> String) -> String {
+    catch_unwind(AssertUnwindSafe(handle)).unwrap_or_else(|_| PANICKED.into())
+}
+/// `process_json`, with a panic answered as an error instead of unwinding into the caller.
+pub fn process_json_guarded(input: &str) -> String {
+    guarded(|| process_json(input))
+}
 /// # Safety
 /// `input` must point to a valid NUL-terminated UTF-8 string alive for this call.
 /// Free the returned owned string exactly once with `parzr_string_free`.
@@ -1640,14 +1666,13 @@ pub unsafe extern "C" fn parzr_rewrite_json(input: *const c_char) -> *mut c_char
     if input.is_null() {
         return std::ptr::null_mut();
     }
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = guarded(|| {
         // SAFETY: the C ABI caller guarantees a valid NUL-terminated string.
         let input = unsafe { CStr::from_ptr(input) }.to_str().map_err(|_| ());
         input
             .map(process_json)
             .unwrap_or_else(|_| r#"{"error":"Input is not UTF-8."}"#.into())
-    }))
-    .unwrap_or_else(|_| r#"{"error":"The writing engine could not complete the request."}"#.into());
+    });
     CString::new(result)
         .map(CString::into_raw)
         .unwrap_or(std::ptr::null_mut())
@@ -1769,6 +1794,19 @@ pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_c
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_slip_switch_defaults_on_and_requests_without_it_still_parse() {
+        // The browser host and the LSP never send it: they keep the slip check.
+        let old: Request = serde_json::from_str(r#"{"text":"I hat it."}"#).unwrap();
+        assert!(old.slips);
+        assert!(Request::default().slips);
+        let off: Request = serde_json::from_str(r#"{"text":"I hat it.","slips":false}"#).unwrap();
+        assert!(!off.slips);
+        let on: Request = serde_json::from_str(r#"{"text":"I hat it.","slips":true}"#).unwrap();
+        assert!(on.slips);
+        // Other unknown fields are still refused (deny_unknown_fields), so a misspelt switch is caught.
+        assert!(serde_json::from_str::<Request>(r#"{"text":"x","slip":false}"#).is_err());
+    }
     #[test]
     fn capitalized_known_typos_mid_sentence_get_lowercase_fixes() {
         assert_eq!(typo_capital("The".into(), "Teh", false), "the");

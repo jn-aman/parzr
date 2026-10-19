@@ -46,6 +46,37 @@ final class HostRulesTests: XCTestCase {
         }
         for bundle in ["com.apple.TextEdit", "com.tinyspeck.slackmacgap", "com.apple.mail", "com.apple.Safari"] { XCTAssertFalse(rules.excludesApp(bundle), bundle) }
     }
+    func testEveryCommonPasswordManagerAndAuthenticatorIsOff() {
+        let bundles = ["com.1password.1password", "com.agilebits.onepassword7", "com.agilebits.onepassword-osx", "com.1password.safari", "com.bitwarden.desktop",
+                       "com.dashlane.dashlanephonefinal", "com.lastpass.LastPass", "org.keepassxc.keepassxc", "me.proton.pass.electron", "in.sinew.Enpass-Desktop",
+                       "com.nordsec.nordpass", "com.keepersecurity.passwordmanager", "com.callpod.keepermac", "com.siber.RoboForm", "com.markmcguill.strongbox.mac",
+                       "com.hicknhacksoftware.MacPass", "com.keepassium.ios", "com.zetetic.Codebook", "com.outercorner.Secrets", "com.apple.Passwords",
+                       "com.apple.keychainaccess", "com.authy.authy-mac", "io.ente.auth.mac", "com.bitwarden.authenticator"]
+        for bundle in bundles { XCTAssertTrue(rules.excludesApp(bundle), bundle) }
+        for bundle in ["com.apple.Notes", "com.siber.goodsync", "com.example.passwords-blog", "me.proton.mail"] { XCTAssertFalse(rules.excludesApp(bundle), bundle) }
+    }
+    func testOptionSpaceAndTheCopyFallbackHonourExclusions() {
+        // Option+Space: never in an excluded app, a field a rule turns off, or one named for a secret; a no-prose form field stays checkable on request.
+        XCTAssertTrue(Compat.blocksExplicitCheck(bundle: "com.1password.1password", verdict: .allowed, rules: rules))
+        XCTAssertTrue(Compat.blocksExplicitCheck(bundle: "com.apple.Safari", verdict: rules.verdict(for: field("AXTextArea", bundle: "com.apple.Safari", markers: ["parzr-disable"])), rules: rules))
+        XCTAssertTrue(Compat.blocksExplicitCheck(bundle: "com.apple.Safari", verdict: rules.verdict(for: field("AXTextArea", bundle: "com.apple.Safari", url: "https://accounts.example.com/")), rules: rules))
+        for label in ["Password", "Verification code", "Card number", "Social security number", "API key"] {
+            XCTAssertTrue(Compat.blocksExplicitCheck(bundle: "com.example.app", verdict: rules.verdict(for: field(labels: [label])), rules: rules), label)
+        }
+        for label in ["Search", "City", "First name", "Email"] {
+            XCTAssertFalse(Compat.blocksExplicitCheck(bundle: "com.example.app", verdict: rules.verdict(for: field(labels: [label])), rules: rules), label)
+        }
+        XCTAssertFalse(Compat.blocksExplicitCheck(bundle: "com.apple.TextEdit", verdict: .allowed, rules: rules))
+        // The copy fallback sends Cmd+C into the app: only where Parzr checks, in a field nothing blocks.
+        XCTAssertTrue(Compat.allowsCopyFallback(bundle: "com.google.Chrome", verdict: .allowed, secure: false, rules: rules))
+        XCTAssertFalse(Compat.allowsCopyFallback(bundle: "com.google.Chrome", verdict: .allowed, secure: true, rules: rules), "a secure field")
+        for bundle in ["com.1password.1password", "com.bitwarden.desktop", "com.apple.Terminal", "com.googlecode.iterm2", "com.jetbrains.intellij", "com.apple.systempreferences"] {
+            XCTAssertFalse(Compat.allowsCopyFallback(bundle: bundle, verdict: .allowed, secure: false, rules: rules), bundle)
+        }
+        for label in ["Password", "Search", "Email"] {
+            XCTAssertFalse(Compat.allowsCopyFallback(bundle: "com.google.Chrome", verdict: rules.verdict(for: field(bundle: "com.google.Chrome", labels: [label])), secure: false, rules: rules), label)
+        }
+    }
     func testSignInAndCheckoutPagesAreOff() {
         XCTAssertTrue(blocked(field("AXTextArea", bundle: "com.google.Chrome", url: "https://accounts.example.com/signin")))
         XCTAssertTrue(blocked(field("AXTextArea", bundle: "com.google.Chrome", url: "https://shop.example.com/checkout?step=2")))

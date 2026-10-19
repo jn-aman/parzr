@@ -199,7 +199,7 @@ final class PassiveObserver {
                 do { snapshot = try SelectionSnapshot.capture(passive: true) } catch { self?.onClear?(); return }
                 FixLearning.observe(snapshot)
                 let request = EngineRequest(text: snapshot.text, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: snapshot.fullText ?? snapshot.text, request: snapshot.text), capitalizeNames: Preferences.shared.capitalizeNames(for: snapshot.app.bundleIdentifier),
-                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar)
+                                            dialect: Preferences.shared.dialect, protectedRanges: snapshot.protectedRanges(), sentenceStart: snapshot.startsSentence, sentenceEnd: snapshot.endsSentence, gec: Preferences.shared.smartGrammar, slips: Preferences.shared.slipCheck)
                 // Automatic checks (typing and plain selection) never wait for the GPU model. With Smart grammar on,
                 // the engine scores short-word swaps with it only when it is already loaded and free, within a small
                 // budget; a cold model starts loading in the background and stays loaded while the person keeps typing.

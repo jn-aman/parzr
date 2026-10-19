@@ -245,6 +245,9 @@ struct SelectionSnapshot {
     var automatic = false
     /// Set only by headless tests: the writing space this snapshot was read from, validated and patched directly because Accessibility needs an on-screen, key window.
     var headlessEditor: NSTextView?
+    /// Whether "Report wrong suggestion" may send this text: decided at capture, never for an app on the exclusion list, a
+    /// field the host rules or sensitive-field keywords block, a secure field, or text read by copying (its field is unknown).
+    var reportable = false
     var checkingEnabled: Bool { Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) }
     func validateCheckingEligibility(preferences: Preferences = .shared) throws {
         guard preferences.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) else { throw ParzrError.message("Checking is paused or disabled for this app.") }
@@ -260,9 +263,12 @@ struct SelectionSnapshot {
         // Check app policy before resolving the focused text, which itself reads editor attributes.
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         guard Preferences.shared.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: passive) else { throw ParzrError.message("Automatic checking is paused for this app.") }
+        // Password managers, authenticators and security panes are never read, on request or not.
+        guard !HostRules.shared.excludesApp(app.bundleIdentifier) else { throw ParzrError.message("Parzr does not read this app.") }
         guard let element = AX.focusedText(app, automatic: passive),
               Compat.allowsCapture(appPID: app.processIdentifier, ownPID: ProcessInfo.processInfo.processIdentifier, identifier: AX.string(element, kAXIdentifierAttribute)) else { throw ParzrError.message("Select text in an editor, then press your Parzr shortcut.") }
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        if !passive, Compat.blocksExplicitCheck(bundle: app.bundleIdentifier, verdict: AX.hostVerdict(element)) { throw ParzrError.message("Parzr does not read this field.") }
         // Another app's secure input hides this plain field's typing too: name that app instead of blaming the field.
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         if passive, Compat.isVSCode(app.bundleIdentifier), !Compat.isProseFile(windowTitle: AX.windowTitle(app, element)) { throw ParzrError.message("No supported typing context.") }
@@ -298,7 +304,15 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive)
+                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive,
+                                 reportable: reportable(app, element))
+    }
+    /// The same rules for Option+Space and automatic checks: the explicit shortcut may read a field automatic checking skips
+    /// (a search box, a form field), but a report never comes from one.
+    static func reportable(_ app: NSRunningApplication, _ element: AXUIElement) -> Bool {
+        let bundle = app.bundleIdentifier
+        return Compat.reportsAllowed(bundle: bundle, excludedByRules: HostRules.shared.excludesApp(bundle), enabled: Preferences.shared.enabled(for: bundle ?? ""),
+                                     secure: AX.isSecure(element) || IsSecureEventInputEnabled(), verdict: AX.hostVerdict(element), copied: false)
     }
     /// Explicit checks only: reads the selection via Cmd+C when AX cannot. Restores the clipboard; never logs or stores the text.
     static func captureByCopy() async throws -> SelectionSnapshot {
@@ -307,6 +321,8 @@ struct SelectionSnapshot {
         guard Preferences.shared.enabled(for: app.bundleIdentifier ?? "") else { throw ParzrError.message("Parzr is disabled for this app. Enable it in Apps settings.") }
         let element = AX.focusedText(app) ?? AX.focused(app) ?? AXUIElementCreateApplication(app.processIdentifier)
         guard !AX.isSecure(element) else { throw ParzrError.message("Parzr does not read secure fields.") }
+        // Cmd+C goes only to an app Parzr checks and a field no rule blocks (never a password manager, a terminal or a sign-in field).
+        guard Compat.allowsCopyFallback(bundle: app.bundleIdentifier, verdict: AX.hostVerdict(element), secure: false) else { throw ParzrError.message("Parzr does not read this field.") }
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message(SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere)) }
         let text = try await ClipboardTransaction.copySelection(from: app.processIdentifier) ?? ""
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ParzrError.message("Select the words you want to improve, then try again.") }
@@ -386,7 +402,7 @@ struct SelectionSnapshot {
         SelectionSnapshot(app: app, element: editor, selection: selection, expectedSelection: expectedSelection, text: text, fullText: fullText, bounds: bounds,
                           richText: richText, copied: copied,
                           canPatch: fullText != nil && ReplacePlan.first(textSettable: AX.settable(editor, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(editor), docs: docs) != nil,
-                          docs: docs, inlineBreaks: inlineBreaks, automatic: automatic)
+                          docs: docs, inlineBreaks: inlineBreaks, automatic: automatic, reportable: reportable && Self.reportable(app, editor))
     }
     /// Run once the card has handed the keyboard back (`AppModel.handOff`), before anything is written. The editor's window needs a moment to
     /// take the keyboard again, and Chromium reports no focused field until it has, so focus is polled rather than read once. An inline mark's
@@ -519,7 +535,7 @@ struct SelectionSnapshot {
                 // The typed replacement left the caret after the earliest edit; walk it back to the writer's place (see docsMoveCaret).
                 let after = min(selection.location + first.start_utf16 + first.replacement.utf16.count, expected.utf16.count)
                 let span = NSRange(location: min(after, target), length: abs(target - after))
-                await AX.docsMoveCaret(app, by: ((expected as NSString).substring(with: span).count) * (target >= after ? 1 : -1))
+                await AX.docsMoveCaret(app, element: element, automatic: automatic, by: ((expected as NSString).substring(with: span).count) * (target >= after ? 1 : -1))
             } else {
                 _ = AX.select(element, NSRange(location: target, length: 0))
             }

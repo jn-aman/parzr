@@ -1,9 +1,10 @@
-# Parzr suggestion reports Worker. Placeholders (REPLACE_...) are filled in by the owner; see worker/README.md.
+# Parzr suggestion reports Worker; see worker/README.md.
 name = "parzr-reports"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 # Served only on the custom domain the app's Info.plist names (ParzrReportsURL).
 workers_dev = false
+preview_urls = false
 routes = [{ pattern = "reports.parzr.app", custom_domain = true }]
 
 # No Workers Logs or traces: invocation logs would carry request metadata the Worker itself never stores.
@@ -13,14 +14,22 @@ enabled = false
 [[d1_databases]]
 binding = "DB"
 database_name = "parzr-reports"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "01da2683-fd5d-4948-8850-05750a027744"
 migrations_dir = "migrations"
 
-# Per-client request limit (keyed by a salted, daily hash of the address; nothing is stored).
+# Per-client request limit: 4 requests a minute, keyed by a salted, daily hash of the IPv4 address or IPv6 /64
+# (only Cloudflare's counter sees it). With at most 25 reports a request, one network could send 100 rows a minute;
+# CLIENT_DAILY_ROW_CAP bounds what it stores a day, and DAILY_ROW_CAP bounds the total.
 [[ratelimits]]
 name = "REPORTS_LIMITER"
-namespace_id = "REPLACE_WITH_RATE_LIMIT_NAMESPACE_ID" # any integer unique in the account, e.g. "4201"
-simple = { limit = 20, period = 60 }
+namespace_id = "4201"
+simple = { limit = 4, period = 60 }
+
+# The deployed version id, which /v1/health returns so a deploy can check it is the one answering.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+# CPU: the Workers Free plan already caps each request at 10 ms; a [limits] cpu_ms block needs a paid plan.
 
 # Daily retention clean-up.
 [triggers]
@@ -28,6 +37,13 @@ crons = ["17 3 * * *"]
 
 [vars]
 RETENTION_DAYS = "180"
+# Report rows one client (IPv4 address or IPv6 /64, by its salted daily hash) stores per UTC day; past it that client
+# alone is answered 429 until midnight UTC.
+CLIENT_DAILY_ROW_CAP = "200"
+# Report rows stored per UTC day across every client: a backstop far above one client's quota, so only widely
+# distributed traffic can reach it; past it the Worker answers 503 until midnight UTC.
+DAILY_ROW_CAP = "100000"
+# ALLOW_MISSING_CLIENT_IP is for local development and tests only (.dev.vars or test bindings), never set here.
 
 # Secret, set with: npx wrangler secret put RATE_LIMIT_SALT
 # RATE_LIMIT_SALT = "..."

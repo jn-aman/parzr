@@ -28,8 +28,9 @@ QWEN_SOURCE = ('https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea62
                '37ae482d336108d23516fa35e8e0c4126688d81018b87178a18d752a1357814f')
 GECTOR_ZIP = ('https://github.com/jn-aman/parzr/releases/download/gector-v1/gector-roberta-base-5k-coreml-int8.zip',
               '9e3d2c433206b4eea2cb612c1a32765a24bf39ba2eef9a1c51a9ed8942427796')
-# Packs --derive can rebuild byte for byte. The slips pack's Core ML model is compiled by the local toolchain, so its pinned
-# hashes are those of the published assets: before its release exists, fetch --derive-fallback skips it (its tests skip too).
+# Packs --derive can rebuild byte for byte. The slips and tone packs' Core ML models are compiled by the local toolchain, so their
+# pinned hashes are those of the published assets: a missing release of one of them fails the fetch, with or without
+# --derive-fallback (publish the pack before the change that pins it; docs/releases.md).
 DERIVABLE = {'essential'}
 
 
@@ -40,6 +41,40 @@ def load():
 def digest(path):
     with open(path, 'rb') as stream:
         return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+MARKER = '.verified.json'
+
+
+def identity(path):
+    """Size, inode and modification time (ns) of a regular file, as engine/src/packs.rs and the app record them."""
+    info = os.stat(path, follow_symlinks=False)
+    if not os.path.isfile(path) or os.path.islink(path): raise SystemExit(f'{path} is not a regular file')
+    return info.st_size, info.st_ino, info.st_mtime_ns
+
+
+def mark(pack, folder):
+    """The verification marker the engine requires before it uses a pack (engine/src/packs.rs): written only after
+    every file matched its pinned SHA-256, naming each file's identity on disk."""
+    files = []
+    for f in pack['files']:
+        size, inode, mtime = identity(folder/f['path'])
+        files.append({'path': f['path'], 'sha256': f['sha256'], 'bytes': size, 'inode': inode, 'mtime_ns': mtime})
+    (folder/MARKER).write_text(json.dumps({'schema': 1, 'pack': pack['id'], 'version': pack['version'], 'files': files}, indent=2)+'\n')
+
+
+def marked(pack, folder):
+    """The marker still vouches for every file as it is now (no hashing)."""
+    try: marker = json.loads((folder/MARKER).read_text())
+    except (OSError, ValueError): return False
+    if marker.get('schema') != 1 or marker.get('pack') != pack['id'] or marker.get('version') != pack['version']: return False
+    entries = {m.get('path'): m for m in marker.get('files', [])}
+    for f in pack['files']:
+        m = entries.get(f['path'])
+        try: now = identity(folder/f['path'])
+        except (OSError, SystemExit): return False
+        if not m or m.get('sha256') != f['sha256'] or m.get('bytes') != f['bytes'] or now != (m.get('bytes'), m.get('inode'), m.get('mtime_ns')): return False
+    return True
 
 
 def asset_name(file):
@@ -152,12 +187,52 @@ def stage(manifest, args):
         print(f"Staged pack {pack['id']} {pack['version']}: {len(pack['files'])} files, {sum(f['bytes'] for f in pack['files'])/1e6:.0f} MB in {out}")
 
 
+# Licences and attribution published with each pack: the THIRD_PARTY_NOTICES paragraphs that name its models and
+# training data (each key must match exactly one paragraph, so an edited NOTICES file cannot silently drop one),
+# and the full licence texts, attached to the release beside the model files (extra assets; fetch ignores them).
+PACK_NOTICES = {
+    'essential': (['Qwen3.5-0.8B: Copyright', 'GECToR grammatical error correction model'],
+                  {'LICENSE-Apache-2.0.txt': 'LICENSE', 'LICENSE-Qwen3.5.txt': 'resources/ThirdParty/Qwen3.5-LICENSE.txt',
+                   'LICENSE-GECToR-Grammarly-Apache-2.0.txt': 'resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt'}),
+    'slips': (['distilroberta-base (the word-choice check'], {'LICENSE-Apache-2.0.txt': 'LICENSE'}),
+    'tone': (['Tone check model (the optional'], {'LICENSE-Apache-2.0.txt': 'LICENSE'}),
+}
+
+
+def notice_text(pack):
+    keys, _ = PACK_NOTICES.get(pack['id'], ([], {}))
+    if not keys: raise SystemExit(f"Pack {pack['id']} has no licence and attribution entry in PACK_NOTICES (scripts/model-pack.py)")
+    paragraphs = (ROOT/'THIRD_PARTY_NOTICES').read_text().split('\n\n')
+    picked = []
+    for key in keys:
+        found = [p.strip() for p in paragraphs if key in p]
+        if len(found) != 1: raise SystemExit(f'THIRD_PARTY_NOTICES must hold exactly one paragraph with {key!r}, found {len(found)}')
+        picked.append(found[0])
+    return '\n\n'.join(picked) + '\n'
+
+
+def licence_assets(pack, out):
+    """Write NOTICE-<pack>-<version>.txt and the pack's licence texts into out; return their paths."""
+    notice = f"NOTICE-{pack['id']}-{pack['version']}.txt"
+    names = {asset_name(f) for f in pack['files']}
+    files = []
+    for name, source in [(notice, None), *PACK_NOTICES[pack['id']][1].items()]:
+        if name in names: raise SystemExit(f"{name} would collide with a model asset of pack {pack['id']}")
+        path = pathlib.Path(out)/name
+        path.write_text(f"Parzr model pack {pack['id']} {pack['version']}: licences and attribution\n\n{notice_text(pack)}" if source is None
+                        else (ROOT/source).read_text())
+        files.append(str(path))
+    return files
+
+
 def notes(pack):
     rows = '\n'.join(f"| `{asset_name(f)}` | `{f['path']}` | {f['bytes']:,} | {f['license']} | `{f['sha256']}` |" for f in pack['files'])
+    licences = ', '.join(f'`{name}`' for name in [f"NOTICE-{pack['id']}-{pack['version']}.txt", *PACK_NOTICES[pack['id']][1]])
     return (f"Model pack **{pack['id']}**, version {pack['version']}: {pack['title']}.\n\n{pack['purpose']}\n\n"
             "Parzr downloads these files on demand (pinned in `engine/models.json`, each checked against its SHA-256 before use). "
             "This is not an app release: download Parzr from the latest release.\n\n"
-            f"License: {pack['license']}\n\n| Asset | Path in the pack | Bytes | License | SHA-256 |\n|---|---|---|---|---|\n{rows}\n")
+            f"License: {pack['license']}\n\n| Asset | Path in the pack | Bytes | License | SHA-256 |\n|---|---|---|---|---|\n{rows}\n\n"
+            f"## Licences and attribution\n\nThe full licence texts are attached: {licences}.\n\n```\n{notice_text(pack)}```\n")
 
 
 def publish(manifest, args):
@@ -169,6 +244,7 @@ def publish(manifest, args):
             path = staged/asset_name(f)
             if not path.is_file() or digest(path) != f['sha256']: raise SystemExit(f'{path} is missing or does not match the manifest; run stage first')
             files.append(str(path))
+        files += licence_assets(pack, tempfile.mkdtemp(prefix=f"parzr-{pack['id']}-licences-"))
         if subprocess.run(['gh', 'release', 'view', tag], capture_output=True).returncode == 0:
             raise SystemExit(f'Release {tag} already exists. Packs are immutable: publish a new version under a new tag (see docs/releases.md).')
         command = ['gh', 'release', 'create', tag, '--title', f"Parzr models: {pack['id']} {pack['version']}", '--notes', notes(pack), '--prerelease', '--latest=false', *files]
@@ -183,7 +259,9 @@ def fetch(manifest, args):
     for pack in pick(manifest, args.pack):
         final = root/pack['id']/pack['version']
         if final.is_dir() and all((final/f['path']).is_file() and (final/f['path']).stat().st_size == f['bytes'] for f in pack['files']):
-            if not args.verify or all(digest(final/f['path']) == f['sha256'] for f in pack['files']):
+            # The engine uses a pack only with a current marker; without one (an older checkout or cache) the files are hashed first.
+            if (marked(pack, final) and not args.verify) or all(digest(final/f['path']) == f['sha256'] for f in pack['files']):
+                if not marked(pack, final): mark(pack, final)
                 print(f'{final} is installed'); continue
         staging = root/pack['id']/f".download-{pack['version']}"
         base = args.base_url
@@ -197,9 +275,8 @@ def fetch(manifest, args):
         except urllib.error.HTTPError as error:
             if not args.derive_fallback: raise SystemExit(f'{error.url}: HTTP {error.code}. Is the {tag_of(pack)} release published?')
             if pack['id'] not in DERIVABLE:
-                print(f"{tag_of(pack)} is not published yet (HTTP {error.code}) and pack {pack['id']} cannot be rebuilt here: skipped "
-                      "(Parzr works without it; its tests skip)", file=sys.stderr)
-                continue
+                raise SystemExit(f"{error.url}: HTTP {error.code}. Pack {pack['id']} cannot be rebuilt from upstream (its Core ML model is "
+                                 f"compiled locally): publish {tag_of(pack)} before pinning it (docs/releases.md).")
             print(f'{tag_of(pack)} is not published yet (HTTP {error.code}); rebuilding the pack from its pinned upstream sources', file=sys.stderr)
             assets = pathlib.Path(tempfile.mkdtemp(prefix='parzr-pack-'))
             stage(manifest, argparse.Namespace(out=assets, from_app=None, from_dir=None, work=args.work, pack=pack['id']))
@@ -209,6 +286,7 @@ def fetch(manifest, args):
         (staging/'pack.json').write_text(json.dumps(pack, indent=2)+'\n')
         if final.exists(): shutil.rmtree(final)
         staging.rename(final)
+        mark(pack, final)
         for old in (root/pack['id']).iterdir():
             if old != final and old.is_dir(): shutil.rmtree(old)
         print(f'Installed {final}')
@@ -227,7 +305,8 @@ def main():
     p.add_argument('--target', help='commit or branch for a new tag (default: the default branch)')
     f = sub.add_parser('fetch'); f.add_argument('--models-dir', default=os.environ.get('PARZR_MODELS_DIR') or str(ROOT/'dist/models'))
     f.add_argument('--base-url', help='download from here instead of the release (for example file:///…/dist/model-pack)')
-    f.add_argument('--derive-fallback', action='store_true', help='rebuild the pack from upstream when its release is not published yet')
+    f.add_argument('--derive-fallback', action='store_true', help='rebuild a derivable pack (essential) from upstream when its release is not '
+                   'published yet; a missing release of any other pack still fails')
     f.add_argument('--verify', action='store_true', help='re-hash an installed pack instead of trusting its sizes')
     for command in (s, p, f): command.add_argument('--pack')
     for command in (s, f): command.add_argument('--work', default=str(ROOT/'dist/model-derive'))

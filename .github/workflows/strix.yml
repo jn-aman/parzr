@@ -1,0 +1,70 @@
+name: Strix security scan
+# A diff-scoped AI pentest of every pull request (Strix, https://docs.strix.ai): only changed files are tested, and
+# validated vulnerabilities fail the check. It needs the repository secrets STRIX_LLM (a LiteLLM model id, e.g.
+# anthropic/claude-sonnet-5-5) and LLM_API_KEY; until both exist the job skips with a notice, so it never blocks a merge
+# on missing setup. Pull requests from forks get no secrets and skip too.
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: strix-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Check the scanner's credentials
+        id: creds
+        env:
+          HAS_MODEL: ${{ secrets.STRIX_LLM != '' }}
+          HAS_KEY: ${{ secrets.LLM_API_KEY != '' }}
+        run: |
+          if [ "$HAS_MODEL" = true ] && [ "$HAS_KEY" = true ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Strix is not set up: add the STRIX_LLM and LLM_API_KEY repository secrets to scan pull requests."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          fetch-depth: 0 # diff scope needs the base branch
+          persist-credentials: false
+      - name: Install Strix (pinned)
+        if: steps.creds.outputs.ready == 'true'
+        # A pinned release from PyPI instead of `curl | bash`, so the tool that reads the source is a known version.
+        run: |
+          python3 -m pip install --user --disable-pip-version-check 'strix-agent==1.6.2'
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Scan the pull request's changes
+        if: steps.creds.outputs.ready == 'true'
+        env:
+          STRIX_LLM: ${{ secrets.STRIX_LLM }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          git fetch --no-tags origin "$BASE_REF"
+          git rev-parse --verify --quiet "origin/$BASE_REF" > /dev/null || { echo "::error::Cannot resolve origin/$BASE_REF"; exit 1; }
+          strix -n -t ./ --scan-mode quick --scope-mode diff --diff-base "origin/$BASE_REF" --max-budget 10
+      # A run cut off at the budget limit exits 0 with status "stopped"; never treat that as a clean result.
+      - name: Fail unless the scan completed
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          run_json=$(ls -t strix_runs/*/run.json | head -1)
+          status=$(jq -r .status "$run_json")
+          if [ "$status" != completed ]; then
+            echo "::error::Strix run status is '$status'; the scan did not complete (raise --max-budget)."
+            exit 1
+          fi
+      - name: Upload findings to code scanning
+        if: always() && steps.creds.outputs.ready == 'true' && hashFiles('strix_runs/**/findings.sarif') != ''
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          sarif_file: strix_runs
+          category: strix

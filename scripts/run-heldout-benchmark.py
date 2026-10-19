@@ -11,13 +11,22 @@ per item. For every error item it records:
 and for every clean item whether anything changed (a false alarm).
 
 usage: run-heldout-benchmark.py [--engine PATH] [--layers rules,gec,deep] [--split dev|test|all] [--limit N] [--output DIR]
-                                [--min-fix-rate LAYER=RATE ...] [--max-false-alarm-rate LAYER=RATE ...]
+                                [--min-fix-rate LAYER=RATE ...] [--max-false-alarm-rate LAYER=RATE ...] [--baseline SUITE]
 
 --engine takes the parzr-engine CLI or scripts/heldout-native.swift built with swiftc (the app's path, with Apple
 NaturalLanguage hints; see benchmarks/README.md). The gate flags make the run exit 1 when a layer falls below a fix
-rate or above a false-alarm rate, so CI can block a release that makes checking worse.
+rate or above a false-alarm rate, so CI can block a release that makes checking worse. --baseline SUITE compares the
+run with that suite's entry in benchmarks/baselines.json (scripts/quality_gates.py): a fix rate more than 0.5 points
+lower, more than 2 extra false alarms, or p50/p95 latency or peak engine memory above 1.5x the baseline fails it.
+Every layer's summary records p50/p95 latency per check and the engine's peak resident memory.
+
+Test sets are sealed: --split test (also --split all on the held-out set, and a typo-fuzz test corpus, test*.jsonl) runs only on CI or with
+PARZR_RELEASE_GATE=1, and then writes totals and category counts only, never an item's input or output.
 """
 import argparse, collections, hashlib, json, pathlib, subprocess, sys, time, unicodedata
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import quality_gates  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_ENGINE = '/Applications/Parzr.app/Contents/MacOS/parzr-engine'
@@ -41,21 +50,26 @@ def split_of(item):
 
 class Engine:
     def __init__(self, path, extra):
-        self.extra = extra
-        self.proc = subprocess.Popen([path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1)
+        self.extra, self.ms = extra, []
+        self.proc = subprocess.Popen([path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1,
+                                     env=quality_gates.engine_env())
 
     def check(self, item):
         req = {'text': item['input'], **self.extra}
         if item.get('dialect'):
             req['dialect'] = item['dialect']
+        started = time.perf_counter()
         self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + '\n'); self.proc.stdin.flush()
         line = self.proc.stdout.readline()
         if not line:
             raise RuntimeError('engine exited')
+        self.ms.append((time.perf_counter() - started) * 1000)
         return json.loads(line)
 
     def close(self):
-        self.proc.stdin.close(); self.proc.wait(timeout=30)
+        """Ends the engine; returns its peak resident memory in MB."""
+        self.proc.stdin.close()
+        return quality_gates.reap(self.proc)
 
 
 def touches(edits, span):
@@ -87,14 +101,26 @@ def main():
     p.add_argument('--min-fix-rate', action='append', default=[], metavar='LAYER=RATE')
     p.add_argument('--max-false-alarm-rate', action='append', default=[], metavar='LAYER=RATE')
     p.add_argument('--output', type=pathlib.Path, default=ROOT / 'dist/qa/heldout')
+    p.add_argument('--baseline', metavar='SUITE', help='gate against this suite in benchmarks/baselines.json (heldout-test, typo-fuzz-test)')
     a = p.parse_args()
+    # The held-out set with --split all holds its test split too.
+    heldout = any(path.resolve().is_relative_to(ROOT / 'benchmarks/heldout') for path in (a.corpus, a.clean))
+    sealed = a.split == 'test' or a.corpus.name.startswith('test') or (a.split == 'all' and heldout)
+    if sealed and not quality_gates.release_gate():
+        sys.exit(f'{a.corpus.name} ({a.split}) is a sealed test set: it is scored on CI (or with PARZR_RELEASE_GATE=1 for a '
+                 'release gate) and reports totals only. Fix against --split dev.')
     errors, clean = load(a.corpus), load(a.clean)
     if a.split != 'all':
         errors, clean = [i for i in errors if split_of(i) == a.split], [i for i in clean if split_of(i) == a.split]
     if a.limit:
         errors, clean = errors[:a.limit], clean[:a.limit]
     a.output.mkdir(parents=True, exist_ok=True)
-    summary = {'engine': a.engine, 'split': a.split, 'errors': len(errors), 'clean': len(clean), 'layers': {}}
+    summary = {'engine': a.engine, 'corpus': a.corpus.name, 'split': a.split, 'sealed': sealed, 'machine': quality_gates.machine(),
+               'errors': len(errors), 'clean': len(clean), 'layers': {}}
+    if sealed:
+        stale = sorted(p.name for p in a.output.glob('*-results.jsonl')) + sorted(p.name for p in a.output.glob('*-false-alarms.jsonl'))
+        if stale:
+            print(f'note: {a.output} still holds per-item files from an earlier unsealed run ({", ".join(stale)}); this run writes none', file=sys.stderr)
     for layer in a.layers.split(','):
         eng, t0 = Engine(a.engine, LAYERS[layer]), time.time()
         by_cat = collections.defaultdict(collections.Counter)
@@ -113,7 +139,7 @@ def main():
             resp = eng.check(item)
             if norm(resp.get('text', item['input'])) != norm(item['input']) or resp.get('edits'):
                 false_alarms.append({'id': item['id'], 'input': item['input'], 'output': resp.get('text'), 'rules': [e.get('rule_id') for e in resp.get('edits', [])]})
-        eng.close()
+        rss = eng.close()
         total = collections.Counter(); [total.update({k: v for k, v in c.items()}) for k, c in by_cat.items() if '/' not in k]
         summary['layers'][layer] = {
             'seconds': round(time.time() - t0, 1),
@@ -121,14 +147,17 @@ def main():
             'fix_rate': round(total['fixed'] / max(1, len(errors)), 4),
             'catch_rate': round((total['fixed'] + total['flagged']) / max(1, len(errors)), 4),
             'false_alarm_rate': round(len(false_alarms) / max(1, len(clean)), 4), 'false_alarms': len(false_alarms),
+            'latency': quality_gates.latency(eng.ms), 'max_rss_mb': rss,
             'categories': {k: dict(c) for k, c in sorted(by_cat.items())},
         }
-        with open(a.output / f'{layer}-results.jsonl', 'w') as f:
-            f.writelines(json.dumps(r, ensure_ascii=False) + '\n' for r in rows)
-        with open(a.output / f'{layer}-false-alarms.jsonl', 'w') as f:
-            f.writelines(json.dumps(r, ensure_ascii=False) + '\n' for r in false_alarms)
+        if not sealed:
+            with open(a.output / f'{layer}-results.jsonl', 'w') as f:
+                f.writelines(json.dumps(r, ensure_ascii=False) + '\n' for r in rows)
+            with open(a.output / f'{layer}-false-alarms.jsonl', 'w') as f:
+                f.writelines(json.dumps(r, ensure_ascii=False) + '\n' for r in false_alarms)
         s = summary['layers'][layer]
-        print(f"{layer}: fixed {s['fix_rate']:.1%}, caught {s['catch_rate']:.1%}, false alarms {s['false_alarm_rate']:.1%} ({s['seconds']}s)")
+        print(f"{layer}: fixed {s['fix_rate']:.1%}, caught {s['catch_rate']:.1%}, false alarms {s['false_alarm_rate']:.1%} ({s['seconds']}s; "
+              f"p50 {s['latency']['p50_ms']} ms, p95 {s['latency']['p95_ms']} ms, peak memory {rss} MB)")
     (a.output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
     lines = ['| Category | n | ' + ' | '.join(f'{l} fixed | {l} caught' for l in summary['layers']) + ' |',
              '| --- | --- | ' + ' | '.join('--- | ---' for _ in summary['layers']) + ' |']
@@ -150,7 +179,24 @@ def main():
                 failed.append(f'{layer} {key} {value:.4f} is worse than the gate {threshold}')
     for f in failed:
         print(f'GATE FAILED: {f}', file=sys.stderr)
-    if failed:
+    passed = True
+    if a.baseline:
+        gate = quality_gates.Gate(a.baseline)
+        for layer, s in summary['layers'].items():
+            base = (gate.base or {}).get('layers', {}).get(layer)
+            if base is None:
+                if gate.base is not None:
+                    gate.failures.append(f'{a.baseline}: no baseline for layer {layer}')
+                continue
+            if (base['errors'], base['clean']) != (summary['errors'], summary['clean']):
+                gate.failures.append(f"{a.baseline} {layer}: {summary['errors']} errors / {summary['clean']} clean, the baseline counted "
+                                     f"{base['errors']} / {base['clean']} (corpus or split changed: update the baseline on purpose)")
+                continue
+            gate.rate(f'{layer} fixed', s['fixed'], summary['errors'], base['fixed'], base['errors'])
+            gate.count(f'{layer} false alarms', s['false_alarms'], base['false_alarms'])
+            gate.performance(layer, {'p50_ms': s['latency']['p50_ms'], 'p95_ms': s['latency']['p95_ms'], 'max_rss_mb': s['max_rss_mb']})
+        passed = gate.finish()
+    if failed or not passed:
         sys.exit(1)
 
 

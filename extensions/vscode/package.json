@@ -3,6 +3,7 @@
   "version": "0.5.2", "publisher": "parzr", "license": "Apache-2.0", "engines": {"vscode": "^1.85.0"},
   "categories": ["Linters"], "main": "./extension.cjs", "activationEvents": ["onCommand:parzr.rewrite", "onLanguage:plaintext", "onLanguage:markdown", "onLanguage:mdx", "onLanguage:git-commit"],
   "capabilities": {"untrustedWorkspaces": {"supported": true}, "virtualWorkspaces": {"supported": false}},
+  "devDependencies": {"@vscode/vsce": "4.0.0"},
   "contributes": {
     "commands": [{"command": "parzr.rewrite", "title": "Parzr: Improve selected text"}],
     "keybindings": [{"command": "parzr.rewrite", "key": "alt+space", "mac": "alt+space", "when": "editorTextFocus && editorHasSelection"}],

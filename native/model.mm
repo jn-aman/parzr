@@ -308,6 +308,8 @@ extern "C" double parzr_model_name_log_odds(const char *file, const char *text, 
         if (to < length) while (to > end && text[to] != ' ' && text[to] != '\n') to--;
         const std::string word(text + start, end - start), window(text + from, to - from);
         // The text comes first and the question last: measured AUC 0.996 against 0.969 with the question first.
+        // The prompt is tokenized with special tokens parsed, so the caller (engine/src/model.rs, name_log_odds)
+        // escapes every special-token literal in `text` first and computes `start`/`end` on the escaped text.
         const std::string prompt = "<|im_start|>user\nText: " + window + "\n\nIn this text, is '" + word + "' a person's name? Answer yes or no.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
         if (!r.load(file) || abort.stopped()) return nan;
         const auto *vocab = llama_model_get_vocab(r.model);
@@ -607,14 +609,13 @@ void gecRelease(Gec &g) {
     g.model = nil; g.directory.clear();
     malloc_zone_pressure_relief(nullptr, 0);
 }
-// The folder the engine names (the downloaded pack's), else the last one it named, else PARZR_GEC_DIR, else `gector` beside the Qwen model file (PARZR_MODEL_PATH), else beside this library (dist/model).
+// The folder the engine names (the downloaded pack's, or a development override the engine honours), else the last one it named, else beside this library (dist/model).
+// The runtime reads no environment variables: overrides are the engine's, and a release engine ignores them (engine/src/overrides.rs).
 std::string gecDirectory(const char *given, const std::string &remembered) {
     if (given && *given) return given;
     if (!remembered.empty()) return remembered;
-    if (const char *env = std::getenv("PARZR_GEC_DIR"); env && *env) return env;
     NSFileManager *files = NSFileManager.defaultManager;
     NSMutableArray<NSString *> *candidates = [NSMutableArray array];
-    if (const char *model = std::getenv("PARZR_MODEL_PATH"); model && *model) [candidates addObject:[[@(model) stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"gector"]];
     Dl_info info;
     if (dladdr(reinterpret_cast<const void *>(&gecDirectory), &info) && info.dli_fname) {
         NSString *library = [@(info.dli_fname) stringByDeletingLastPathComponent];

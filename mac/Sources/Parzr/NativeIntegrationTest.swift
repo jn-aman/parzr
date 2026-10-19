@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ApplicationServices
 import Carbon
@@ -443,3 +445,4 @@ final class FixtureEditor {
         try? FileManager.default.removeItem(at: directory)
     }
 }
+#endif

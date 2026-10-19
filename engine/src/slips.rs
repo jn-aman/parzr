@@ -34,17 +34,21 @@ const EXPLICIT_ROWS: usize = 1024;
 /// A word of more sub-tokens than this is not a slip of a common word (the candidates are short).
 const MAX_WORD_TOKENS: usize = 6;
 
-/// Where the slip checker's files live: PARZR_SLIP_DIR (development), else the downloaded pack's
-/// folder. None while the pack is not on this Mac.
+/// Where the slip checker's files live, to load them: PARZR_SLIP_DIR (development), else the
+/// downloaded pack's folder once its files hashed to their pinned SHA-256 in this process. None
+/// while the pack is not on this Mac.
 pub fn dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("PARZR_SLIP_DIR").filter(|d| !d.is_empty()) {
+    if let Some(dir) = crate::overrides::var("PARZR_SLIP_DIR") {
         return Some(PathBuf::from(dir));
     }
     crate::packs::installed("slip_model")
 }
-/// True when the slip checker is on this Mac (a cheap file check; nothing loads).
+/// True when the slip checker is on this Mac (a cheap file check; nothing loads or waits).
 pub fn available() -> bool {
-    dir().is_some_and(|d| d.join("mlm.mlmodelc").is_dir())
+    crate::overrides::var("PARZR_SLIP_DIR")
+        .map(PathBuf::from)
+        .or_else(|| crate::packs::available("slip_model"))
+        .is_some_and(|d| d.join("mlm.mlmodelc").is_dir())
 }
 
 struct Slips {
@@ -78,8 +82,16 @@ fn load(dir: &Path) -> Result<Slips, String> {
         bpe: Bpe::new(&read("vocab.json")?, &read("merges.txt")?)?,
     })
 }
-/// Loads everything now so the first check does not pay for it (the app calls this in the background).
+/// Loads everything now so the first check does not pay for it (the app calls this in the background):
+/// the model and its vocabulary, and the word lists the candidates and the name guard read, which
+/// would otherwise spend a cold first typing check's whole budget.
 pub fn warm() -> bool {
+    let probe = crate::Request {
+        text: "Warm the word lists up, Sam.".into(),
+        ..crate::Request::default()
+    };
+    let _ = crate::name_guard_ranges(&probe);
+    let _ = crate::confusion::sentence_swaps(&probe.text, &[]);
     shared().is_some()
 }
 
@@ -544,6 +556,25 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(900));
         }
     }
+    /// The same typing check with the slip check switched off (`Request::slips` false, as the app sends
+    /// it): the slip checker is never asked, so no slip edit comes from it.
+    #[test]
+    #[ignore = "needs the slip checker and the native runtime"]
+    fn typing_route_leaves_slips_alone_when_the_switch_is_off() {
+        assert!(available(), "no slip checker pack");
+        let req = crate::Request {
+            text: "This is so bad. I hat it.".into(),
+            gec: true,
+            dialect: "american".into(),
+            slips: false,
+            ..crate::Request::default()
+        };
+        let edits = crate::rewrite(&req).expect("a typing check").edits;
+        assert!(
+            edits.iter().all(|e| e.rule_id != "context.slip_swap"),
+            "{edits:?}"
+        );
+    }
     /// The typing route with the real pack (PARZR_SLIP_DIR or the installed pack, and the native
     /// runtime in PARZR_MODEL_RUNTIME): "I hat it" is fixed by the slip check while typing, whether
     /// or not the writing model is installed, within the app's follow-ups.
@@ -551,6 +582,8 @@ mod tests {
     #[ignore = "needs the slip checker and the native runtime"]
     fn typing_route_fixes_a_slip_with_the_real_pack() {
         assert!(available(), "no slip checker pack");
+        // Cold: the first check of the process may spend its whole budget loading the word lists; it then
+        // asks for a follow-up, which finds the verdict.
         let (edits, follow_ups) = typing_check("This is so bad. I hat it.");
         let slip: Vec<_> = edits
             .iter()

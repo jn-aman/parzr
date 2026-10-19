@@ -38,9 +38,12 @@ Compiled default graph:
   serde_core 1.0.229
   serde_derive 1.0.229
   serde_json 1.0.151
+  similar 2.7.0
   syn 3.0.6
   unicode-ident 1.0.26
+  unicode-segmentation 1.13.3
   zmij 1.0.23
+(cargo tree --features external-tables --target aarch64-apple-darwin -e normal)
 
 Development tools (Playwright, Swift/Rust compilers and build tooling) are
 not shipped as a product runtime.
@@ -53,10 +56,10 @@ full license (Resources/ThirdParty/Pow-LICENSE.txt) ship with the app.
 Parzr's icon and brand mark are original project assets.
 
 Automatic updates
-Sparkle 2.9.5: Copyright Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński,
+Sparkle 2.9.6: Copyright Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński,
 Mayur Pawashe, C.W. Betts, Petroules Corporation, Big Nerd Ranch. MIT license.
 https://github.com/sparkle-project/Sparkle
-Sparkle.framework ships in the app and runs the daily update check. Its
+Sparkle.framework ships in the app and runs the hourly update check. Its
 bundled third-party components, bsdiff and bspatch 4.3 (Colin Percival, BSD),
 sais-lite (Yuta Mori, MIT), the portable Ed25519 implementation (Orson Peters,
 zlib) and SUSignatureVerifier (Mark Hamlin, BSD), are licensed as listed in the
@@ -68,7 +71,9 @@ Copyright Robyn Speer and the credited upstream source contributors.
 https://github.com/rspeer/wordfreq
 Data license: Creative Commons Attribution-ShareAlike 4.0 International.
 https://creativecommons.org/licenses/by-sa/4.0/
-The independent frequency JSON is adapted to the English ASCII entries in
+The adapted frequency data (engine/rules/frequency.json, shipped as
+Resources/ThirdParty/EnglishFrequency-data.json and compiled into the engine
+tables) is licensed CC BY-SA 4.0, like its source. It is adapted to the English ASCII entries in
 Parzr's lexical export and rounded to integer Zipf frequencies times 100.
 Attribution, license, changes and source hashes are embedded in the JSON;
 the full upstream credits and citations accompany it in
@@ -87,6 +92,10 @@ corrections and kept by scripts/build-typo-lexicon.py:
   error corpus, compiled by Roger Mitton (Birkbeck, University of London).
   Wikipedia:Lists of common misspellings/For machines, CC BY-SA 4.0.
 Pairs from non-commercial learner corpora are never included.
+The adapted pair list (engine/rules/typos.txt, compiled into the engine
+tables) is distributed under CC BY-SA 4.0, the ShareAlike terms of its WikEd
+(CC BY-SA 3.0) and Wikipedia list (CC BY-SA 4.0) sources.
+https://creativecommons.org/licenses/by-sa/4.0/
 
 Local models and runtime
 The models are not part of the app: Parzr downloads them once from the
@@ -116,15 +125,18 @@ Chernodub, Skurzhanskyi, "GECToR: Grammatical Error Correction: Tag, Not
 Rewrite" (BEA 2020), a Grammarly project. Parzr downloads a Core ML conversion
 (static 80 token input, fp16 or int8 weight-only) made by scripts/convert-gector.py;
 revisions, versions and SHA-256 hashes are in the pack's gector/manifest.json.
-roberta-base: Copyright Facebook AI Research. MIT license. https://huggingface.co/roberta-base
-Its byte level BPE vocabulary (vocab.json, merges.txt) ships with the model.
+roberta-base: Copyright (c) Facebook, Inc. and its affiliates (fairseq). MIT license.
+https://huggingface.co/roberta-base, https://github.com/facebookresearch/fairseq
+Its byte level BPE vocabulary (vocab.json, merges.txt) ships with the model. The full
+MIT license text ships as resources/ThirdParty/RoBERTa-fairseq-MIT-LICENSE.txt (in the
+app: Resources/ThirdParty/RoBERTa-fairseq-MIT-LICENSE.txt).
 Output label vocabulary and verb form vocabulary (verb-form-vocab.txt):
 grammarly/gector, commit 4ad259f25c6bb408a99788d468cd8958845e647e,
 https://github.com/grammarly/gector. Copyright Grammarly, Inc. Apache License 2.0
 (resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt).
 The model runs entirely on the device; nothing is sent.
 
-distilroberta-base (the word-choice check while typing, optional "slips" pack)
+distilroberta-base (the word-choice check while typing, optional "slips" pack, downloaded while Slip check is on, the default)
 Weights: distilbert/distilroberta-base, revision
 fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, https://huggingface.co/distilbert/distilroberta-base
 Copyright Hugging Face. Apache License 2.0. Distilled from roberta-base (Facebook
@@ -134,7 +146,7 @@ masked-language-model head scored at one position per row) made by
 scripts/convert-slips.py; revisions, versions and SHA-256 hashes are in the pack's
 slips/manifest.json. The model runs entirely on the device; nothing is sent.
 
-Tone check model (the optional "tone" pack, downloaded only when Tone check is on)
+Tone check model (the optional "tone" pack, downloaded while Tone check is on, the default)
 Fine-tuned from sentence-transformers/all-MiniLM-L6-v2, revision
 1110a243fdf4706b3f48f1d95db1a4f5529b4d41, https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
 (based on microsoft/MiniLM-L6-H384-uncased). Apache License 2.0. Its BERT uncased
@@ -148,10 +160,13 @@ The model runs entirely on the device; nothing is sent.
 
 The engine tokenizes sentences for the model as spaCy 3.8 does. Its English tokenizer rules
 (engine/rules/gec-tokenizer.json: prefix, suffix and infix patterns and the special-case table)
-are exported from spaCy, Copyright Explosion. MIT license. https://github.com/explosion/spaCy
+are exported from spaCy, Copyright ExplosionAI GmbH, spaCy GmbH and Matthew Honnibal. MIT license.
+https://github.com/explosion/spaCy. The full license text ships as resources/ThirdParty/spaCy-MIT-LICENSE.txt
+(in the app: Resources/ThirdParty/spaCy-MIT-LICENSE.txt).
 
-Production edit alignment uses similar 2.7.0 (Apache-2.0),
-unicode-segmentation (MIT/Apache-2.0), and bstr (MIT/Apache-2.0).
+Production edit alignment uses similar 2.7.0 (Apache-2.0,
+resources/ThirdParty/similar-2.7.0/LICENSE) and unicode-segmentation 1.13.3
+(MIT/Apache-2.0, resources/ThirdParty/unicode-segmentation-1.13.3).
 The rule and frequency credits above cover production grammar/spelling passes
 and research source. Production combines those passes with the bundled model.
 

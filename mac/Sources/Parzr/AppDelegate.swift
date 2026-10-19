@@ -66,6 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
             return
         }
+        #if DEBUG || PARZR_QA
+        // QA modes. Compiled into debug builds and QA builds only (scripts/build.py --qa adds -DPARZR_QA); a release build has none of
+        // these flags, their fixture editor or their throwaway settings (scripts/audit-bundle.py checks the release binary for them).
         if let index = CommandLine.arguments.firstIndex(of: "--paste-test"), CommandLine.arguments.indices.contains(index + 1) {
             Task { @MainActor in
                 do { try await runAutomaticPasteTest(reportDirectory: CommandLine.arguments[index + 1]); print("Automatic fixture paste regression passed."); NSApp.terminate(nil) }
@@ -170,7 +173,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let index = CommandLine.arguments.firstIndex(of: "--snapshot"), CommandLine.arguments.indices.contains(index + 1) {
             snapshot(to: CommandLine.arguments[index + 1]); return
         }
-        #if DEBUG
         // Dev only: the updater alone, against the feed this build's Info.plist names. No onboarding, no Accessibility, no observers, no hotkey. The defaults flag lets the copy Sparkle relaunches (it gets no arguments) do the same.
         if CommandLine.arguments.contains("--update-test") || UserDefaults.standard.bool(forKey: "updateTestMode") {
             startUpdates(); updates?.start(); updatePresenter?.allowsFocus = false
@@ -181,6 +183,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return
         }
         #endif
+        // The model centers first: an installed pack is re-hashed in the background before anything loads it (the engine holds it until then).
+        _ = ModelCenter.app; _ = ModelCenter.optionalCenters
         panelModel.warm(); studioModel.warm()
         // Sends suggestion reports an earlier launch queued (or erases them when reports are off).
         Reports.start()
@@ -257,31 +261,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }.store(in: &subscriptions)
         // The grammar model compiles for the Neural Engine on first use (seconds): do it in the background once setup is finished, never during launch.
         Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
-            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar(); await WritingEngine.warmSlips() } }.store(in: &subscriptions)
+            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar(); if Preferences.shared.slipCheck { await WritingEngine.warmSlips() } } }.store(in: &subscriptions)
         // Models are downloaded on demand (ModelCenter): until they arrive Parzr checks with its rules. Smart grammar warms the moment they do.
-        // Optional packs: an automatic one (the slip check, about 84 MB) follows the essential pack, one download at a time,
-        // and warms when it arrives; the tone check's downloads only when its setting is on (below).
-        let models = ModelCenter.app, optional = ModelCenter.optionalCenters, automatic = optional.filter { $0.optional?.automatic == true }
+        // Optional packs (the slip check, about 84 MB; the tone check, about 23 MB) follow the essential pack while their
+        // checks are switched on in Settings, Writing (both on by default), and warm or load when they arrive (OptionalChecks).
+        let models = ModelCenter.app, optional = ModelCenter.optionalCenters
         let allowed = ModelCenter.downloadsAllowed
         models.onReady = {
             if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } }
-            if allowed { automatic.forEach { $0.startIfNeeded() } }
+            OptionalChecks.startAutomatic(essentialReady: true)
         }
-        ModelCenter.slips?.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } } }
+        ModelCenter.slips?.onReady = { if Preferences.shared.smartGrammar, Preferences.shared.slipCheck { Task { await WritingEngine.warmSlips() } } }
         if allowed {
             models.watchNetwork(); optional.forEach { $0.watchNetwork() }
             // A finished welcome guide (an existing user after an update, or a returning one) downloads in the background without showing anything;
             // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
             Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2)); models.startIfNeeded()
-                if models.isReady { automatic.forEach { $0.startIfNeeded() } }
+                OptionalChecks.startAutomatic(essentialReady: models.isReady)
             } }.store(in: &subscriptions)
         }
-        // Tone check (opt-in): its model is its own small pack, fetched when the setting is turned on and loaded once it is on disk.
+        // Tone check: the classifier loads once its pack is on disk and the check is on; Remove unloads it.
         ModelCenter.tone?.onReady = { ToneModel.load() }
         ModelCenter.tone?.onRemove = { Task { await ToneChecker.shared.unload() } }
-        ToneModel.apply(Preferences.shared.toneCheck, userInitiated: false)
-        Preferences.shared.$toneCheck.dropFirst().removeDuplicates().sink { enabled in Task { @MainActor in ToneModel.apply(enabled, userInitiated: true) } }.store(in: &subscriptions)
+        ToneModel.load()
+        // The switches in Settings, Writing: on asks for a missing pack, off stops the check (the files stay until Remove).
+        Preferences.shared.$toneCheck.dropFirst().removeDuplicates().sink { on in Task { @MainActor in OptionalChecks.switched(.tone, on: on) } }.store(in: &subscriptions)
+        Preferences.shared.$slipCheck.dropFirst().removeDuplicates().sink { on in Task { @MainActor in OptionalChecks.switched(.slips, on: on) } }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
@@ -579,6 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard x + size.width <= screen.visibleFrame.maxX else { return }
         marker?.setContentSize(size); marker?.setFrameOrigin(NSPoint(x: x, y: bounds.minY)); marker?.orderFrontRegardless()
     }
+    #if DEBUG || PARZR_QA
     /// The explicit check card in every state, dark (`card-<state>.png`) and light (`-light`). Results are built by hand, so no engine is needed.
     private func cardSnapshots(to directory: URL) throws {
         let text = "i hope your doing well. can you chek this once?"
@@ -724,7 +731,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             } catch { fputs("Native snapshots failed: \(error.localizedDescription)\n", stderr); exit(1) }
         }
     }
-    #if DEBUG
     /// Scenarios: install (found, download, extract, ready, restart), fail (same, but the update must be rejected), skip (Skip this version holds for scheduled checks), check (a manual check with nothing new), relaunched (the copy Sparkle starts after an update, or a manual copy: the Updated toast must show only after an install by the updater), quit (waits for a background download, then quits so Sparkle installs on quit). Writes update-test-<scenario>.json and one PNG per new panel state.
     private func runUpdateTest(directory: String, scenario: String) async throws {
         guard let updates else { throw ParzrError.message("This build has no update feed.") }
@@ -863,7 +869,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             try finish(["up_to_date": done]); NSApp.terminate(nil)
         }
     }
-    #endif
     /// `--ui-test`. Not part of the local release routine (it opens and activates real windows); the same controls are checked headless by UIControlsWindowTests, and this stays for the parts that need a real screen.
     private func runUIControlsTest(directory: String) async throws {
         guard !IsSecureEventInputEnabled() else { throw ParzrError.message("UI QA stopped while secure input is active.") }
@@ -971,6 +976,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let png = bitmap.representation(using: .png, properties: [:]) else { throw ParzrError.message("Could not encode the UI snapshot.") }
         try png.write(to: url); window.close()
     }
+    #endif
 }
 
 /// Which Dock policy the app needs: an accessory app never owns the menu bar, so an open Parzr window makes it regular whatever Show in Dock says. Pure so tests can check it without activating anything.

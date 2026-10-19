@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy | Parzr</title>
+<meta name="description" content="What the Parzr Mac app sends and keeps: an hourly update check, model downloads, and suggestion reports only when you click Report wrong suggestion.">
+<link rel="canonical" href="https://parzr.app/privacy">
+<meta name="theme-color" content="#202629">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="stylesheet" href="/styles.css">
+<script
+    src="https://rybbit.aman.wiki/api/script.js?siteId=836549889db5"
+    defer
+></script>
+</head>
+<body>
+<svg class="sr-only" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="pmark" viewBox="4 3.4 18.5 22.8"><path fill="currentColor" fill-rule="evenodd" d="M4.00 26.10L4.00 6.67Q4.00 3.48 7.00 3.48L13.25 3.48C19.50 3.48 21.25 6.38 21.25 10.44C21.25 14.79 17.25 17.40 13.50 18.56L8.75 20.59L8.75 26.10ZM8.75 8.99L8.75 14.50L13.75 12.76Q16.25 12.18 16.25 10.44Q16.25 8.41 13.50 8.41ZM13.25 23.20H21.25A1.25 1.45 0 0 1 22.50 24.65V24.65A1.25 1.45 0 0 1 21.25 26.10H13.25A1.25 1.45 0 0 1 12.00 24.65V24.65A1.25 1.45 0 0 1 13.25 23.20Z"/></symbol>
+</svg>
+<header class="nav"><nav class="nav-in" aria-label="Primary"><a class="brand" href="/" aria-label="Parzr, home"><svg class="brand-mark" aria-hidden="true"><use href="#pmark"/></svg><span>Parzr</span></a></nav></header>
+<main class="legal" id="main">
+  <div class="wrap legal-in">
+    <p class="eyebrow">Privacy</p>
+    <h1 class="h2">What leaves your Mac</h1>
+    <p class="sect-lede">Parzr checks your writing on your Mac. It has no account and keeps no writing history. This page covers the few things that leave your Mac.</p>
+
+    <h2>Requests the app makes</h2>
+    <ul>
+      <li><strong>Update check.</strong> Hourly, unless you turn it off: a request to GitHub for the latest release’s signed update feed. It carries nothing about you or your writing, and Parzr installs only an update whose signature verifies.</li>
+      <li><strong>Model downloads.</strong> From GitHub, once each: the Smart grammar and rewriting models (727 MB) when you set Parzr up, then the Slip check (84 MB) and Tone check (23 MB) models while those checks are on (both are by default). Every file is checked against a pinned SHA-256 before use. The downloads carry nothing about you or your writing.</li>
+      <li><strong>Suggestion reports.</strong> On by default, off with one switch. See below.</li>
+    </ul>
+
+    <h2 id="reports">Suggestion reports</h2>
+    <p>Parzr sends a report <strong>only when you click “Report wrong suggestion”</strong> (in a suggestion card’s More menu, or Report in the Review list). Ignoring a suggestion sends nothing, and accepting one sends nothing.</p>
+    <p>A report holds the suggestion (the words it would change and what it would change them to), the text around it (up to about 240 characters on each side, within its sentence), the rule or model that made it, the app’s bundle ID (such as <code>com.apple.mail</code>) and Parzr’s version.</p>
+    <p>Before a report is queued, Parzr removes on your Mac the names it recognises, email addresses, phone numbers, other numbers, links and keys. The rest of the text around the suggestion is sent as written. Parzr cannot reliably recognise every name (a name that is also an ordinary word, like Will or Rose, is caught only if Parzr already knows it as a name, and even then not when it is written in lowercase), and it cannot recognise health, financial or other personal details written in ordinary words. A report that mentions a few health terms is not sent at all, but that is not a guarantee: if a sentence is private, don’t report it.</p>
+    <p>Reports are never sent from apps Parzr excludes (terminals and code editors), apps you turned off, password and other secure fields, fields Parzr treats as sensitive (sign-in, payment, one-time code and address fields, among others), or text Parzr could only read by copying.</p>
+
+    <h2>Where reports go, and for how long</h2>
+    <ul>
+      <li>Reports go to <code>reports.parzr.app</code>, a Cloudflare Worker and database. Cloudflare runs that service for Parzr as its processor. Parzr’s maintainer decides what is collected and why: to find and fix wrong suggestions.</li>
+      <li>No account, device identifier, IP address or time of day is stored: a stored report keeps only the fields above and the day it arrived. The rate limit and a daily per-network quota use a salted hash of your IP address (or of its /64 network for IPv6) and the day, so it changes every day. The hash is held in Cloudflare’s rate-limit counter for about a minute, and in the database only next to a count of reports stored that day, never with a report, and deleted within two days. Your IP address itself is never stored. Request logs are off.</li>
+      <li>Reports are deleted after 180 days.</li>
+      <li>Because nothing links a report to you, a report that has been sent cannot be found and deleted on request. Turning reports off stops sending at once and deletes any reports on your Mac not yet sent.</li>
+      <li>A reported sentence, as redacted, may become a test case in Parzr’s open-source repository, so the mistake does not come back.</li>
+    </ul>
+
+    <h2>Turning reports off</h2>
+    <p>Settings, Privacy, “Send anonymous suggestion reports” (also in the welcome guide). Off is immediate.</p>
+
+    <h2>What stays on your Mac</h2>
+    <p>Your dictionary, learned names and words, muted suggestions, preferences and, if you keep it, a private weekly summary of your fixes (Settings, Learning) are saved on this Mac only. Settings, Privacy, “Erase all Parzr data” removes them, along with any reports not yet sent. Downloaded models stay until you remove them in Settings, Models.</p>
+
+    <h2>This website</h2>
+    <p>parzr.app counts visits with Rybbit, cookieless. It sets no cookies and asks for nothing.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or requests: <a href="https://github.com/jn-aman/parzr/issues">open an issue on GitHub</a>. Please don’t paste text you reported into a public issue.</p>
+    <p class="fine">Updated 2026-10-19. Source: <a href="https://github.com/jn-aman/parzr/blob/main/docs/privacy.md">docs/privacy.md</a>.</p>
+  </div>
+</main>
+</body>
+</html>

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Prepare ephemeral GitHub-runner signing credentials without printing secret commands."""
+"""Prepare ephemeral GitHub-runner signing credentials without printing secret commands.
+
+The private key is usable only by codesign and security (-T, never -A for every application), the keychain locks
+itself after 40 idle minutes, and the release workflow deletes it as soon as notarization is done."""
 import base64, os, pathlib, secrets, subprocess, sys
 if os.environ.get('GITHUB_ACTIONS')!='true':sys.exit('This helper is restricted to GitHub Actions. Use your local keychain for local signing.')
 required=['PARZR_CERTIFICATE_BASE64','PARZR_CERTIFICATE_PASSWORD','PARZR_SIGNING_IDENTITY','PARZR_NOTARY_KEY_BASE64','PARZR_NOTARY_KEY_ID','PARZR_NOTARY_ISSUER']
@@ -18,9 +21,11 @@ def run(command,label):
  result=subprocess.run(command,capture_output=True)
  if result.returncode:sys.exit(label+' failed. Credentials and command arguments are omitted from logs.')
 run(['security','create-keychain','-p',password,str(keychain)],'Keychain creation')
-run(['security','set-keychain-settings','-lut','21600',str(keychain)],'Keychain setup')
+# Auto-lock after 40 minutes idle (and on sleep): the workflow creates this keychain only after every unsigned build
+# and package step, signs at once, and deletes it right after notarization; 40 minutes covers one notarization wait.
+run(['security','set-keychain-settings','-lut','2400',str(keychain)],'Keychain setup')
 run(['security','unlock-keychain','-p',password,str(keychain)],'Keychain unlock')
-run(['security','import',str(cert),'-P',os.environ['PARZR_CERTIFICATE_PASSWORD'],'-A','-t','cert','-f','pkcs12','-k',str(keychain)],'Certificate import')
+run(['security','import',str(cert),'-P',os.environ['PARZR_CERTIFICATE_PASSWORD'],'-T','/usr/bin/codesign','-T','/usr/bin/security','-t','cert','-f','pkcs12','-k',str(keychain)],'Certificate import')
 run(['security','set-key-partition-list','-S','apple-tool:,apple:,codesign:','-s','-k',password,str(keychain)],'Signing-key access')
 run(['security','list-keychains','-d','user','-s',str(keychain)],'Keychain search-list setup')
 run(['xcrun','notarytool','store-credentials','parzr-ci','--key',str(key),'--key-id',os.environ['PARZR_NOTARY_KEY_ID'],'--issuer',os.environ['PARZR_NOTARY_ISSUER'],'--keychain',str(keychain)],'Notarization credential validation')

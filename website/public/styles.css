@@ -581,6 +581,17 @@ kbd{font:600 15px var(--sans)}
 .nf .lede{position:relative;z-index:3}
 .nf .cta-row{justify-content:center;position:relative;z-index:3}
 .nf .aurora{position:absolute}
+/* Privacy page: plain reading column */
+.legal{padding:clamp(110px,14vh,150px) 0 80px}
+.legal-in{max-width:760px}
+.legal .h2{font-size:clamp(34px,4.6vw,56px);margin-bottom:20px}
+.legal h2:not(.h2){font-size:20px;font-weight:650;color:var(--text-primary);margin:40px 0 12px}
+.legal p,.legal li{font-size:16px;line-height:1.65;color:var(--text-secondary)}
+.legal p{margin:0 0 14px}
+.legal ul{margin:0 0 14px;padding-left:20px;display:grid;gap:10px}
+.legal strong{color:var(--text-primary);font-weight:600}
+.legal a{color:var(--mint);text-underline-offset:3px}
+.legal code{font-size:.92em;color:var(--text-primary)}
 
 /* Footer finale: the wordmark types "Prazr", underlines it in red, then fixes it in mint */
 .mk-pair::before{background:color-mix(in srgb,var(--red) 14%,transparent)}

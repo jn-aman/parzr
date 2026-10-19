@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Parzr: an offline writing assistant for Mac</title>
-<meta name="description" content="Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone offline, with no extension or account. Nothing you write leaves your Mac.">
+<meta name="description" content="Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Optional anonymous reports, sent only when you report a wrong suggestion, are redacted on your Mac first.">
 <link rel="canonical" href="https://parzr.app/">
 <meta name="theme-color" content="#202629">
 <meta name="color-scheme" content="dark">
@@ -33,7 +33,7 @@
     src="https://rybbit.aman.wiki/api/script.js?siteId=836549889db5"
     defer
 ></script>
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://parzr.app/#app","name":"Parzr","url":"https://parzr.app/","description":"Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone offline, with no extension or account. Nothing you write leaves your Mac.","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later, Apple Silicon","image":"https://parzr.app/assets/og-image.png","downloadUrl":"https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg","license":"https://github.com/jn-aman/parzr/blob/main/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Aman Jain"}},{"@type":"WebSite","@id":"https://parzr.app/#website","name":"Parzr","url":"https://parzr.app/","inLanguage":"en"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","@id":"https://parzr.app/#app","name":"Parzr","url":"https://parzr.app/","description":"Parzr is a free, open-source Mac writing assistant. Fixes grammar, spelling and tone on your Mac, offline, with no extension or account. Optional anonymous reports, sent only when you report a wrong suggestion, are redacted on your Mac first.","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later, Apple Silicon","image":"https://parzr.app/assets/og-image.png","downloadUrl":"https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg","license":"https://github.com/jn-aman/parzr/blob/main/LICENSE","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Aman Jain"}},{"@type":"WebSite","@id":"https://parzr.app/#website","name":"Parzr","url":"https://parzr.app/","inLanguage":"en"}]}</script>
 </head>
 <body>
 <!-- Shared SVG symbols (the ParzrMark ported from Design.swift, plus mode icons). -->
@@ -201,12 +201,14 @@
     <div class="names-copy">
       <p class="eyebrow">Names</p>
       <h2 id="names-h" class="h2">Built to <span class="nw">respect names.</span></h2>
-      <p class="sect-lede">Names are proper nouns. Type aman jain or thanks, priya in lowercase and Parzr suggests the capital, Aman Jain and Priya, but never respells the name. Real typos still get fixed. And it learns the names that matter to you.</p>
+      <p class="sect-lede">Names are proper nouns. Type aman jain or thanks, priya in lowercase and Parzr suggests the capital, Aman Jain and Priya, but never respells the name. Real typos still get fixed. And it learns the names, and the words, that matter to you.</p>
       <ul class="learn">
         <li><svg aria-hidden="true"><use href="#i-undo"/></svg><div><b>From your Undo</b><span>Undo a change to a name and Parzr remembers.</span></div></li>
-        <li><svg aria-hidden="true"><use href="#i-ban"/></svg><div><b>From Ignore</b><span>Ignore a mark once and it stays ignored.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-ban"/></svg><div><b>From Ignore</b><span>Ignore a mark once and it stays ignored. Ignore the same kind three times and Parzr stops suggesting it.</span></div></li>
         <li><svg aria-hidden="true"><use href="#i-book"/></svg><div><b>From macOS</b><span>It reads the system dictionary and, only if you opt in, your Contacts.</span></div></li>
         <li><svg aria-hidden="true"><use href="#i-person"/></svg><div><b>This is a name</b><span>One button on the card teaches it directly.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-check"/></svg><div><b>Your jargon</b><span>Product names and acronyms you use are kept exactly as typed.</span></div></li>
+        <li><svg aria-hidden="true"><use href="#i-lock"/></svg><div><b>Settings, Learning</b><span>A private weekly summary of your fixes, kept on this Mac. Unmute suggestions there.</span></div></li>
       </ul>
     </div>
     <div class="names-vis">
@@ -233,7 +235,7 @@
     <div class="layer d1 glow g4" aria-hidden="true"></div>
     <div class="priv-in">
       <p class="eyebrow">Privacy</p>
-      <h2 id="priv-h" class="manifesto" data-manifesto>Your words never leave this Mac.<br class="lg"> <span class="nw">No account.</span> <span class="nw">No cloud.</span><br class="lg"> <span class="nw">No telemetry.</span> <span class="nw">No HTTP server.</span></h2>
+      <h2 id="priv-h" class="manifesto" data-manifesto>Your writing is checked on this Mac.<br class="lg"> <span class="nw">No account.</span> <span class="nw">No cloud checking.</span><br class="lg"> <span class="nw">Reports only when you ask,</span> <span class="nw">off with one switch.</span></h2>
     </div>
   </div>
 </section>
@@ -262,7 +264,7 @@
           <ul class="gec-stats"><li><b>about 2 ms</b> per sentence</li><li><b>about 18 MB</b> of memory</li><li><b>Neural Engine</b>, always loaded</li></ul>
         </div>
         <h3 class="bt-t">Smart grammar, on the Neural Engine.</h3>
-        <p class="bt-d">A small grammar model tags each word of a new sentence (keep, replace, append, verb form, plural) instead of rewriting it. It runs on your Mac in about 2 ms a sentence, and its fixes pass Parzr's own guards: names, links and code stay untouched. Example: "will be release" becomes "will be released".</p>
+        <p class="bt-d">A small grammar model tags each word of a new sentence (keep, replace, append, verb form, plural) instead of rewriting it. It runs on your Mac in about 2 ms a sentence, and its fixes pass Parzr's own guards: names, links and code stay untouched, and Hinglish words are never respelled. Example: "will be release" becomes "will be released". Every sentence gets its capital, chat included, non-native patterns like "I seen" and "reply me" are fixed, and there are fewer false alarms than before. The Slip check, a second small model, catches real words typed by mistake: "I hat it" becomes "I hate it", then and than, lose and loose. It is on by default, with its own switch.</p>
       </article>
 
       <article class="bt bt-ext">
@@ -271,7 +273,7 @@
           <ul class="apps"><li>Safari</li><li>Chrome</li><li>Brave</li><li>Edge</li><li>Arc</li><li>Firefox</li><li>Mac apps</li><li>Electron apps</li></ul>
         </div>
         <h3 class="bt-t">No extension needed.</h3>
-        <p class="bt-d">Parzr reads your text through macOS Accessibility, so it works in Safari, Chrome, Brave, Edge, Arc and Firefox, in native Mac apps and in Electron apps. Nothing to install in your browser.</p>
+        <p class="bt-d">Parzr reads your text through macOS Accessibility, so it works in Safari, Chrome, Brave, Edge, Arc and Firefox, in native Mac apps and in Electron apps. Nothing to install in your browser. Fixes from an underline land in Chromium editors too (tested in Notion in Brave). Password, one-time-code and payment fields are skipped, read-only text like a Teams message list gets no suggestions, and the menu bar pauses an app for 15 minutes or an hour, with Resume now.</p>
       </article>
 
       <article class="bt bt-col">
@@ -281,7 +283,7 @@
           <p class="col-line">Fixed: <span class="im ok">received</span></p>
         </div>
         <h3 class="bt-t">Red for mistakes. Blue for style.</h3>
-        <p class="bt-d">Solid, thick underlines with a soft tint on the word, deeper when you hover. Mint is only for the fix.</p>
+        <p class="bt-d">Solid, thick underlines with a soft tint on the word, deeper when you hover. Mint is only for the fix. Underlines stay put while you type and follow the text as you scroll; new ones wait while you type fast.</p>
       </article>
 
       <article class="bt bt-opt">
@@ -290,7 +292,7 @@
           <p class="opt-line"><span class="opt-a">teh</span><span class="opt-b">the</span></p>
         </div>
         <h3 class="bt-t">Option+Space, anywhere.</h3>
-        <p class="bt-d">Select text in any app, even Google Docs, and press Option+Space. Parzr checks the selection and pastes the fix.</p>
+        <p class="bt-d">Select text in any app, even Google Docs, and press Option+Space. Parzr checks the selection and pastes the fix. The Tone check, on by default with its own switch, says when a message may read as rude, passive-aggressive, curt or over-apologetic, and Soften rewrites it in one click.</p>
       </article>
 
       <article class="bt bt-modes">
@@ -314,16 +316,16 @@
           </dl>
         </div>
         <h3 class="bt-t">One sentence. Five ways to say it.</h3>
-        <p class="bt-d">Grammar, spelling and punctuation run in every mode. Illustrative example, written by hand to show how modes differ.</p>
+        <p class="bt-d">Select text, press Option+Space, pick a mode. Grammar, spelling and punctuation run in every mode, and rewrites run on your Mac through a meaning check. Illustrative example, written by hand to show how modes differ.</p>
       </article>
 
       <article class="bt bt-priv">
         <div class="bt-vis priv-vis" aria-hidden="true">
-          <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">bytes</span></p>
-          <svg class="off"><use href="#i-wifi"/></svg>
+          <p class="stat"><span class="num" data-count="0" data-kind="scramble">0</span><span class="unit">reports unless you click Report</span></p>
+          <svg class="off"><use href="#i-lock"/></svg>
         </div>
         <h3 class="bt-t">Sent from your Mac.</h3>
-        <p class="bt-d">No account, no telemetry, no HTTP service and no writing logs. The two models download once from GitHub when you set Parzr up, are checked against pinned hashes, then run on your Mac: the grammar model stays loaded on the Neural Engine, the 593 MB rewriting model loads when you ask and unloads after 30 idle seconds. Besides that download, the app's only request is an hourly check for a new version. Neither carries anything about you or your writing, and you can turn the update check off in Settings.</p>
+        <p class="bt-d">Checking runs on your Mac: no account, no HTTP service and no writing history. Models download from GitHub: Smart grammar and rewrites (727 MB) when you set Parzr up, then the Slip check (84 MB) and Tone check (23 MB) while they are on. Every file is checked against a pinned SHA-256 before use, then runs locally. The app checks hourly for a new version and installs only updates signed for Parzr. Settings, Privacy can erase all Parzr data. To help fix wrong suggestions, Parzr sends an anonymous report only when you click Report wrong suggestion; ignoring or accepting a suggestion sends nothing. A report holds the suggestion and the text around it (up to about 240 characters on each side). Parzr removes names it recognises, emails, phone numbers, other numbers, links and keys on your Mac before sending; the rest of the text around the suggestion is sent as written, so personal details in ordinary words can't be reliably caught. It also holds the rule or model behind the suggestion, the app's bundle ID and Parzr's version. Reports are kept 180 days on Cloudflare, which runs the report server for Parzr, with no IP address or account, so a sent report can't be deleted individually. Reports are on by default; one switch in the welcome guide or Settings, Privacy turns them off and deletes any not yet sent. <a href="/privacy" class="inl">Privacy details</a></p>
       </article>
 
       <article class="bt bt-src">
@@ -398,7 +400,7 @@
     <div class="open-copy">
       <p class="eyebrow">Open source</p>
       <h2 id="open-h" class="h2"><span class="nw">Read every line.</span></h2>
-      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and two local models, all in one public repository. Every rule ships with a positive and a negative example, and its provenance. The GECToR weights Parzr downloads are for non-commercial use, and Parzr is free.</p>
+      <p class="sect-lede">Apache-2.0. A Rust grammar engine, a Swift app and four local models, all in one public repository. Every rule ships with a positive and a negative example, and its provenance. The GECToR weights Parzr downloads are for non-commercial use, and Parzr is free.</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/jn-aman/parzr" data-link="repo" data-rybbit-event="GitHub opened" data-rybbit-prop-placement="Open source section" rel="noopener"><svg aria-hidden="true"><use href="#i-gh"/></svg>GitHub</a>
         <details class="build" id="build">
@@ -460,7 +462,7 @@ python3 scripts/package.py</code></pre>
   <div class="wrap foot-top">
     <div class="foot-brand">
       <a class="brand" href="#top" aria-label="Parzr, back to top"><svg class="brand-mark" aria-hidden="true"><use href="#pmark"/></svg><span>Parzr</span></a>
-      <p class="foot-promise">Your words never leave this Mac.</p>
+      <p class="foot-promise">Your writing is checked on this Mac.</p>
       <p class="status-pill"><i class="live" aria-hidden="true"></i>Public beta</p>
     </div>
     <nav class="foot-col" aria-labelledby="fp-h">
@@ -469,7 +471,7 @@ python3 scripts/package.py</code></pre>
         <li><a class="fl" href="https://github.com/jn-aman/parzr/releases/latest/download/Parzr.dmg" data-link="release" data-rybbit-event="Download clicked" data-rybbit-prop-placement="Footer" rel="noopener">Download</a></li>
         <li><a class="fl" href="#try" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Try it">Try it</a></li>
         <li><a class="fl" href="#names" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Names">Names</a></li>
-        <li><a class="fl" href="#privacy" data-rybbit-event="Section link clicked" data-rybbit-prop-section="Privacy">Privacy</a></li>
+        <li><a class="fl" href="/privacy" data-rybbit-event="Privacy page opened" data-rybbit-prop-placement="Footer">Privacy</a></li>
       </ul>
     </nav>
     <nav class="foot-col" aria-labelledby="fo-h">
@@ -483,7 +485,7 @@ python3 scripts/package.py</code></pre>
     </nav>
   </div>
   <div class="wrap foot-base"><span>© 2026 Parzr · Apache-2.0</span><a class="up fl" href="#top">Back to top<svg aria-hidden="true"><use href="#i-up"/></svg></a></div>
-  <div class="wrap"><p class="fine foot-note">This website counts visits with Rybbit, cookieless and privacy-friendly. The Parzr app never sends your writing anywhere; its only request is an hourly update check, which you can turn off.</p></div>
+  <div class="wrap"><p class="fine foot-note">This website counts visits with Rybbit, cookieless and privacy-friendly. The Parzr app checks your writing on your Mac. It downloads its models from GitHub, sends an hourly update check and, only when you click Report wrong suggestion (unless you turn reports off), that suggestion with the text around it, after removing names it recognises, emails, phone numbers, other numbers, links and keys; the rest is sent as written and kept 180 days. <a href="/privacy">Privacy details</a>.</p></div>
   <div class="mk" id="mk" aria-hidden="true"><span class="mk-in" id="mk-in"><span class="mk-l" data-c="P">P</span><span class="mk-pair"><span class="mk-l mk-a" data-c="a">a</span><span class="mk-l mk-r" data-c="r">r</span></span><span class="mk-l" data-c="z">z</span><span class="mk-l" data-c="r">r</span></span></div>
 </footer>
 </body>

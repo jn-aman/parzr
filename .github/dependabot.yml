@@ -1,0 +1,41 @@
+# Weekly version updates for every package manager in the repository. Minor and patch updates are grouped into one
+# pull request per ecosystem and directory; majors stay separate. Security updates are switched on in the repository
+# settings (docs/repo-settings.md) and are not grouped. Each pull request runs the `verify` and `dependencies` checks.
+# GitHub Actions stay pinned to commit SHAs: Dependabot rewrites the SHA and its version comment together.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    groups:
+      actions-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: cargo
+    directory: /engine
+    schedule: {interval: weekly, day: monday}
+    groups:
+      cargo-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: npm
+    directory: /
+    schedule: {interval: weekly, day: monday}
+    groups:
+      npm-root-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: npm
+    directory: /worker
+    schedule: {interval: weekly, day: monday}
+    groups:
+      npm-worker-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: npm
+    directory: /extensions/vscode
+    schedule: {interval: weekly, day: monday}
+    groups:
+      npm-vscode-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: npm
+    directory: /website
+    schedule: {interval: weekly, day: monday}
+    groups:
+      npm-website-minor-patch: {update-types: [minor, patch]}
+  - package-ecosystem: swift
+    directory: /mac
+    schedule: {interval: weekly, day: monday}
+    groups:
+      swift-minor-patch: {update-types: [minor, patch]}

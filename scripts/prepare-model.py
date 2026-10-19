@@ -21,6 +21,10 @@ if not source.exists():
     run(['git', '-C', source, 'checkout', '--detach', REVISION])
 if subprocess.check_output(['git', '-C', source, 'rev-parse', 'HEAD'], text=True).strip() != REVISION:
     raise SystemExit('llama.cpp source revision does not match the pinned runtime.')
+# The pinned commit says nothing about edited or added files in the work tree (a reused dist/ or CI cache):
+# build only from the exact pinned tree. Ignored files (none are tracked build inputs) are not checked.
+if subprocess.check_output(['git', '-C', source, 'status', '--porcelain', '--untracked-files=all'], text=True).strip():
+    raise SystemExit('dist/llama-source has local changes or untracked files; delete dist/llama-source and build again.')
 cmake = shutil.which('cmake')
 if not cmake:
     local = ROOT/'dist/qa/frequency-build/bin/cmake'

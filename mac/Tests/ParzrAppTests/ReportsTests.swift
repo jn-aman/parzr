@@ -29,6 +29,41 @@ final class ReportsTests: XCTestCase {
         XCTAssertNil(Reports.endpoint(nil))
         XCTAssertNil(Reports.endpoint(42))
     }
+    func testReportsNeverComeFromExcludedAppsOrBlockedOrSecureFields() {
+        func allowed(_ bundle: String? = "com.apple.Notes", rules: Bool = false, enabled: Bool = true, secure: Bool = false, verdict: HostRules.Verdict = .allowed, copied: Bool = false) -> Bool {
+            Compat.reportsAllowed(bundle: bundle, excludedByRules: rules, enabled: enabled, secure: secure, verdict: verdict, copied: copied)
+        }
+        XCTAssertTrue(allowed())
+        XCTAssertFalse(allowed("com.apple.Terminal"), "a terminal is on the exclusion list")
+        XCTAssertFalse(allowed("com.jetbrains.intellij"), "so are JetBrains IDEs")
+        XCTAssertFalse(allowed(rules: true), "an app a host rule turns off")
+        XCTAssertFalse(allowed(enabled: false), "an app the writer turned off")
+        XCTAssertFalse(allowed(secure: true), "a secure field, or while secure input is on")
+        XCTAssertFalse(allowed(verdict: .blocked("sensitive:otp")), "a field the sensitive-field keywords block, even through Option+Space")
+        XCTAssertFalse(allowed(verdict: .blocked("rule:x")), "a field a host rule blocks")
+        XCTAssertFalse(allowed(copied: true), "text read by copying: its field is unknown")
+        XCTAssertFalse(allowed(nil)); XCTAssertFalse(allowed(""))
+    }
+    func testTheReportSwitchFollowsTheText() {
+        let model = AppModel()
+        XCTAssertFalse(model.sourceReportable, "nothing to report before any text")
+        model.playground("I has it.")
+        XCTAssertTrue(model.sourceReportable, "Parzr's own writing space may report")
+        model.clearSession()
+        XCTAssertFalse(model.sourceReportable)
+        XCTAssertFalse(model.canReport, "and never under tests")
+    }
+    func testThePrivacyPageIsHTTPS() {
+        XCTAssertEqual(Reports.privacyURL.scheme, "https")
+        XCTAssertEqual(Reports.privacyURL.absoluteString, "https://parzr.app/privacy")
+    }
+    func testTheReportsCopyIsHonest() {
+        let detail = StudioView.reportsDetail
+        for phrase in ["Only when you click Report wrong suggestion", "up to about 240 characters", "removes names it recognises, emails, phone numbers, other numbers, links and keys", "sent as written", "180 days", "Cloudflare", "can't be found or deleted individually", "Ignoring or accepting a suggestion sends nothing"] {
+            XCTAssertTrue(detail.contains(phrase), phrase)
+        }
+        XCTAssertFalse(detail.contains("ignore a suggestion or report"), "Ignore no longer sends anything")
+    }
     func testTheWelcomeGuideSampleIsNeverReported() {
         XCTAssertFalse(OnboardingModel().editor.reports)
         XCTAssertTrue(AppModel().reports)

@@ -86,7 +86,7 @@ struct RewritePanel: View {
     private func footer(more: Bool) -> some View {
         let focused = model.busy ? nil : model.focusedEdit
         let hide = { (edit: WritingEdit) in if let ignore { ignore(edit) } else { model.toggle(edit) } }
-        let report: (() -> Void)? = focused.flatMap { edit in model.canReport ? { model.report([edit], .reported); hide(edit) } : nil }
+        let report: (() -> Void)? = focused.flatMap { edit in model.canReport ? { model.report([edit]); hide(edit) } : nil }
         // Without "more" the row has its own Copy button, so the menu holds only what is left (reporting).
         let moreMenu = CardMore(edit: focused, done: { if let edit = focused { hide(edit) } }, copy: more && showsModes ? { model.copy() } : nil, copied: copied, copyEnabled: !model.busy && model.result != nil, report: report)
         return HStack(spacing: 6) {
@@ -102,7 +102,7 @@ struct RewritePanel: View {
                 }
                 Spacer(minLength: 0)
                 moreMenu
-                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); model.report([edit], .dismissed); hide(edit) }).fixedSize()
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); hide(edit) }).fixedSize()
             } else if toneFlag != nil, let tone = model.softenTone {
                 NativeButton(title: "Soften  ⏎", kind: .primary, label: "Soften: rewrite as \(tone.title)", key: "\r", enabled: !model.busy, action: { model.soften() }).fixedSize().help("Rewrite it as \(tone.title) · Return")
                 Spacer(minLength: 0); moreMenu

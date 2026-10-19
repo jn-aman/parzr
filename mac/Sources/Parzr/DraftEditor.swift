@@ -13,7 +13,7 @@ struct DraftEditor: NSViewRepresentable {
     var focusedEditID: String? = nil
     var ignore: (WritingEdit) -> Void = { _ in }
     /// Reports a suggestion the writer turned down (Ignore, or Report wrong suggestion): the edits, the text they were made in, and the action. nil: never.
-    var report: (([WritingEdit], String, ReportAction) -> Void)? = nil
+    var report: (([WritingEdit], String) -> Void)? = nil
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSScrollView(); scroll.drawsBackground = false; scroll.hasVerticalScroller = true
@@ -108,7 +108,7 @@ struct DraftEditor: NSViewRepresentable {
 final class CorrectionTextView: NSTextView {
     var suggestions: [WritingEdit] = []
     var ignore: (WritingEdit) -> Void = { _ in }
-    var report: (([WritingEdit], String, ReportAction) -> Void)?
+    var report: (([WritingEdit], String) -> Void)?
     private var correction: NSPopover?
     private var correctionEdit: WritingEdit?
     /// The edit whose card is on screen, and that card's view (read by the click self test).
@@ -143,7 +143,7 @@ final class CorrectionTextView: NSTextView {
         guard local.x >= hit.minX, local.x <= hit.maxX, local.y >= line.minY, local.y <= line.maxY else { dismissCorrection(); return }
         dismissCorrection()
         let popover = NSPopover(); popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }, report: report.map { report in { [weak self] action in report([edit], self?.string ?? "", action) } }))
+        popover.contentViewController = NSHostingController(rootView: InlineCorrection(edit: edit, source: string, edits: suggestions, canApply: true, apply: { [weak self] in self?.accept(edit) }, applySentence: { [weak self] in self?.acceptSentence(edit) }, ignore: { [weak self] in self?.ignore(edit); self?.dismissCorrection() }, close: { [weak self] in self?.dismissCorrection() }, report: report.map { report in { [weak self] in report([edit], self?.string ?? "") } }))
         popover.contentSize = InlineCorrection.size
         correction = popover; correctionEdit = edit
         if presentsPopover { popover.show(relativeTo: rect, of: self, preferredEdge: .maxY) }

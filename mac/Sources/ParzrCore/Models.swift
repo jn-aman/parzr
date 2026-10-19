@@ -158,9 +158,11 @@ public struct EngineRequest: Codable, Sendable {
     public let gec: Bool
     /// The text comes from a chat app: a short Friendly rewrite may end with one fitting emoji.
     public let casual: Bool
-    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], names: [String] = [], capitalizeNames: Bool = false, dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false, gec: Bool = false, casual: Bool = false) {
+    /// Use the slip check's model (the optional slip pack) when it is on this Mac; false while the user has switched it off.
+    public let slips: Bool
+    public init(text: String, mode: RewriteMode = .fix, dictionary: [String] = [], names: [String] = [], capitalizeNames: Bool = false, dialect: String = "american", protectedRanges: [TextSpan] = [], tokens: [TokenHint] = [], sentenceStart: Bool = true, sentenceEnd: Bool = true, deep: Bool = false, gec: Bool = false, casual: Bool = false, slips: Bool = true) {
         self.text = text; self.mode = mode; self.dictionary = dictionary; self.names = names; capitalize_names = capitalizeNames; self.dialect = dialect; protected_ranges = protectedRanges; self.tokens = tokens; sentence_start = sentenceStart
-        self.deep = deep; self.gec = gec; self.casual = casual
+        self.deep = deep; self.gec = gec; self.casual = casual; self.slips = slips
         sentence_end = sentenceEnd
     }
 }

@@ -17,9 +17,9 @@ actor FakeReportTransport: ReportTransport {
 }
 
 final class ReportQueueTests: XCTestCase {
-    private func report(_ n: Int, action: ReportAction = .dismissed) -> SuggestionReport { Self.report(n, action: action) }
-    static func report(_ n: Int, action: ReportAction = .dismissed) -> SuggestionReport {
-        SuggestionReport(sentence: "sentence \(String(repeating: "x", count: n))", suggestion: .init(start: 0, end: 8, original: "sentence", replacement: "Sentence"), rule: "grammar.test", model: "rules", action: action, app: "com.apple.TextEdit", version: "0.5.0")
+    private func report(_ n: Int) -> SuggestionReport { Self.report(n) }
+    static func report(_ n: Int) -> SuggestionReport {
+        SuggestionReport(sentence: "sentence \(String(repeating: "x", count: n))", suggestion: .init(start: 0, end: 8, original: "sentence", replacement: "Sentence"), rule: "grammar.test", model: "rules", action: .reported, app: "com.apple.TextEdit", version: "0.5.0")
     }
     private func queue(_ transport: FakeReportTransport, store: ReportStore = ReportStore(url: nil), enabled: Bool = true, policy: ReportQueue.Policy = ReportQueue.Policy()) -> ReportQueue {
         ReportQueue(transport: transport, store: store, gate: ReportGate(enabled: enabled), policy: policy, sleep: { _ in }, jitter: { 1 })
@@ -156,7 +156,7 @@ final class ReportQueueTests: XCTestCase {
         let q = queue(FakeReportTransport(), enabled: false)
         let center = ReportCenter(queue: q)
         let edit = WritingEdit(start: 2, end: 5, replacement: "has", original: "hav", ruleID: "spelling.typo")
-        XCTAssertNil(center.submit([edit], source: "I hav it.", action: .dismissed, mode: .fix, app: "com.apple.Notes", version: "0.5.0"))
+        XCTAssertNil(center.submit([edit], source: "I hav it.", mode: .fix, app: "com.apple.Notes", version: "0.5.0"))
         let count = await q.count
         XCTAssertEqual(count, 0)
     }
@@ -166,13 +166,13 @@ final class ReportQueueTests: XCTestCase {
         let center = ReportCenter(queue: q)
         let source = "Hi Rahul. I hav 3 cats at aman@example.com."
         let edit = WritingEdit(start: 12, end: 15, replacement: "have", original: "hav", ruleID: "spelling.typo")
-        await center.submit([edit], source: source, action: .reported, mode: .fix, app: "com.apple.Notes", version: "0.5.0")?.value
+        await center.submit([edit], source: source, mode: .fix, app: "com.apple.Notes", version: "0.5.0")?.value
         let count = await q.count
         XCTAssertEqual(count, 1)
         await q.purge()
         // Only the sentence the edit is in, redacted.
         let other = FakeReportTransport(), q2 = queue(other)
-        await ReportCenter(queue: q2).submit([edit], source: source, action: .reported, mode: .fix, app: "com.apple.Notes", version: "0.5.0")?.value
+        await ReportCenter(queue: q2).submit([edit], source: source, mode: .fix, app: "com.apple.Notes", version: "0.5.0")?.value
         await q2.drain()
         let sentence = await other.sent.first?.batch.reports.first?.sentence
         XCTAssertEqual(sentence, "I hav [number] cats at [email].")
@@ -184,8 +184,83 @@ final class ReportQueueTests: XCTestCase {
         XCTAssertEqual(URLSessionReportTransport.classify(status: 413, retryAfter: nil), .rejected)
         XCTAssertEqual(URLSessionReportTransport.classify(status: 429, retryAfter: "120"), .retry(after: 120))
         XCTAssertEqual(URLSessionReportTransport.classify(status: 503, retryAfter: nil), .retry(after: nil))
-        XCTAssertEqual(URLSessionReportTransport.classify(status: 404, retryAfter: nil), .retry(after: nil), "an endpoint not deployed yet keeps the queue")
+        XCTAssertEqual(URLSessionReportTransport.classify(status: 500, retryAfter: "60"), .retry(after: 60))
+        XCTAssertEqual(URLSessionReportTransport.classify(status: 408, retryAfter: nil), .retry(after: nil))
+        for status in [401, 403, 404, 405, 410, 422, 451] { XCTAssertEqual(URLSessionReportTransport.classify(status: status, retryAfter: nil), .rejected, "\(status) is refused for good, never retried forever") }
+        for status in [301, 302, 307, 308] { XCTAssertEqual(URLSessionReportTransport.classify(status: status, retryAfter: nil), .rejected, "a redirect is refused, and the batch dropped") }
     }
+    func testRedirectsAreRefused() async {
+        let delegate = RefuseRedirects()
+        let response = HTTPURLResponse(url: URL(string: "https://reports.parzr.app/v1/reports")!, statusCode: 307, httpVersion: nil, headerFields: ["Location": "https://elsewhere.example/"])!
+        let session = URLSession(configuration: .ephemeral)
+        let task = session.dataTask(with: URL(string: "https://reports.parzr.app/v1/reports")!)
+        let next = await delegate.urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: URLRequest(url: URL(string: "https://elsewhere.example/")!))
+        XCTAssertNil(next)
+        task.cancel()
+    }
+    func testReportsQueuedLongerThanTheBatchKeyIsKeptAreDropped() async {
+        let clock = Clock(Date(timeIntervalSince1970: 1_800_000_000))
+        let transport = FakeReportTransport(fallback: .retry(after: nil))
+        var policy = ReportQueue.Policy(); policy.delay = 0; policy.backoff = 1; policy.maxBackoff = 1
+        let q = ReportQueue(transport: transport, gate: ReportGate(enabled: true), policy: policy, sleep: { _ in clock.advance(86_400) }, jitter: { 1 }, now: { clock.now })
+        await q.enqueue([report(1)])
+        await q.drain()
+        let sent = await transport.sent.count, left = await q.count
+        XCTAssertEqual(left, 0, "offline for over 14 days: the report is dropped, not retried with a key the server forgot")
+        XCTAssertLessThanOrEqual(sent, 15)
+        XCTAssertGreaterThanOrEqual(sent, 13)
+    }
+    func testOldAndInvalidReportsOnDiskAreDroppedAtLaunch() async throws {
+        let store = temporaryStore()
+        defer { store.erase() }
+        let now = Date()
+        let leaky = SuggestionReport(sentence: "call 555 0100 now", suggestion: .init(start: 0, end: 4, original: "call", replacement: "Call"), rule: "r", model: "rules", action: .reported, app: "a.b", version: "1")
+        let badOffsets = SuggestionReport(sentence: "I has it", suggestion: .init(start: 0, end: 4, original: "has", replacement: "have"), rule: "r", model: "rules", action: .reported, app: "a.b", version: "1")
+        let bidi = SuggestionReport(sentence: "I has \u{202E}it", suggestion: .init(start: 2, end: 5, original: "has", replacement: "have"), rule: "r", model: "rules", action: .reported, app: "a.b", version: "1")
+        store.save([
+            ReportQueue.Item(id: UUID(), report: report(1), queued: now.addingTimeInterval(-15 * 86_400)),
+            ReportQueue.Item(id: UUID(), report: report(2), queued: now.addingTimeInterval(-86_400)),
+            ReportQueue.Item(id: UUID(), report: report(3)),
+            ReportQueue.Item(id: UUID(), report: leaky, queued: now), ReportQueue.Item(id: UUID(), report: badOffsets, queued: now), ReportQueue.Item(id: UUID(), report: bidi, queued: now),
+        ])
+        let q = ReportQueue(transport: FakeReportTransport(), store: store, gate: ReportGate(enabled: true), sleep: { _ in try await Task.sleep(nanoseconds: 10_000_000_000) })
+        let count = await q.count
+        XCTAssertEqual(count, 2, "the 15-day-old report and the three that fail today's checks are gone; one without a date counts from now")
+        XCTAssertEqual(store.load().map(\.report), [report(2), report(3)])
+        XCTAssertNotNil(store.load().last?.queued)
+        await q.purge()
+    }
+    func testAQueueFileFromBeforeIgnoreStoppedSendingIsErased() async throws {
+        let store = temporaryStore()
+        try FileManager.default.createDirectory(at: store.url!.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let old = #"{"items":[{"id":"0F8FAD5B-D9CB-469F-A165-70867728950E","report":{"sentence":"I has it","suggestion":{"start":2,"end":5,"original":"has","replacement":"have"},"rule":"r","model":"rules","action":"dismissed","app":"a.b","version":"0.5.0"}}]}"#
+        try Data(old.utf8).write(to: store.url!)
+        let q = queue(FakeReportTransport(), store: store)
+        let count = await q.count
+        XCTAssertEqual(count, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.url!.path))
+    }
+    func testTheQueueFileIsPrivateAndNotBackedUp() throws {
+        let store = temporaryStore()
+        defer { store.erase() }
+        store.save([ReportQueue.Item(id: UUID(), report: report(1), queued: Date())])
+        let attributes = try FileManager.default.attributesOfItem(atPath: store.url!.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+        XCTAssertEqual(try store.url!.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        store.save([ReportQueue.Item(id: UUID(), report: report(2), queued: Date())])
+        XCTAssertEqual((try FileManager.default.attributesOfItem(atPath: store.url!.path)[.posixPermissions] as? NSNumber)?.intValue, 0o600, "every rewrite stays private")
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: store.url!.deletingLastPathComponent().path)
+        XCTAssertEqual(leftovers, [store.url!.lastPathComponent], "no temporary files left behind")
+    }
+}
+
+/// A clock tests move by hand.
+final class Clock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Date
+    init(_ start: Date) { current = start }
+    var now: Date { lock.lock(); defer { lock.unlock() }; return current }
+    func advance(_ seconds: TimeInterval) { lock.lock(); current += seconds; lock.unlock() }
 }
 
 final class ReportBuilderTests: XCTestCase {
@@ -193,7 +268,7 @@ final class ReportBuilderTests: XCTestCase {
         let source = "First line here.\nThanks Rahul, I has 2 questions about https://x.io/a. Bye."
         let start = (source as NSString).range(of: "has")
         let edit = WritingEdit(start: start.location, end: NSMaxRange(start), replacement: "have", original: "has", category: "Grammar", ruleID: "grammar.i_agreement", explanation: "Use have with I.")
-        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, action: .reported, mode: .fix, app: "com.tinyspeck.slackmacgap", version: "0.5.0"))
+        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, mode: .fix, app: "com.tinyspeck.slackmacgap", version: "0.5.0"))
         XCTAssertEqual(report.sentence, "Thanks [name], I has [number] questions about [link].")
         XCTAssertEqual(report.suggestion.original, "has"); XCTAssertEqual(report.suggestion.replacement, "have")
         XCTAssertEqual((report.sentence as NSString).substring(with: NSRange(location: report.suggestion.start, length: report.suggestion.end - report.suggestion.start)), "has")
@@ -204,9 +279,62 @@ final class ReportBuilderTests: XCTestCase {
         XCTAssertEqual(Set(json.keys), ["sentence", "suggestion", "rule", "model", "action", "app", "version"])
         XCTAssertEqual(Set((json["suggestion"] as? [String: Any])?.keys ?? [:].keys), ["start", "end", "original", "replacement"])
     }
-    func testOnlyTurnedDownSuggestionsAreReported() throws {
-        XCTAssertEqual(ReportAction.allCases, [.dismissed, .reported], "accepted suggestions are never sent")
+    func testOnlyReportWrongSuggestionMakesAReport() throws {
+        XCTAssertEqual(ReportAction.allCases, [.reported], "Ignore sends nothing, and accepted suggestions are never sent")
         XCTAssertNil(try? JSONDecoder().decode(ReportAction.self, from: Data(#""accepted""#.utf8)))
+        XCTAssertNil(try? JSONDecoder().decode(ReportAction.self, from: Data(#""dismissed""#.utf8)))
+    }
+
+    // MARK: The audit's probes: each is redacted, or the report is not made.
+    private func probe(_ source: String, _ original: String, _ replacement: String, names: [String] = []) -> SuggestionReport? {
+        let range = (source as NSString).range(of: original)
+        let edit = WritingEdit(start: range.location, end: NSMaxRange(range), replacement: replacement, original: original, ruleID: "grammar.test")
+        return ReportBuilder.report(edit: edit, source: source, mode: .fix, app: "com.apple.Notes", version: "0.6.0", names: names)
+    }
+    func testTheAuditProbesAreRedactedOrNotReported() {
+        let cases: [(source: String, original: String, replacement: String, secrets: [String])] = [
+            ("hi rahul, i has told priya about it", "has", "have", ["rahul", "priya"]),
+            ("rahul has the keys", "has", "have", ["rahul"]),
+            ("pin is four four two one", "is", "was", ["four four", "two one"]),
+            ("aman at gmail dot com", "at", "@", ["aman", "gmail"]),
+            ("ping #rahulsharma now", "now", "today", ["rahulsharma"]),
+            ("token " + "sk_" + "live_abcdefghijk", "token", "Token", ["sk_" + "live", "abcdefghijk"]),
+            ("ok " + "gh" + "p_abcdefghijklmnopqrstuvwxyz0123 is set", "is", "was", ["gh" + "p_"]),
+            ("the key AbCdEfGhIjKlMnOpQrStUvWx is set", "is", "was", ["AbCdEf"]),
+            ("[name] [name] said my HIV test came back positive", "came", "come", ["HIV"]),
+        ]
+        for c in cases {
+            guard let report = probe(c.source, c.original, c.replacement) else { continue } // not reported at all: fine
+            let sent = [report.sentence, report.suggestion.original, report.suggestion.replacement].joined(separator: " | ")
+            for secret in c.secrets { XCTAssertFalse(sent.lowercased().contains(secret.lowercased()), "\(c.source) → \(sent)") }
+        }
+        XCTAssertNil(probe("[name] [name] said my HIV test came back positive", "came", "come"), "health terms stop the report")
+        XCTAssertEqual(probe("hi rahul, i has told priya about it", "has", "have")?.sentence, "hi [name], i has told [name] about it")
+        XCTAssertEqual(probe("pin is four four two one", "is", "was")?.sentence, "pin is [number]")
+        XCTAssertEqual(probe("aman at gmail dot com", "at", "@")?.sentence, "[email]")
+    }
+    func testATypoBeingCorrectedSurvivesButOtherUnknownWordsAreRedacted() throws {
+        let report = try XCTUnwrap(probe("see you tomorow with neha", "tomorow", "tomorrow"))
+        XCTAssertEqual(report.sentence, "see you tomorow with [name]")
+        XCTAssertEqual(report.suggestion.original, "tomorow"); XCTAssertEqual(report.suggestion.replacement, "tomorrow")
+        let recased = try XCTUnwrap(probe("thanks to neha for this", "neha", "Neha"))
+        XCTAssertEqual(recased.suggestion.original, "[name]", "re-casing an unknown word is how a name gets capitalized: it stays redacted")
+        XCTAssertEqual(recased.suggestion.replacement, "[name]")
+    }
+    func testNamesFromEveryCheckSourceAreRedacted() throws {
+        // The app passes KnownNames.names(for:): learned, Contacts, document and lexicon names.
+        let report = try XCTUnwrap(probe("ask will about it, she has it", "has", "have", names: ["Will"]))
+        XCTAssertTrue(report.sentence.contains("will"), "a known name that is a common word stays lowercase: \(report.sentence)")
+        let named = try XCTUnwrap(probe("ask zorblat about it, she has it", "has", "have", names: ["Zorblat"]))
+        XCTAssertFalse(named.sentence.lowercased().contains("zorblat"))
+    }
+    func testABuiltReportIsValidAndAReportThatIsNotIsRefused() throws {
+        let report = try XCTUnwrap(probe("I has it.", "has", "have"))
+        XCTAssertTrue(ReportBuilder.isValid(report))
+        let control = SuggestionReport(sentence: "I has\u{0007} it", suggestion: .init(start: 2, end: 5, original: "has", replacement: "have"), rule: "r", model: "rules", action: .reported, app: "a.b", version: "1")
+        XCTAssertFalse(ReportBuilder.isValid(control))
+        let identifiers = SuggestionReport(sentence: "I has it", suggestion: .init(start: 2, end: 5, original: "has", replacement: "have"), rule: "r", model: "rules", action: .reported, app: "my app", version: "1")
+        XCTAssertFalse(ReportBuilder.isValid(identifiers))
     }
     func testTheModelIsNamedFromTheRule() {
         XCTAssertEqual(ReportBuilder.model(rule: "gector.verb_form", mode: .fix), "gector")
@@ -217,22 +345,22 @@ final class ReportBuilderTests: XCTestCase {
     }
     func testIdentifiersCannotCarryFreeText() throws {
         let edit = WritingEdit(start: 0, end: 3, replacement: "The", original: "teh", ruleID: "spelling typo with words")
-        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .dismissed, mode: .fix, app: "my secret app name", version: "1.0 (my build)"))
+        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", mode: .fix, app: "my secret app name", version: "1.0 (my build)"))
         XCTAssertEqual(report.rule, "unknown"); XCTAssertEqual(report.app, "unknown"); XCTAssertEqual(report.version, "unknown")
-        let none = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .dismissed, mode: .fix, app: nil, version: "0.5.0"))
+        let none = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", mode: .fix, app: nil, version: "0.5.0"))
         XCTAssertEqual(none.app, "unknown")
     }
     func testAnEditThatNoLongerMatchesTheTextIsNotReported() {
         let edit = WritingEdit(start: 0, end: 3, replacement: "The", original: "teh")
-        XCTAssertNil(ReportBuilder.report(edit: edit, source: "the cat", action: .dismissed, mode: .fix, app: "a.b", version: "1"))
-        XCTAssertNil(ReportBuilder.report(edit: WritingEdit(start: 5, end: 20, replacement: "x", original: "y"), source: "short", action: .dismissed, mode: .fix, app: "a.b", version: "1"))
+        XCTAssertNil(ReportBuilder.report(edit: edit, source: "the cat", mode: .fix, app: "a.b", version: "1"))
+        XCTAssertNil(ReportBuilder.report(edit: WritingEdit(start: 5, end: 20, replacement: "x", original: "y"), source: "short", mode: .fix, app: "a.b", version: "1"))
     }
     func testALongSentenceIsCutAtWordsAroundTheSuggestion() throws {
         let filler = Array(repeating: "word", count: 150).joined(separator: " ")
         let source = "\(filler) teh \(filler)"
         let range = (source as NSString).range(of: "teh")
         let edit = WritingEdit(start: range.location, end: NSMaxRange(range), replacement: "the", original: "teh")
-        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, action: .dismissed, mode: .fix, app: "a.b", version: "1"))
+        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, mode: .fix, app: "a.b", version: "1"))
         XCTAssertLessThanOrEqual(report.sentence.utf16.count, 2 * ReportBuilder.context + 3)
         XCTAssertTrue(report.sentence.hasPrefix("word ")); XCTAssertTrue(report.sentence.hasSuffix(" word"))
         XCTAssertEqual((report.sentence as NSString).substring(with: NSRange(location: report.suggestion.start, length: 3)), "teh")
@@ -241,7 +369,7 @@ final class ReportBuilderTests: XCTestCase {
         let source = "Pay 5O0 dollars."
         let range = (source as NSString).range(of: "5O0")
         let edit = WritingEdit(start: range.location, end: NSMaxRange(range), replacement: "500", original: "5O0")
-        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, action: .reported, mode: .fix, app: "a.b", version: "1"))
+        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: source, mode: .fix, app: "a.b", version: "1"))
         XCTAssertEqual(report.sentence, "Pay [number] dollars.")
         XCTAssertEqual(report.suggestion.original, "[number]"); XCTAssertEqual(report.suggestion.replacement, "[number]")
     }

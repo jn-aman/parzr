@@ -32,7 +32,7 @@ python3 scripts/run-english-benchmark.py --output dist/qa/english-2000 \
   --corpus benchmarks/english-2000.jsonl --controls benchmarks/english-200-clean.jsonl
 ```
 
-Both sets are expected to show exact corrections on every corrupted paragraph and no change to any clean control; a regression on either is a reason to revisit the rule that caused it, never to edit the corpus.
+Both sets are expected to show exact corrections on every corrupted paragraph and no change to any clean control; a regression on either is a reason to revisit the rule that caused it, never to edit the corpus. `--require-exact` makes the runner exit 1 otherwise; CI's verify job runs both sets that way on the Rust engine and the app's NaturalLanguage path (`--engine`/`--library` point it at a development build instead of a packaged app, `--paths` picks the paths).
 
 The runner measures the packaged Rust executable and a native harness compiled with the application's unchanged `WritingEngine` and model sources. The harness loads the packaged Rust library and uses the same Apple NaturalLanguage enrichment. It does not open the app, read personal writing, or exercise editor UI. Both paths use Fix mode, American English, an empty personal dictionary and no manually protected ranges.
 
@@ -65,7 +65,9 @@ Test split, v0.3.6 against the build that added this set:
 | While typing (`gec`) | 44.5% / 52.6% / 1.7% | 64.3% / 69.5% / 1.1% |
 | Option+Space (`deep`) | 59.2% / 68.4% / 4.2% | 74.5% / 80.9% / 3.5% |
 
-The `gec` layer is scored with checks back to back, so the language-model swap check, which while typing runs in the background and lands on the next check, barely shows there; `deep` shows it (real-word slips 26% to 68% fixed). CI's verify job scores the test split for `rules` and `gec` and fails below the fix rates or above the false-alarm rates in `.github/workflows/ci-release.yml`; raise those gates when a change lifts the test score, never lower them to let a regression through.
+The `gec` layer is scored with checks back to back, so the language-model swap check, which while typing runs in the background and lands on the next check, barely shows there; `deep` shows it (real-word slips 26% to 68% fixed). CI's verify job scores the test split for `rules` and `gec` and fails below the fix rates or above the false-alarm rates in `.github/workflows/ci-release.yml`, and against the committed baseline (see "Quality gates" below); raise those gates when a change lifts the test score, never lower them to let a regression through.
+
+The test split is sealed: `run-heldout-benchmark.py --split test` (and the typo-fuzz `test*.jsonl` corpus) refuses to run unless `CI=true` or `PARZR_RELEASE_GATE=1`, and then writes only totals and category counts (`summary.json`, `summary.md`), never an item's input or output. Work from `--split dev`.
 
 `scripts/run-public-gec-benchmark.py` compares the same layers with LanguageTool on CoNLL-2014, JFLEG and the GitHub Typo Corpus (downloaded into ignored `dist/gec-data/`; ERRANT and GLEU scoring). See the script's header for setup.
 
@@ -82,3 +84,20 @@ The `gec` layer is scored with checks back to back, so the language-model swap c
 - **dev2.jsonl** (`tone-check/dev2_written.txt`) was written before the second round trained and scored once at the end.
 
 Training removes every text of both sets. Results: dist/tone-check/README.md.
+
+## Everyday regression set
+
+`everyday/items.jsonl` holds 2,870 short real-world texts (chat, email, notes, commit messages, status updates, non-native English, passages; some Enron AESLC lines, a public corpus) whose expected output is certain: the certain items of the everyday batches 1 to 3, with the outputs a reader accepted as `accept` alternatives. Texts with the owner's name and Enron lines with e-mail addresses or phone numbers were left out. Expectations follow the always-capitalize policy: a sentence starts with a capital in chat too (`flex: "stop"`: only a final full stop and the case of ok/OK are optional). Items whose first word is chat shorthand, a command, a handle or a brand ("lol", "fyi", "sudo apt", "eBay") keep that word's case, with the capitalized form also accepted.
+
+```sh
+python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native [--paths typing,deep] [--deep-sample N]
+```
+
+scores the typing path (Smart grammar; while the engine answers `context.pending` it asks again every 0.1 s, up to 10 s, so it scores what the typing route settles on whatever the machine's speed, where the app looks three times 0.9 s apart) and, when the writing model is present, Option+Space. It fails when an item labelled correct in `everyday/baseline.json` is not correct any more, and lists every such item. CI runs typing on every item and Option+Space on a fixed sample of 40. After an intended change, `--update` records the new labels (review the diff of `everyday/baseline.json`).
+
+## Quality gates
+
+- **Frozen corpora.** `frozen.json` pins every frozen corpus (the English sets and manifests, the held-out set and its sources, typo-fuzz, names, the everyday items) by SHA-256 and size; `scripts/check-frozen-corpora.py` fails CI when one changes, disappears or appears unpinned. A deliberate new corpus version is pinned with `--update` (and its baselines are then updated on purpose).
+- **Baselines.** `baselines.json` holds the last accepted numbers: held-out test and typo-fuzz test (fixed and false alarms per layer), names (typo recall, damaged names) and performance. `run-heldout-benchmark.py --baseline SUITE`, `run-name-benchmark.py --baseline` and the everyday gate fail when a fix rate falls more than 0.5 points below the baseline, false alarms (or damaged names) rise by more than 2, or p50/p95 latency or peak engine memory exceed 1.5 times the baseline (latency also gets 2 ms of slack for sub-millisecond checks). Performance is compared only with a baseline measured on the same kind of machine (`ci`, or the local chip); summaries record p50/p95 latency and peak memory either way.
+- **Updating a baseline.** `python3 scripts/update-baselines.py SUITE SUMMARY --reason "..."` records a run's summary, with the date and reason, after a change lifts a score (so later changes cannot give the gain back) or for a deliberate, explained trade-off. Test-split summaries come from CI: `gh run download RUN -n quality-summaries-SHA` holds totals only.
+- **Tests.** CI fails on an XCTest skip that is not in `mac/Tests/expected-skips.txt`, and runs the engine's real-pack typing-route slip tests (`cargo test --release -- --ignored typing_route`).

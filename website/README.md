@@ -1,6 +1,6 @@
 # Parzr website
 
-Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app sends no writing anywhere (its only network request is the optional hourly update check).
+Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app checks writing on the Mac; its network requests are the optional hourly update check, the one-time model download, and anonymous reports sent only when the writer clicks "Report wrong suggestion" (redacted on the Mac, on by default, off in Settings, Privacy; see public/privacy.html, docs/privacy.md and worker/README.md).
 
 ```
 public/
@@ -8,6 +8,7 @@ public/
   styles.css      tokens from mac/Sources/Parzr/Design.swift
   main.js         vanilla motion engine (requestAnimationFrame, IntersectionObserver, CSS custom properties)
   404.html        not found page
+  privacy.html    what the app sends and keeps (served at /privacy; source text in docs/privacy.md)
   _headers        CSP and cache policy (Cloudflare static assets)
   assets/         WebP renders of the real app, favicon.svg, icon-192.png, icon-512.png, og-image.png
   favicon.ico     16, 32 and 48 px PNGs (the icon services, such as DuckDuckGo's, ask for /favicon.ico)
@@ -21,15 +22,17 @@ wrangler.jsonc    Cloudflare Workers static assets config
 ```sh
 python3 -m http.server -d website/public 8080   # then open http://localhost:8080
 # or, to exercise _headers and the 404 handling the way Cloudflare does:
-cd website && npx wrangler dev
+cd website && npm ci --ignore-scripts && npx --no-install wrangler dev
 ```
 
 `python3 -m http.server` does not apply `_headers`, so the CSP is not enforced there. Use `wrangler dev` to check it.
 
 ## Deploy
 
+CI deploys it (`.github/workflows/website.yml`): after every published release, and on demand from `main` for website-only changes (`gh workflow run website.yml --ref main`); see docs/releases.md, "Website". By hand, with the wrangler version locked in `package-lock.json`:
+
 ```sh
-cd website && npx wrangler deploy
+cd website && npm ci --ignore-scripts && npx --no-install wrangler deploy
 ```
 
 This publishes `public/` as Workers static assets and binds the custom domain `parzr.app` (see `wrangler.jsonc`). Deployment needs a Cloudflare account that owns the zone.

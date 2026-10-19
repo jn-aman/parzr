@@ -21,6 +21,8 @@ public final class ModelCenter: ObservableObject {
     private let removedKey: String
     private let development: Bool
     private var download: Task<Void, Never>?
+    /// This run's check of an installed pack (`ModelStore.verify`), in the background before anything loads it.
+    private var verification: Task<Void, Never>?
     private var retry: Task<Void, Never>?
     private var failures = 0
     /// Each download's number: a cancelled download that reports late never touches the state of the next one.
@@ -48,22 +50,23 @@ public final class ModelCenter: ObservableObject {
     /// PARZR_MODEL_PATH or PARZR_GEC_DIR (development) mean the engine uses other files, so nothing is downloaded.
     /// PARZR_MODELS_DIR moves the folder and PARZR_MODELS_BASE_URL replaces the release address (local copies for testing).
     public static func live(defaults: UserDefaults = .standard) -> ModelCenter {
-        let environment = ProcessInfo.processInfo.environment
-        let development = ["PARZR_MODEL_PATH", "PARZR_GEC_DIR"].contains { !(environment[$0] ?? "").isEmpty }
+        let environment = DevOverrides.environment()
+        let development = ["PARZR_MODEL_PATH", "PARZR_GEC_DIR"].contains { DevOverrides.value($0, in: environment) != nil }
         let pack = WritingEngine.modelManifest().flatMap { try? ModelManifest.decode($0) }?.essential
         return ModelCenter(pack: pack, store: liveStore(environment), defaults: defaults, development: development)
     }
     /// An optional pack's center (the slip check's masked language model, the tone check's classifier). Its development
     /// variable means the feature uses other files. Nil when this build pins no such pack.
     public static func live(_ optional: OptionalPack, defaults: UserDefaults = .standard) -> ModelCenter? {
-        let environment = ProcessInfo.processInfo.environment
+        let environment = DevOverrides.environment()
         guard let pack = WritingEngine.modelManifest().flatMap({ try? ModelManifest.decode($0) })?.pack(providing: optional.role) else { return nil }
-        let development = !(environment[optional.developmentVariable] ?? "").isEmpty
+        let development = DevOverrides.value(optional.developmentVariable, in: environment) != nil
         return ModelCenter(pack: pack, store: liveStore(environment), defaults: defaults, development: development, optional: optional)
     }
+    /// `environment` has already been through `DevOverrides.environment` (a release build passes no PARZR_* variable).
     static func liveStore(_ environment: [String: String]) -> ModelStore {
         var store = ModelStore(root: ModelStore.defaultRoot(environment: environment), transport: URLSessionTransport())
-        store.baseURL = environment["PARZR_MODELS_BASE_URL"].flatMap { $0.isEmpty ? nil : URL(string: $0) }
+        store.baseURL = DevOverrides.value("PARZR_MODELS_BASE_URL", in: environment).flatMap { URL(string: $0) }
         return store
     }
 
@@ -72,13 +75,42 @@ public final class ModelCenter: ObservableObject {
     public var totalBytes: Int64 { pack?.bytes ?? 0 }
     public var isReady: Bool { state.isReady }
 
-    /// Reads the state from disk (cheap: sizes only). Leaves a running download alone.
+    /// Reads the state from disk (cheap: sizes, and this run's hash verdicts). An installed pack this run has not checked yet
+    /// is re-hashed in the background first (`.verifying`; the engine is held meanwhile), so nothing loads a file before this
+    /// run checked it. Leaves a running download or check alone.
     public func refresh() {
         guard !state.isWorking else { return }
         if development { state = .development; return }
         guard let pack, let store else { state = .failed(.other("This copy of Parzr has no model list. Reinstall Parzr.")); return }
-        if store.isInstalled(pack) { state = .ready }
+        if store.isInstalled(pack) {
+            if store.verifiedThisRun(pack) { state = .ready } else { verifyInstalled(pack, store) }
+        }
         else if case .failed = state {} else { state = .missing }
+    }
+    private func verifyInstalled(_ pack: ModelPack, _ store: ModelStore) {
+        state = .verifying
+        generation += 1
+        let current = generation
+        PackHold.shared.begin()
+        verification = Task.detached(priority: .utility) { [weak self] in
+            let result: ModelStore.Verification? = try? store.verify(pack)
+            await self?.verified(result, current)
+            PackHold.shared.end()
+        }
+    }
+    private func verified(_ result: ModelStore.Verification?, _ number: Int) {
+        verification = nil
+        guard number == generation, let pack, let store else { return }
+        switch result {
+        case .verified:
+            state = .ready; onReady?()
+        case .mismatch(let path):
+            // Set aside, so neither the engine nor a later launch uses it; Download fetches a fresh copy.
+            try? store.quarantine(pack)
+            state = .failed(.changedOnDisk(path))
+        case nil:
+            state = .failed(.other("Parzr could not check the downloaded models. Try again."))
+        }
     }
 
     /// The automatic download: on a normal launch after the welcome guide, and from its download step. Never after the user removed the pack.
@@ -91,7 +123,7 @@ public final class ModelCenter: ObservableObject {
     public func start(userInitiated: Bool = false) {
         if userInitiated { defaults.removeObject(forKey: removedKey); failures = 0 }
         refresh()
-        guard let pack, let store, !state.isReady, download == nil else { return }
+        guard let pack, let store, !state.isReady, download == nil, verification == nil else { return }
         retry?.cancel(); retry = nil
         state = .downloading(received: store.downloaded(pack), total: pack.bytes)
         generation += 1
@@ -102,9 +134,23 @@ public final class ModelCenter: ObservableObject {
             await self?.finish(result, current)
         }
     }
+    /// An optional pack's own download: only an automatic pack whose check is switched on, once the essential pack is
+    /// ready, and never after the user removed it (`startIfNeeded`). The essential pack and other packs ignore this.
+    public func startAutomatically(switchedOn: Bool, essentialReady: Bool) {
+        guard let optional, optional.automatic, switchedOn, essentialReady else { return }
+        startIfNeeded()
+    }
+    /// The user switched this pack's check on: that asks for the pack again, so an earlier Remove no longer holds it back,
+    /// and a missing pack downloads now (or once the essential pack is ready).
+    public func checkSwitchedOn(essentialReady: Bool) {
+        guard optional != nil else { return }
+        defaults.removeObject(forKey: removedKey); failures = 0
+        startAutomatically(switchedOn: true, essentialReady: essentialReady)
+    }
     /// Stops the download and keeps what arrived, so Download resumes it.
     public func cancel() {
         retry?.cancel(); retry = nil
+        verification?.cancel(); verification = nil
         download?.cancel(); download = nil; generation += 1
         if state.isWorking { state = .missing }
         defaults.set(true, forKey: removedKey)
@@ -119,7 +165,7 @@ public final class ModelCenter: ObservableObject {
     }
     /// Deletes the pack and downloads it again from scratch.
     public func redownload() {
-        retry?.cancel(); retry = nil; download?.cancel(); download = nil; generation += 1
+        retry?.cancel(); retry = nil; download?.cancel(); download = nil; verification?.cancel(); verification = nil; generation += 1
         if let pack, let store { try? store.remove(pack) }
         state = .missing
         start(userInitiated: true)
@@ -186,7 +232,8 @@ public final class ModelCenter: ObservableObject {
     public var unavailableNote: String? {
         switch state {
         case .ready, .development: nil
-        case .downloading, .verifying: "Smart grammar is downloading. Checked with the rules for now."
+        case .downloading: "Smart grammar is downloading. Checked with the rules for now."
+        case .verifying: "Smart grammar is getting ready. Checked with the rules for now."
         case .missing where !removedByUser: "Smart grammar is downloading. Checked with the rules for now."
         case .missing, .failed: "Smart grammar isn't downloaded. Checked with the rules only. Download it in Settings, Models."
         }
@@ -225,6 +272,17 @@ public final class ModelCenter: ObservableObject {
     }
     /// The engine's text for a missing writing model (engine/src/model.rs MODEL_MISSING).
     public static let engineMissing = "The writing model is not downloaded yet."
+}
+
+/// Holds the model packs in this process's engine (`parzr_packs_hold`) while any installed pack is being re-checked,
+/// so the engine never loads a file before this run hashed it.
+final class PackHold: @unchecked Sendable {
+    static let shared = PackHold()
+    private let lock = NSLock()
+    private var count = 0
+    func begin() { lock.withLock { count += 1; if count == 1 { WritingEngine.holdPacks(true) } } }
+    func end() { lock.withLock { count = max(0, count - 1); if count == 0 { WritingEngine.holdPacks(false) } } }
+    var held: Bool { lock.withLock { count > 0 } }
 }
 
 /// Passes on at most ten progress updates a second (the download reports every few kilobytes), and every change of kind at once.

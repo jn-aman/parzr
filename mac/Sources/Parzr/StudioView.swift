@@ -53,6 +53,7 @@ struct StudioView: View {
     @State private var appliedCount = 0
     @State private var reviewVisible = false
     @State private var statsVisible = false
+    @State private var confirmErase = false
     @State private var focusedWriting = false
     private var activeRoute: StudioRoute { route ?? model.studioRoute }
     private var animate: Bool { !systemReduceMotion && !preferences.reduceMotion && !renderingSnapshot }
@@ -95,10 +96,13 @@ struct StudioView: View {
                 }
             }.scrollIndicators(.hidden)
             Spacer(minLength: 16)
-            VStack(alignment: .leading, spacing: 8) {
-                StatusLine(title: model.engineReady ? "On this Mac" : model.error == nil ? "Starting…" : "Engine unavailable", good: model.engineReady)
-                Text("Your writing is checked here.").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.7))
-            }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color.canvas, in: RoundedRectangle(cornerRadius: 10)).padding(14)
+            // One quiet status line: what the engine is doing, and what to do only when it cannot start.
+            VStack(alignment: .leading, spacing: 4) {
+                StatusLine(title: model.engineReady ? "Checking on this Mac" : model.error == nil ? "Starting…" : "Engine unavailable", good: model.engineReady || model.error == nil)
+                if !model.engineReady, model.error != nil {
+                    Text("Quit and reopen Parzr.").font(.system(size: 10)).foregroundStyle(Color.textSecondary).padding(.leading, 11)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.vertical, 16)
         }.frame(width: 190).frame(maxHeight: .infinity).background(Color.sidebar)
     }
     private func navigation(_ item: StudioRoute) -> some View {
@@ -153,7 +157,7 @@ struct StudioView: View {
                 }.padding(.horizontal, 16).padding(.vertical, 12)
                 Rectangle().fill(Color.hairline.opacity(0.6)).frame(height: 0.5)
                 ZStack(alignment: .topLeading) {
-                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, report: model.canReport ? { edits, text, action in model.report(edits, action, text: text) } : nil)
+                    DraftEditor(text: $draft, edits: model.marks(for: draft), provisional: model.provisional || model.source != draft, fontSize: preferences.boundedFontSize, lineSpacing: preferences.boundedLineSpacing, highlightFill: preferences.highlightFill, focusedEditID: model.focusedEditID, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, report: model.canReport ? { edits, text in model.report(edits, text: text) } : nil)
                     if draft.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("A thought. A message. A first draft.").font(.system(size: preferences.boundedFontSize)).foregroundStyle(Color.textSecondary.opacity(0.7))
@@ -175,8 +179,8 @@ struct StudioView: View {
                                     let related = EditPlan.related(to: edit, in: model.chosenEdits)
                                     guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(related, to: draft) else { return }
                                     preferences.noteFixes(related); draft = next
-                                }, ignore: { edit in model.report([edit], .dismissed, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
-                                report: model.canReport ? { edit in model.report([edit], .reported, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
+                                }, ignore: { edit in ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
+                                report: model.canReport ? { edit in model.report([edit], text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
                             }
                     }
                     if draft.isEmpty { NativeButton(title: "Try a sample", action: { draft = "I recieved your mesage.\n\nCan you chek this?" }).fixedSize() }
@@ -237,7 +241,7 @@ struct StudioView: View {
                     settingRow("Quit Parzr", detail: "Stops checking until you open Parzr again.") { NativeButton(title: "Quit", label: "Quit Parzr", action: { NSApp.terminate(nil) }).fixedSize() }
                 }
                 group("UPDATES") {
-                    settingRow("Check for updates automatically", detail: "Parzr checks GitHub once a day for a new version. It sends nothing about you or your writing.") { toggle("Check for updates automatically", $updates.automaticChecks) }
+                    settingRow("Check for updates automatically", detail: "Parzr asks GitHub every hour whether a new version is out. It sends nothing about you or your writing.") { toggle("Check for updates automatically", $updates.automaticChecks) }
                     divider
                     settingRow("Download and install automatically", detail: "New versions download quietly and install when you quit Parzr or step away. You can cancel the restart.") { toggle("Download and install automatically", $updates.automaticDownloads).disabled(!updates.automaticChecks) }
                 }
@@ -262,6 +266,8 @@ struct StudioView: View {
                     }
                     divider
                     settingRow("Context refinement", detail: "Use the larger on-device model when you check a selection with your shortcut. Typing uses the rules and Smart grammar; tone rewrites always use the larger model.") { toggle("Context refinement", $preferences.contextRefinement) }
+                    divider
+                    settingRow("Slip check", detail: "Catches word-choice slips as you type (\u{201C}I hat it\u{201D}, then/than) with a small on-device model. Off, Option+Space still checks word choice.") { toggle("Slip check", $preferences.slipCheck) }
                     divider
                     settingRow("Tone check", detail: "Flags a message that may read as rude, passive-aggressive, curt or overly apologetic, with a reason and a Soften button. \(ToneModel.status)") { toggle("Tone check", $preferences.toneCheck) }
                     divider
@@ -333,12 +339,14 @@ struct StudioView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Label("Your writing is checked on your Mac.", systemImage: "lock.shield").font(.system(size: 17, weight: .medium)).foregroundStyle(Color.mintAccent)
                         Text("Grammar and rewrites run locally. No account and no writing history. Your dictionary, learned names and words, preferences and, if you keep it, a private weekly tally of fixes are saved on this Mac only.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
-                        Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
+                        Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the hourly update check, and the one-time download of its models (Settings, Models). Suggestion reports, while on, go to reports.parzr.app.").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
                 if Reports.configured {
                     group("SUGGESTION REPORTS") {
                         settingRow("Send anonymous suggestion reports", detail: Self.reportsDetail) { toggle("Send anonymous suggestion reports", $preferences.shareReports) }
+                        divider
+                        settingRow("What is sent and kept", detail: "Retention, who processes reports, and how to reach us: \(Reports.privacyURL.host ?? "")\(Reports.privacyURL.path)") { NativeButton(title: "Privacy details", kind: .utility, action: { NSWorkspace.shared.open(Reports.privacyURL) }).fixedSize() }
                     }
                 }
                 group("CLIPBOARD & SESSION") {
@@ -347,6 +355,15 @@ struct StudioView: View {
                     settingRow("Clear this draft", detail: "Clear the current writing session and its Undo history.") { NativeButton(title: "Clear this writing session", action: { model.clearSession(); draft = "" }).fixedSize() }
                 }
                 Text("Copy uses the system clipboard. Restoration cannot erase text another app has already read. Editor Undo can revert corrections; some editors use a separate step for each edit.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(3)
+                group("YOUR DATA ON THIS MAC") {
+                    settingRow("Erase all Parzr data", detail: "Removes your dictionary, learned names and words, muted suggestions, the weekly summary, queued suggestion reports and every preference from this Mac. Downloaded models stay; remove them in Models.") {
+                        NativeButton(title: "Erase…", label: "Erase all Parzr data", action: { confirmErase = true }).fixedSize()
+                            .confirmationDialog("Erase all Parzr data?", isPresented: $confirmErase) {
+                                Button("Erase", role: .destructive) { preferences.eraseAllData(); model.clearSession(); draft = "" }
+                                Button("Cancel", role: .cancel) {}
+                            } message: { Text("Parzr forgets everything it learned and counted on this Mac and returns to its default settings. This cannot be undone.") }
+                    }
+                }
             case .compatibility:
                 group("EDITOR ACCESS") {
                     settingRow(preferences.permissionGranted ? "Accessibility is enabled" : "Enable Accessibility", detail: "macOS requires this permission for corrections in other apps.") { NativeButton(title: preferences.permissionGranted ? "Refresh" : "Enable…", action: { if preferences.permissionGranted { preferences.refreshPermission() } else { preferences.requestPermission() } }).fixedSize() }
@@ -385,7 +402,7 @@ struct StudioView: View {
         }
     }
     /// What a suggestion report holds, in the words Settings and the welcome guide use.
-    static let reportsDetail = "Only when you ignore a suggestion or report it as wrong, Parzr sends the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on this Mac first. Suggestions you accept are never sent. A report also holds the suggestion, the rule or model that made it, whether you ignored or reported it, the app's bundle ID and Parzr's version, nothing else. No account, device ID or IP address is kept. Turning this off stops sending and deletes reports not yet sent."
+    static let reportsDetail = "Only when you click Report wrong suggestion, Parzr sends that suggestion and the text around it (up to about 240 characters on each side). Before sending, Parzr removes names it recognises, emails, phone numbers, other numbers, links and keys on this Mac; the rest of the text around the suggestion is sent as written, so health or other personal details in ordinary words can't be reliably caught. A report also holds the rule or model that made the suggestion, the app's bundle ID and Parzr's version. Ignoring or accepting a suggestion sends nothing, and nothing is sent from excluded apps, secure fields or fields Parzr treats as sensitive. Reports are kept for 180 days on Cloudflare, which runs the report server for Parzr. No account, device ID or IP address is stored, so a sent report can't be found or deleted individually. Turning this off stops sending and deletes reports not yet sent."
     /// Settings, Learning: the private weekly summary, learned words and muted suggestions.
     @ViewBuilder private var learning: some View {
         let summary = preferences.stats.summary(today: LearningDay.today())

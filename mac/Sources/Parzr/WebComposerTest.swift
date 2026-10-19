@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ApplicationServices
 import ParzrCore
@@ -67,3 +69,4 @@ func runWebComposerTest(reportDirectory: String, pid: pid_t, ids: [String]) asyn
     try (lines + failures).joined(separator: "\n").write(to: directory.appendingPathComponent("web-composers.txt"), atomically: true, encoding: .utf8)
     guard failures.isEmpty else { throw ParzrError.message(failures.joined(separator: "; ")) }
 }
+#endif

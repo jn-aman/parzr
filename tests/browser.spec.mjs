@@ -43,6 +43,17 @@ test('secure inputs are never read or sent to the engine',async({page})=>{
  await setup(page,'<input type="password" value="teh secret">');await page.locator('input').focus();await page.evaluate(script);
  await expect(page.locator('#parzr-local-panel')).toHaveCount(0);expect(await page.evaluate(()=>window.__parzrCalls||0)).toBe(0);
 });
+test('card, email, phone and address fields and page opt-outs are never read',async({page})=>{
+ await setup(page,`<textarea id="card" autocomplete="cc-number">teh</textarea><textarea id="ship" autocomplete="Shipping Street-Address">teh</textarea>
+  <input id="mail" type="text" autocomplete="email" value="teh"><input id="tel" type="text" autocomplete="section-a tel-national" value="teh">
+  <textarea id="cls" class="parzr-disable">teh</textarea><div data-parzr-disable><textarea id="inside">teh</textarea></div>
+  <div data-parzr-disable="false"><textarea id="optin">teh</textarea></div><textarea id="plain">teh</textarea><textarea id="note" autocomplete="off">teh</textarea>`);
+ await page.evaluate(script);
+ const found=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('textarea,input')].map(e=>[e.id,!!window.__parzrEditors.find(e)])));
+ expect(found).toEqual({card:false,ship:false,mail:false,tel:false,cls:false,inside:false,optin:true,plain:true,note:true});
+ for(const id of ['card','ship','mail','tel','cls','inside']){await page.locator('#'+id).focus();await page.waitForTimeout(220);}
+ expect(await page.evaluate(()=>window.__parzrCalls||0)).toBe(0);
+});
 test('code and mentions are protected in rich text',async({page})=>{
  await setup(page,'<div id="editor" contenteditable="true">I recieved <code>teh --help</code> from <span contenteditable="false" data-mention="john">mesage</span>.</div>');
  await page.evaluate(()=>{const e=document.querySelector('#editor');e.focus();const r=document.createRange();r.selectNodeContents(e);const s=getSelection();s.removeAllRanges();s.addRange(r);});

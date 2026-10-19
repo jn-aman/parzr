@@ -1,0 +1,151 @@
+name: Reports Worker
+# Tests worker/ (suggestion reports: Cloudflare Worker + D1) on every change, and deploys it to reports.parzr.app from
+# main only.
+#
+# test    no secrets: npm ci (install scripts run here, never next to the token), unit tests, type-check, real-D1 tests
+#         (workerd, local), and a dry-run bundle.
+# deploy  main only, in the `reports-production` environment, which holds the secret REPORTS_CLOUDFLARE_API_TOKEN
+#         (Workers Scripts edit, D1 edit, Workers Routes edit on parzr.app; nothing else). The repository variable
+#         CLOUDFLARE_ACCOUNT_ID names the account. The token reaches only the steps that talk to Cloudflare. Missing
+#         credentials fail the run. Before migrating it records a D1 Time Travel bookmark and the live version in the
+#         job summary; a failed health check rolls the Worker back to that version.
+#
+# Migrations must be additive (worker/README.md, "Migrations"): they run before the new code is live, and a rollback
+# restores only code, so the previous version must keep working against the new schema.
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/worker.yml']
+  pull_request:
+    paths: ['worker/**', '.github/workflows/worker.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: parzr-reports-worker-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.20.0'
+      - name: Install
+        run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Type-check
+        run: npm run typecheck
+      - name: D1 tests
+        run: npm run test:d1
+      - name: Bundle (dry run)
+        run: npm run check
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: reports-production
+    concurrency:
+      group: parzr-reports-worker-deploy
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+      HEALTH_URL: https://reports.parzr.app/v1/health
+    steps:
+      - name: Check deployment credentials
+        working-directory: .
+        env:
+          HAS_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != 'true' ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::The reports-production environment needs the REPORTS_CLOUDFLARE_API_TOKEN secret, and the repository the CLOUDFLARE_ACCOUNT_ID variable."
+            exit 1
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.20.0'
+      - name: Install
+        run: npm ci
+      - name: Record the rollback point
+        id: before
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+        run: |
+          bookmark=$(npx wrangler d1 time-travel info parzr-reports --json | jq -r '.bookmark // empty')
+          if [ -z "$bookmark" ]; then echo "::error::Could not read a D1 Time Travel bookmark; not migrating without a restore point."; exit 1; fi
+          previous=$(npx wrangler deployments status --json 2>/dev/null | jq -r '.versions[0].version_id // empty' || true)
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Rollback point"
+            echo "- D1 bookmark before migrations: \`$bookmark\` (restore: \`npx wrangler d1 time-travel restore parzr-reports --bookmark=$bookmark\`)"
+            echo "- Worker version live before this deploy: \`${previous:-unknown}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply database migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply parzr-reports --remote
+      - name: Create the rate-limit salt once
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+        # The salt is never rotated by a deploy: an existing one is kept, a missing one is created at random. If the
+        # list cannot be read the job fails rather than guess (a new salt would only reset the counters, but a failed
+        # read is no evidence that the secret is missing).
+        run: |
+          if ! secrets=$(npx wrangler secret list --format json); then echo "::error::Could not list the Worker's secrets."; exit 1; fi
+          if ! echo "$secrets" | jq -e 'type == "array"' > /dev/null; then echo "::error::Unexpected secret list output."; exit 1; fi
+          if ! echo "$secrets" | jq -e 'any(.[]; .name == "RATE_LIMIT_SALT")' > /dev/null; then
+            openssl rand -hex 32 | npx wrangler secret put RATE_LIMIT_SALT
+          fi
+      - name: Deploy
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-output.ndjson
+        run: |
+          npx wrangler deploy
+          version=$(jq -r 'select(.type == "deploy") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" | tail -n 1)
+          if [ -z "$version" ]; then echo "::error::wrangler deploy did not report a version id."; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "- Deployed version: \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Health check
+        env:
+          VERSION: ${{ steps.deploy.outputs.version }}
+        # The new version must be the one answering, and its database read must work.
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            body=$(curl -fsS --max-time 10 "$HEALTH_URL" || true)
+            if echo "$body" | jq -e --arg v "$VERSION" '.ok == true and .database == "ok" and .version == $v' > /dev/null 2>&1; then
+              echo "- Health: \`$body\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$HEALTH_URL did not answer ok from version $VERSION after the deploy (last answer: ${body:-none})."
+          exit 1
+      - name: Roll back after a failed health check
+        if: failure() && steps.deploy.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+          PREVIOUS: ${{ steps.before.outputs.previous }}
+        run: |
+          npx wrangler rollback ${PREVIOUS:+"$PREVIOUS"} --message "Health check failed after deploy ${{ github.sha }}" --yes
+          echo "### Rolled back to ${PREVIOUS:-the previous version}. Migrations stay applied; see the D1 bookmark above." >> "$GITHUB_STEP_SUMMARY"

@@ -47,7 +47,7 @@ final class UpdateController: NSObject, SPUUserDriver, SPUUpdaterDelegate {
         model.canCheck = true; model.lastChecked = updater.lastUpdateCheckDate
         announceIfUpdated()
     }
-    #if DEBUG
+    #if DEBUG || PARZR_QA
     func checkInBackground() { if model.canCheck { updater.checkForUpdatesInBackground() } }
     #endif
     func checkNow() { guard model.canCheck else { return }; if updater.sessionInProgress { showUpdateInFocus() } else { updater.checkForUpdates() } }

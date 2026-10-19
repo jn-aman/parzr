@@ -13,6 +13,29 @@ enum Compat {
                             "com.github.wez.wezterm", "org.tabby", "co.zeit.hyper"]
     static let excluded = terminals + ["dev.zed.Zed", "com.jetbrains"]
     static func isExcluded(_ bundle: String?) -> Bool { excluded.contains { bundle?.hasPrefix($0) == true } }
+    /// Whether "Report wrong suggestion" may send text from this field. Never from an app on the exclusion list (built in or a
+    /// host rule) or one the writer turned off, a secure field (or while secure input is on), a field the host rules or the
+    /// sensitive-field keywords block, or text read by copying, whose field Parzr cannot see.
+    static func reportsAllowed(bundle: String?, excludedByRules: Bool, enabled: Bool, secure: Bool, verdict: HostRules.Verdict, copied: Bool) -> Bool {
+        guard let bundle, !bundle.isEmpty else { return false }
+        return !isExcluded(bundle) && !excludedByRules && enabled && !secure && verdict == .allowed && !copied
+    }
+    /// Option+Space reads only what the writer could check by hand: never an app the host rules turn off (password managers,
+    /// authenticators, sign-in and security panes), and never a field a rule turns off (a page's `parzr-disable`, a sign-in or
+    /// payment page) or one named for a secret (passwords, one-time codes, card numbers, identity numbers, keys, sign-in forms).
+    /// Fields that merely hold no prose (search, address, name) stay checkable on request.
+    static let explicitlyBlockedKeywords: Set<String> = ["password", "one-time-code", "payment", "identity", "secret", "sign-in-form"]
+    static func blocksExplicitCheck(bundle: String?, verdict: HostRules.Verdict, rules: HostRules = .shared) -> Bool {
+        if rules.excludesApp(bundle) { return true }
+        guard case .blocked(let reason) = verdict else { return false }
+        if reason.hasPrefix("rule:") { return true }
+        return reason.hasPrefix("sensitive:") && explicitlyBlockedKeywords.contains(String(reason.dropFirst("sensitive:".count)))
+    }
+    /// The copy fallback sends Cmd+C into the app, so it is stricter still: never in an app Parzr does not check on its own (terminals,
+    /// code editors, the host rules' excluded apps), never in a secure field, and only in a field no rule or keyword blocks.
+    static func allowsCopyFallback(bundle: String?, verdict: HostRules.Verdict, secure: Bool, rules: HostRules = .shared) -> Bool {
+        !secure && !isExcluded(bundle) && !rules.excludesApp(bundle) && verdict == .allowed
+    }
     static func isTerminal(_ bundle: String?) -> Bool { terminals.contains { bundle?.hasPrefix($0) == true } }
     /// Who holds secure input, as far as Parzr can tell. The window server records the frontmost app's pid whenever the holder is a background process
     /// (measured: a faceless holder app, with Warp and then Chrome in front, read as Warp and then Chrome), so a frontmost app is named only when it can
@@ -210,6 +233,13 @@ enum ReplacePlan {
         while let last = result.unicodeScalars.last, last == "\n" { result.unicodeScalars.removeLast() }
         return result
     }
+    /// Checked before each typed chunk: the editor's app still in front, no secure input, and the keyboard still in the field being fixed
+    /// (`focusMatches` runs last, as it reads Accessibility). Nil means type on.
+    static func typingInterrupted(inFront: Bool, secureInput: Bool, focusMatches: () -> Bool) -> ApplyFailure? {
+        if !inFront { return .editorNotInFront }
+        if secureInput { return .secureInput }
+        return focusMatches() ? nil : .focusElsewhere
+    }
     /// A readable leaf can differ from its writable ancestor, so fallback focus must use the snapshot's resolution mode.
     static func focusMatches<Element>(_ element: Element, automatic: Bool = false, resolve: (Bool) -> Element?, same: (Element, Element) -> Bool) -> Bool {
         guard let focus = resolve(automatic) else { return false }
@@ -404,6 +434,11 @@ extension AX {
             try await Task.sleep(for: .milliseconds(120))
         }
         for event in TypedReplacement.events(for: replacement) {
+            // Between chunks the writer may have moved on (another app in front, a password prompt, another field): stop rather than type there.
+            if let stop = ReplacePlan.typingInterrupted(inFront: SelfTestTarget.watched?.processIdentifier == app.processIdentifier, secureInput: IsSecureEventInputEnabled(),
+                                                        focusMatches: { ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }) }) {
+                throw fail(stop, "typed-chunk")
+            }
             post(event, to: app.processIdentifier)
             try await Task.sleep(for: .milliseconds(8))
         }

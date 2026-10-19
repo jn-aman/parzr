@@ -2,10 +2,10 @@ import Foundation
 import NaturalLanguage
 import os
 
-/// What the writer did with a suggestion. Only suggestions turned down are reported: Ignore (`dismissed`) and
-/// "Report wrong suggestion" (`reported`). Accepted suggestions are never sent.
+/// Why a report exists. The only one is "Report wrong suggestion" (`reported`): Ignore sends nothing, and accepted
+/// suggestions are never sent. (Versions before 0.6 also sent `dismissed`; the Worker now refuses it.)
 public enum ReportAction: String, Codable, Sendable, CaseIterable {
-    case dismissed, reported
+    case reported
 }
 
 /// One anonymous wrong-suggestion report: exactly what is sent, and nothing else.
@@ -16,7 +16,7 @@ public struct SuggestionReport: Codable, Equatable, Sendable {
         public let start: Int, end: Int
         public let original: String, replacement: String
     }
-    /// The redacted sentence the suggestion was made in.
+    /// The redacted text around the suggestion: its sentence, cut to at most `ReportBuilder.context` UTF-16 units on each side.
     public let sentence: String
     public let suggestion: Suggestion
     /// The engine rule (`grammar.your_doing`, `gector.verb_form`, `local-model`).
@@ -88,8 +88,34 @@ public enum ReportBuilder {
         }
         return NSRange(location: start, length: max(0, end - start))
     }
+    /// What a report may hold, checked when it is built and again when it is loaded from disk: within the limits, clean of
+    /// anything redaction removes, offsets that point at `original`, identifiers of allowed characters only, and no
+    /// control, bidirectional or invisible format characters (the Worker refuses them too).
+    public static func isValid(_ report: SuggestionReport) -> Bool {
+        let s = report.suggestion, ns = report.sentence as NSString
+        guard !report.sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              report.sentence.utf16.count <= SuggestionReport.Limits.sentence,
+              s.original.utf16.count <= SuggestionReport.Limits.text, s.replacement.utf16.count <= SuggestionReport.Limits.text,
+              s.start >= 0, s.end >= s.start, s.end <= ns.length, ns.substring(with: NSRange(location: s.start, length: s.end - s.start)) == s.original,
+              [report.sentence, s.original, s.replacement].allSatisfy({ Redactor.isClean($0) && plain($0) }),
+              report.action == .reported,
+              identifier(report.rule, allowed: ruleCharacters, limit: SuggestionReport.Limits.rule, fallback: "") == report.rule,
+              identifier(report.app, allowed: bundleCharacters, limit: SuggestionReport.Limits.app, fallback: "") == report.app,
+              identifier(report.version, allowed: versionCharacters, limit: SuggestionReport.Limits.version, fallback: "") == report.version,
+              report.model.utf8.count <= SuggestionReport.Limits.model, !report.model.isEmpty else { return false }
+        return true
+    }
+    /// No control characters but tab and newline, no bidirectional controls, no invisible format characters other than the joiners.
+    static func plain(_ text: String) -> Bool {
+        let forbidden: Set<UInt32> = [0x061C, 0x200B, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2060, 0x2061, 0x2062, 0x2063, 0x2064, 0x2066, 0x2067, 0x2068, 0x2069, 0xFEFF]
+        return text.unicodeScalars.allSatisfy { scalar in
+            if scalar == "\t" || scalar == "\n" { return true }
+            return scalar.properties.generalCategory != .control && !forbidden.contains(scalar.value)
+        }
+    }
     /// A report for `edit`, made in `source`, or nil when the edit does not fit the text or the result would not be clean.
-    public static func report(edit: WritingEdit, source: String, action: ReportAction, mode: RewriteMode, app: String?, version: String, names: [String] = []) -> SuggestionReport? {
+    /// Only "Report wrong suggestion" makes one.
+    public static func report(edit: WritingEdit, source: String, mode: RewriteMode, app: String?, version: String, names: [String] = []) -> SuggestionReport? {
         let ns = source as NSString
         guard edit.start_utf16 >= 0, edit.end_utf16 >= edit.start_utf16, edit.end_utf16 <= ns.length,
               ns.substring(with: edit.range) == edit.original else { return nil }
@@ -99,15 +125,12 @@ public enum ReportBuilder {
         let text = ns.substring(with: cut)
         let local = NSRange(location: edit.start_utf16 - cut.location, length: edit.range.length)
         guard let redacted = Redactor.redact(sentence: text, edit: local, replacement: edit.replacement, names: names) else { return nil }
-        guard !redacted.sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              redacted.sentence.utf16.count <= SuggestionReport.Limits.sentence,
-              redacted.original.utf16.count <= SuggestionReport.Limits.text, redacted.replacement.utf16.count <= SuggestionReport.Limits.text,
-              [redacted.sentence, redacted.original, redacted.replacement].allSatisfy(Redactor.isClean) else { return nil }
         let rule = identifier(edit.rule_id, allowed: ruleCharacters, limit: SuggestionReport.Limits.rule, fallback: "unknown")
-        return SuggestionReport(sentence: redacted.sentence, suggestion: .init(start: redacted.start, end: redacted.end, original: redacted.original, replacement: redacted.replacement),
-                                rule: rule, model: model(rule: rule, mode: mode), action: action,
-                                app: identifier(app, allowed: bundleCharacters, limit: SuggestionReport.Limits.app, fallback: "unknown"),
-                                version: identifier(version, allowed: versionCharacters, limit: SuggestionReport.Limits.version, fallback: "unknown"))
+        let report = SuggestionReport(sentence: redacted.sentence, suggestion: .init(start: redacted.start, end: redacted.end, original: redacted.original, replacement: redacted.replacement),
+                                      rule: rule, model: model(rule: rule, mode: mode), action: .reported,
+                                      app: identifier(app, allowed: bundleCharacters, limit: SuggestionReport.Limits.app, fallback: "unknown"),
+                                      version: identifier(version, allowed: versionCharacters, limit: SuggestionReport.Limits.version, fallback: "unknown"))
+        return isValid(report) ? report : nil
     }
 }
 
@@ -127,8 +150,13 @@ public protocol ReportTransport: Sendable {
     func send(_ body: Data, key: String) async -> ReportSendResult
 }
 
-/// Plain HTTPS POST: an ephemeral session (no cookies, cache or credentials) and a bare user agent, so the request says
-/// nothing about this Mac beyond what the network itself carries.
+/// Refuses every redirect: a report goes to the configured endpoint or nowhere.
+final class RefuseRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest) async -> URLRequest? { nil }
+}
+
+/// Plain HTTPS POST: an ephemeral session (no cookies, cache or credentials), a bare user agent and no redirects, so the
+/// request says nothing about this Mac beyond what the network itself carries, and goes nowhere but the endpoint.
 public struct URLSessionReportTransport: ReportTransport {
     public let endpoint: URL
     private let session: URLSession
@@ -140,7 +168,7 @@ public struct URLSessionReportTransport: ReportTransport {
         configuration.timeoutIntervalForRequest = 20; configuration.timeoutIntervalForResource = 40
         configuration.waitsForConnectivity = false
         configuration.httpAdditionalHeaders = ["User-Agent": "Parzr"]
-        session = URLSession(configuration: configuration)
+        session = URLSession(configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
     }
     public func send(_ body: Data, key: String) async -> ReportSendResult {
         var request = URLRequest(url: endpoint)
@@ -153,10 +181,13 @@ public struct URLSessionReportTransport: ReportTransport {
             return Self.classify(status: http.statusCode, retryAfter: http.value(forHTTPHeaderField: "Retry-After"))
         } catch { return .retry(after: nil) }
     }
+    /// 2xx (and 409) stored; 408, 429 and 5xx retry later; any other 4xx, and a refused redirect (3xx), drop the batch
+    /// for good: a request the server refuses once it will refuse again.
     public static func classify(status: Int, retryAfter: String?) -> ReportSendResult {
         switch status {
         case 200..<300, 409: return .accepted
-        case 400, 413, 415, 422: return .rejected
+        case 408, 429, 500..<600: return .retry(after: retryAfter.flatMap(TimeInterval.init))
+        case 300..<500: return .rejected
         default: return .retry(after: retryAfter.flatMap(TimeInterval.init))
         }
     }
@@ -178,15 +209,27 @@ public struct ReportStore: Sendable {
     public let url: URL?
     public init(url: URL?) { self.url = url }
     struct Saved: Codable { var items: [ReportQueue.Item] }
+    /// What an earlier launch queued. A file that no longer decodes (one holding Ignore reports from before 0.6, say) is erased.
     func load() -> [ReportQueue.Item] {
-        guard let url, let data = try? Data(contentsOf: url), let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return [] }
+        guard let url, let data = try? Data(contentsOf: url) else { return [] }
+        guard let saved = try? JSONDecoder().decode(Saved.self, from: data) else { erase(); return [] }
         return saved.items
     }
+    /// Written readable by this user only (0600) and excluded from backups: reports waiting to be sent are not part of
+    /// anyone's Time Machine or iCloud history. The file is created 0600 before any byte is written, then moved into place.
     func save(_ items: [ReportQueue.Item]) {
         guard let url else { return }
-        if items.isEmpty { try? FileManager.default.removeItem(at: url); return }
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? JSONEncoder().encode(Saved(items: items)).write(to: url, options: [.atomic])
+        let files = FileManager.default
+        if items.isEmpty { try? files.removeItem(at: url); return }
+        guard let data = try? JSONEncoder().encode(Saved(items: items)) else { return }
+        try? files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let temporary = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString)")
+        guard files.createFile(atPath: temporary.path, contents: data, attributes: [.posixPermissions: 0o600]) else { return }
+        guard rename(temporary.path, url.path) == 0 else { try? files.removeItem(at: temporary); return }
+        try? files.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        var values = URLResourceValues(); values.isExcludedFromBackup = true
+        var target = url
+        try? target.setResourceValues(values)
     }
     func erase() { if let url { try? FileManager.default.removeItem(at: url) } }
 }
@@ -204,6 +247,9 @@ public actor ReportQueue {
         public var delay: TimeInterval = 30
         public var backoff: TimeInterval = 30
         public var maxBackoff: TimeInterval = 6 * 3600
+        /// A report waiting longer than this is dropped: the Worker remembers a batch key for 14 days, so an older retry
+        /// could be stored twice.
+        public var maxAge: TimeInterval = 14 * 86_400
         public init() {}
     }
     struct Item: Codable, Equatable {
@@ -211,6 +257,8 @@ public actor ReportQueue {
         let report: SuggestionReport
         /// Set when the item first goes into a request, and kept for its retries.
         var batch: String?
+        /// When it was queued (nil in files from before 0.6: counted from the launch that loads it).
+        var queued: Date?
     }
     public let gate: ReportGate
     private let transport: ReportTransport
@@ -218,6 +266,7 @@ public actor ReportQueue {
     private let policy: Policy
     private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let jitter: @Sendable () -> Double
+    private let now: @Sendable () -> Date
     private var items: [Item] = []
     private var loaded = false
     private var worker: Task<Void, Never>?
@@ -227,22 +276,41 @@ public actor ReportQueue {
     private(set) var waits: [TimeInterval] = []
     public init(transport: ReportTransport, store: ReportStore = ReportStore(url: nil), gate: ReportGate, policy: Policy = Policy(),
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64(max(0, $0) * 1_000_000_000)) },
-                jitter: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) }) {
-        self.transport = transport; self.store = store; self.gate = gate; self.policy = policy; self.sleep = sleep; self.jitter = jitter
+                jitter: @escaping @Sendable () -> Double = { Double.random(in: 0.8...1.2) },
+                now: @escaping @Sendable () -> Date = { Date() }) {
+        self.transport = transport; self.store = store; self.gate = gate; self.policy = policy; self.sleep = sleep; self.jitter = jitter; self.now = now
     }
     public var count: Int { loadIfNeeded(); return items.count }
+    /// Loads what an earlier launch queued, checking each report again as if it were new: a file edited on disk, or
+    /// written by an older version with weaker redaction, sends nothing that would not be built today.
     private func loadIfNeeded() {
         guard !loaded else { return }
         loaded = true
         guard gate.enabled else { store.erase(); return }
-        items = store.load() + items
+        let stored = store.load()
+        let today = now()
+        let kept = stored.filter { ReportBuilder.isValid($0.report) }.map { item in var item = item; if item.queued == nil { item.queued = today }; return item }
+        items = kept + items
+        if kept != stored { store.save(items) }
+        dropExpired()
+    }
+    /// Drops reports queued longer than `policy.maxAge` ago (or, with a clock that moved back, in the future).
+    @discardableResult
+    private func dropExpired() -> Bool {
+        let today = now()
+        let before = items.count
+        items.removeAll { item in item.queued.map { today.timeIntervalSince($0) > policy.maxAge || $0.timeIntervalSince(today) > 86_400 } ?? false }
+        guard items.count != before else { return false }
+        store.save(items)
+        return true
     }
     /// Adds a report (dropped when reports are off) and schedules a send.
     public func enqueue(_ report: SuggestionReport) { enqueue([report]) }
     public func enqueue(_ reports: [SuggestionReport]) {
         guard gate.enabled, !reports.isEmpty else { return }
         loadIfNeeded()
-        items += reports.map { Item(id: UUID(), report: $0) }
+        let today = now()
+        items += reports.filter(ReportBuilder.isValid).map { Item(id: UUID(), report: $0, queued: today) }
         if items.count > policy.capacity { items.removeFirst(items.count - policy.capacity) }
         store.save(items)
         schedule(after: policy.delay)
@@ -269,7 +337,9 @@ public actor ReportQueue {
                 waits.append(wait)
                 do { try await sleep(wait) } catch { break }
             }
-            guard current == generation, gate.enabled, !Task.isCancelled, !items.isEmpty else { break }
+            guard current == generation, gate.enabled, !Task.isCancelled else { break }
+            if dropExpired() { failures = 0 }
+            guard !items.isEmpty else { break }
             let (ids, key, body) = nextBatch()
             guard let body else {
                 // Nothing that can be encoded: drop it rather than spin.
@@ -339,16 +409,17 @@ public final class ReportCenter: Sendable {
         gate.set(enabled)
         Task { [queue] in if enabled { await queue.resume() } else { await queue.purge() } }
     }
-    /// Redacts and queues one report per edit, in the background. Returns at once.
+    /// Redacts and queues one report per edit the writer reported as wrong, in the background. Returns at once.
+    /// `names` gathers the names to redact (the app passes the same names its checks use, including the lexicon's).
     @discardableResult
-    public func submit(_ edits: [WritingEdit], source: String, action: ReportAction, mode: RewriteMode, app: String?, version: String, names: @escaping @Sendable () -> [String] = { [] }) -> Task<Void, Never>? {
+    public func submit(_ edits: [WritingEdit], source: String, mode: RewriteMode, app: String?, version: String, names: @escaping @Sendable () async -> [String] = { [] }) -> Task<Void, Never>? {
         guard gate.enabled, !edits.isEmpty else { return nil }
         return Task.detached(priority: .utility) { [gate, queue] in
-            let known = names()
+            let known = await names()
             var reports: [SuggestionReport] = []
             for edit in edits {
                 guard gate.enabled else { return }
-                if let report = ReportBuilder.report(edit: edit, source: source, action: action, mode: mode, app: app, version: version, names: known) { reports.append(report) }
+                if let report = ReportBuilder.report(edit: edit, source: source, mode: mode, app: app, version: version, names: known) { reports.append(report) }
             }
             await queue.enqueue(reports)
         }

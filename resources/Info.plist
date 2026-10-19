@@ -26,6 +26,8 @@
 	<string>Parzr can treat names from your contacts as names, so it never corrects them. Names stay on this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>ParzrReportsURL</key>
+	<string>https://reports.parzr.app/v1/reports</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Parzr contributors. Third-party notices included.</string>
 	<key>SUAllowsAutomaticUpdates</key>
@@ -40,7 +42,11 @@
 	<string>https://github.com/jn-aman/parzr/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0=</string>
+	<key>SURequireSignedFeed</key>
+	<true/>
 	<key>SUScheduledCheckInterval</key>
 	<integer>3600</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

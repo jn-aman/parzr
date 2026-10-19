@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ParzrCore
 
@@ -66,3 +68,4 @@ func runEditorTypingTest(model: AppModel, host: NSView, window: NSWindow, direct
     guard editor.string == expected, caretMoved == 0, rewrites == 0 else { throw ParzrError.message("The text view was rewritten or the caret moved while typing.") }
     guard missingMarks == 0, busy == 0, checkDisabled == 0, copyDisabled == 0 else { throw ParzrError.message("The editor flickered while typing: marks vanished, Checking showed or buttons were disabled.") }
 }
+#endif

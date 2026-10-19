@@ -1,5 +1,6 @@
-// The weekly fix queue: a week of report rows grouped by what was suggested, ranked by how often writers said it
-// was wrong. Format documented in worker/README.md ("Fix-queue format").
+// The weekly fix queue: a week of "Report wrong suggestion" rows grouped by what was suggested, ranked by how many
+// distinct sentences, on how many days, writers said it was wrong. Format documented in worker/README.md
+// ("Fix-queue format").
 
 export interface Row {
   received_day: string;
@@ -10,7 +11,8 @@ export interface Row {
   replacement: string;
   rule: string;
   model: string;
-  action: 'dismissed' | 'reported';
+  /** Only `reported` is sent and stored now; older `dismissed` rows are skipped. */
+  action: string;
   app: string;
   version: string;
 }
@@ -19,10 +21,12 @@ export interface Example {
   text: string;
   start: number;
   end: number;
-  action: Row['action'];
   app: string;
   version: string;
 }
+
+/** The most one day can add to a suggestion's score: a burst from one place on one day cannot top the queue. */
+export const DAY_CAP = 3;
 
 export interface Entry {
   id: string;
@@ -31,12 +35,13 @@ export interface Entry {
   model: string;
   original: string;
   replacement: string;
-  counts: { reported: number; dismissed: number };
-  /** 3 x reported + dismissed: an explicit "wrong" weighs three Ignores. */
+  /** Rows reported, the distinct sentences among them, and the distinct days they came in on. */
+  counts: { reported: number; sentences: number; days: number };
+  /** For each day, the distinct sentences reported that day (at most DAY_CAP), summed over the week. */
   score: number;
   apps: Record<string, number>;
   versions: Record<string, number>;
-  /** Up to five distinct sentences, reported ones first. */
+  /** Up to five distinct sentences. */
   examples: Example[];
   /** A regression item to triage into dist/batches (scripts/everyday-batch.py): `expected` is filled in by a person. */
   item: { id: string; text: string; expected: null; note: string };
@@ -72,34 +77,33 @@ export function previousWeek(now: Date): string {
 export function build(rows: Row[], week: string): Entry[] {
   const groups = new Map<string, Row[]>();
   for (const row of rows) {
+    if (row.action !== 'reported') continue;
     const key = JSON.stringify([row.rule, row.original, row.replacement]);
     const list = groups.get(key);
     if (list) list.push(row);
     else groups.set(key, [row]);
   }
-  const order: Record<Row['action'], number> = { reported: 0, dismissed: 1 };
   const entries: Omit<Entry, 'id' | 'item'>[] = [];
   for (const list of groups.values()) {
-    const counts = { reported: 0, dismissed: 0 };
     const apps: Record<string, number> = {};
     const versions: Record<string, number> = {};
     const models: Record<string, number> = {};
+    // Distinct sentences per day: the same sentence sent again, by one writer or a script, counts once.
+    const byDay = new Map<string, Set<string>>();
+    const sentences = new Set<string>();
+    const examples: Example[] = [];
     for (const row of list) {
-      if (row.action !== 'reported' && row.action !== 'dismissed') continue;
-      counts[row.action] += 1;
       apps[row.app] = (apps[row.app] ?? 0) + 1;
       versions[row.version] = (versions[row.version] ?? 0) + 1;
       models[row.model] = (models[row.model] ?? 0) + 1;
+      const today = byDay.get(row.received_day) ?? new Set<string>();
+      today.add(row.sentence);
+      byDay.set(row.received_day, today);
+      if (!sentences.has(row.sentence) && examples.length < 5) examples.push({ text: row.sentence, start: row.start_utf16, end: row.end_utf16, app: row.app, version: row.version });
+      sentences.add(row.sentence);
     }
-    const score = 3 * counts.reported + counts.dismissed;
-    if (score <= 0) continue;
-    const seen = new Set<string>();
-    const examples: Example[] = [];
-    for (const row of [...list].sort((a, b) => order[a.action] - order[b.action])) {
-      if (!(row.action in order) || seen.has(row.sentence) || examples.length >= 5) continue;
-      seen.add(row.sentence);
-      examples.push({ text: row.sentence, start: row.start_utf16, end: row.end_utf16, action: row.action, app: row.app, version: row.version });
-    }
+    let score = 0;
+    for (const set of byDay.values()) score += Math.min(DAY_CAP, set.size);
     const model = Object.entries(models).sort((a, b) => b[1] - a[1])[0][0];
     entries.push({
       week,
@@ -107,14 +111,17 @@ export function build(rows: Row[], week: string): Entry[] {
       model,
       original: list[0].original,
       replacement: list[0].replacement,
-      counts,
+      counts: { reported: list.length, sentences: sentences.size, days: byDay.size },
       score,
       apps,
       versions,
       examples,
     });
   }
-  entries.sort((a, b) => b.score - a.score || b.counts.reported - a.counts.reported || a.rule.localeCompare(b.rule) || a.original.localeCompare(b.original));
+  entries.sort(
+    (a, b) =>
+      b.score - a.score || b.counts.days - a.counts.days || b.counts.sentences - a.counts.sentences || a.rule.localeCompare(b.rule) || a.original.localeCompare(b.original),
+  );
   return entries.map((entry, index) => {
     const id = `${week}-${String(index + 1).padStart(3, '0')}`;
     return {
@@ -124,7 +131,7 @@ export function build(rows: Row[], week: string): Entry[] {
         id: `fq-${id}`,
         text: entry.examples[0].text,
         expected: null,
-        note: `${entry.rule} suggested "${entry.original}" -> "${entry.replacement}"; reported wrong ${entry.counts.reported} times, ignored ${entry.counts.dismissed} times. Fill in the expected text, then add it to a batch.`,
+        note: `${entry.rule} suggested "${entry.original}" -> "${entry.replacement}"; reported wrong in ${entry.counts.sentences} distinct sentences on ${entry.counts.days} days (${entry.counts.reported} reports). Fill in the expected text, then add it to a batch.`,
       },
     } as Entry;
   });
@@ -143,15 +150,15 @@ export function toMarkdown(entries: Entry[], week: string, totalRows: number): s
   const lines = [
     `# Parzr fix queue ${week}`,
     '',
-    `${range.from} to ${range.to}: ${totalRows} reports, ${entries.length} suggestions to look at (ranked by score = 3 x reported + dismissed).`,
+    `${range.from} to ${range.to}: ${totalRows} reports, ${entries.length} suggestions to look at (score: distinct sentences reported each day, at most ${DAY_CAP} a day, summed over the week).`,
     '',
-    '| # | Score | Rule | Model | Suggestion | Reported | Dismissed | Example |',
+    '| # | Score | Rule | Model | Suggestion | Sentences | Days | Example |',
     '|---|---|---|---|---|---|---|---|',
   ];
   for (const e of entries) {
     const example = e.examples[0];
     lines.push(
-      `| ${e.id.slice(-3)} | ${e.score} | \`${cell(e.rule)}\` | ${cell(e.model)} | ${cell(e.original || '(insert)')} → ${cell(e.replacement || '(remove)')} | ${e.counts.reported} | ${e.counts.dismissed} | ${cell(example.text)} |`,
+      `| ${e.id.slice(-3)} | ${e.score} | \`${cell(e.rule)}\` | ${cell(e.model)} | ${cell(e.original || '(insert)')} → ${cell(e.replacement || '(remove)')} | ${e.counts.sentences} | ${e.counts.days} | ${cell(example.text)} |`,
     );
   }
   lines.push('', 'Each line of the matching .jsonl file holds every example and a regression `item` to triage into a batch.', '');

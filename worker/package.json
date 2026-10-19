@@ -3,10 +3,13 @@
   "private": true,
   "type": "module",
   "description": "Cloudflare Worker + D1 for Parzr's anonymous suggestion reports",
-  "engines": { "node": ">=22.18" },
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "test": "node --test test/*.test.ts",
-    "typecheck": "tsc --noEmit",
+    "test:d1": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test-d1",
     "check": "wrangler deploy --dry-run --outdir dist",
     "dev": "wrangler dev",
     "migrate:local": "wrangler d1 migrations apply parzr-reports --local",
@@ -15,9 +18,13 @@
     "fix-queue": "node scripts/export-fix-queue.ts"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "5.20260930.2",
     "@types/node": "22.20.4",
+    "@vitest/runner": "4.1.11",
+    "@vitest/snapshot": "4.1.11",
     "typescript": "5.9.3",
+    "vitest": "4.1.11",
     "wrangler": "4.145.0"
   }
 }

@@ -1,3 +1,5 @@
+#if DEBUG || PARZR_QA
+// QA only: compiled into debug and QA builds (scripts/build.py --qa), never into a release build.
 import AppKit
 import ApplicationServices
 import Carbon
@@ -147,3 +149,4 @@ func runGoogleDocsTest(reportDirectory: String) async throws {
     try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: directory.appendingPathComponent("docs-results.json"))
     guard applied, restored, after == expectedFull else { throw ParzrError.message("Docs apply or undo failed. See docs-results.json.") }
 }
+#endif
