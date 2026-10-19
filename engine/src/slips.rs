@@ -466,6 +466,41 @@ mod tests {
             assert_eq!(bpe.encode(text), ids, "{text}");
         }
     }
+    /// Pipeline harness: PARZR_SLIPS_PIPELINE=in.jsonl:out.jsonl runs every line's text through the
+    /// whole engine (Fix mode, American English, no dictionary) with only the slip checker installed
+    /// (no writing model: point PARZR_MODELS_DIR at an empty folder), so every guard of the real
+    /// path applies, and writes the slip-check edits with the time each check took.
+    #[test]
+    #[ignore = "needs the slip checker and PARZR_SLIPS_PIPELINE"]
+    fn slips_pipeline() {
+        use std::io::Write;
+        let spec = std::env::var("PARZR_SLIPS_PIPELINE").expect("PARZR_SLIPS_PIPELINE=in:out");
+        let (input, output) = spec.split_once(':').expect("in:out");
+        assert!(warm(), "the slip checker did not load");
+        assert!(!crate::model::model_available(), "run without the writing model");
+        let mut out = std::fs::File::create(output).unwrap();
+        for line in std::fs::read_to_string(input).unwrap().lines() {
+            let item: serde_json::Value = serde_json::from_str(line).unwrap();
+            let text = item["input"].as_str().or(item["text"].as_str()).unwrap();
+            let req = crate::Request {
+                text: text.into(),
+                gec: true,
+                deep: true,
+                dialect: "american".into(),
+                ..crate::Request::default()
+            };
+            let started = std::time::Instant::now();
+            let edits = crate::rewrite(&req).map(|r| r.edits).unwrap_or_default();
+            let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let slips: Vec<_> = edits
+                .iter()
+                .filter(|e| e.rule_id == "context.slip_swap")
+                .map(|e| serde_json::json!([e.start_utf16, e.end_utf16, e.original, e.replacement]))
+                .collect();
+            let record = serde_json::json!({"id": item["id"], "ms": ms, "slips": slips});
+            writeln!(out, "{record}").unwrap();
+        }
+    }
     /// Dev harness: PARZR_SLIPS_DEV=in.jsonl:out.jsonl (lines with "id" and "input" or "text") writes,
     /// for every window the checker scores (a sentence and the sentence before, as `confusion` scores
     /// it), every candidate swap with its masked-word gain and the time the window took, for

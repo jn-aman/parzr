@@ -78,6 +78,21 @@ final class ModelPackTests: XCTestCase {
         XCTAssertTrue(pack.files.allSatisfy { $0.url.hasPrefix("https://github.com/jn-aman/parzr/releases/download/") })
         XCTAssertTrue(pack.files.allSatisfy { !$0.license.isEmpty && !$0.purpose.isEmpty && !$0.name.isEmpty && !$0.version.isEmpty })
         XCTAssertGreaterThan(pack.bytes, 100_000_000, "the essential pack holds the real models")
+        // The slip check is an optional pack of its own, under its own release tag.
+        let slips = try XCTUnwrap(manifest.slips)
+        XCTAssertNotEqual(slips.id, pack.id)
+        XCTAssertEqual(slips.provides["slip_model"], "slips")
+        XCTAssertTrue(slips.files.contains { $0.path == "slips/mlm.mlmodelc/weights/weight.bin" })
+        XCTAssertTrue(slips.files.allSatisfy { $0.url.contains("/models-slips-\(slips.version)/") })
+        XCTAssertLessThan(slips.bytes, 100_000_000)
+    }
+    func testTheSlipPackIsFoundByItsRole() throws {
+        let essential = Self.pack
+        let slips = ModelPack(id: "slips", version: "1", provides: ["slip_model": "slips"], files: [Self.file("slips/mlm.bin", Self.grammar)])
+        let manifest = ModelManifest(packs: [essential, slips])
+        XCTAssertEqual(manifest.essential?.id, "essential")
+        XCTAssertEqual(manifest.slips?.id, "slips")
+        XCTAssertNil(ModelManifest(packs: [essential]).slips)
     }
     func testManifestRejectsUnsafeEntries() throws {
         func manifest(_ edit: (inout ModelFile) -> Void) -> ModelManifest { var file = Self.file("a.bin", Self.grammar); edit(&file); return ModelManifest(packs: [ModelPack(id: "p", version: "1", files: [file])]) }
@@ -307,6 +322,25 @@ final class ModelCenterTests: XCTestCase {
         XCTAssertGreaterThan(transport.requests.filter { $0.name == "writer.gguf" }.last?.offset ?? 0, 0, "Download resumed the partial file")
         center.redownload(); await wait(center, for: .ready)
         XCTAssertEqual(transport.requests.filter { $0.name == "writer.gguf" }.last?.offset, 0)
+    }
+    func testTheSlipPackDownloadsAndIsRemovedOnItsOwn() async {
+        let data = Data("slip weights".utf8)
+        let pack = ModelPack(id: "slips", version: "1", title: "Word-choice check", provides: ["slip_model": "slips"], files: [ModelPackTests.file("slips/mlm.bin", data)])
+        let transport = fake(); transport.serve("slips.mlm.bin", data)
+        let essential = center(transport)
+        let slips = ModelCenter(pack: pack, store: ModelStore(root: root, transport: transport), defaults: defaults, feature: "Slip check")
+        XCTAssertEqual(slips.feature, "Slip check"); XCTAssertEqual(essential.feature, "Smart grammar")
+        slips.start(); await wait(slips, for: .ready)
+        essential.start(); await wait(essential, for: .ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("slips/1/slips/mlm.bin").path))
+        // Removing the slip check leaves the essential pack alone, and its Remove is remembered separately.
+        slips.remove()
+        XCTAssertTrue(slips.removedByUser); XCTAssertFalse(essential.removedByUser)
+        XCTAssertEqual(essential.state, .ready); XCTAssertEqual(slips.state, .missing)
+        slips.startIfNeeded(); XCTAssertEqual(slips.state, .missing, "no automatic download after Remove")
+        essential.remove(); XCTAssertTrue(essential.removedByUser)
+        slips.start(userInitiated: true); XCTAssertFalse(slips.removedByUser); XCTAssertTrue(essential.removedByUser)
+        await wait(slips, for: .ready)
     }
     func testDevelopmentModelsNeedNoDownload() {
         let center = ModelCenter(pack: ModelPackTests.pack, store: ModelStore(root: root, transport: fake()), defaults: defaults, development: true)
