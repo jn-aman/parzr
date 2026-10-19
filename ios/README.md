@@ -23,7 +23,7 @@ ios/scripts/build.sh test     # the same, then ParzrKitTests on an iPhone simula
 - The Swift side imports the engine as `ParzrEngineFFI` and calls `parzr_rewrite_json`, `parzr_tone_guard_json`, `parzr_string_free` and `parzr_is_known_misspelling` directly. This is the same FFI the Mac app reaches through `dlopen`.
 - The archives are not stripped. An earlier `strip -S -x` on the static archive broke relocations: the engine crashed with SIGSEGV inside `contractions::check` on the simulator.
 - The simulator build is Apple-silicon only (`EXCLUDED_ARCHS = x86_64`).
-- Both scripts run under `nice` with 2 jobs (`PARZR_JOBS` overrides this). `build.sh test` shuts its simulator down afterwards.
+- Both scripts run under `nice -n 15` with 2 jobs (`PARZR_JOBS` overrides this). `build.sh test` shuts its simulator down afterwards.
 - `Parzr.xcodeproj`, the XCFramework and `ios/build/` are generated and ignored by git.
 
 Bundle IDs are `app.parzr.ios`, `app.parzr.ios.keyboard` and the App Group `group.app.parzr.ios`. A device build needs a team that owns these IDs and the App Group capability.
@@ -34,26 +34,46 @@ Bundle IDs are `app.parzr.ios`, `app.parzr.ios.keyboard` and the App Group `grou
 - **`meaning` builds without `local-model`.** Before, the meaning module was compiled only with the local model. It now builds in the rules-only configuration too, and `distance` moved from `model.rs` to `meaning.rs`.
 - **Checks.** `cargo fmt --check`, `clippy -D warnings` (both feature sets) and `cargo test` (both feature sets) pass.
 
-## Memory: the engine does not fit a keyboard today
+## Memory: the engine fits a keyboard
 
-Peak memory footprint of the rules-only engine for one request, measured on macOS (`/usr/bin/time -l`, release build):
+A keyboard extension is ended by the system at roughly 60–70 MB (est.; Apple does not publish the limit, and it varies by device).
 
-| Request | Peak footprint |
-|---|---|
-| empty text | 20 MB |
-| "Hello." (loads the lexicon and rules) | 108 MB |
-| "i recieved teh report" (also spelling candidates, word pairs) | 137 MB |
-| the same, without the SymSpell deletes index (experiment) | 75 MB |
-| the same, without the deletes index and the word-pair table | 57 MB |
+**Before (v0.5.0).** The engine built its spelling tables as `HashMap<String, …>` values from JSON at first use. One request peaked at 108 MB ("Hello.") to 137 MB ("i recieved teh report"). The SymSpell deletes index alone was about 62 MB and the word-pair table about 18 MB.
 
-A keyboard extension is ended by the system at roughly 60–70 MB (est.; Apple does not publish the limit, and it varies by device). So:
+**Now.** Three changes, all with identical lookups:
 
-- The keyboard calls `MemoryBudget.engineFits()`, which reads `os_proc_available_memory()`, before loading the engine. It needs 160 MB of headroom.
-- On a device, the keyboard falls back to `SystemSpelling`, the UITextChecker corrections expressed as engine edits. The same bar and the same apply path work with either checker.
-- The simulator sets no memory limit, so the engine runs in the keyboard there.
-- The keyboard writes which checker it used, and its headroom, to the App Group. The app's Keyboard tab shows it.
+- **Tables compiled at build time.** `engine/build.rs` turns `rules/lexicon.json`, `frequency.json` and `bigrams.json` into read-only hash tables: the lexicon with flags and canonical casing, the deletes index, frequencies and word pairs (format in `engine/src/table.rs`). They are embedded with `include_bytes!` and read in place, so their pages stay clean and shared, and there is no JSON parsing at run time.
+- **Bounded set of compiled rule patterns.** At most 48 rule patterns stay compiled (`rules::COMPILED_PATTERNS_KEPT`, least recently used dropped). A compiled pattern is about 70–100 KB, and a long, varied session used to compile all of them (about 20 MB).
+- **Bounded lazy-DFA cache.** Each rule pattern's cache is held to 16 KB (`REGEX_CACHE_BYTES`; the regex crate's default is 2 MB).
 
-**Fix (next step):** build the lexicon's deletes index (about 62 MB) and the word-pair table (about 18 MB) at build time, as sorted static arrays read in place from the binary. They are `HashMap<String, …>` values built at first use today. That should bring the engine under about 30 MB with identical lookups. Then the full engine, and the meaning guard that in-keyboard rewrites need, can run in the keyboard.
+Peak footprint, macOS, release build, rules only (`/usr/bin/time -l`):
+
+| Workload | v0.5.0 | Now |
+|---|---|---|
+| one short request, fresh process ("i recieved teh report") | 136 MB | 21.7 MB |
+| each of the 1,643 held-out DEV error items alone, fresh process | (over 100 MB) | median 19.5, p95 21.5, max 24.0 MB |
+| 9,278 paragraphs in one process (English 1000 + 2000 with clean controls, typo-fuzz and held-out DEV samples), with NaturalLanguage hints | 166–174 MB | 29.3–30.6 MB |
+| 18,004 one- and two-sentence windows in one process (what the keyboard sends) | 166 MB | 30.0 MB |
+
+- **Outputs are identical.** Base and new engines were compared request by request, ignoring only `elapsed_ms`:
+
+  | Build | Requests | Requests that differ |
+  |---|---|---|
+  | rules-only, with NaturalLanguage hints | 9,278 | 0 |
+  | rules-only, without hints | 9,278 | 0 |
+  | rules-only, sentence windows | 18,004 | 0 |
+  | default features (local model), with hints | 9,278 | 0 |
+
+  The 9,278 requests are English 1000/2000 and their clean controls, 500 British-dialect paragraphs, a fifth of the typo-fuzz DEV set with its clean set, and the held-out DEV split by the runner's hash rule. The held-out test split was never used.
+- **Lookups are tested exhaustively.** `spelling::compiled_tables` checks every word, deletion key, frequency and pair against maps rebuilt from the JSON.
+- **Speed and size.**
+  - Instructions retired: 105.5 G against 103.8 G on the 9,278 requests (+1.7%), and 152.0 G against 149.5 G on the sentence windows (+1.7%).
+  - A cold first request takes about a third of the time: 0.10 s against 0.31 s at low load, and 0.30 s against 0.81 s under load.
+  - The cost is binary size. Each binary that links the engine grows by about 16 MB (11.1 MB compressed against 4.4 MB) because the hashed tables compress worse than the JSON.
+- **In the keyboard.**
+  - `MemoryBudget.engineMB` is now 40 MB of headroom, so the keyboard runs the full engine and the meaning guard, and falls back to `SystemSpelling` (UITextChecker) only when headroom is below that.
+  - The simulator sets no memory limit, so the engine always runs there.
+  - The keyboard writes which checker it used, and its headroom, to the App Group. The app's Keyboard tab shows it.
 
 ## Apple Foundation Models
 
@@ -88,12 +108,12 @@ What is known:
   - Without Full Access, a keyboard cannot use the network or write a shared container. Whether it may open the XPC connection to the model service is not documented.
   - Foundation Models is rate-limited for apps in the background. A keyboard runs inside another app's foreground session.
   - Neither can be settled in the simulator, which applies neither the device sandbox nor the memory limit.
-- **The meaning guard is the binding constraint today.** A rewrite must not reach the text field unchecked, and the guard needs the engine's lexicon, which does not fit (see Memory above).
+- **The meaning guard needed the engine's lexicon,** which did not fit until the tables were compiled (see Memory above). It now fits: a rewrite in the keyboard can be checked there.
 
 So the design does not depend on the answer:
 
-1. **Probe at run time.** With Full Access, the keyboard makes one short `ToneRewriter.probe()` call per launch (3 s deadline). It records "works (N ms)" or the exact error in the App Group, and the app's Keyboard tab shows it. Running it on a real iPhone answers the question.
-2. **Rewrite in the keyboard** only when the engine fits *and* Apple Intelligence answers there. That is the simulator today, and devices once the engine's memory is reduced.
+1. **Probe at run time.** The keyboard makes one short on-device `ToneRewriter.probe()` call at most once a day (3 s deadline) and logs it. It records "works (N ms)" or the exact error in the App Group, and the app's Keyboard tab shows it. Running it on a real iPhone answers the question.
+2. **Rewrite in the keyboard** only when the engine fits *and* Apple Intelligence answers there.
 3. **Otherwise, hand off through the App Group.**
    - The keyboard stores the sentence and tone (`SharedStore.post`) and says "Open Parzr to write a Professional version".
    - When the app is next active, it writes the rewrite with the full engine and AFM (`AppModel.answerHandoff`) and stores the result or the reason there is none.
@@ -124,8 +144,8 @@ So the design does not depend on the answer:
 
 ## Next steps
 
-1. **Compact the engine's tables** (see Memory) so that the engine and the meaning guard run in the keyboard. Measure with `os_proc_available_memory` on the oldest supported iPhone.
-2. **Run the keyboard on a device with Full Access** and read the Apple Intelligence probe result in the Keyboard tab. If it works, in-keyboard rewrites only wait on step 1.
+1. **Run the keyboard on a device with Full Access.** Read the Apple Intelligence probe result and the memory headroom in the Keyboard tab, on the oldest supported iPhone.
+2. **Win back the binary size.** The Mac app ships four binaries that link the engine (the dylib, `parzr-engine`, `parzr-native-host`, `parzr-lsp`), so the tables are in it four times. Linking the side binaries against the dylib, or shipping the tables as one read-only file mapped at run time, keeps one copy.
 3. **Keyboard polish:**
    - long-press accents;
    - double-space period;

@@ -2,12 +2,13 @@ import Foundation
 import os
 
 /// Whether this process can afford the Rust engine. A keyboard extension is ended by the system
-/// past its memory limit (about 60-70 MB on current iPhones), and the engine's tables peak at
-/// about 110-140 MB (ios/README.md), so the keyboard asks first and falls back to the system
-/// spell checker.
+/// past its memory limit (about 60-70 MB on current iPhones, est.). The engine peaks at about
+/// 20 MB for one check and stays near 30 MB over a long session (ios/README.md), so it fits; the
+/// keyboard still asks first and falls back to the system spell checker on a device that leaves
+/// it less headroom.
 public enum MemoryBudget {
-    /// Peak footprint the engine adds on its first check, with margin (measured 108-137 MB).
-    public static let engineMB = 160
+    /// Headroom the engine needs: its long-session footprint (about 30 MB) with margin.
+    public static let engineMB = 40
 
     /// Memory left before the system ends this process, in MB; nil where the system sets no
     /// limit (the simulator, and apps on macOS).

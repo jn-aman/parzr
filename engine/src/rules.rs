@@ -4,7 +4,10 @@ use crate::Mode;
 use aho_corasick::AhoCorasick;
 use regex::Regex;
 use serde::Deserialize;
-use std::{collections::HashMap, sync::OnceLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, OnceLock},
+};
 mod literals;
 #[derive(Debug, Deserialize)]
 pub struct Rule {
@@ -33,13 +36,61 @@ fn confidence() -> f32 {
 }
 pub struct CompiledRule {
     pub rule: Rule,
-    regex: OnceLock<Regex>,
+    index: usize,
+}
+/// How many compiled rule patterns stay in memory. A compiled pattern costs about 70 KB (its NFA
+/// and one-pass DFA, mostly Unicode word classes); keeping all ~470 that a long, varied session
+/// reaches cost about 20 MB, too much for a keyboard extension. Past this many, the pattern used
+/// least recently is dropped and compiled again when next needed, with the same matches.
+pub const COMPILED_PATTERNS_KEPT: usize = 48;
+struct Compiled {
+    regexes: Vec<Option<Arc<Regex>>>,
+    used: Vec<u64>,
+    live: usize,
+    tick: u64,
+}
+fn compiled() -> &'static Mutex<Compiled> {
+    static COMPILED: OnceLock<Mutex<Compiled>> = OnceLock::new();
+    COMPILED.get_or_init(|| {
+        let n = pack().rules.len();
+        Mutex::new(Compiled {
+            regexes: vec![None; n],
+            used: vec![0; n],
+            live: 0,
+            tick: 0,
+        })
+    })
 }
 impl CompiledRule {
-    pub fn regex(&self) -> &Regex {
-        self.regex.get_or_init(|| {
-            Regex::new(&self.rule.pattern).expect("valid embedded contextual pattern")
-        })
+    pub fn regex(&self) -> Arc<Regex> {
+        {
+            let mut cache = compiled().lock().unwrap_or_else(|e| e.into_inner());
+            cache.tick += 1;
+            let tick = cache.tick;
+            if let Some(regex) = cache.regexes[self.index].clone() {
+                cache.used[self.index] = tick;
+                return regex;
+            }
+        }
+        let regex =
+            Arc::new(crate::regex(&self.rule.pattern).expect("valid embedded contextual pattern"));
+        let mut cache = compiled().lock().unwrap_or_else(|e| e.into_inner());
+        if cache.regexes[self.index].is_none() {
+            if cache.live == COMPILED_PATTERNS_KEPT {
+                let oldest = (0..cache.regexes.len())
+                    .filter(|&i| cache.regexes[i].is_some())
+                    .min_by_key(|&i| cache.used[i])
+                    .expect("a compiled pattern");
+                cache.regexes[oldest] = None;
+                cache.live -= 1;
+            }
+            cache.regexes[self.index] = Some(regex.clone());
+            cache.live += 1;
+        }
+        cache.tick += 1;
+        let tick = cache.tick;
+        cache.used[self.index] = tick;
+        regex
     }
 }
 pub fn contextual() -> &'static [CompiledRule] {
@@ -84,10 +135,8 @@ fn pack() -> &'static Pack {
             .expect("required literals");
         let rules = grammar
             .into_iter()
-            .map(|rule| CompiledRule {
-                rule,
-                regex: OnceLock::new(),
-            })
+            .enumerate()
+            .map(|(index, rule)| CompiledRule { rule, index })
             .collect();
         Pack {
             rules,

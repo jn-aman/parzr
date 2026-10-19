@@ -8,10 +8,10 @@ let keyboardLog = Logger(subsystem: "app.parzr.ios", category: "keyboard")
 /// Parzr's keyboard: a plain QWERTY layout with a suggestion bar that checks the sentence being
 /// typed and applies fixes through `textDocumentProxy`.
 ///
-/// Memory: the keyboard loads the Rust engine only when `MemoryBudget` says it fits (it does not
-/// on current iPhones; see ios/README.md); otherwise the bar shows the system spell checker's
-/// corrections. Tone rewrites run here only when the engine (needed for the meaning guard) and
-/// Apple Intelligence are both usable; otherwise they are handed to the app through the App Group.
+/// Memory: the keyboard loads the Rust engine when `MemoryBudget` says it fits (about 30 MB at
+/// most; see ios/README.md); otherwise the bar shows the system spell checker's corrections.
+/// Tone rewrites run here only when the engine (needed for the meaning guard) and Apple
+/// Intelligence are both usable; otherwise they are handed to the app through the App Group.
 final class KeyboardViewController: UIInputViewController {
     private let bar = SuggestionBar()
     private let keys = KeysView()

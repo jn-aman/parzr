@@ -162,8 +162,9 @@ final class EngineTests: XCTestCase {
 
     func testMemoryBudget() {
         XCTAssertTrue(MemoryBudget.engineFits(headroomMB: nil))
-        XCTAssertFalse(MemoryBudget.engineFits(headroomMB: 60))
-        XCTAssertTrue(MemoryBudget.engineFits(headroomMB: 2_000))
+        XCTAssertFalse(MemoryBudget.engineFits(headroomMB: 25))
+        // A keyboard's usual headroom (limit about 60-70 MB, minus its own UI).
+        XCTAssertTrue(MemoryBudget.engineFits(headroomMB: 50))
     }
 }
 

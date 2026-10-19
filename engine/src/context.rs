@@ -1,26 +1,17 @@
 //! Pinned, attributed word-pair frequencies; no runtime downloads or writing logs.
-use std::{collections::HashMap, sync::OnceLock};
+use crate::table::Table;
+use std::sync::OnceLock;
 
-fn counts() -> &'static HashMap<String, u64> {
-    static COUNTS: OnceLock<HashMap<String, u64>> = OnceLock::new();
-    COUNTS.get_or_init(|| {
-        #[derive(serde::Deserialize)]
-        struct Data {
-            metadata: serde_json::Value,
-            entries: Vec<(String, u64)>,
-        }
-        let data: Data = serde_json::from_str(include_str!("../rules/bigrams.json"))
-            .expect("valid attributed word pairs");
-        assert!(
-            data.metadata["source_sha256"]
-                .as_str()
-                .is_some_and(|s| s.len() == 64)
-        );
-        data.entries.into_iter().collect()
-    })
+/// "a b" to its count, built by `build.rs` from `rules/bigrams.json` and read in place.
+fn counts() -> &'static Table {
+    static COUNTS: OnceLock<Table> = OnceLock::new();
+    COUNTS.get_or_init(|| Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/bigrams.bin"))))
 }
 pub fn count(a: &str, b: &str) -> u64 {
-    counts().get(&format!("{a} {b}")).copied().unwrap_or(0)
+    let counts = counts();
+    counts.find(&format!("{a} {b}")).map_or(0, |e| {
+        u64::from_le_bytes(counts.value(e).try_into().expect("8-byte count"))
+    })
 }
 pub fn score(a: &str, b: &str) -> i32 {
     // Smoothed floor for pairs absent from this truncated corpus. Counts are

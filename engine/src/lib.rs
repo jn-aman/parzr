@@ -28,10 +28,22 @@ mod real_word;
 mod rules;
 mod spelling;
 mod structure;
+mod table;
 mod tokenizer;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
+/// The lazy DFA cache each rule pattern may grow to. The regex crate's default (2 MB per regex)
+/// would let the footprint of a long session climb with the rule patterns it compiles
+/// (`rules::COMPILED_PATTERNS_KEPT`); past this bound a search clears the cache or falls back to
+/// another of the crate's engines, with the same matches.
+pub(crate) const REGEX_CACHE_BYTES: usize = 16 * 1024;
+/// A rule regex with the engine's bounded cache (`REGEX_CACHE_BYTES`).
+pub(crate) fn regex(pattern: &str) -> Result<Regex, regex::Error> {
+    regex::RegexBuilder::new(pattern)
+        .dfa_size_limit(REGEX_CACHE_BYTES)
+        .build()
+}
 use serde::{Deserialize, Serialize};
 pub(crate) use spelling::AUTO_CAPITAL_HINT;
 use std::time::Instant;

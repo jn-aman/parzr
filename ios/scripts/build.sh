@@ -32,7 +32,7 @@ if [[ -z "$DESTINATION" ]]; then
 fi
 
 status=0
-nice -n 10 xcodebuild -project "$IOS/Parzr.xcodeproj" -scheme Parzr \
+nice -n 15 xcodebuild -project "$IOS/Parzr.xcodeproj" -scheme Parzr \
     -destination "$DESTINATION" -derivedDataPath "$IOS/build" \
     -jobs "${PARZR_JOBS:-2}" CODE_SIGNING_ALLOWED=NO "$ACTION" || status=$?
 # Do not leave the test simulator running (its media daemons keep the CPU busy).

@@ -5,9 +5,9 @@ internal import ParzrEngineFFI
 /// ios/scripts/build-engine-xcframework.sh, rules only). Calls run one at a time on a private
 /// queue: the engine keeps per-thread caches, and typing must never block the main thread.
 ///
-/// Memory: the engine builds its spelling and word-pair tables on first use, about 110-140 MB
-/// peak (measured on macOS, see ios/README.md). That does not fit a keyboard extension today;
-/// the keyboard asks `MemoryBudget` before it loads the engine.
+/// Memory: the engine's spelling and word-pair tables are compiled into the binary and read in
+/// place, so a check peaks at about 20 MB and a long session stays near 30 MB (measured on
+/// macOS, see ios/README.md). The keyboard still asks `MemoryBudget` before it loads the engine.
 public final class ParzrEngine: @unchecked Sendable {
     public static let shared = ParzrEngine()
     /// Words the system spell checker accepts in a text (lowercase, shaped as `WordShape.shaped`).

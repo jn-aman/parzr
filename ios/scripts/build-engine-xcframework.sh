@@ -21,7 +21,7 @@ for target in aarch64-apple-ios aarch64-apple-ios-sim; do
     rustup target list --installed | grep -qx "$target" || rustup target add "$target"
     echo "Building engine for $target"
     # Only the static library: the crate's cdylib and binaries are not needed on iOS.
-    nice -n 10 cargo rustc --manifest-path "$ROOT/engine/Cargo.toml" --release --locked \
+    nice -n 15 cargo rustc --manifest-path "$ROOT/engine/Cargo.toml" --release --locked \
         --no-default-features --lib --crate-type staticlib --target "$target" -j "$JOBS"
 done
 

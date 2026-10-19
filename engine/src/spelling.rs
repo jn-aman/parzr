@@ -1,116 +1,68 @@
 //! Inflection-aware deletion index with deterministic context ranking.
+use crate::table::Table;
 use crate::tokenizer::Token;
 use crate::{context, morphology, names};
-use std::{
-    collections::{HashMap, HashSet},
-    hash::{BuildHasherDefault, Hasher},
-    sync::OnceLock,
-};
-/// Multiply-rotate hasher (as in rustc-hash) for the static dictionary maps: their keys are fixed
-/// data, so SipHash's flooding resistance buys nothing and costs a tenth of a pass.
-#[derive(Default)]
-struct FastHasher(u64);
-impl Hasher for FastHasher {
-    fn write(&mut self, bytes: &[u8]) {
-        for chunk in bytes.chunks(8) {
-            let mut word = [0; 8];
-            word[..chunk.len()].copy_from_slice(chunk);
-            self.0 = (self.0.rotate_left(5) ^ u64::from_le_bytes(word))
-                .wrapping_mul(0xf135_7aea_2e62_a9c5);
-        }
-    }
-    fn write_u8(&mut self, byte: u8) {
-        self.0 = (self.0.rotate_left(5) ^ u64::from(byte)).wrapping_mul(0xf135_7aea_2e62_a9c5);
-    }
-    fn finish(&self) -> u64 {
-        self.0.rotate_left(26)
-    }
-}
-type Fast = BuildHasherDefault<FastHasher>;
+use std::{collections::HashSet, sync::OnceLock};
+/// The spelling lexicon and its deletion index, built by `build.rs` from `rules/lexicon.json`
+/// and `rules/frequency.json` and read in place (`table.rs`).
 struct Lexicon {
-    words: HashMap<String, u8, Fast>,
-    lowercase: HashSet<String, Fast>,
-    /// Original casing of entries that are neither plain capitalized nor acronyms ("McDonald", "iPhone").
-    canonical: HashMap<String, String>,
-    deletes: HashMap<String, Vec<String>, Fast>,
+    /// Lowercase word: flags (low byte) and whether the word is an ordinary lowercase entry
+    /// (bit 8); then the arena offset and length of its canonical casing ("McDonald", "iPhone").
+    words: Table,
+    /// A common word with one byte deleted: the words it comes from (entry numbers in `words`,
+    /// sorted by word).
+    deletes: Table,
+}
+impl Lexicon {
+    fn flags(&self, lower: &str) -> Option<u8> {
+        self.words
+            .find(lower)
+            .map(|e| self.words.value_u32(e, 0) as u8)
+    }
+    fn contains(&self, lower: &str) -> bool {
+        self.words.find(lower).is_some()
+    }
+    /// The dictionary's own copy of `lower`.
+    fn word(&self, lower: &str) -> Option<&'static str> {
+        self.words.find(lower).map(|e| self.words.key(e))
+    }
+    /// An entry spelled in lowercase in the dictionary ("hope", "rose"), not only as a name.
+    fn ordinary(&self, word: &str) -> bool {
+        self.words
+            .find(word)
+            .is_some_and(|e| self.words.value_u32(e, 0) & 0x100 != 0)
+    }
+    fn canonical(&self, lower: &str) -> Option<&'static str> {
+        let entry = self.words.find(lower)?;
+        let len = self.words.value_u32(entry, 2) as usize;
+        (len > 0).then(|| {
+            self.words
+                .arena_str(self.words.value_u32(entry, 1) as usize, len)
+        })
+    }
+    /// The common words that `deleted` is one deleted byte of, in sorted order.
+    fn deletes(&self, deleted: &str) -> impl Iterator<Item = &'static str> + use<> {
+        let (words, deletes) = (self.words, self.deletes);
+        let (start, count) = deletes.find(deleted).map_or((0, 0), |e| {
+            (
+                deletes.value_u32(e, 0) as usize,
+                deletes.value_u32(e, 1) as usize,
+            )
+        });
+        (start..start + count).map(move |i| words.key(deletes.extra(i) as usize))
+    }
 }
 pub(crate) fn frequency(word: &str) -> u16 {
-    static FREQUENCIES: OnceLock<HashMap<String, u16, Fast>> = OnceLock::new();
-    FREQUENCIES
-        .get_or_init(|| {
-            #[derive(serde::Deserialize)]
-            struct Prior {
-                metadata: serde_json::Value,
-                entries: Vec<(String, u16)>,
-            }
-            let prior: Prior = serde_json::from_str(include_str!("../rules/frequency.json"))
-                .expect("valid attributed frequency prior");
-            assert_eq!(prior.metadata["license"], "CC-BY-SA-4.0");
-            prior.entries.into_iter().collect()
-        })
-        .get(word)
-        .copied()
-        .unwrap_or(0)
+    static FREQUENCIES: OnceLock<Table> = OnceLock::new();
+    let table = FREQUENCIES
+        .get_or_init(|| Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/frequency.bin"))));
+    table.find(word).map_or(0, |e| table.value_u32(e, 0) as u16)
 }
 fn lexicon() -> &'static Lexicon {
     static LEXICON: OnceLock<Lexicon> = OnceLock::new();
-    LEXICON.get_or_init(|| {
-        let entries: Vec<(String, u8)> =
-            serde_json::from_str(include_str!("../rules/lexicon.json")).unwrap_or_default();
-        let mut words = HashMap::with_capacity_and_hasher(entries.len(), Fast::default());
-        let mut lowercase = HashSet::with_hasher(Fast::default());
-        let mut canonical: HashMap<String, String> = HashMap::new();
-        for (word, flags) in entries {
-            let lower = word.to_lowercase();
-            if word == lower {
-                lowercase.insert(word.clone());
-            } else if word.chars().skip(1).any(char::is_uppercase)
-                && word.chars().any(char::is_lowercase)
-            {
-                // Mixed case beyond a first capital ("McDonald", "iPhone"), not "Rahul" or "NASA".
-                // The spelling with the most capitals wins ("McDonald" over "Mcdonald").
-                let capitals = |w: &str| w.chars().filter(|c| c.is_uppercase()).count();
-                let better = canonical
-                    .get(&lower)
-                    .is_none_or(|old| capitals(&word) > capitals(old));
-                if better {
-                    canonical.insert(lower.clone(), word.clone());
-                }
-            }
-            *words.entry(lower).or_insert(0) |= flags;
-        }
-        let mut deletes: HashMap<String, Vec<String>, Fast> =
-            HashMap::with_capacity_and_hasher(words.len() * 2, Fast::default());
-        // Index common words only for suggestions; all words remain valid dictionary entries.
-        for (word, flags) in &words {
-            let common_form = flags & 1 != 0
-                || frequency(word) >= 250
-                || ["s", "es", "ed", "ing"].iter().any(|suffix| {
-                    word.strip_suffix(suffix).is_some_and(|stem| {
-                        words.get(stem).is_some_and(|f| f & 1 != 0)
-                            || words.get(&format!("{stem}e")).is_some_and(|f| f & 1 != 0)
-                    })
-                });
-            if !common_form || word.len() > 24 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
-                continue;
-            }
-            // A letter repeated in the word yields one deletion twice; the dedup below drops it.
-            for i in 0..word.len() {
-                let deleted = format!("{}{}", &word[..i], &word[i + 1..]);
-                deletes.entry(deleted).or_default().push(word.clone());
-            }
-        }
-        for values in deletes.values_mut() {
-            values.sort();
-            values.dedup();
-        }
-        canonical.retain(|lower, _| !lowercase.contains(lower));
-        Lexicon {
-            words,
-            lowercase,
-            canonical,
-            deletes,
-        }
+    LEXICON.get_or_init(|| Lexicon {
+        words: Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/lexicon.bin"))),
+        deletes: Table::new(include_bytes!(concat!(env!("OUT_DIR"), "/deletes.bin"))),
     })
 }
 fn deletions(word: &str) -> HashSet<String> {
@@ -119,26 +71,22 @@ fn deletions(word: &str) -> HashSet<String> {
         .collect()
 }
 pub fn known(word: &str) -> bool {
-    lexicon().words.contains_key(&word.to_lowercase())
+    lexicon().contains(&word.to_lowercase())
 }
 pub fn flags(word: &str) -> u8 {
-    lexicon()
-        .words
-        .get(&word.to_lowercase())
-        .copied()
-        .unwrap_or(0)
+    lexicon().flags(&word.to_lowercase()).unwrap_or(0)
 }
 pub fn name_only(word: &str) -> bool {
-    known(word) && !lexicon().lowercase.contains(word)
+    known(word) && !lexicon().ordinary(word)
 }
 /// An ordinary lowercase dictionary word ("hope", "rose"), as opposed to a name or acronym.
 pub fn ordinary(word: &str) -> bool {
-    lexicon().lowercase.contains(word)
+    lexicon().ordinary(word)
 }
 /// "mcdonald" -> "McDonald", "iphone" -> "iPhone": the dictionary spelling of a word that is not
 /// an ordinary lowercase word.
 pub fn canonical_case(lower: &str) -> Option<&'static str> {
-    lexicon().canonical.get(lower).map(String::as_str)
+    lexicon().canonical(lower)
 }
 /// A name from the lexicon or the bundled list, whether or not the user capitalized it.
 fn namey(word: &str) -> bool {
@@ -579,7 +527,7 @@ pub fn slot_fix(
     if !(2..=3).contains(&word.len()) {
         return None;
     }
-    let unknown = !lexicon().lowercase.contains(word);
+    let unknown = !lexicon().ordinary(word);
     let mut near: Vec<&str> = COMMON
         .into_iter()
         // Far more frequent: a gap of 1.5 Zipf points (about 30 times) in the frequency prior.
@@ -952,21 +900,15 @@ fn slips_within(word: &str, max_cost: f64) -> Vec<String> {
     }
     let lexicon = lexicon();
     let mut near: HashSet<String> = HashSet::new();
-    if let Some(values) = lexicon.deletes.get(word) {
-        near.extend(values.iter().cloned());
-    }
+    near.extend(lexicon.deletes(word).map(String::from));
     for deleted in deletions(word) {
-        if lexicon.lowercase.contains(&deleted) {
+        if lexicon.ordinary(&deleted) {
             near.insert(deleted.clone());
         }
-        if let Some(values) = lexicon.deletes.get(&deleted) {
-            near.extend(values.iter().cloned());
-        }
+        near.extend(lexicon.deletes(&deleted).map(String::from));
     }
     near.into_iter()
-        .filter(|c| {
-            lexicon.lowercase.contains(c) && distance_one(word, c) && slip_cost(word, c) <= max_cost
-        })
+        .filter(|c| lexicon.ordinary(c) && distance_one(word, c) && slip_cost(word, c) <= max_cost)
         .collect()
 }
 pub(crate) fn typo_shaped(word: &str) -> bool {
@@ -1095,9 +1037,7 @@ fn name_only_typo(word: &str, prev: &str) -> bool {
                 let mut swapped = word.as_bytes().to_vec();
                 swapped.swap(i, i + 1);
                 let swapped = String::from_utf8_lossy(&swapped).into_owned();
-                swapped != word
-                    && lexicon().lowercase.contains(&swapped)
-                    && frequency(&swapped) >= 500
+                swapped != word && lexicon().ordinary(&swapped) && frequency(&swapped) >= 500
             })
 }
 /// The word before `token`, read through the given punctuation. A word on an earlier line only
@@ -2180,23 +2120,21 @@ fn within_two(word: &str) -> Vec<String> {
             }
         }
     }
-    let mut near: HashSet<&String> = HashSet::new();
+    let mut near: HashSet<&'static str> = HashSet::new();
     for v in &variants {
-        if let Some((w, _)) = lexicon.words.get_key_value(v) {
+        if let Some(w) = lexicon.word(v) {
             near.insert(w);
         }
-        if let Some(values) = lexicon.deletes.get(v) {
-            near.extend(values);
-        }
+        near.extend(lexicon.deletes(v));
     }
     near.into_iter()
         .filter(|c| {
-            lexicon.lowercase.contains(c.as_str())
+            lexicon.ordinary(c)
                 && frequency(c) >= 300
                 && *c != word
                 && osa_within(bytes, c.as_bytes(), 2)
         })
-        .cloned()
+        .map(String::from)
         .collect()
 }
 /// How likely `candidate` is the word meant by the unknown `word` between `before` and `after`
@@ -2392,17 +2330,13 @@ pub fn suggest(
     } else if flags(following) != 0 || !following.is_ascii() {
         flags(following)
     } else {
-        let mut nearby = HashSet::new();
-        if let Some(values) = lexicon().deletes.get(following) {
-            nearby.extend(values.iter());
-        }
+        let mut nearby: HashSet<&'static str> = HashSet::new();
+        nearby.extend(lexicon().deletes(following));
         for deleted in deletions(following) {
-            if let Some((w, _)) = lexicon().words.get_key_value(&deleted) {
+            if let Some(w) = lexicon().word(&deleted) {
                 nearby.insert(w);
             }
-            if let Some(values) = lexicon().deletes.get(&deleted) {
-                nearby.extend(values.iter());
-            }
+            nearby.extend(lexicon().deletes(&deleted));
         }
         let candidates: Vec<_> = nearby
             .into_iter()
@@ -2466,7 +2400,7 @@ pub fn suggest(
     // that usually label something ("plan b", "option c", "vitamin d", "x is 5") are left alone.
     let letter = word.len() == 1 && "fghjlmnopqstvw".contains(word.as_str());
     // A proper noun typed in lowercase ("lyft", "duolingo") is capitalized, never respelled.
-    if lexicon().lowercase.contains(word) && !letter || names::is_shorthand(word) || chat(word) {
+    if lexicon().ordinary(word) && !letter || names::is_shorthand(word) || chat(word) {
         return None;
     }
     let proper_noun = crate::capitalization::proper_noun(names::base(word)).is_some();
@@ -2601,7 +2535,7 @@ pub fn suggest(
         .or_else(|| word.strip_suffix("fes").map(|stem| format!("{stem}ves")));
     if let Some(plural) = plural
         && !accepted
-        && lexicon().lowercase.contains(&plural)
+        && lexicon().ordinary(&plural)
     {
         return Some(plural);
     }
@@ -2624,16 +2558,12 @@ pub fn suggest(
     }
     let lexicon = lexicon();
     let mut candidates = HashSet::new();
-    if let Some(values) = lexicon.deletes.get(word) {
-        candidates.extend(values.iter().cloned());
-    }
+    candidates.extend(lexicon.deletes(word).map(String::from));
     for deleted in deletions(word) {
-        if lexicon.words.contains_key(&deleted) {
+        if lexicon.contains(&deleted) {
             candidates.insert(deleted.clone());
         }
-        if let Some(values) = lexicon.deletes.get(&deleted) {
-            candidates.extend(values.iter().cloned());
-        }
+        candidates.extend(lexicon.deletes(&deleted).map(String::from));
     }
     // With no dialect chosen, British and American spellings are both valid.
     let dialect_flags = match dialect {
@@ -2647,7 +2577,7 @@ pub fn suggest(
         .filter(|candidate| {
             distance_one(word, candidate)
                 && flags(candidate) & dialect_flags != 0
-                && lexicon.lowercase.contains(candidate.as_str())
+                && lexicon.ordinary(candidate.as_str())
         })
         // "foetuses" and "fetuses", "premisses" and "premises" are two valid spellings.
         .filter(|candidate| !dialect.is_empty() || !variant_spelling(word, candidate))
@@ -3511,5 +3441,107 @@ mod tests {
         for name in ["rakesh", "aman", "minji", "hao", "priya", "jatin"] {
             assert!(!hinted_name_is_typo(name, "with"), "{name}");
         }
+    }
+}
+/// The compiled tables (`build.rs`) answer every lookup exactly as the maps the engine used to
+/// build from the JSON at first use: every word, every deletion key, every frequency and pair.
+#[cfg(test)]
+mod compiled_tables {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn the_compiled_lexicon_matches_the_json_it_was_built_from() {
+        let prior: serde_json::Value =
+            serde_json::from_str(include_str!("../rules/frequency.json")).unwrap();
+        let mut frequencies: HashMap<String, u16> = HashMap::new();
+        for e in prior["entries"].as_array().unwrap() {
+            frequencies.insert(e[0].as_str().unwrap().into(), e[1].as_u64().unwrap() as u16);
+        }
+        for (word, value) in &frequencies {
+            assert_eq!(frequency(word), *value, "{word}");
+        }
+        assert_eq!(frequency("zzzqqx"), 0);
+
+        let entries: Vec<(String, u8)> =
+            serde_json::from_str(include_str!("../rules/lexicon.json")).unwrap();
+        let mut words: HashMap<String, u8> = HashMap::new();
+        let mut lowercase: HashSet<String> = HashSet::new();
+        let mut canonical: HashMap<String, String> = HashMap::new();
+        for (word, flags) in entries {
+            let lower = word.to_lowercase();
+            if word == lower {
+                lowercase.insert(word.clone());
+            } else if word.chars().skip(1).any(char::is_uppercase)
+                && word.chars().any(char::is_lowercase)
+            {
+                let capitals = |w: &str| w.chars().filter(|c| c.is_uppercase()).count();
+                if canonical
+                    .get(&lower)
+                    .is_none_or(|old| capitals(&word) > capitals(old))
+                {
+                    canonical.insert(lower.clone(), word.clone());
+                }
+            }
+            *words.entry(lower).or_insert(0) |= flags;
+        }
+        canonical.retain(|lower, _| !lowercase.contains(lower));
+        let mut deletes: HashMap<String, Vec<String>> = HashMap::new();
+        for (word, flags) in &words {
+            let common_form = flags & 1 != 0
+                || frequencies.get(word).copied().unwrap_or(0) >= 250
+                || ["s", "es", "ed", "ing"].iter().any(|suffix| {
+                    word.strip_suffix(suffix).is_some_and(|stem| {
+                        words.get(stem).is_some_and(|f| f & 1 != 0)
+                            || words.get(&format!("{stem}e")).is_some_and(|f| f & 1 != 0)
+                    })
+                });
+            if !common_form || word.len() > 24 || !word.bytes().all(|b| b.is_ascii_lowercase()) {
+                continue;
+            }
+            for i in 0..word.len() {
+                let deleted = format!("{}{}", &word[..i], &word[i + 1..]);
+                deletes.entry(deleted).or_default().push(word.clone());
+            }
+        }
+        let lexicon = lexicon();
+        for (word, flags) in &words {
+            assert_eq!(lexicon.flags(word), Some(*flags), "{word}");
+            assert_eq!(lexicon.word(word), Some(word.as_str()));
+            assert_eq!(lexicon.ordinary(word), lowercase.contains(word), "{word}");
+            assert_eq!(
+                lexicon.canonical(word),
+                canonical.get(word).map(String::as_str),
+                "{word}"
+            );
+        }
+        for (deleted, values) in &mut deletes {
+            values.sort();
+            values.dedup();
+            assert_eq!(
+                &lexicon.deletes(deleted).collect::<Vec<_>>(),
+                values,
+                "{deleted}"
+            );
+        }
+        assert_eq!(deletes.len(), lexicon.deletes.len());
+        assert_eq!(words.len(), lexicon.words.len());
+        assert_eq!(lexicon.deletes("zzzqqx").count(), 0);
+        assert!(
+            !lexicon.contains("zzzqqx") && !lexicon.ordinary("Hope") && lexicon.ordinary("hope")
+        );
+
+        let pairs: serde_json::Value =
+            serde_json::from_str(include_str!("../rules/bigrams.json")).unwrap();
+        let mut counts: HashMap<String, u64> = HashMap::new();
+        for e in pairs["entries"].as_array().unwrap() {
+            counts.insert(e[0].as_str().unwrap().into(), e[1].as_u64().unwrap());
+        }
+        for (pair, count) in &counts {
+            if let Some((a, b)) = pair.split_once(' ') {
+                assert_eq!(context::count(a, b), *count, "{pair}");
+            }
+        }
+        assert_eq!(context::count("zzzqqx", "the"), 0);
     }
 }
