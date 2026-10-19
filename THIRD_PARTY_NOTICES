@@ -140,10 +140,10 @@ Fine-tuned from sentence-transformers/all-MiniLM-L6-v2, revision
 (based on microsoft/MiniLM-L6-H384-uncased). Apache License 2.0. Its BERT uncased
 WordPiece vocabulary (vocab.txt) ships with the model, unchanged. The fine-tuned
 network is converted to Core ML with 8-bit weights by scripts/tone-check.
-Training data: lines written for Parzr (synthetic), the Stanford Politeness Corpus
-(Danescu-Niculescu-Mizil et al., 2013, CC BY 4.0), ParaDetox (s-nlp/paradetox,
-Logacheva et al., 2022, OpenRAIL++) and the Civil Comments validation shard
-(google/civil_comments, CC0). No private writing was used.
+Training data (pack version 2): lines written for Parzr (synthetic), the Stanford
+Politeness Corpus (Danescu-Niculescu-Mizil et al., 2013, CC BY 4.0) and the Civil
+Comments validation shard (google/civil_comments, CC0). No private writing was used,
+and no data under use-restricted (RAIL) licenses.
 The model runs entirely on the device; nothing is sent.
 
 The engine tokenizes sentences for the model as spaCy 3.8 does. Its English tokenizer rules

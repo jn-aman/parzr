@@ -14,7 +14,9 @@ Sources (all synthetic, public or licensed for this use):
   templates           TEMPLATES below, filled with synthetic objects, names and times
   everyday            dist/batches/batch-001 items written for Parzr ("written" and "corrupted" sources only;
                       Enron, LexNorm and ClueWeb lines are excluded), neutral after the AFM screen in afm-label
-  paradetox           s-nlp/paradetox (OpenRAIL++): toxic side rude, neutral rewrite neutral
+  paradetox           only with --with-paradetox (the v1 model): s-nlp/paradetox (OpenRAIL++), toxic side rude,
+                      neutral rewrite neutral. Left out by default since tone pack 2, so the shipped model carries no
+                      OpenRAIL++ use restrictions.
   politeness          Stanford Politeness Corpus (CC BY 4.0): the most polite half as neutral
   civil               google/civil_comments validation shard (CC0): toxicity >= 0.7 rude, < 0.05 neutral, <= 200 chars
 
@@ -181,7 +183,12 @@ def seeds(label):
     return lines
 
 
-def build(out, dev_path, seed=7):
+# Rows in ParaDetox's train.tsv: without it, the builder still draws the same shuffle so every later sample
+# (Stanford Politeness, Civil Comments) is the one the v1 model trained on.
+PARADETOX_ROWS = 19744
+
+
+def build(out, dev_path, seed=7, with_paradetox=False, filename="train.jsonl"):
     rng = random.Random(seed)
     rows = []
 
@@ -221,14 +228,18 @@ def build(out, dev_path, seed=7):
         if r["source"] in ("written", "corrupted"):
             add(r["expected"], "neutral", "everyday", f"b1-{r['id']}")
     # Public corpora.
-    pairs = []
-    with open(BAKEOFF / "dl-paradetox/s-nlp__paradetox/train.tsv", encoding="utf-8") as f:
-        for k, r in enumerate(csv.DictReader(f, delimiter="\t")):
-            pairs.append((k, r["en_toxic_comment"].strip(), r["en_neutral_comment"].strip()))
-    rng.shuffle(pairs)
-    for k, tox, neu in pairs[:1500]:
-        add(tox, "rude", "paradetox", f"pdx-{k}")
-        add(neu, "neutral", "paradetox", f"pdx-{k}")
+    if with_paradetox:
+        pairs = []
+        with open(BAKEOFF / "dl-paradetox/s-nlp__paradetox/train.tsv", encoding="utf-8") as f:
+            for k, r in enumerate(csv.DictReader(f, delimiter="\t")):
+                pairs.append((k, r["en_toxic_comment"].strip(), r["en_neutral_comment"].strip()))
+        assert len(pairs) == PARADETOX_ROWS
+        rng.shuffle(pairs)
+        for k, tox, neu in pairs[:1500]:
+            add(tox, "rude", "paradetox", f"pdx-{k}")
+            add(neu, "neutral", "paradetox", f"pdx-{k}")
+    else:
+        rng.shuffle(list(range(PARADETOX_ROWS)))
     pol = []
     for name in ("wikipedia", "stack-exchange"):
         with open(BAKEOFF / f"dl-politeness/Stanford_politeness_corpus/{name}.annotated.csv", encoding="utf-8") as f:
@@ -271,7 +282,7 @@ def build(out, dev_path, seed=7):
         by.setdefault(norm(r["text"]), set()).add(r["label"])
     final = [r for r in final if len(by[norm(r["text"])]) == 1]
     out.mkdir(parents=True, exist_ok=True)
-    with open(out / "train.jsonl", "w", encoding="utf-8") as f:
+    with open(out / filename, "w", encoding="utf-8") as f:
         for i, r in enumerate(final):
             r["id"] = f"t{i:05d}"
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -285,5 +296,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=pathlib.Path, default=TONE / "data")
     ap.add_argument("--dev", type=pathlib.Path, default=REPO / "benchmarks/tone-check/dev.jsonl")
+    ap.add_argument("--with-paradetox", action="store_true", help="add ParaDetox as the v1 model did")
+    ap.add_argument("--name", default="train.jsonl", help="output file name in --out")
     a = ap.parse_args()
-    build(a.out, a.dev)
+    build(a.out, a.dev, with_paradetox=a.with_paradetox, filename=a.name)

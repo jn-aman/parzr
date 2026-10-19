@@ -14,7 +14,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "engine/models.json"
-VERSION = "1"
+VERSION = "2"
 TAG = f"models-tone-{VERSION}"
 SOURCE = "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit"
 
