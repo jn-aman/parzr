@@ -24,6 +24,8 @@ final class AppModel: ObservableObject {
     @Published var suggestion: SuggestedVersion?
     /// Set for the selection card: a Fix check of a few words or more also offers one rewrite.
     var offersRewrite = false
+    /// What the writer does with this model's suggestions is reported (when reports are on). The welcome guide's sample turns it off.
+    var reports = true
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
     var didAnalyze: (() -> Void)?
@@ -185,6 +187,14 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
+    /// The app the text belongs to: the editor's, or Parzr's own for its writing space.
+    private var reportApp: String? { snapshot?.app.bundleIdentifier ?? Bundle.main.bundleIdentifier }
+    /// Reports what the writer did with `edits` of the current text. `text` overrides the source (the writing space's draft can be a keystroke ahead).
+    func report(_ edits: [WritingEdit], _ action: ReportAction, text: String? = nil) {
+        guard reports else { return }
+        Reports.record(edits, source: text ?? source, action: action, mode: mode, app: reportApp)
+    }
+    var canReport: Bool { reports && Reports.available }
     func copy() { guard !busy, !provisional, result != nil, snapshot?.checkingEnabled != false else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }

@@ -329,6 +329,8 @@ struct InlineCorrection: View {
     var applySentence: (() -> Void)? = nil
     var ignore: () -> Void
     var close: () -> Void
+    /// Reports what the writer did with this suggestion; nil when reports are off (or for the welcome guide's sample).
+    var report: ((ReportAction) -> Void)? = nil
     private var sentenceEdits: [WritingEdit] { SentencePreview.edits(source: source, edits: edits, focused: edit) }
     var body: some View {
         let count = sentenceEdits.count
@@ -349,8 +351,8 @@ struct InlineCorrection: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: canApply, action: apply)
                 }
                 Spacer(minLength: 0)
-                CardMore(edit: edit, done: ignore)
-                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore() }).fixedSize()
+                CardMore(edit: edit, done: ignore, report: report.map { report in { report(.reported); ignore() } })
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); report?(.dismissed); ignore() }).fixedSize()
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }

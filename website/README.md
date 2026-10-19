@@ -1,6 +1,6 @@
 # Parzr website
 
-Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app sends no writing anywhere (its only network request is the optional hourly update check).
+Static marketing site for parzr.app. No build step, no dependencies. The only third-party request is the self-hosted Rybbit analytics script (see "Analytics events"); the Parzr app checks writing on the Mac; its network requests are the optional hourly update check, the one-time model download, and anonymous reports of suggestions the writer ignores or reports as wrong (never accepted ones; redacted on the Mac, on by default, off in Settings, Privacy; see worker/README.md).
 
 ```
 public/

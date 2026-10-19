@@ -1,0 +1,33 @@
+# Parzr suggestion reports Worker. Placeholders (REPLACE_...) are filled in by the owner; see worker/README.md.
+name = "parzr-reports"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+# Served only on the custom domain the app's Info.plist names (ParzrReportsURL).
+workers_dev = false
+routes = [{ pattern = "reports.parzr.app", custom_domain = true }]
+
+# No Workers Logs or traces: invocation logs would carry request metadata the Worker itself never stores.
+[observability]
+enabled = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "parzr-reports"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Per-client request limit (keyed by a salted, daily hash of the address; nothing is stored).
+[[ratelimits]]
+name = "REPORTS_LIMITER"
+namespace_id = "REPLACE_WITH_RATE_LIMIT_NAMESPACE_ID" # any integer unique in the account, e.g. "4201"
+simple = { limit = 20, period = 60 }
+
+# Daily retention clean-up.
+[triggers]
+crons = ["17 3 * * *"]
+
+[vars]
+RETENTION_DAYS = "180"
+
+# Secret, set with: npx wrangler secret put RATE_LIMIT_SALT
+# RATE_LIMIT_SALT = "..."
