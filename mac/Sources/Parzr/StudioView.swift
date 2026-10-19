@@ -95,10 +95,13 @@ struct StudioView: View {
                 }
             }.scrollIndicators(.hidden)
             Spacer(minLength: 16)
-            VStack(alignment: .leading, spacing: 8) {
-                StatusLine(title: model.engineReady ? "On this Mac" : model.error == nil ? "Starting…" : "Engine unavailable", good: model.engineReady)
-                Text("Your writing is checked here.").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.7))
-            }.padding(14).frame(maxWidth: .infinity, alignment: .leading).background(Color.canvas, in: RoundedRectangle(cornerRadius: 10)).padding(14)
+            // One quiet status line: what the engine is doing, and what to do only when it cannot start.
+            VStack(alignment: .leading, spacing: 4) {
+                StatusLine(title: model.engineReady ? "Checking on this Mac" : model.error == nil ? "Starting…" : "Engine unavailable", good: model.engineReady || model.error == nil)
+                if !model.engineReady, model.error != nil {
+                    Text("Quit and reopen Parzr.").font(.system(size: 10)).foregroundStyle(Color.textSecondary).padding(.leading, 11)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 24).padding(.vertical, 16)
         }.frame(width: 190).frame(maxHeight: .infinity).background(Color.sidebar)
     }
     private func navigation(_ item: StudioRoute) -> some View {
