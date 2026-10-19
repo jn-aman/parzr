@@ -61,6 +61,8 @@ public struct ModelManifest: Codable, Equatable, Sendable {
     }
     /// The pack that holds the models for typing and Option+Space (the one that provides the writing model).
     public var essential: ModelPack? { packs.first { $0.provides["writing_model"] != nil } ?? packs.first }
+    /// The pack that provides `role` (for example "tone_model"), if this manifest has one.
+    public func pack(providing role: String) -> ModelPack? { packs.first { $0.provides[role] != nil } }
 }
 
 /// Why a pack is not ready. Every case leaves Parzr working with its rules.

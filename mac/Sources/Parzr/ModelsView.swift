@@ -5,8 +5,43 @@ import SwiftUI
 extension ModelCenter {
     /// The app's model pack. Self tests, snapshots and `swift test` use the throwaway preferences suite and never start a download on their own.
     static let app = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard)
+    /// The tone check's own pack, downloaded only once the user turns Tone check on. PARZR_TONE_DIR points at a local copy instead.
+    static let tone = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard, role: "tone_model", developmentVariables: ["PARZR_TONE_DIR"])
     /// A normal launch may download (never a self test, a snapshot or `swift test`).
     static var downloadsAllowed: Bool { !Preferences.isSelfTest && !Preferences.underXCTest && !CommandLine.arguments.contains("--health-check") }
+}
+
+/// Keeps the tone classifier in step with the setting: on downloads the pack (if needed) and loads it, off unloads it
+/// (the files stay until removed).
+@MainActor
+enum ToneModel {
+    static var center: ModelCenter { .tone }
+    /// The installed classifier folder, or PARZR_TONE_DIR in development.
+    static func folder() -> URL? {
+        if let custom = ProcessInfo.processInfo.environment["PARZR_TONE_DIR"], !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
+        guard center.state == .ready, let pack = center.pack, let store = center.store, let relative = pack.provides["tone_model"] else { return nil }
+        return store.folder(pack).appendingPathComponent(relative, isDirectory: true)
+    }
+    static func load() {
+        guard Preferences.shared.toneCheck, let folder = folder() else { return }
+        Task.detached(priority: .utility) { try? await ToneChecker.shared.load(folder: folder) }
+    }
+    /// `userInitiated`: the user just switched it on, which also clears an earlier Remove of the pack.
+    static func apply(_ enabled: Bool, userInitiated: Bool) {
+        guard enabled else { Task { await ToneChecker.shared.unload() }; return }
+        center.refresh()
+        if center.isReady { load(); return }
+        guard ModelCenter.downloadsAllowed else { return }
+        if userInitiated { center.start(userInitiated: true) } else { center.startIfNeeded() }
+    }
+    /// One line for Settings.
+    static var status: String {
+        switch center.state {
+        case .ready, .development: "Checks a selection when you press your shortcut, and the playground as you type. Nothing leaves your Mac."
+        case .missing: Preferences.shared.toneCheck ? "Getting the tone model ready (\(center.sizeText))." : "Uses a small extra model (\(center.sizeText)), downloaded when you turn this on."
+        default: center.statusLine
+        }
+    }
 }
 
 /// A thin progress bar in the accent colour; indeterminate stripes are avoided so snapshots and reduced motion stay still.

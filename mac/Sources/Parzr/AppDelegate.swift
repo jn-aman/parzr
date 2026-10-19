@@ -254,6 +254,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
             Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in try? await Task.sleep(for: .seconds(2)); models.startIfNeeded() } }.store(in: &subscriptions)
         }
+        // Tone check (opt-in): its model is its own small pack, fetched when the setting is turned on and loaded once it is on disk.
+        ModelCenter.tone.onReady = { ToneModel.load() }
+        if ModelCenter.downloadsAllowed { ModelCenter.tone.watchNetwork() }
+        ToneModel.apply(Preferences.shared.toneCheck, userInitiated: false)
+        Preferences.shared.$toneCheck.dropFirst().removeDuplicates().sink { enabled in Task { @MainActor in ToneModel.apply(enabled, userInitiated: true) } }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).

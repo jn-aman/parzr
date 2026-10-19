@@ -1,0 +1,124 @@
+# over_apologetic: apologizing far more than the situation calls for, or self-deprecation that undercuts the message.
+# Not over-apologetic: one ordinary apology ("Sorry, my mistake, fixed now.", "Sorry I'm late!").
+# Written for Parzr's tone check (synthetic; no real messages).
+So sorry to bother you, I know you're super busy, but could you maybe look at my PR when you have a sec? Sorry again!
+Sorry, sorry, I'm so sorry, I totally messed up the numbers.
+I'm really sorry to ask this, and sorry if it's a stupid question, but where is the template?
+Sorry for the long message, and sorry if this is the wrong channel, and sorry for the trouble.
+I apologize for bothering you again, I'm so sorry, I just wanted to check if you got my email.
+Sorry, this is probably a dumb question, sorry.
+I'm so, so sorry for the delay, I feel terrible, I completely understand if you're upset with me.
+Sorry to be a pain, sorry, but could you resend the link? Sorry!
+Apologies for the inconvenience, and apologies again, I really apologize.
+I'm sorry, I know this is my fault, I'm so sorry, it won't happen again, I promise, sorry.
+Sorry for asking, but would it be okay if I maybe took Friday off? Sorry if that's a problem.
+Sorry if this is annoying, I'm sorry, I just need one more approval.
+So sorry, I'm an idiot, I sent the wrong file. Sorry sorry sorry.
+I'm really sorry for wasting your time with this.
+Sorry for even asking, I'm sure it's obvious and I'm just slow.
+Sorry I'm terrible at this, sorry for all the questions.
+Sorry for existing today, I've made so many mistakes.
+Ugh, sorry, I'm the worst. Sorry for the typo in the deck.
+I feel so bad, I'm sorry, I'm so sorry I missed your message.
+I'm sorry to interrupt, I'm sorry, this will only take a second, sorry.
+Apologies in advance for the dumb question, and sorry if it's already in the docs.
+Sorry again for the trouble, and sorry for the follow-up, and thank you, and sorry.
+Sorry if I'm overstepping, I'm sorry, I just thought maybe we could try a different approach? Sorry.
+I'm so sorry, this is probably nothing, but I think there might be a small bug? Sorry if I'm wrong.
+Sorry, sorry! I hope I'm not bothering you. Sorry.
+Really sorry to be asking again, I know I'm being annoying.
+I'm sorry I'm so slow, I'm sorry this took me so long, I'm really sorry.
+I just wanted to say sorry again for yesterday, and sorry for bringing it up again.
+So sorry for the late reply!! I'm the worst at email, sorry!!
+Sorry for the spam, sorry, last message I promise, sorry.
+I'm sorry to bother you on a Friday, sorry, it can totally wait, sorry.
+Sorry if this sounds stupid, but I don't understand the ticket, sorry.
+Sorry, I hate to ask, I really hate to ask, but could you review this? Sorry!
+My apologies, I'm so sorry, I should have known better, I'm really sorry.
+I'm so sorry to be such a bother.
+I'm really sorry, I know you have better things to do than help me.
+Sorry, I know I keep asking you things, sorry.
+So sorry, I'm probably wrong about this, but the total looks off? Sorry!
+Sorry for the inconvenience, I'm deeply sorry, I sincerely apologize, I am so sorry.
+I'm sorry if my last message came across badly, I'm sorry, I didn't mean anything by it, sorry.
+I'm so embarrassed and sorry, please forgive me for the typo in the subject line.
+I can't apologize enough for the two-minute delay.
+Sorry for being late to the meeting, I'm so sorry, I feel awful, it was totally my fault, sorry everyone.
+Sorry, hope this is okay, sorry if it isn't, I can redo it, sorry.
+I'm sorry for asking for help, I know I should be able to figure this out on my own.
+Sorry, I'm not very smart about this stuff, sorry for the basic question.
+Sorry to be needy, sorry, could you check this one more time?
+Sorry, I know this is a terrible idea, but what if we added a filter? Sorry, forget it.
+Sorry, forget I said anything. Sorry.
+Sorry sorry sorry, wrong channel!
+So sorry to trouble you, I'm sure you're swamped, I'm so sorry, but the client asked about the invoice.
+Apologies, apologies, I'll fix it right away, I'm so sorry for the mistake.
+Sorry if this is too much to ask, I completely understand if you say no, sorry for asking.
+I'm sorry I have to bring this up, I'm so sorry, but the build is failing.
+I'm sorry for being so useless this week, sorry everyone.
+Sorry I'm such a mess today, sorry for the confusion.
+I deeply apologize for the minor formatting issue and I am truly sorry for any distress it caused.
+I'm so sorry for my mistake, I know there's no excuse, I feel horrible, I hope you can forgive me.
+Sorry to bother, sorry, could I get access to the repo? So sorry for the trouble.
+I'm really sorry for asking, but could I possibly have one more day? I'm so sorry, I know it's a lot to ask.
+Sorry, quick question, sorry, is the meeting still on? Sorry!
+sorry sorry sorry i'm so dumb, sent it to the wrong person
+omg sorry!! so sorry!! i'm the worst!! sorry!!
+sooo sorry, i'm so sorry, i totally forgot, sorry
+sorry to bug u again, sorry, i know ur busy, sorry
+sorry if this is dumb but sorry where do i find the logs? sorry
+Sorry for my bad English, sorry, I hope this makes sense, sorry for any mistakes.
+I'm sorry to say this, and I'm sorry if it's out of line, but I think the date might be wrong.
+Sorry, I hope you don't mind me asking, sorry if it's rude, but when will payroll run?
+I apologize profusely for the oversight and for any inconvenience, and I apologize again for having to apologize.
+So sorry for all the back and forth, I'm so sorry, I know I'm making this harder, sorry.
+Sorry for not being good enough at this.
+Sorry, I'm probably overreacting, sorry, it's fine, ignore me.
+Ignore me, sorry, I'm just being silly, sorry.
+Sorry for taking up your time, I really appreciate it, sorry again.
+Sorry to say no, I'm so sorry, I really wish I could, I feel terrible, sorry.
+I'm sorry, I can't make it, I'm so sorry, I feel awful, I'm really, really sorry.
+Sorry, I know it's late, sorry, I'll understand if you can't, sorry.
+Sorry for the double message, and sorry for the triple message.
+I'm terribly sorry, I think I may have possibly made a tiny error, so sorry.
+Sorry to sound demanding, I'm sorry, but could you send it today if possible? Sorry.
+Sorry for being a burden on the team.
+I'm sorry I wasn't more help, I'm sorry I'm so bad at this.
+I'm sorry, I feel like I'm always apologizing, sorry about that.
+Sorry for the silly mistake, I'm such an idiot, sorry.
+Very sorry, very very sorry, I should have double-checked.
+My sincerest apologies, I am so incredibly sorry for this.
+Sorry, I hate being that person, sorry, but the doc link is broken.
+Oh no, I'm so sorry, I'm so sorry, I didn't see your message until now, I'm so sorry!
+Sorry for asking such a basic thing, sorry for wasting your time.
+Sorry, sorry, I'll get out of your way.
+I'm sorry to keep bothering everyone with my questions.
+I'm sorry, I'm still learning, sorry for being slow, sorry.
+Sorry, I hope I didn't mess anything up, sorry if I did, I can undo it, sorry.
+Sorry, maybe I'm wrong, I'm usually wrong, but shouldn't this be 40?
+Sorry, I'm sure you've thought of this already and it's probably a bad idea, but sorry, could we try caching?
+Sorry for the incredibly long delay on such a simple request, I'm so embarrassed.
+Sorry for being so annoying about this, I really am sorry.
+I'm sorry if my question is stupid, I apologize, I'm new, sorry.
+Sorry for being difficult, sorry, I just have one concern.
+I'm so sorry, I don't mean to complain, sorry, but the room is freezing.
+Sorry to rain on the parade, sorry, but we're over budget, sorry.
+So sorry, I feel bad even asking, but can you cover my shift? I'm so sorry.
+Sorry, sorry, sorry, I completely forgot about the deadline, I'm the worst, sorry.
+Sorry it's so bad, sorry, it's just a rough draft, sorry, I'll fix it.
+Sorry, it's probably terrible, but here's my draft. Sorry in advance.
+Here's my attempt, sorry it's so bad.
+Here's the deck, sorry, I know it's not great, sorry.
+Sorry for the ugly code, sorry, I'm not a real developer, sorry.
+Apologies for the rambling, apologies for the delay, apologies for everything.
+I apologize for the confusion, I apologize for the error, and I apologize for the trouble this caused, I'm so sorry.
+I'm probably wrong, I'm not an expert at all, feel free to ignore this, but maybe the cache is stale?
+This is probably a silly idea and you can totally ignore it, I don't really know what I'm talking about, but what if we split the job?
+I don't want to step on anyone's toes and I'm sure I'm missing something obvious, but is the date right?
+Feel free to completely ignore me, I'm just a junior and probably don't get it, but the test seems flaky.
+I know I'm not qualified to say this, and I'm probably being dumb, but the chart looks off.
+Forgive me for being such a nuisance, I know I'm terrible with these things.
+Please forgive me, I'm awful, I can't believe I did that, please don't be mad.
+I hope I'm not being a bother, I really hate imposing, and I totally get it if you can't.
+Again, I'm so grateful and so sorry for taking up your evening with my silly problem.
+I know I always mess things up, so sorry in advance if this is wrong too.

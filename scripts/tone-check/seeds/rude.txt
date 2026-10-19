@@ -1,0 +1,207 @@
+# rude: insults, profanity aimed at a person or their work, hostility, contempt, condescension, blame, threats.
+# Written for Parzr's tone check (synthetic; no real messages). One message per line.
+This is the worst code I've ever had to review.
+Did you even test this before you pushed it?
+Are you seriously this incompetent?
+Who approved this garbage?
+What the hell were you thinking?
+This deck is an embarrassment.
+You have no clue what you're talking about.
+Honestly, my intern could do better than this.
+Stop being so lazy and do your job.
+That was a stupid decision and you know it.
+You screwed up the release again.
+Your team is useless.
+This is a pathetic excuse for a report.
+I don't have time for your nonsense.
+Shut up and let me finish.
+Nobody asked for your opinion.
+You're the reason this project is late.
+How hard is it to read a spec? Apparently too hard for you.
+Learn to do basic math before you send me numbers.
+This is idiotic.
+What a joke of a plan.
+You clearly didn't bother to think.
+Are you deaf? I said Tuesday.
+Don't be an idiot about this.
+This is a complete mess and it's your fault.
+Your design is ugly and confusing.
+Get your act together or get out.
+I'm sick of cleaning up after you.
+That's a dumb question.
+You people never get anything right.
+This is crap. Redo it.
+Who the hell wrote this?
+You're wasting everyone's time.
+Grow up.
+Do you even know how git works?
+This is beyond stupid.
+Your estimate was a fantasy, as usual.
+Maybe try using your brain next time.
+I can't believe how sloppy this is.
+Fix your garbage code.
+Stop whining about the deadline.
+You're hopeless.
+This is amateur hour.
+Even a child would have caught this bug.
+Your email made zero sense.
+Quit screwing around.
+That's the dumbest idea I've heard all year.
+You don't know what you're doing, do you?
+Are you trying to get us fired?
+This presentation is a disaster, just like your last one.
+Read the damn ticket.
+Don't waste my time with this crap.
+You broke prod. Great job, genius.
+What is wrong with you?
+I've had it with your excuses.
+Your manager should be ashamed of this work.
+This is lazy, half-assed work.
+Do I have to explain everything to you like you're five?
+Clearly reading isn't your strong suit.
+Nobody on this team trusts your numbers anymore.
+Stop acting like you know better.
+You messed up the client call. Again.
+This is unacceptable and frankly insulting.
+What kind of moron schedules a meeting at 7am?
+Your feedback is worthless.
+I don't care what you think.
+You're a terrible listener.
+Keep your stupid opinions to yourself.
+How did you even get hired?
+This bug is your fault, own it.
+Don't make me repeat myself, idiot.
+Your writing is painful to read.
+Do better. This is embarrassing.
+Your process is a joke.
+That's not a plan, that's a fantasy from someone who doesn't understand the product.
+You really dropped the ball, as always.
+Stop being so dramatic.
+The whole thing is a dumpster fire because of you.
+Seriously, what is your problem?
+You're impossible to work with.
+Typical of you to blame everyone else.
+I'm not going to babysit you.
+Get off my back.
+This is the sloppiest pull request I've seen.
+Are you incapable of meeting a deadline?
+Wow, you really have no idea how this works.
+Don't talk to me like that ever again.
+If this happens again, you're done here.
+This proposal is garbage from start to finish.
+You're too slow for this team.
+What a clueless take.
+Please stop embarrassing us in front of the client.
+Your code is a pile of spaghetti.
+I've seen better work from first-year students.
+You obviously don't care about quality.
+This is so dumb I can't even.
+Pull your weight for once.
+Spare me the excuses.
+That's a garbage excuse.
+The QA team is a bunch of clowns.
+You're being an idiot about the budget.
+Nobody wants to hear your complaints.
+Who taught you to write SQL like this?
+Your attitude stinks.
+You should be ashamed of this.
+What a waste of a sprint.
+I swear you never listen.
+Try not to break anything this time.
+This is a screwup of epic proportions.
+Your so-called fix made everything worse.
+You can't even format a spreadsheet properly.
+Stop making stupid mistakes.
+Ugh, you are so useless sometimes.
+You call this a test plan? Pathetic.
+This is the last time I cover for your mistakes.
+Learn to write a proper email.
+Don't ever ship something this broken again.
+How many times do I have to tell you people?
+This ticket is a mess, just like everything you touch.
+That idea is stupid and so are the reasons behind it.
+You're clueless about our customers.
+Your team botched the migration.
+Frankly, your work is subpar and everyone knows it.
+Stop being a baby about code review.
+You've been completely useless this week.
+This is bullshit.
+What the fuck is this?
+Fucking hell, who merged this?
+This is a shit show.
+Holy crap, this is bad. Who did this?
+Why are you so bad at this?
+Your incompetence is costing us money.
+The vendor's support team is a bunch of morons.
+Stop pestering me.
+I'm done dealing with your mess.
+You're making this way harder than it needs to be, as usual.
+Did you just copy this from the internet without reading it?
+Next time, think before you open your mouth.
+You don't deserve the promotion.
+That was an idiotic thing to say in the meeting.
+Your spreadsheet is full of errors. Did you even look at it?
+I'm not surprised you got this wrong.
+Can you not be this careless for one day?
+This mockup looks like it was made in five minutes by someone who hates users.
+Your last three releases were trash.
+You're a liability.
+You obviously skipped the onboarding.
+This is exactly why nobody wants to work with you.
+Stop pretending you understand the architecture.
+Ugh, another stupid question from you.
+Your plan makes no sense, like most of your plans.
+Is it too much to ask for you to do your job?
+That's a garbage way to handle a customer.
+Answer the question instead of rambling, for once.
+What a pointless waste of everyone's time this meeting was, thanks to you.
+Your numbers are made up and you know it.
+I wouldn't trust you to water the plants.
+Dude, this is trash.
+Bro, this code is awful.
+lol you really messed that up, didn't you
+omg this is so bad who wrote it
+wtf is this PR
+ur so useless today
+this is dumb af
+Stop sending me your crap at midnight.
+The intern's work is better than yours.
+Don't bother replying if it's another excuse.
+This is an insult to the customer.
+Your slides are a mess and your talk was worse.
+Oh my god, can you just shut up for a minute?
+That's not my job, that's your screwup to fix.
+Clean up your mess.
+You're so annoying.
+Keep your hands off my code.
+Nobody cares about your feelings, fix the bug.
+You must be joking. This is terrible.
+I knew you'd mess this up.
+You're unbelievably slow.
+The support team is completely incompetent.
+Your so-called research is lazy.
+Absolute rubbish. Start over.
+Bloody hell, this is a mess.
+What a shambles.
+You've made a right mess of this.
+This is rubbish and you know it.
+Are you thick? It's in the doc.
+Your proposal is half-baked nonsense.
+Stop talking over everyone, it's rude and annoying.
+I expect better than this amateur garbage.
+Sort yourself out.
+This is the most useless update I've ever read.
+Your reply was rude and unprofessional, just like you.
+Who let you near production?
+If you can't handle it, quit.
+I'm tired of your incompetence.
+Thanks for nothing, you were zero help.
+You never do anything right.
+Why do I even bother asking you?
+You ruined the demo.
+Your code review comments are petty and stupid.
+This report is full of lies.
+Stop lying about the timeline.
+You're full of it.
+Pathetic effort.
+Your customer service is a joke and so are you.

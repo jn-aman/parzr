@@ -1,0 +1,312 @@
+# DEV lines for the tone check, written separately from the training seeds and in other settings
+# (retail, clinics, schools, kitchens, trades, legal, nonprofits, freelancing, families). Format: label<TAB>text.
+# Hard negatives are labelled neutral with a "hard" marker: label is "neutral-hard".
+rude	The window display you put up looks like a toddler did it.
+rude	Whoever stocked aisle 6 must be completely brainless.
+rude	You call that a lesson plan? My nephew could teach better.
+rude	The new hire is dumb as a rock.
+rude	Your invoice is a scam and you know it.
+rude	What kind of idiot leaves the freezer door open overnight?
+rude	Your translation is laughably bad.
+rude	The contractor you hired is a clown.
+rude	Do you ever stop talking nonsense?
+rude	That's a moronic way to run a kitchen.
+rude	The plumber's work is shoddy garbage.
+rude	You're a disgrace to this department.
+rude	Learn to count, the till is short again because of you.
+rude	Nobody wants your half-baked suggestions.
+rude	Your filing system is a joke and so is your work ethic.
+rude	This brief is drivel from top to bottom.
+rude	You have the attention span of a goldfish.
+rude	Get lost, I'm not dealing with you today.
+rude	Your so-called expertise is worthless.
+rude	That was the most pathetic sales pitch I've ever sat through.
+rude	Seriously, are you stupid or just pretending?
+rude	The parents' committee is full of busybodies with no brains.
+rude	Your piece was badly written and boring as hell.
+rude	Stop being such a crybaby about the schedule.
+rude	The night shift is a bunch of lazy slobs.
+rude	You must be the worst manager this store has ever had.
+rude	This logo is hideous. Did you design it with your eyes closed?
+rude	You're clueless about patient care.
+rude	Hey genius, the order was for twelve, not twenty.
+rude	Your edits ruined my article, thanks a lot, you hack.
+rude	Shut your mouth and listen for once.
+rude	Your carpentry is an insult to the trade.
+rude	What a useless excuse for a volunteer.
+rude	This damn mess is all because you can't follow simple instructions.
+rude	You freaking ruined the cake order.
+rude	Your arguments are stupid and your citations are worse.
+rude	The receptionist is a rude, lazy cow.
+rude	I've never met anyone as incompetent as you.
+rude	Keep your idiotic ideas out of the planning meeting.
+rude	You're a fraud and everyone here knows it.
+rude	That's a braindead plan.
+rude	ur an idiot, the delivery was supposed to be today
+rude	this menu is garbage and so is whoever wrote it
+rude	what the f is wrong with the scheduling team
+rude	You absolute muppet, you deleted the client folder.
+passive_aggressive	Thanks so much for restocking the shelves. Oh wait, you didn't.
+passive_aggressive	I'm sure the patients won't mind waiting while you finish your coffee.
+passive_aggressive	As I said in the staff meeting you skipped, grades are due Thursday.
+passive_aggressive	Wonderful, another parent email I get to answer for you.
+passive_aggressive	No problem at all, I'll just close the shop by myself again.
+passive_aggressive	It must be lovely having weekends off.
+passive_aggressive	I see the dishes have magically not been done.
+passive_aggressive	Just reminding you, again, that the forms need a signature.
+passive_aggressive	Glad to see you've discovered the sign-in sheet.
+passive_aggressive	I didn't realize the deadline was just a suggestion for you.
+passive_aggressive	Thanks for replying to my question from April.
+passive_aggressive	Interesting how the stockroom is always a mess after your shift.
+passive_aggressive	Oh, you're on time today. Did something happen?
+passive_aggressive	I'm sure the client loved hearing that from you before me.
+passive_aggressive	How generous of you to finally share the schedule.
+passive_aggressive	Not that it matters, but I was the one who found the error.
+passive_aggressive	Hope your vacation was relaxing. Ours was full of your unfinished tickets.
+passive_aggressive	Kindly see the attachment I already sent you twice.
+passive_aggressive	Since reading seems to be optional, I'll say it out loud: masks in the lab.
+passive_aggressive	Nice of the delivery team to show up three hours late. Again.
+passive_aggressive	Good to know that my opinion only counts when you agree with it.
+passive_aggressive	Feel free to ignore this message like the last ones.
+passive_aggressive	I love finding out about schedule changes from the whiteboard.
+passive_aggressive	It's fine, I enjoy doing two people's jobs.
+passive_aggressive	Wow, you actually filled in the form correctly this time.
+passive_aggressive	Your essay was surprisingly coherent.
+passive_aggressive	Great idea. I had the same one last year, but sure.
+passive_aggressive	Per the memo nobody bothered to read, the lot is closed Monday.
+passive_aggressive	Again, the fridge is not your personal storage unit.
+passive_aggressive	Let me know when you have a moment to do the thing you promised in May.
+passive_aggressive	I suppose I'll be the one cleaning up, as always.
+passive_aggressive	Thanks for the help with the inventory. Said nobody.
+passive_aggressive	So I guess we're just not doing handovers anymore?
+passive_aggressive	Must be nice to have a manager who never checks your work.
+passive_aggressive	I'll send it again, since my emails seem to vanish once they reach you.
+passive_aggressive	It's adorable that you think this will be done by Friday.
+passive_aggressive	Appreciate you taking all of thirty seconds to read my proposal.
+passive_aggressive	No, please, take all the credit. I insist.
+passive_aggressive	Looks like someone forgot to read the safety checklist. Again.
+passive_aggressive	Really glad the whole team got cc'd on my mistake.
+passive_aggressive	oh look who finally answered
+passive_aggressive	wow thanks for the super fast reply, only took a week
+passive_aggressive	Happy to help, as long as you remember who did it this time.
+curt	Clock in on time or don't bother coming.
+curt	I'm not answering this again. Look at the board.
+curt	Restock it. Now.
+curt	Don't call me on my day off.
+curt	Mop the floor. Then we'll talk.
+curt	Not my table. Ask your server.
+curt	Just sign the form.
+curt	I don't want to hear it. Finish the chart.
+curt	Get the patient files to me. Immediately.
+curt	Stop calling. Email me.
+curt	Not my department, try upstairs.
+curt	Do the inventory again. Correctly.
+curt	I asked for the receipts, not a story.
+curt	Pick a date and stop wasting my time.
+curt	Fix the leak or I'll hire someone who can.
+curt	Just answer the question I asked.
+curt	Quit complaining and serve the customers.
+curt	Make the changes. I'm not debating it.
+curt	Unload the truck. All of it. Today.
+curt	Send it already.
+curt	I don't need a meeting, I need the numbers.
+curt	Not doing that. Next topic.
+curt	No more extensions. Hand it in.
+curt	Be at the site by six. Don't be late.
+curt	Done talking about this.
+curt	Ask someone who cares.
+curt	Not my issue.
+curt	Get off the phone and help at the register.
+curt	Don't email me again about parking.
+curt	Answer me.
+curt	Move your car.
+curt	The essay. By Monday. No exceptions.
+curt	Shorter. Rewrite it.
+curt	Did you finish the grading or not?
+curt	Leave the keys and go.
+curt	Bring me the file. Now.
+curt	Don't argue with me, just change the order.
+curt	Whatever. Do what you want.
+curt	stop texting me about this
+curt	just do it already
+curt	not my problem tbh, ask the office
+curt	I don't have time for your questions. Read the handbook.
+curt	Get it right next time.
+over_apologetic	Sorry, sorry, I know you're slammed, I'm so sorry, but table four is asking for you, sorry!
+over_apologetic	I'm so sorry to email again, I feel awful bothering you, but did the permit come through? Sorry!
+over_apologetic	Sorry if this is a stupid question, I'm sorry, I'm still new, but where do the clean towels go? Sorry.
+over_apologetic	I can't tell you how sorry I am for the tiny typo in the newsletter, I feel horrible, I'm so so sorry.
+over_apologetic	Sorry for asking, sorry, I know it's a lot, could I maybe swap shifts? So sorry.
+over_apologetic	I'm really, truly sorry to trouble you over something so small, sorry, but my paycheck is short.
+over_apologetic	Apologies, apologies, I'm the worst, I forgot to bring the extension cord, I'm so sorry everyone.
+over_apologetic	Sorry, I don't mean to be annoying, I'm sorry, but is there an update on my leave request? Sorry!!
+over_apologetic	Please forgive me, I'm so sorry, I'm hopeless, I put the wrong date on the flyer.
+over_apologetic	Sorry, I'm probably being silly, sorry, I'm not an expert, but I think the dosage on the chart is off? So sorry.
+over_apologetic	So, so sorry for the wait, I'm so embarrassed, I'm terrible at this, I'm really sorry.
+over_apologetic	I'm sorry I keep messaging, I'm sorry, I know I'm a nuisance, sorry.
+over_apologetic	Sorry for the bother, sorry, could you possibly sign this when you get a sec? Sorry again!
+over_apologetic	I'm sorry this draft is so awful, I'm not a good writer, sorry, feel free to throw it out.
+over_apologetic	Sorry to ask, I hate asking, I'm so sorry, but could I leave twenty minutes early?
+over_apologetic	I'm so sorry I didn't reply sooner, I'm so sorry, I feel so bad, please don't think I'm ignoring you!
+over_apologetic	Sorry, I hope I'm not stepping on your toes, sorry, I just rearranged the tables a little, sorry.
+over_apologetic	Very sorry for the inconvenience, I'm so very sorry, I deeply regret the delay of five minutes.
+over_apologetic	sorry sorry i'm so sorry, i'm useless, i forgot the milk for the break room
+over_apologetic	omg i'm so sorry!! i feel terrible!! sorry for the late invoice!! sorry!!
+over_apologetic	Sorry, I'm sure this is my fault somehow, sorry, but the printer won't connect.
+over_apologetic	Sorry for being such a burden, I know I ask too many questions, sorry.
+over_apologetic	Sorry, I hate to be a pest, so sorry, but has anyone seen the projector remote? Sorry!
+over_apologetic	I know this is a terrible question and I'm sorry for asking, but what's the wifi password? Sorry.
+over_apologetic	Sorry again, and sorry for saying sorry so much, sorry.
+over_apologetic	I'm sorry, I'm so sorry, I really didn't mean to double-book the room, I'm so sorry.
+over_apologetic	I feel so guilty asking, sorry, I'm sure you're exhausted, but could you check my lesson plan? Sorry!
+over_apologetic	Sorry, my mistake, totally my fault, I'm an idiot, I'm sorry, I'll fix the price tags.
+over_apologetic	I'm sorry to be so needy, sorry, could you look at my timesheet once more? So sorry.
+over_apologetic	Sorry it took me an hour to reply, I feel awful, I'm so sorry, I hope I didn't hold anything up, sorry.
+over_apologetic	Forgive the silly question, I'm sure I'm being dense, apologies, but which form is it?
+over_apologetic	I'm so sorry, I know I'm useless with spreadsheets, sorry for asking you again.
+over_apologetic	Sorry, I hope this isn't rude, sorry, I'm sorry, but could you lower the music a bit? Sorry!
+over_apologetic	Sorry, I'm probably wrong, I usually am, sorry, but I think the delivery is tomorrow, not today.
+over_apologetic	Ugh, sorry, sorry, I'm the worst, I spilled coffee on the sign-up sheet, I'm so sorry!
+over_apologetic	Sorry to be that person, sorry, I'm so sorry, the soup is a little cold? So sorry!
+over_apologetic	I'm terribly, terribly sorry for asking about the refund again, I know I'm a pain.
+over_apologetic	So sorry for the long voicemail, sorry, and sorry for calling at dinner time, sorry.
+over_apologetic	I apologize for my question, I apologize for the inconvenience, I apologize for everything.
+over_apologetic	I'm sorry I'm so bad at this job, sorry for the mix-up with the orders.
+neutral	The delivery is scheduled for Thursday between 9 and 11.
+neutral	Can you cover the front desk while I take my break?
+neutral	Reminder: staff training is on Wednesday at 4.
+neutral	Please sign the permission slip by Friday.
+neutral	Table six would like the check.
+neutral	The patient in room 12 is asking for water.
+neutral	We're out of oat milk. I'll order more.
+neutral	The inspection passed. Great work, everyone.
+neutral	Could you send me the updated floor plan?
+neutral	Thanks for staying late to finish the inventory.
+neutral	I'll be at the site around 7.
+neutral	The client signed the lease this morning.
+neutral	Let's meet at the café at noon.
+neutral	Grades are posted in the portal.
+neutral	The parking lot will be repaved next week.
+neutral	I need a copy of your certification for our records.
+neutral	Please keep the fire exit clear.
+neutral	The fridge will be cleaned out on Friday.
+neutral	Who's opening the shop on Sunday?
+neutral	Can I swap my Saturday shift with someone?
+neutral	The printer on the second floor is out of toner.
+neutral	Your appointment is confirmed for 10:30 on Monday.
+neutral	Here's the menu for the event.
+neutral	Thanks for the quick turnaround!
+neutral	Can you resend the photos? The link expired.
+neutral	We'll need two more chairs for the meeting.
+neutral	Please bring your ID on your first day.
+neutral	The volunteer orientation is moved to room 3.
+neutral	Our last order arrived damaged. Can we get a replacement?
+neutral	The quote is a bit high for us. Is there any flexibility?
+neutral	I'm going to need more time on the translation.
+neutral	The kids loved the field trip.
+neutral	See you at the fundraiser!
+neutral	Do you know if the pharmacy is open late tonight?
+neutral	The water will be shut off from 1 to 3pm.
+neutral	Happy anniversary to our longest-serving volunteer!
+neutral	Can you check the stock levels before the weekend?
+neutral	I've attached the signed contract.
+neutral	The rehearsal starts at 6 sharp.
+neutral	Let me know which dates work for the training.
+neutral	Thank you for your donation.
+neutral	The register is short by $20. Can you recount?
+neutral	Lunch is on me today.
+neutral	I'll grab the keys from the office.
+neutral	The new hours start next Monday.
+neutral	Could you review my cover letter?
+neutral	I made a mistake on the schedule. The corrected version is up.
+neutral	The tile shipment is delayed until the 20th.
+neutral	Please remind parents about picture day.
+neutral	The heating in the gym isn't working.
+neutral-hard	No.
+neutral-hard	nope
+neutral-hard	Can't today.
+neutral-hard	Not tonight, sorry.
+neutral-hard	Status on the order?
+neutral-hard	Any update?
+neutral-hard	Is it done?
+neutral-hard	Why?
+neutral-hard	Ok.
+neutral-hard	k thanks
+neutral-hard	Fine with me.
+neutral-hard	Sure, whatever's easiest.
+neutral-hard	Send it when ready.
+neutral-hard	Please sign and return the form.
+neutral-hard	Lock the door when you leave.
+neutral-hard	Clean the grill before closing.
+neutral-hard	Restock the napkins, please.
+neutral-hard	Call the supplier and cancel the order.
+neutral-hard	Don't park in the loading zone.
+neutral-hard	Do not touch the wet paint.
+neutral-hard	Stop the line if you see a defect.
+neutral-hard	Hand in your keys at the front desk.
+neutral-hard	I disagree. The data doesn't support that.
+neutral-hard	This chapter needs a lot of work. The pacing is off.
+neutral-hard	The flowers arrived wilted. We'd like a refund.
+neutral-hard	I'm unhappy with how the move was handled.
+neutral-hard	I'm disappointed we lost the grant.
+neutral-hard	The tiles were installed unevenly. Please come back and fix them.
+neutral-hard	This isn't what we ordered.
+neutral-hard	That price is too high.
+neutral-hard	I won't be able to volunteer this month.
+neutral-hard	I need you to be on time for the morning shift.
+neutral-hard	You were late three times this week. Let's talk about it.
+neutral-hard	Your timesheet has errors. Please correct and resubmit.
+neutral-hard	The essay is due Monday. No late submissions will be accepted.
+neutral-hard	We can't offer you the position at this time.
+neutral-hard	I'm not able to approve your leave for those dates.
+neutral-hard	Sorry for the delay in getting back to you.
+neutral-hard	Sorry, I forgot to send the photos. Here they are.
+neutral-hard	Sorry I missed your call. What's up?
+neutral-hard	I apologize for the double charge. It's been refunded.
+neutral-hard	Sorry to bother you after hours, but the alarm is going off at the shop.
+neutral-hard	I'm so sorry for your loss.
+neutral-hard	So sorry, I can't make it to the party. Have fun!
+neutral-hard	Just a reminder that the rent is due on the 1st.
+neutral-hard	Following up on my message from last week about the invoice.
+neutral-hard	Checking in again on the permit. Any news?
+neutral-hard	Resending in case this got lost: the venue contract is attached.
+neutral-hard	As I mentioned on the phone, delivery is free over $50.
+neutral-hard	Per the handbook, breaks are 30 minutes.
+neutral-hard	As agreed, I'll invoice at the end of the month.
+neutral-hard	Thanks for finally fixing the AC, it's so much better in here!
+neutral-hard	Finally got the oven working!
+neutral-hard	I'm so tired of this rain.
+neutral-hard	Ugh, the register froze again.
+neutral-hard	This form is so confusing.
+neutral-hard	Damn, we're out of ice.
+neutral-hard	Holy crap, that was a busy lunch rush. Great job, team.
+neutral-hard	This is freaking delicious, who made it?
+neutral-hard	Hell of a game last night!
+neutral-hard	That was a disaster of a delivery, but the driver was great about it.
+neutral-hard	I hate Mondays.
+neutral-hard	Must have been a typo. Can you check the total?
+neutral-hard	Not my area, but Kim in billing can help.
+neutral-hard	That's not my call. Ask the principal.
+neutral-hard	I'm not the right person for that. Try the front office.
+neutral-hard	Can't help with that, sorry. Try the hotline.
+neutral-hard	Please don't call before 8am.
+neutral-hard	Please email instead of texting for work stuff.
+neutral-hard	I'd rather not discuss this over text.
+neutral-hard	Let's keep this between us for now.
+neutral-hard	I'm not comfortable with that plan.
+neutral-hard	I need a straight answer by Friday.
+neutral-hard	We need to talk about the budget before we order anything else.
+neutral-hard	Come see me after class.
+neutral-hard	Can you redo the labels? The prices changed.
+neutral-hard	Please redo the count, the numbers don't match.
+neutral-hard	The deadline is firm.
+neutral-hard	This is your last reminder to submit expenses before the close.
+neutral-hard	Final call for lunch orders!
+neutral-hard	Thanks, but no thanks.
+neutral-hard	We'll pass for now.
+neutral-hard	Honestly, I'm not a fan of the new layout.
+neutral-hard	You're right, my mistake.
+neutral-hard	lol no
+neutral-hard	nah, maybe next time
+neutral-hard	ugh fine, I'll do the dishes
+neutral-hard	ok ok I'm coming

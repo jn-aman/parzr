@@ -13,10 +13,12 @@ struct RewritePanel: View {
     private var copied: Bool { model.status == "Copied to clipboard" }
     /// Engine warnings only; "Copied to clipboard" is feedback, not a degraded check.
     private var warning: String? { copied ? nil : model.status }
+    /// The tone check's flag, on a Fix result (selection cards only). It takes the offered rewrite's row: Soften runs the tone that fixes it.
+    private var toneFlag: ToneFlag? { showsModes && model.mode == .fix && model.result != nil && !model.busy ? model.toneFlag : nil }
     /// The rewrite a Fix check offers in the tone that fits the app (selection cards only).
-    private var offersSuggestion: Bool { showsModes && model.showsSuggestion }
+    private var offersSuggestion: Bool { showsModes && model.showsSuggestion && toneFlag == nil }
     /// Errors and empty results shrink to their content; a result, a running check or an offered rewrite keeps the full card so it never jumps.
-    var isCompact: Bool { model.error != nil || !model.busy && model.result != nil && model.focusedEdit == nil && !offersSuggestion }
+    var isCompact: Bool { model.error != nil || !model.busy && model.result != nil && model.focusedEdit == nil && !offersSuggestion && toneFlag == nil }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -50,7 +52,11 @@ struct RewritePanel: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 9))
             } else if let edit = model.focusedEdit {
                 SentenceDiffView(source: model.source, edits: model.chosenEdits, focused: edit, note: warning?.hasPrefix("Grammar checked") == true ? "Grammar checked · Context refinement unavailable" : warning?.hasPrefix("Smart grammar is downloading") == true ? "Checked with the rules · Smart grammar is downloading" : warning?.hasPrefix("Smart grammar isn") == true ? "Checked with the rules · Smart grammar isn’t downloaded" : edit.explanation, whole: (model.snapshot?.expectedSelection.length ?? 0) > 0).frame(minHeight: 64)
-                if offersSuggestion, let offered = model.suggestion { SuggestionRow(model: model, offered: offered) }
+                if let flag = toneFlag { ToneRow(model: model, flag: flag) }
+                else if offersSuggestion, let offered = model.suggestion { SuggestionRow(model: model, offered: offered) }
+            } else if let flag = toneFlag {
+                // Nothing to fix, but the message may land badly: say why, and offer the rewrite that softens it.
+                ToneNote(model: model, flag: flag).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else if offersSuggestion, let offered = model.suggestion {
                 let empty = EmptyCheck(mode: model.mode, status: warning)
                 VStack(alignment: .leading, spacing: 6) {
@@ -94,6 +100,9 @@ struct RewritePanel: View {
                 Spacer(minLength: 0)
                 if more { moreMenu }
                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); if let ignore { ignore(edit) } else { model.toggle(edit) } }).fixedSize()
+            } else if toneFlag != nil, let tone = model.softenTone {
+                NativeButton(title: "Soften  ⏎", kind: .primary, label: "Soften: rewrite as \(tone.title)", key: "\r", enabled: !model.busy, action: { model.soften() }).fixedSize().help("Rewrite it as \(tone.title) · Return")
+                Spacer(minLength: 0); if more { moreMenu }
             } else if offersSuggestion, let offered = model.suggestion {
                 NativeButton(title: "\(SuggestedRewrite.action(offered.tone))  ⏎", kind: .primary, label: SuggestedRewrite.action(offered.tone), key: "\r", enabled: model.canUseSuggestion, action: { model.useSuggestion() }).fixedSize().help("Replace the selection with this \(offered.tone.title) version · Return")
                 Spacer(minLength: 0); if more { moreMenu }
@@ -147,6 +156,45 @@ struct SuggestionRow: View {
                 Text(SuggestedRewrite.working(offered.tone)).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
             }
         }.padding(.horizontal, 8).frame(height: 26).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 7))
+    }
+}
+
+/// One line under the fixes: how the message may read, and Soften (the tone rewrite that fixes it, meaning guard included).
+struct ToneRow: View {
+    @ObservedObject var model: AppModel
+    let flag: ToneFlag
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "bubble.left.and.exclamationmark.bubble.right").font(.system(size: 10)).foregroundStyle(Color.correctionInk).accessibilityHidden(true)
+            Text(flag.title).font(.system(size: 11, weight: .semibold)).foregroundColor(Color.textPrimary).lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading).help(flag.reason)
+            if let tone = model.softenTone {
+                NativeButton(title: "Soften", kind: .utility, label: "Soften: rewrite as \(tone.title)", enabled: !model.busy, action: { model.soften() }).fixedSize().help("\(flag.reason) Rewrite it as \(tone.title).")
+            }
+        }.padding(.horizontal, 8).frame(height: 26).background(Color.writingSurface, in: RoundedRectangle(cornerRadius: 7))
+            .accessibilityElement(children: .combine).accessibilityLabel("\(flag.title). \(flag.reason)")
+    }
+}
+
+/// The card's body when the text needs no fixes but may read badly: the flagged part, the category and the reason.
+struct ToneNote: View {
+    @ObservedObject var model: AppModel
+    let flag: ToneFlag
+    private var excerpt: String {
+        let ns = model.source as NSString
+        guard flag.range.location != NSNotFound, flag.range.location + flag.range.length <= ns.length else { return model.source }
+        return ns.substring(with: flag.range)
+    }
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "bubble.left.and.exclamationmark.bubble.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.correctionInk).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(flag.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.textPrimary)
+                Text("“\(excerpt)”").font(.system(size: 12)).foregroundStyle(Color.textPrimary).lineLimit(2).truncationMode(.tail)
+                Text(flag.reason).font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                if let tone = model.softenTone { Text("Soften rewrites it as \(tone.title). No spelling or grammar to fix.").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.mintAccent).padding(.top, 2) }
+            }
+        }.padding(.horizontal, 2).padding(.bottom, 4)
     }
 }
 
