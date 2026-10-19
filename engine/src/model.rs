@@ -1782,14 +1782,17 @@ fn keep_chat_ending(req: &Request, edits: Vec<Edit>) -> Vec<Edit> {
         .split_whitespace()
         .filter(|w| w.chars().any(char::is_alphanumeric))
         .count();
-    let emoji_end = emoji_regex()
-        .find_iter(text)
-        .last()
-        .is_some_and(|m| m.end() == text.len());
-    if !req.sentence_end || text.is_empty() || text.ends_with(MARKS) || !(words <= 4 || emoji_end) {
+    // The words before a closing emoji: the model puts its mark after them ("legs. 😅") as often
+    // as after the emoji ("legs 😅.").
+    let core = match emoji_regex().find_iter(text).last() {
+        Some(m) if m.end() == text.len() => text[..m.start()].trim_end(),
+        _ => text,
+    };
+    let emoji_end = core.len() < text.len();
+    if !req.sentence_end || core.is_empty() || core.ends_with(MARKS) || !(words <= 4 || emoji_end) {
         return edits;
     }
-    let end = text.encode_utf16().count();
+    let end = core.encode_utf16().count();
     edits
         .into_iter()
         .filter_map(|mut e| {
@@ -2828,6 +2831,10 @@ mod tests {
             ("Nice work, team", "Nice work, team."),
             ("Got the tickets 🎉", "Got the tickets 🎉."),
             (
+                "Our team shipped the new release today 🚀",
+                "Our team shipped the new release today. 🚀",
+            ),
+            (
                 "We finally fixed the build on the release branch 👍",
                 "We finally fixed the build on the release branch 👍.",
             ),
@@ -2856,6 +2863,7 @@ mod tests {
         // the other checks.
         for (source, target, end) in [
             ("Call me later!", "Call me later.", true),
+            ("Big news on Monday! 🎉", "Big news on Monday. 🎉", true),
             ("be there in five", "be there in five.", false),
         ] {
             assert_eq!(
