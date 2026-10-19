@@ -32,7 +32,7 @@
 
 Parzr underlines mistakes as you write, in the apps you already use. Click the flagged word and the card shows the **whole corrected sentence**; press Return and every error in it is fixed. Select any passage and press **Option+Space** to check it, or rewrite it as Professional, Friendly, Concise or Direct.
 
-Checking runs on your Mac. No account, no cloud checking, no extension. The app makes three kinds of network request: an hourly check for a new version (you can turn it off) and a one-time download of its two models (727 MB), both plain downloads from GitHub that carry nothing about you or your writing; and anonymous suggestion reports. Only when you ignore a suggestion or report it as wrong (never when you accept one), Parzr sends the sentence it was in with names, email addresses, phone numbers, other numbers and links removed on your Mac first, plus the suggestion, the rule or model that made it, whether you ignored or reported it, the app's bundle ID and Parzr's version. Nothing else, and the server keeps no IP address ([worker/](worker/README.md)). Reports are on by default; turn them off in the welcome guide or Settings, Privacy, which also deletes any not yet sent.
+Everything runs on your Mac. No account, no cloud, no telemetry, no extension. Your writing never leaves it. The app makes two kinds of network request, both plain downloads from GitHub that carry nothing about you or your writing: an hourly check for a new version (you can turn it off), and a one-time download of its two models (727 MB) when you set it up.
 
 > **Public beta.** Signed and notarized by Apple. English coverage is growing and Parzr will not catch every error. Please [tell us what you find](https://github.com/jn-aman/parzr/issues).
 

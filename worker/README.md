@@ -80,9 +80,9 @@ npm run fix-queue -- --week 2026-W43 --local
 5. `npm run migrate` (applies migrations/ to the remote database).
 6. `npm run deploy`. This also binds the custom domain `reports.parzr.app` (parzr.app must be a zone in the account).
 7. `curl https://reports.parzr.app/v1/health` should answer `{"ok":true}`.
-8. The app sends to `ParzrReportsURL` in resources/Info.plist (`https://reports.parzr.app/v1/reports`). Change both
-   that key and `routes` here if you use another host. Deploy the Worker before releasing the app; until then the
-   app keeps reports queued and retries with backoff.
+8. Turn reports on in the app: add `<key>ParzrReportsURL</key><string>https://reports.parzr.app/v1/reports</string>`
+   to resources/Info.plist (change it and `routes` here if you use another host), restore the reports wording on the
+   website and in README, and release. Builds without that key show no reports switch and send nothing.
 
 ## Fix-queue format
 

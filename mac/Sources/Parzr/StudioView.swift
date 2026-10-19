@@ -336,8 +336,10 @@ struct StudioView: View {
                         Text("Parzr also makes two requests to GitHub that carry nothing about you or your writing: the update check, and the one-time download of its models (Settings, Models).").font(.system(size: 12)).foregroundStyle(Color.textSecondary).lineSpacing(4)
                     }.padding(18)
                 }
-                group("SUGGESTION REPORTS") {
-                    settingRow("Send anonymous suggestion reports", detail: Self.reportsDetail) { toggle("Send anonymous suggestion reports", $preferences.shareReports) }
+                if Reports.configured {
+                    group("SUGGESTION REPORTS") {
+                        settingRow("Send anonymous suggestion reports", detail: Self.reportsDetail) { toggle("Send anonymous suggestion reports", $preferences.shareReports) }
+                    }
                 }
                 group("CLIPBOARD & SESSION") {
                     settingRow("Allow paste fallback", detail: "An explicit option for editors that refuse range edits. May change formatting. Parzr restores an unchanged clipboard after 0.8 seconds.") { toggle("Allow paste fallback", $preferences.clipboardFallback) }

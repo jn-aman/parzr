@@ -110,9 +110,11 @@ struct OnboardingView: View {
                         .padding(.horizontal, 11).frame(height: 27).background(Color.surface, in: Capsule()).overlay(Capsule().strokeBorder(Color.hairline.opacity(0.7), lineWidth: 0.5))
                 }
             }
+            if Reports.configured {
             row("exclamationmark.bubble", "Send anonymous suggestion reports", "When you ignore or report a suggestion, its sentence is sent with names, emails, numbers and links removed on your Mac first. Change it any time in Settings, Privacy.") {
                 Toggle("Send anonymous suggestion reports", isOn: $preferences.shareReports).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize()
             }.graphiteSurface().frame(maxWidth: 480).help(StudioView.reportsDetail)
+            }
             Spacer(minLength: 0)
         }.frame(maxWidth: .infinity).padding(.bottom, 24)
     }

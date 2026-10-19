@@ -24,6 +24,8 @@ enum Reports {
     static func start() { center?.setEnabled(Preferences.shared.shareReports) }
     /// The switch changed. Off is immediate: the gate closes before this returns.
     static func setEnabled(_ enabled: Bool) { center?.setEnabled(enabled) }
+    /// Whether this build names a reports server; without one the switch and its text stay hidden.
+    static var configured: Bool { center != nil }
     /// Whether the cards offer "Report wrong suggestion".
     static var available: Bool { center != nil && Preferences.shared.shareReports }
     /// Queues one report per edit; redaction runs in the background, so this costs the caller almost nothing.

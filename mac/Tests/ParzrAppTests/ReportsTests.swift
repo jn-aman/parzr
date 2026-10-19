@@ -33,12 +33,12 @@ final class ReportsTests: XCTestCase {
         XCTAssertFalse(OnboardingModel().editor.reports)
         XCTAssertTrue(AppModel().reports)
     }
-    func testTheBundledEndpointIsHTTPS() throws {
-        // The repository's Info.plist (what release builds ship) names an HTTPS endpoint.
+    func testTheBundledEndpointIsHTTPSWhenPresent() throws {
+        // Release builds name no endpoint until the reports Worker is deployed; when they do, it is HTTPS.
         var directory = URL(fileURLWithPath: #filePath)
         while directory.path != "/" && !FileManager.default.fileExists(atPath: directory.appendingPathComponent("resources/Info.plist").path) { directory.deleteLastPathComponent() }
         let data = try Data(contentsOf: directory.appendingPathComponent("resources/Info.plist"))
         let info = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
-        XCTAssertNotNil(Reports.endpoint(info[Reports.endpointKey]))
+        if let value = info[Reports.endpointKey] { XCTAssertNotNil(Reports.endpoint(value)) }
     }
 }
