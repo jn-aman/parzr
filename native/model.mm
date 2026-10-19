@@ -308,6 +308,8 @@ extern "C" double parzr_model_name_log_odds(const char *file, const char *text, 
         if (to < length) while (to > end && text[to] != ' ' && text[to] != '\n') to--;
         const std::string word(text + start, end - start), window(text + from, to - from);
         // The text comes first and the question last: measured AUC 0.996 against 0.969 with the question first.
+        // The prompt is tokenized with special tokens parsed, so the caller (engine/src/model.rs, name_log_odds)
+        // escapes every special-token literal in `text` first and computes `start`/`end` on the escaped text.
         const std::string prompt = "<|im_start|>user\nText: " + window + "\n\nIn this text, is '" + word + "' a person's name? Answer yes or no.<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n";
         if (!r.load(file) || abort.stopped()) return nan;
         const auto *vocab = llama_model_get_vocab(r.model);

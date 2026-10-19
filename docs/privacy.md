@@ -26,8 +26,9 @@ A report holds:
 Before a report is queued, Parzr removes on your Mac the names it recognises, email addresses, phone numbers, other
 numbers, links and keys, replacing them with `[name]`, `[email]`, `[phone]`, `[number]`, `[link]` and `[key]`. The
 rest of the text around the suggestion is sent as written. Parzr cannot reliably recognise every name (a name that is
-also an ordinary word, like "Will" or "Rose", is not caught unless Parzr already knows it as a name), and it cannot
-recognise health, financial or other personal details written in ordinary words. A report that mentions a few
+also an ordinary word, like "Will" or "Rose", is not caught unless Parzr already knows it as a name, and even then
+not when it is written in lowercase), and it cannot recognise health, financial or other personal details written in
+ordinary words. A report that mentions a few
 health terms is not sent at all, but that is not a guarantee. If a sentence is private, don't report it.
 
 Reports are never sent from apps Parzr excludes (terminals and code editors), apps you turned off, password and other
@@ -41,8 +42,10 @@ Parzr as its processor. Parzr's maintainer decides what is collected and why: to
 
 - No account, device identifier, IP address or time of day is stored. A stored report keeps only the fields above and
   the day it arrived.
-- The rate limit uses a salted hash of your IP address (or of its /64 network for IPv6), held only in Cloudflare's
-  rate-limit counter for about a minute, never in the database. Request logs are off.
+- The rate limit and a daily per-network quota use a salted hash of your IP address (or of its /64 network for IPv6)
+  and the day, so it changes every day. The hash is held in Cloudflare's rate-limit counter for about a minute, and in
+  the database only next to a count of reports stored that day, never with a report, and deleted within two days.
+  Your IP address itself is never stored. Request logs are off.
 - Reports are deleted after 180 days.
 - Because nothing links a report to you, a report that has been sent cannot be found and deleted on request. Turning
   reports off stops sending at once and deletes any reports on your Mac that have not been sent yet.
