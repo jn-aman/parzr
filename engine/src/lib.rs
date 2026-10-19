@@ -2348,6 +2348,39 @@ mod tests {
                 "I think there going to cancel the event.",
                 "I think they're going to cancel the event.",
             ),
+            (
+                "Please send me you're slides.",
+                "Please send me your slides.",
+            ),
+            (
+                "Let me know if your available tomorrow.",
+                "Let me know if you're available tomorrow.",
+            ),
+            (
+                "Finish the report and than send it to me.",
+                "Finish the report and then send it to me.",
+            ),
+            (
+                "The report is done. Its due tomorrow.",
+                "The report is done. It's due tomorrow.",
+            ),
+            (
+                "Everyone in the office were surprised.",
+                "Everyone in the office was surprised.",
+            ),
+            (
+                "It crash when you open the settings.",
+                "It crashes when you open the settings.",
+            ),
+            ("He learn really fast.", "He learns really fast."),
+            (
+                "I will discuss about it with my manager.",
+                "I will discuss it with my manager.",
+            ),
+            (
+                "Their happy with the design.",
+                "They're happy with the design.",
+            ),
         ] {
             assert_eq!(fix(input), expected, "{input}");
             assert_eq!(fix(expected), expected, "idempotent: {expected}");
@@ -2379,6 +2412,9 @@ mod tests {
             "This NDA would be similar to those that you put together for DealBench.",
             "Please see that final agreements are forwarded for signature.",
             "Attached is a list of RSVP's I have received so far for the seminar.",
+            "Their happy hour starts at five.",
+            "Did he learn fast?",
+            "It is bigger than we need.",
         ] {
             assert_eq!(fix(text), text, "{text}");
         }

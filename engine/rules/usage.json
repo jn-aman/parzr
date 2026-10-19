@@ -2330,5 +2330,104 @@
     "provenance": "Parzr original real-word and usage rule",
     "positive": "I think there going to cancel the event.",
     "negative": "I think there's going to be rain. I think there going to be rain."
+  },
+  {
+    "id": "usage.your_after_object",
+    "pattern": "(?i)\\b(?:me|us|him|her|them|ask|asked|tell|told|call|with) (?P<target>you['’]re) (?:new |old |)(?:slides|team|team lead|manager|boss|notes|report|feedback|numbers|calendar|calendars|details|email|number|address|docs|files|thoughts|input)\\b",
+    "replacement": "your",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use the possessive “your”; “you’re” means you are.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "Please send me you're slides by Wednesday.",
+    "negative": "Please tell me you're coming. I told them you're new."
+  },
+  {
+    "id": "usage.youre_available",
+    "pattern": "(?im)(?:^|[.!?,;]\\s+|\\b(?:if|when|once|until|unless|whether|hope|think|know|guess|sure|but|and|so|since|because|while|that) )(?P<target>your) (?:available|interested|able|allowed|happy|welcome to|still there|around|there|here)(?:[.!?,;:]|$| (?:to|for|tomorrow|today|tonight|now|later|this|next|at|on|in|with)\\b)",
+    "replacement": "you're",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use “you’re” (you are); “your” is possessive.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "Let me know if your available tomorrow.",
+    "negative": "Let me know if your available slots change."
+  },
+  {
+    "id": "usage.then_sequence",
+    "pattern": "(?i)(?:,|\\band) (?P<target>than) (?:we|I|you|they|he|she|send|go|come|call|let|do|check|add|we['’]ll|I['’]ll|you['’]ll|email|ping|move|start)\\b",
+    "replacement": "then",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use “then” for what comes next.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "Finish the report and than send it to me.",
+    "negative": "It is bigger than I thought, and more than we need."
+  },
+  {
+    "id": "usage.its_state",
+    "pattern": "(?im)(?:^|[.!?,;]\\s+|\\b(?:and|but|so|because|if|think|hope) )(?P<target>its) (?:due (?:tomorrow|today|now|soon|on|by|at|in|next|this)\\b|(?:done|fine|ready|late|true|over|broken|okay|ok|free)(?:[.!?,;]|$| (?:now|already|yet|today|tomorrow|too|and|but|so|for|to|with|lol)\\b))",
+    "replacement": "it's",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use “it’s” (it is) here; “its” is possessive.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "The report is almost done. Its due tomorrow.",
+    "negative": "The form has its due date. The dog wagged its fine tail."
+  },
+  {
+    "id": "usage.indefinite_phrase_was",
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?:everyone|everybody|nobody|no one|someone|somebody) (?:on|in|at|from) (?:the|my|our|your|this|that) \\p{L}+ (?P<target>were)\\b",
+    "replacement": "was",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "“Everyone” takes a singular verb.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "Everyone in the office were surprised.",
+    "negative": "Everyone in the office was surprised."
+  },
+  {
+    "id": "usage.pronoun_third_es",
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?:it|he|she) (?P<target>crash|fix|finish|reach|watch|miss|push|catch|teach)\\b(?: (?:when|whenever|if|every|all|on|after|at|again|a lot|sometimes|always|the|my|it|me|us)\\b)",
+    "replacement": "${target}es",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use the -es form with “it”, “he” or “she”.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "It crash when you open the settings.",
+    "negative": "It crashes when you open the settings."
+  },
+  {
+    "id": "usage.pronoun_third_s",
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?:it|he|she) (?P<target>freeze|fail|work|stop|load|keep|need|want|say|get|make|take|look|seem|sound|feel|know|think|like|love|hate|break|happen|start|run|learn|help)\\b(?: (?:when|whenever|if|every|all|on|after|at|again|really|so|a|an|the|my|me|us|you|him|her|them|it|to|fast|great|good|fine|like|that|this|crashing|working|freezing)\\b)",
+    "replacement": "${target}s",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use the -s form with “it”, “he” or “she”.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "He learn really fast.",
+    "negative": "He learns really fast. Did he learn fast?"
+  },
+  {
+    "id": "usage.discuss_about_pronoun",
+    "pattern": "(?i)\\bdiscuss(?:ed|ing)? (?P<target>about )(?:it|them|him|her|this|that|these|those|your|my|his|their)\\b",
+    "replacement": "",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "“Discuss” takes its object directly.",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "I will discuss about it with my manager.",
+    "negative": "I will discuss it with my manager. We talked about it."
+  },
+  {
+    "id": "usage.theyre_adjective_start",
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?P<target>Their) (?:happy|sad|busy|late|ready|done|right|wrong|fine|excited|upset|angry|okay|sure|here|back|home)(?:[.!?,;:]|$| (?:with|about|to|for|now|today|tonight|and|but|so|that|if)\\b)",
+    "replacement": "They're",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "Use “they’re” (they are).",
+    "provenance": "Parzr original real-word and usage rule",
+    "positive": "Their happy with the design.",
+    "negative": "Their happy hour starts at five."
   }
 ]
