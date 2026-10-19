@@ -78,9 +78,9 @@ npm run fix-queue -- --week 2026-W43 --local
 3. Set `namespace_id` under `[[ratelimits]]` to any integer not used by another rate limit in the account.
 4. `npx wrangler secret put RATE_LIMIT_SALT` with a long random value (`openssl rand -hex 32`).
 5. `npm run migrate` (applies migrations/ to the remote database).
-6. `npm run deploy`. This also binds the custom domain `reports.parzr.app` (parzr.app must be a zone in the account).
-7. `curl https://reports.parzr.app/v1/health` should answer `{"ok":true}`.
-8. Turn reports on in the app: add `<key>ParzrReportsURL</key><string>https://reports.parzr.app/v1/reports</string>`
+6. `npm run deploy`. It serves on the account's workers.dev address (live: `https://parzr-reports.amanjain.workers.dev`); for a custom domain see the note in wrangler.toml.
+7. `curl https://parzr-reports.amanjain.workers.dev/v1/health` should answer `{"ok":true}`.
+8. Turn reports on in the app: add `<key>ParzrReportsURL</key><string>https://parzr-reports.amanjain.workers.dev/v1/reports</string>`
    to resources/Info.plist (change it and `routes` here if you use another host), restore the reports wording on the
    website and in README, and release. Builds without that key show no reports switch and send nothing.
 

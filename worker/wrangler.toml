@@ -1,10 +1,13 @@
-# Parzr suggestion reports Worker. Placeholders (REPLACE_...) are filled in by the owner; see worker/README.md.
+# Parzr suggestion reports Worker; see worker/README.md.
 name = "parzr-reports"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
-# Served only on the custom domain the app's Info.plist names (ParzrReportsURL).
-workers_dev = false
-routes = [{ pattern = "reports.parzr.app", custom_domain = true }]
+# Served on the account's workers.dev address, which the app's Info.plist names (ParzrReportsURL).
+# To move to reports.parzr.app later: put parzr.app in the account, set workers_dev = false and add
+# routes = [{ pattern = "reports.parzr.app", custom_domain = true }], then change ParzrReportsURL.
+workers_dev = true
+# No per-version preview addresses: only the one deployed endpoint answers.
+preview_urls = false
 
 # No Workers Logs or traces: invocation logs would carry request metadata the Worker itself never stores.
 [observability]
@@ -13,13 +16,13 @@ enabled = false
 [[d1_databases]]
 binding = "DB"
 database_name = "parzr-reports"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "01da2683-fd5d-4948-8850-05750a027744"
 migrations_dir = "migrations"
 
 # Per-client request limit (keyed by a salted, daily hash of the address; nothing is stored).
 [[ratelimits]]
 name = "REPORTS_LIMITER"
-namespace_id = "REPLACE_WITH_RATE_LIMIT_NAMESPACE_ID" # any integer unique in the account, e.g. "4201"
+namespace_id = "4201"
 simple = { limit = 20, period = 60 }
 
 # Daily retention clean-up.
