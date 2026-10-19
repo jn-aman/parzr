@@ -1171,6 +1171,103 @@ mod tests {
         assert_eq!(edits.len(), 1);
         assert_eq!(edits[0].replacement, "in");
     }
+    /// The typing route end to end without models: the slip check runs in the background job (the
+    /// writing model, though present, is never asked while typing), a check it outlasts reports
+    /// pending, a follow-up reads the verdict from the cache, and an explicit check of the same
+    /// text scores it again with the writing model confirming.
+    #[test]
+    fn typing_scores_slips_in_the_background_and_a_follow_up_reads_the_verdict() {
+        static MODEL_ASKED: AtomicBool = AtomicBool::new(false);
+        static SLIPS_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        fn slow_slips(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
+            SLIPS_RUNS.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(250));
+            slips_fake(sentence, swaps, how)
+        }
+        fn watched_model(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
+            MODEL_ASKED.store(true, Ordering::SeqCst);
+            model_fake(sentence, swaps, how)
+        }
+        let scorers = Scorers {
+            slips: Some(slow_slips),
+            model: Some(watched_model),
+        };
+        let typing = |text: &str| Request {
+            text: text.into(),
+            gec: true,
+            ..Request::default()
+        };
+        // Load the word lists first: their one-time start-up is not the budget under test.
+        combine_using(&typing("Warm the lists up."), &[], vec![], scorers);
+        take_pending();
+        let req = typing("Honestly, I really hat waiting.");
+        let started = Instant::now();
+        let first = combine_using(&req, &[], vec![], scorers);
+        assert!(first.is_empty());
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "typing waits for its budget only"
+        );
+        assert!(take_pending(), "the app is told to look again");
+        // Follow-ups (the app's come 900 ms apart) find the verdict once the job is done.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut edits = vec![];
+        while edits.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            take_pending();
+            edits = combine_using(&req, &[], vec![], scorers);
+        }
+        assert_eq!(edits.len(), 1, "a follow-up reads the slip check's verdict");
+        assert_eq!(
+            (edits[0].replacement.as_str(), edits[0].rule_id.as_str()),
+            ("hate", SLIPS_RULE)
+        );
+        assert!(!take_pending());
+        assert!(
+            !MODEL_ASKED.load(Ordering::SeqCst),
+            "typing never asks the writing model"
+        );
+        // Once cached, typing checks of the same text do not run the scorer again.
+        let runs = SLIPS_RUNS.load(Ordering::SeqCst);
+        assert_eq!(combine_using(&req, &[], vec![], scorers).len(), 1);
+        assert_eq!(SLIPS_RUNS.load(Ordering::SeqCst), runs);
+        // An explicit check does not take the typing verdict: the writing model confirms it.
+        let explicit = Request {
+            deep: true,
+            ..req.clone()
+        };
+        let confirmed = combine_using(&explicit, &[], vec![], scorers);
+        assert!(MODEL_ASKED.load(Ordering::SeqCst));
+        assert_eq!(confirmed.len(), 1);
+        assert_eq!(confirmed[0].replacement, "hate");
+        // A failed or unavailable slip check is never cached as "nothing here".
+        fn broken(_: &str, _: &[Swap], _: Use) -> Result<Scored, Unscored> {
+            Err(Unscored::Unavailable)
+        }
+        let unavailable = Scorers {
+            slips: Some(broken),
+            model: None,
+        };
+        let text = typing("So I hat it again.");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            assert!(combine_using(&text, &[], vec![], unavailable).is_empty());
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(cached(&unavailable.key(false, "So I hat it again.")).is_none());
+        assert_eq!(combine_using(&text, &[], vec![], scorers).len(), 0);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut later = vec![];
+        while later.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(100));
+            later = combine_using(&text, &[], vec![], scorers);
+        }
+        assert_eq!(
+            later.len(),
+            1,
+            "the slip check scores it once it is available"
+        );
+    }
     /// Latency harness: PARZR_LATENCY=in.jsonl:out.jsonl:typing|explicit times `combine` (the time this
     /// checker adds to a check) on each line's text, back to back, as the app would call it.
     #[test]
