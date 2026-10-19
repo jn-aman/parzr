@@ -26,8 +26,9 @@ A report holds:
 Before a report is queued, Parzr removes on your Mac the names it recognises, email addresses, phone numbers, other
 numbers, links and keys, replacing them with `[name]`, `[email]`, `[phone]`, `[number]`, `[link]` and `[key]`. The
 rest of the text around the suggestion is sent as written. Parzr cannot reliably recognise every name (a name that is
-also an ordinary word, like "Will" or "Rose", is not caught unless Parzr already knows it as a name), and it cannot
-recognise health, financial or other personal details written in ordinary words. A report that mentions a few
+also an ordinary word, like "Will" or "Rose", is not caught unless Parzr already knows it as a name, and even then
+not when it is written in lowercase), and it cannot recognise health, financial or other personal details written in
+ordinary words. A report that mentions a few
 health terms is not sent at all, but that is not a guarantee. If a sentence is private, don't report it.
 
 Reports are never sent from apps Parzr excludes (terminals and code editors), apps you turned off, password and other
