@@ -24,7 +24,7 @@ through scripts/heldout-native.swift):
          --baseline FILE (a previous --save) lists the items whose label changed.
 
 Build the harness once:
-  swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \\
+  swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift \\
     scripts/heldout-native.swift -o dist/batches/tools/native
 """
 import argparse

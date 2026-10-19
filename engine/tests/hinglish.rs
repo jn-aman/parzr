@@ -49,6 +49,12 @@ fn english_slips_in_hinglish_are_still_fixed() {
         "Sab theek hai, don't worry"
     );
     assert_eq!(fix("I recieved the file yaar"), "I received the file yaar");
+    // "thik" alone in English is "think"; beside Roman Hindi it stays.
+    assert_eq!(
+        fix("I thik you're going to enjoy it."),
+        "I think you're going to enjoy it."
+    );
+    assert_eq!(fix("ok thik hai"), "Ok thik hai");
 }
 
 #[test]

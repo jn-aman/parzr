@@ -88,7 +88,7 @@ jobs:
         # The held-out test split (benchmarks/heldout, never used for tuning) through the app's own path. Fails when
         # what runs while typing fixes less, or changes more correct text, than the last measured build allows.
         run: |
-          swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift scripts/heldout-native.swift -o dist/qa/heldout-native
+          swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift scripts/heldout-native.swift -o dist/qa/heldout-native
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
             --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
