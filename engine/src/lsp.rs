@@ -199,41 +199,37 @@ fn actions(uri: &str, doc: &Document, params: &Value, options: &Value) -> Value 
     }
     json!(actions)
 }
-fn main() {
-    let mut input = io::stdin().lock();
-    let mut output = io::stdout().lock();
-    let mut docs = HashMap::<String, Document>::new();
-    let mut options = json!({});
-    let mut shutdown = false;
-    while let Some(message) = read_message(&mut input) {
+#[derive(Default)]
+struct Server {
+    docs: HashMap<String, Document>,
+    options: Value,
+    shutdown: bool,
+}
+impl Server {
+    /// The messages to send for one incoming message (diagnostics, then the response to a request).
+    fn handle(&mut self, message: &Value) -> Vec<Value> {
         let method = message["method"].as_str().unwrap_or("");
         let params = &message["params"];
         let uri = params["textDocument"]["uri"].as_str().unwrap_or("");
-        let id = message.get("id");
-        if method == "exit" {
-            if shutdown {
-                break;
-            }
-            std::process::exit(1);
-        }
+        let mut out = vec![];
         let result = match method {
             "initialize" => {
-                options = params["initializationOptions"].clone();
+                self.options = params["initializationOptions"].clone();
                 Some(
                     json!({"capabilities":{"positionEncoding":"utf-16","textDocumentSync":{"openClose":true,"change":1},"codeActionProvider":{"codeActionKinds":["quickfix","refactor.rewrite"]}},"serverInfo":{"name":"parzr","version":env!("CARGO_PKG_VERSION")}}),
                 )
             }
             "shutdown" => {
-                shutdown = true;
-                docs.clear();
+                self.shutdown = true;
+                self.docs.clear();
                 Some(Value::Null)
             }
-            "textDocument/didOpen" if !shutdown => {
+            "textDocument/didOpen" if !self.shutdown => {
                 if let (Some(text), Some(version), Some(language)) = (
                     params["textDocument"]["text"].as_str(),
                     params["textDocument"]["version"].as_i64(),
                     params["textDocument"]["languageId"].as_str(),
-                ) && docs.len() < 32
+                ) && self.docs.len() < 32
                     && text.len() <= MAX_MESSAGE / 2
                 {
                     let doc = Document {
@@ -241,15 +237,13 @@ fn main() {
                         version,
                         language: language.into(),
                     };
-                    if write_message(&mut output, diagnostics(uri, &doc, &options)).is_err() {
-                        break;
-                    }
-                    docs.insert(uri.into(), doc);
+                    out.push(diagnostics(uri, &doc, &self.options));
+                    self.docs.insert(uri.into(), doc);
                 }
                 None
             }
-            "textDocument/didChange" if !shutdown => {
-                if let Some(doc) = docs.get_mut(uri)
+            "textDocument/didChange" if !self.shutdown => {
+                if let Some(doc) = self.docs.get_mut(uri)
                     && let Some(version) = params["textDocument"]["version"].as_i64()
                     && version > doc.version
                     && let Some(changes) = params["contentChanges"].as_array()
@@ -260,33 +254,115 @@ fn main() {
                 {
                     doc.text = text.into();
                     doc.version = version;
-                    if write_message(&mut output, diagnostics(uri, doc, &options)).is_err() {
-                        break;
-                    }
+                    out.push(diagnostics(uri, doc, &self.options));
                 }
                 None
             }
             "textDocument/didClose" => {
-                docs.remove(uri);
-                if write_message(&mut output,json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":uri,"diagnostics":[]}})).is_err(){break;}
+                self.docs.remove(uri);
+                out.push(json!({"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":uri,"diagnostics":[]}}));
                 None
             }
-            "textDocument/codeAction" if !shutdown => Some(
-                docs.get(uri)
-                    .map(|doc| actions(uri, doc, params, &options))
+            "textDocument/codeAction" if !self.shutdown => Some(
+                self.docs
+                    .get(uri)
+                    .map(|doc| actions(uri, doc, params, &self.options))
                     .unwrap_or(json!([])),
             ),
+            // The test-only hook: a request that panics, as a bug in the engine would.
+            #[cfg(test)]
+            "parzr/testPanic" => panic!("injected"),
             _ => None,
         };
-        if let Some(id) = id {
-            let response = if let Some(result) = result {
+        if let Some(id) = message.get("id") {
+            out.push(if let Some(result) = result {
                 json!({"jsonrpc":"2.0","id":id,"result":result})
             } else {
                 json!({"jsonrpc":"2.0","id":id,"error":{"code":-32601,"message":"Unsupported request."}})
-            };
-            if write_message(&mut output, response).is_err() {
-                break;
+            });
+        }
+        out
+    }
+}
+/// Serves LSP messages until the input ends or `exit`. Each message is handled under
+/// `catch_unwind`: one that panics is answered (a request) with an internal error, and the server
+/// keeps serving. Returns the exit code `exit` asks for, if it came.
+fn serve(mut input: impl BufRead, mut output: impl Write) -> Option<i32> {
+    let mut server = Server {
+        options: json!({}),
+        ..Server::default()
+    };
+    while let Some(message) = read_message(&mut input) {
+        if message["method"].as_str() == Some("exit") {
+            return Some(if server.shutdown { 0 } else { 1 });
+        }
+        let replies = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| server.handle(&message)))
+            .unwrap_or_else(|_| {
+                message.get("id").map_or_else(Vec::new, |id| {
+                    vec![json!({"jsonrpc":"2.0","id":id,"error":{"code":-32603,"message":"The writing engine could not complete the request."}})]
+                })
+            });
+        for reply in replies {
+            if write_message(&mut output, reply).is_err() {
+                return None;
             }
         }
+    }
+    None
+}
+fn main() {
+    if serve(io::stdin().lock(), io::stdout().lock()) == Some(1) {
+        std::process::exit(1);
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn frame(value: Value) -> Vec<u8> {
+        let mut bytes = vec![];
+        write_message(&mut bytes, value).unwrap();
+        bytes
+    }
+    #[test]
+    fn a_panicking_request_is_answered_and_the_next_one_still_works() {
+        let uri = "file:///t.txt";
+        let mut input = vec![];
+        for message in [
+            json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+            json!({"jsonrpc":"2.0","id":2,"method":"parzr/testPanic","params":{}}),
+            json!({"jsonrpc":"2.0","method":"parzr/testPanic","params":{}}),
+            json!({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":uri,"version":1,"languageId":"plaintext","text":"I has a dog."}}}),
+            json!({"jsonrpc":"2.0","id":3,"method":"textDocument/codeAction","params":{"textDocument":{"uri":uri},"range":{"start":{"line":0,"character":2},"end":{"line":0,"character":2}}}}),
+        ] {
+            input.extend(frame(message));
+        }
+        let mut output = vec![];
+        assert_eq!(serve(input.as_slice(), &mut output), None);
+        let mut replies = vec![];
+        let mut reader = output.as_slice();
+        while let Some(message) = read_message(&mut reader) {
+            replies.push(message);
+        }
+        // initialize, the panicking request's error (the notification gets nothing), diagnostics, actions.
+        assert_eq!(replies.len(), 4, "{replies:?}");
+        assert_eq!(replies[1]["id"], 2);
+        assert_eq!(replies[1]["error"]["code"], -32603);
+        // The document opened after the panic is checked and its code actions served as usual.
+        let doc = Document {
+            text: "I has a dog.".into(),
+            version: 1,
+            language: "plaintext".into(),
+        };
+        assert_eq!(replies[2], diagnostics(uri, &doc, &json!({})));
+        assert_eq!(replies[3]["id"], 3);
+        assert!(replies[3]["result"].is_array(), "{:?}", replies[3]);
+    }
+    #[test]
+    fn exit_codes_follow_shutdown() {
+        let exit = frame(json!({"jsonrpc":"2.0","method":"exit"}));
+        assert_eq!(serve(exit.as_slice(), &mut vec![]), Some(1));
+        let mut input = frame(json!({"jsonrpc":"2.0","id":1,"method":"shutdown"}));
+        input.extend(&exit);
+        assert_eq!(serve(input.as_slice(), &mut vec![]), Some(0));
     }
 }

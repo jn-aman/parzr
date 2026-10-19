@@ -1646,6 +1646,18 @@ pub fn process_json(input: &str) -> String {
         Err(error) => serde_json::json!({"error":error}).to_string(),
     }
 }
+/// What a request that panicked answers: the process keeps serving the next one.
+pub const PANICKED: &str = r#"{"error":"The writing engine could not complete the request."}"#;
+/// Runs one request's handling and turns a panic into the `PANICKED` error, so one bad request
+/// never takes down a long-lived host (the browser host, the LSP, the stdin engine). The shared
+/// state a request touches tolerates a panic part-way: its locks recover from poisoning.
+pub fn guarded(handle: impl FnOnce() -> String) -> String {
+    catch_unwind(AssertUnwindSafe(handle)).unwrap_or_else(|_| PANICKED.into())
+}
+/// `process_json`, with a panic answered as an error instead of unwinding into the caller.
+pub fn process_json_guarded(input: &str) -> String {
+    guarded(|| process_json(input))
+}
 /// # Safety
 /// `input` must point to a valid NUL-terminated UTF-8 string alive for this call.
 /// Free the returned owned string exactly once with `parzr_string_free`.
@@ -1654,14 +1666,13 @@ pub unsafe extern "C" fn parzr_rewrite_json(input: *const c_char) -> *mut c_char
     if input.is_null() {
         return std::ptr::null_mut();
     }
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = guarded(|| {
         // SAFETY: the C ABI caller guarantees a valid NUL-terminated string.
         let input = unsafe { CStr::from_ptr(input) }.to_str().map_err(|_| ());
         input
             .map(process_json)
             .unwrap_or_else(|_| r#"{"error":"Input is not UTF-8."}"#.into())
-    }))
-    .unwrap_or_else(|_| r#"{"error":"The writing engine could not complete the request."}"#.into());
+    });
     CString::new(result)
         .map(CString::into_raw)
         .unwrap_or(std::ptr::null_mut())
