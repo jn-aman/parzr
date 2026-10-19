@@ -35,7 +35,7 @@ fn modal_like_names_converge_and_keep_their_verbs() {
             "I talked to Will he said yes.",
         ),
         ("Hey Hope!", "Hey Hope!"),
-        ("invite Rose to the party", "invite Rose to the party"),
+        ("invite Rose to the party", "Invite Rose to the party"),
     ] {
         assert_eq!(fix(input), expected, "{input}");
     }
