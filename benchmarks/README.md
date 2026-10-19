@@ -49,7 +49,7 @@ The set was written by hand without reading the checker's rules, lexicons or the
 Score it through the app's own path (ParzrCore's `WritingEngine` with Apple NaturalLanguage hints and the default name capitalization):
 
 ```sh
-swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \
+swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift \
   scripts/heldout-native.swift -o dist/qa/heldout-native
 PARZR_ENGINE_PATH=$PWD/engine/target/release/libparzr_engine.dylib \
 PARZR_MODEL_RUNTIME=$PWD/dist/model/libparzr_model.dylib PARZR_MODELS_DIR=$PWD/dist/models \

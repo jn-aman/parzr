@@ -1226,6 +1226,9 @@ const INDIAN: &[&str] = &[
     "uttapam",
     "vada",
 ];
+/// Roman Hindi words that are also common slips of English words ("I thik", "a minute to chaat"):
+/// Hindi only beside other Roman Hindi.
+const SLIP_HINDI: [&str; 2] = ["chaat", "thik"];
 /// A Hinglish word ("yaar", "karo"), never a typo or a proper noun.
 pub fn hinglish(word: &str) -> bool {
     HINGLISH.binary_search(&word).is_ok()
@@ -1237,9 +1240,11 @@ const HINGLISH_ALONE: [&str; 5] = ["bas", "haa", "ji", "na", "wah"];
 /// is a typo, and it is Roman Hindi only beside other Roman Hindi.
 pub fn roman_hindi(tokens: &[Token<'_>], index: usize) -> bool {
     let word = tokens[index].normalized.as_str();
-    // "thik" is also a typo of "think": Hindi only beside other Roman Hindi ("thik hai").
+    // "I thik you're going": a slip of "think" alone in English is Hindi only beside Hindi
+    // ("thik hai").
+    let slip = SLIP_HINDI.contains(&word);
     hinglish(word)
-        && (word.len() > 3 && word != "thik"
+        && (word.len() > 3 && !slip
             || HINGLISH_ALONE.contains(&word)
             || hindi_beside(tokens, index, true))
         || HINGLISH_BESIDE.contains(&word) && hindi_beside(tokens, index, false)
@@ -1262,7 +1267,7 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize, homographs: bool) -> bool {
                 && t.paragraph == tokens[index].paragraph
                 && (hinglish(&t.normalized)
                     || homographs && HINGLISH_BESIDE.contains(&t.normalized.as_str()))
-                && t.normalized != "thik"
+                && !SLIP_HINDI.contains(&t.normalized.as_str())
         })
 }
 /// Chat spellings people type on purpose ("lil", "wanna", "imma"): a register, not a slip, so Fix
@@ -2457,20 +2462,20 @@ pub fn suggest(
     }
     // Roman Hindi, Indian English and Latin words are never respelled; only the reviewed
     // misspellings above and the name typos stay correctable.
-    // "thik" is also a typo of "think" unless Roman Hindi surrounds it.
+    // "thik" and "chaat" are also typos of "think" and "chat" unless Roman Hindi surrounds them.
     let hindi_near = history
         .iter()
         .rev()
         .take(3)
         .chain(following_context.iter().take(3))
-        .any(|t| hinglish(&t.normalized) && t.normalized != "thik");
+        .any(|t| hinglish(&t.normalized) && !SLIP_HINDI.contains(&t.normalized.as_str()));
     // A short Hinglish word with no Roman Hindi beside it is an English slip ("thi" for "this").
     let lone_hindi = hinglish(word)
         && word.len() <= 3
         && !HINGLISH_ALONE.contains(&word.as_str())
         && !hindi_near;
     if protected(word)
-        && (word != "thik" || hindi_near)
+        && (!SLIP_HINDI.contains(&word.as_str()) || hindi_near)
         && !lone_hindi
         && !names::is_name_typo(word)
     {

@@ -605,11 +605,13 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     let unfinished = !tokens[end..e]
         .iter()
         .any(|t| [".", "!", "?"].contains(&t.surface));
+    // "i'm not sure this is right, what do you think": a question after the comma is its own
+    // sentence even in chat, and takes its question mark.
+    let asks = !question && (wh_question(tokens, r, end) || inverted_question(tokens, r, end));
     if question && inverted_question(tokens, r, end)
-        || unfinished
+        || (unfinished || casual) && !asks
         || ["let's", "lets", "don't", "dont"].contains(&right)
         || ["where", "whereas", "while", "which", "who", "whom", "whose"].contains(&right)
-        || casual
         || (s..c).any(|k| word(tokens, k) == "so" && spelling::flags(word(tokens, k + 1)) & 8 != 0)
         || !spelling::known(&tokens[s].normalized)
             && ["if", "when", "as", "because", "since", "while"]

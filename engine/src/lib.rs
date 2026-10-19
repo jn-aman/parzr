@@ -1141,8 +1141,9 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
                 || capitalization::interjection(&token.normalized)
-                // "yaar kal meeting hai": a Hinglish sentence takes its capital too.
-                || spelling::hinglish(&token.normalized)
+                || capitalization::sign_off_name(&req.text, token)
+                // "yaar kal meeting hai": Roman Hindi opens a sentence with a capital too.
+                || spelling::roman_hindi(&tokens, index)
                 || req.capitalize_names && level[index] >= names::MEDIUM)
             // Every sentence takes its capital, finished or not and in chat too ("yeah I think",
             // "the link? Thanks"): only a line of code or a command keeps its lowercase start.
@@ -1150,17 +1151,19 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         {
             let first = token.surface.chars().next().unwrap_or(' ');
             // "mcdonald" is "McDonald", "iphone" is "iPhone"; other words only need their first letter.
-            let (end, replacement) =
-                if let Some(canonical) = spelling::canonical_case(&token.normalized) {
-                    (token.end_utf16, canonical.to_string())
-                } else if level[index] >= names::MEDIUM {
-                    (token.end_utf16, names::title_case(token))
-                } else {
-                    (
-                        token.start_utf16 + first.len_utf16(),
-                        first.to_uppercase().to_string(),
-                    )
-                };
+            let (end, replacement) = if token.surface == "ok" {
+                // "ok sounds good": the opening "ok" is written "OK", as GECToR and the model write it.
+                (token.end_utf16, "OK".to_string())
+            } else if let Some(canonical) = spelling::canonical_case(&token.normalized) {
+                (token.end_utf16, canonical.to_string())
+            } else if level[index] >= names::MEDIUM {
+                (token.end_utf16, names::title_case(token))
+            } else {
+                (
+                    token.start_utf16 + first.len_utf16(),
+                    first.to_uppercase().to_string(),
+                )
+            };
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
@@ -2337,7 +2340,7 @@ mod tests {
         let text = "hey Aman can u send the file on friday";
         let tokens = tokenizer::tokenize(text, &[hint(text, "u"), hint(text, "friday")]);
         assert!(tokens.iter().all(|t| !t.proper_name));
-        assert_eq!(fix("ok pls send it thx"), "Ok pls send it thx");
+        assert_eq!(fix("ok pls send it thx"), "OK pls send it thx");
         assert!(
             names::never_a_name("june")
                 && names::never_a_name("Friday")
@@ -2384,7 +2387,7 @@ mod tests {
             ),
             ("sure. i can do it tomorrow", "Sure. I can do it tomorrow"),
             ("haha nice", "Haha nice"),
-            ("ok sounds good", "Ok sounds good"),
+            ("ok sounds good", "OK sounds good"),
             (
                 "hi mark,\ni've attached the report.\nthanks,",
                 "Hi mark,\nI've attached the report.\nThanks,",
@@ -2422,6 +2425,41 @@ mod tests {
             "it \"should create a new status\" do",
         ] {
             assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn a_question_after_a_chat_comma_is_its_own_sentence() {
+        // v0.5.0 split these; batch 3's chat-comma rule must not keep them joined.
+        for (input, expected) in [
+            (
+                "i'm not sure if this is the right approach, what do you think",
+                "I'm not sure if this is the right approach. What do you think?",
+            ),
+            (
+                "I'm not sure if this is the right approach, what do you think?",
+                "I'm not sure if this is the right approach. What do you think?",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+            assert_eq!(fix(expected), expected, "idempotent: {expected}");
+        }
+        // A statement after the comma stays in chat; a yes/no question with its own mark too.
+        for text in [
+            "I'm at the store, do you need anything?",
+            "Thanks for dinner last night, it was lovely",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn sign_off_names_take_their_capital() {
+        for (input, expected) in [
+            ("Thanks,\njen", "Thanks,\nJen"),
+            ("Best regards,\npriya k", "Best regards,\nPriya k"),
+            ("Cheers,\nsam", "Cheers,\nSam"),
+            ("Regards,\naman", "Regards,\nAman"),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
         }
     }
     #[test]
@@ -2667,7 +2705,7 @@ mod tests {
             "anoop said hi",
             "Ask aman about it",
             "Thanks aman",
-            "Regards,\naman",
+            "Regards,\nAman",
             "Cheers\nanoop kumar",
             "Hey aman, are you free",
             "I want to see aman jain",
@@ -2819,6 +2857,7 @@ mod tests {
             "We pin it in requirements.txt today.",
             "I can not believe it.",
             "Bhai yaar kya hai.",
+            "Bas, that's it",
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
