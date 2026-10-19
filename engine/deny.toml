@@ -1,0 +1,50 @@
+# cargo-deny policy for the engine (CI: the `dependencies` job in .github/workflows/ci-release.yml).
+#   cargo deny --manifest-path engine/Cargo.toml check --config engine/deny.toml
+#   cargo deny --manifest-path engine/Cargo.toml --features external-tables check --config engine/deny.toml
+# Both shipped graphs are checked: the default one (the browser host, the LSP, CI tests) and the app bundle's
+# (external-tables). The maintainer-only `baseline-harper` feature (harper-core and about 500 crates, used only by the
+# parzr-export-lexicon tool that regenerates engine/rules data) is never enabled in a shipped build and is not checked
+# here; its graph carries known advisories (see docs/releases.md, "Dependency checks").
+
+[graph]
+targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu"]
+all-features = false
+no-default-features = false
+
+[advisories]
+# Every vulnerability, unmaintained, unsound or yanked crate in a shipped graph fails the check. A justified
+# exception goes in `ignore` with the advisory id and a reason, and is removed with the fix.
+yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+ignore = []
+
+[licenses]
+# Licences compatible with shipping the engine under Apache-2.0 (THIRD_PARTY_NOTICES lists every crate).
+allow = ["Apache-2.0", "MIT", "Unlicense", "Unicode-3.0"]
+confidence-threshold = 0.93
+exceptions = []
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+# Network, TLS and native-code dependencies have no place in the offline engine.
+deny = [
+    { name = "openssl" },
+    { name = "openssl-sys" },
+    { name = "native-tls" },
+    { name = "reqwest" },
+    { name = "hyper" },
+    { name = "rustls" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

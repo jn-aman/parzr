@@ -64,12 +64,21 @@ def main():
     for rel in ('extensions/browser/manifest.json', 'extensions/vscode/package.json'):
         text = (ROOT / rel).read_text()
         edits[rel] = sub_once(text, r'("version"\s*:\s*")[^"]*(")', rf'\g<1>{new}\g<2>', rel)
+    # extensions/vscode/package-lock.json (it pins the packaging tool, @vscode/vsce): the top-level "version"
+    # and the root package entry's (the first two "version" keys; every dependency entry comes after them).
+    rel = 'extensions/vscode/package-lock.json'
+    text = (ROOT / rel).read_text()
+    for _ in range(2):
+        text = sub_once(text, rf'("name"\s*:\s*"parzr",\s*"version"\s*:\s*")(?!{re.escape(new)}")[^"]*(")', rf'\g<1>{new}\g<2>', rel)
+    edits[rel] = text
 
     # Validate every edit parses and carries the new version before touching disk.
     assert tomllib.loads(edits['engine/Cargo.toml'])['package']['version'] == new
     assert plistlib.loads(edits['resources/Info.plist'].encode())['CFBundleShortVersionString'] == new
     for rel in ('extensions/browser/manifest.json', 'extensions/vscode/package.json'):
         assert json.loads(edits[rel])['version'] == new, rel
+    vlock = json.loads(edits['extensions/vscode/package-lock.json'])
+    assert vlock['version'] == new and vlock['packages']['']['version'] == new, 'extensions/vscode/package-lock.json'
     locked = [p for p in tomllib.loads(edits['engine/Cargo.lock'])['package'] if p['name'] == 'parzr-engine']
     assert len(locked) == 1 and locked[0]['version'] == new
 

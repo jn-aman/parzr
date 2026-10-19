@@ -1,0 +1,8 @@
+# The Rust toolchain for the engine, the same one CI installs (dtolnay/rust-toolchain with toolchain 1.91.0 in
+# .github/workflows/ci-release.yml). rustup reads this file from the working directory and its parents, and every
+# build runs cargo from the repository root (`--manifest-path engine/Cargo.toml`). Bump it together with CI.
+[toolchain]
+channel = "1.91.0"
+components = ["rustfmt", "clippy"]
+targets = ["aarch64-apple-darwin"]
+profile = "minimal"

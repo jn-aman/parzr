@@ -186,12 +186,52 @@ def stage(manifest, args):
         print(f"Staged pack {pack['id']} {pack['version']}: {len(pack['files'])} files, {sum(f['bytes'] for f in pack['files'])/1e6:.0f} MB in {out}")
 
 
+# Licences and attribution published with each pack: the THIRD_PARTY_NOTICES paragraphs that name its models and
+# training data (each key must match exactly one paragraph, so an edited NOTICES file cannot silently drop one),
+# and the full licence texts, attached to the release beside the model files (extra assets; fetch ignores them).
+PACK_NOTICES = {
+    'essential': (['Qwen3.5-0.8B: Copyright', 'GECToR grammatical error correction model'],
+                  {'LICENSE-Apache-2.0.txt': 'LICENSE', 'LICENSE-Qwen3.5.txt': 'resources/ThirdParty/Qwen3.5-LICENSE.txt',
+                   'LICENSE-GECToR-Grammarly-Apache-2.0.txt': 'resources/ThirdParty/GECToR-Grammarly-Apache-2.0.txt'}),
+    'slips': (['distilroberta-base (the word-choice check'], {'LICENSE-Apache-2.0.txt': 'LICENSE'}),
+    'tone': (['Tone check model (the optional'], {'LICENSE-Apache-2.0.txt': 'LICENSE'}),
+}
+
+
+def notice_text(pack):
+    keys, _ = PACK_NOTICES.get(pack['id'], ([], {}))
+    if not keys: raise SystemExit(f"Pack {pack['id']} has no licence and attribution entry in PACK_NOTICES (scripts/model-pack.py)")
+    paragraphs = (ROOT/'THIRD_PARTY_NOTICES').read_text().split('\n\n')
+    picked = []
+    for key in keys:
+        found = [p.strip() for p in paragraphs if key in p]
+        if len(found) != 1: raise SystemExit(f'THIRD_PARTY_NOTICES must hold exactly one paragraph with {key!r}, found {len(found)}')
+        picked.append(found[0])
+    return '\n\n'.join(picked) + '\n'
+
+
+def licence_assets(pack, out):
+    """Write NOTICE-<pack>-<version>.txt and the pack's licence texts into out; return their paths."""
+    notice = f"NOTICE-{pack['id']}-{pack['version']}.txt"
+    names = {asset_name(f) for f in pack['files']}
+    files = []
+    for name, source in [(notice, None), *PACK_NOTICES[pack['id']][1].items()]:
+        if name in names: raise SystemExit(f"{name} would collide with a model asset of pack {pack['id']}")
+        path = pathlib.Path(out)/name
+        path.write_text(f"Parzr model pack {pack['id']} {pack['version']}: licences and attribution\n\n{notice_text(pack)}" if source is None
+                        else (ROOT/source).read_text())
+        files.append(str(path))
+    return files
+
+
 def notes(pack):
     rows = '\n'.join(f"| `{asset_name(f)}` | `{f['path']}` | {f['bytes']:,} | {f['license']} | `{f['sha256']}` |" for f in pack['files'])
+    licences = ', '.join(f'`{name}`' for name in [f"NOTICE-{pack['id']}-{pack['version']}.txt", *PACK_NOTICES[pack['id']][1]])
     return (f"Model pack **{pack['id']}**, version {pack['version']}: {pack['title']}.\n\n{pack['purpose']}\n\n"
             "Parzr downloads these files on demand (pinned in `engine/models.json`, each checked against its SHA-256 before use). "
             "This is not an app release: download Parzr from the latest release.\n\n"
-            f"License: {pack['license']}\n\n| Asset | Path in the pack | Bytes | License | SHA-256 |\n|---|---|---|---|---|\n{rows}\n")
+            f"License: {pack['license']}\n\n| Asset | Path in the pack | Bytes | License | SHA-256 |\n|---|---|---|---|---|\n{rows}\n\n"
+            f"## Licences and attribution\n\nThe full licence texts are attached: {licences}.\n\n```\n{notice_text(pack)}```\n")
 
 
 def publish(manifest, args):
@@ -203,6 +243,7 @@ def publish(manifest, args):
             path = staged/asset_name(f)
             if not path.is_file() or digest(path) != f['sha256']: raise SystemExit(f'{path} is missing or does not match the manifest; run stage first')
             files.append(str(path))
+        files += licence_assets(pack, tempfile.mkdtemp(prefix=f"parzr-{pack['id']}-licences-"))
         if subprocess.run(['gh', 'release', 'view', tag], capture_output=True).returncode == 0:
             raise SystemExit(f'Release {tag} already exists. Packs are immutable: publish a new version under a new tag (see docs/releases.md).')
         command = ['gh', 'release', 'create', tag, '--title', f"Parzr models: {pack['id']} {pack['version']}", '--notes', notes(pack), '--prerelease', '--latest=false', *files]

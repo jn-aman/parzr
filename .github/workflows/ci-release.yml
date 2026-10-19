@@ -3,6 +3,19 @@ name: Verify and release Parzr
 # and on demand; docs and website changes never need a Mac runner (path filters do not apply to tags).
 # Pull requests always start, so the required `verify` check always reports: a docs-only one skips it,
 # and GitHub counts a skipped required check as passed.
+#
+# A version tag then runs the release in four jobs, each with only what it needs (docs/releases.md):
+#   release-build    `release` environment: builds everything unsigned and packages the extensions before any
+#                    secret is mapped, then creates the signing keychain, signs, notarizes, staples and deletes the
+#                    keychain. Hands on the files with their SHA-256s (a job output, not the artifact). Never maps
+#                    SPARKLE_ED_PRIVATE_KEY.
+#   release-sparkle  `release` environment too (where the key lives), a separate job and runner: the only job that
+#                    maps the EdDSA update key, and only in its signing step. Checks the hashes, builds and signs
+#                    the update zip, deltas and appcast.xml.
+# Secrets are mapped only in the env of the steps that use them, never at job or workflow level.
+#   release-publish  no signing secrets: checks every hash, makes an SBOM and provenance attestations, creates a
+#                    DRAFT release, downloads it back and verifies it, then publishes it and re-checks the live feed.
+#   website          after a published release only: starts website.yml on main.
 on:
   pull_request:
   push:
@@ -24,9 +37,14 @@ permissions:
 concurrency:
   group: parzr-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+env:
+  # Toolchains CI builds with; rust-toolchain.toml pins the same Rust. Bump them together (docs/releases.md).
+  NODE_VERSION: '22.23.3'
+  XCODE_DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
@@ -39,11 +57,34 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ "$EVENT" != pull_request ] || [ -n "$(git diff --name-only "$BASE" HEAD | grep -vE '^(website/|docs/)|\.md$')" ]; then
+          if [ "$EVENT" != pull_request ] || git diff --name-only "$BASE" HEAD | grep -qvE '^(website/|docs/)|\.md$'; then
             echo code=true >> "$GITHUB_OUTPUT"
           else
             echo code=false >> "$GITHUB_OUTPUT"
           fi
+      - name: Flag workflow, release and policy changes
+        # A pull request runs its own copy of these workflows, so it can weaken its own checks. This lists the files
+        # that need the owner's review (CODEOWNERS) as warnings on the run and in its summary; it never fails.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pattern='^(\.github/|scripts/|rust-toolchain\.toml$|engine/(models\.json|deny\.toml|Cargo\.lock)$|resources/(Info\.plist|Parzr\.entitlements)$|worker/|website/package(-lock)?\.json$|extensions/vscode/package(-lock)?\.json$|SECURITY\.md$)'
+          sensitive=$(git diff --name-only "$BASE" HEAD | grep -E "$pattern" || true)
+          if [ -z "$sensitive" ]; then
+            echo "No workflow, release-script or policy files changed."
+            exit 0
+          fi
+          {
+            echo "## Release-sensitive files changed"
+            echo
+            echo "This pull request changes CI, release, signing or dependency-policy files. Review them line by line before merging: the checks on this run are the pull request's own copy."
+            echo
+            printf '%s\n' "$sensitive" | while IFS= read -r file; do printf -- '- %s\n' "$file"; done
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$sensitive" | while IFS= read -r file; do
+            echo "::warning title=Release-sensitive change::$file"
+          done
   verify:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -53,13 +94,20 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+      - name: Pin Xcode and reproducible timestamps
+        run: |
+          test -d "$XCODE_DEVELOPER_DIR" || { echo "::error::$XCODE_DEVELOPER_DIR is not on this runner image; update XCODE_DEVELOPER_DIR (docs/releases.md)."; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild -version
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: '1.91.0'
           components: rustfmt, clippy
+          targets: aarch64-apple-darwin
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: '22'
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - name: Version and Rust checks
         run: |
@@ -75,15 +123,16 @@ jobs:
       - name: Restore the pinned model pack
         # The app downloads its models on demand; the tests use the same pinned pack (engine/models.json),
         # cached by the manifest's hash so a run downloads it only when the pins change.
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: dist/models
           key: model-pack-${{ hashFiles('engine/models.json') }}
       - name: Build engine and test native bridge
         run: |
           python3 scripts/prepare-model.py
-          # Verified against the manifest's SHA-256s; before the pack's release is published, rebuilt from its pinned upstream sources.
-          python3 scripts/model-pack.py fetch --models-dir dist/models --derive-fallback
+          # --verify re-hashes a restored cache against the manifest's SHA-256s (never trusted by size) and
+          # downloads again on a mismatch; before the pack's release is published, it is rebuilt from its pinned upstream sources.
+          python3 scripts/model-pack.py fetch --models-dir dist/models --derive-fallback --verify
           cargo build --release --locked --manifest-path engine/Cargo.toml
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
@@ -104,8 +153,8 @@ jobs:
             --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03
       - name: Browser and editor integration checks
         run: |
-          npm ci
-          npx playwright install chromium
+          npm ci --ignore-scripts
+          npx --no-install playwright install chromium
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:editors
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" npm run test:browser
       - name: Package the optional extensions
@@ -116,7 +165,7 @@ jobs:
           dist/Parzr.app/Contents/MacOS/parzr --health-check
           python3 scripts/package.py
           du -sh dist/Parzr.app dist/Parzr-*-local.dmg
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         # The audit upload is a record, not a check: a GitHub artifact outage must not block a release.
         continue-on-error: true
@@ -131,26 +180,101 @@ jobs:
             dist/package-report.json
             dist/extensions/parzr-*
             dist/Parzr-*-local.dmg
-  release:
+  dependencies:
+    # Supply-chain checks for pull requests and the default branch (not tags: a new advisory must not block a
+    # release that already passed them). Fails on a high or critical advisory in what Parzr ships or deploys.
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.91.0'
+          components: rustfmt, clippy
+          targets: aarch64-apple-darwin
+      - name: Install cargo-deny and cargo-audit
+        run: cargo install --locked cargo-deny@0.20.2 cargo-audit@0.22.2
+      - name: cargo-deny (advisories, licences, bans, sources) on the shipped engine graphs
+        # The default graph and the app bundle's (external-tables); the maintainer-only baseline-harper feature is
+        # never shipped and is not checked (engine/deny.toml).
+        run: |
+          cargo deny --manifest-path engine/Cargo.toml check --config engine/deny.toml
+          cargo deny --manifest-path engine/Cargo.toml --features external-tables check --config engine/deny.toml
+      - name: cargo-audit on the shipped engine graphs
+        run: python3 scripts/cargo-audit-shipped.py
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm audit
+        # Runtime dependencies of the repository root and the reports Worker; the full trees of the two tools that
+        # run in release and deploy jobs (wrangler for the website, @vscode/vsce for the extension).
+        run: |
+          npm audit --omit=dev --audit-level=high
+          (cd worker && npm audit --omit=dev --audit-level=high)
+          (cd website && npm audit --audit-level=high)
+          (cd extensions/vscode && npm audit --audit-level=high)
+  release-build:
     # Publishing is owner-only: the owner's tag push, or the Release workflow's dispatch (github-actions[bot]).
     if: startsWith(github.ref, 'refs/tags/v') && (github.triggering_actor == github.repository_owner || github.triggering_actor == 'github-actions[bot]')
     needs: verify
     runs-on: macos-26
-    timeout-minutes: 75
+    timeout-minutes: 90
     environment: release
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
-      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d
+      - name: Require a tagged commit on main
+        # A tag can point anywhere; only a commit that is already on the default branch (reviewed and verified
+        # there) is released.
+        run: |
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main; only commits on main are released."
+            exit 1
+          fi
+      - name: Pin Xcode and reproducible timestamps
+        run: |
+          test -d "$XCODE_DEVELOPER_DIR" || { echo "::error::$XCODE_DEVELOPER_DIR is not on this runner image; update XCODE_DEVELOPER_DIR (docs/releases.md)."; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild -version
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: '1.91.0'
+          components: rustfmt, clippy
+          targets: aarch64-apple-darwin
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
       - name: Validate release version
         run: python3 scripts/check-release-version.py
+      - name: Build the app unsigned
+        # Every compiler, build script, package manifest and package install runs here, before any signing
+        # credential exists on the runner. The signing step below only re-stages these outputs and signs them.
+        run: |
+          python3 scripts/build.py
+          dist/Parzr.app/Contents/MacOS/parzr --health-check
+      - name: Package the optional extensions
+        # parzr-vscode-X.Y.Z.vsix (the locked @vscode/vsce, `npm ci --ignore-scripts`) and parzr-browser-extension-X.Y.Z.zip
+        # from the tagged sources. Lower-case names keep them out of the Parzr-*.zip update globs.
+        run: python3 scripts/package-extensions.py
       - name: Prepare ephemeral signing keychain
         env:
           PARZR_CERTIFICATE_BASE64: ${{ secrets.PARZR_CERTIFICATE_BASE64 }}
@@ -160,41 +284,99 @@ jobs:
           PARZR_NOTARY_KEY_ID: ${{ secrets.PARZR_NOTARY_KEY_ID }}
           PARZR_NOTARY_ISSUER: ${{ secrets.PARZR_NOTARY_ISSUER }}
         run: python3 scripts/ci-signing.py
-      - name: Build Apple Silicon app, sign, notarize, staple and verify
+      - name: Sign, notarize, staple and verify
+        # --skip-build: no compiler or package install runs while the keychain exists.
         env:
           PARZR_SIGNING_IDENTITY: ${{ secrets.PARZR_SIGNING_IDENTITY }}
           PARZR_BUNDLE_ID: ${{ vars.PARZR_BUNDLE_ID || 'app.parzr.desktop' }}
         run: |
-          python3 scripts/build.py --sign
+          python3 scripts/build.py --sign --skip-build
           dist/Parzr.app/Contents/MacOS/parzr --health-check
           python3 scripts/package.py --release
-      - name: Checksum verified distribution
+      - name: Delete the signing keychain
+        # Right after notarization, and also when anything above failed.
+        if: always()
         run: |
-          cd dist
-          shasum -a 256 Parzr-*.dmg > SHA256SUMS
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: '22'
-      - name: Package the optional extensions
-        # parzr-vscode-X.Y.Z.vsix and parzr-browser-extension-X.Y.Z.zip from the tagged sources (versions were
-        # checked against the app above), added to SHA256SUMS. Lower-case names keep them out of the Parzr-*.zip update globs.
-        run: |
-          python3 scripts/package-extensions.py
-          (cd dist/extensions && shasum -a 256 parzr-* >> ../SHA256SUMS)
-      - name: Fixed-name copies for direct download links
+          security delete-keychain "$RUNNER_TEMP/parzr-signing.keychain-db" 2>/dev/null || true
+          security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" || true
+          rm -f "$RUNNER_TEMP/parzr-signing.p12" "$RUNNER_TEMP/parzr-notary.p8"
+      - name: Checksums, fixed-name copies and the hand-off
         # releases/latest/download/<name> always serves the newest release, so the website, README and docs link
-        # straight to the file. dist/latest stays outside the Parzr-*.dmg and parzr-* globs; cp -c clones on APFS.
+        # straight to Parzr.dmg, parzr-vscode.vsix and parzr-browser-extension.zip. app-stapled.zip is the notarized,
+        # stapled app for the update feed job (not published). The SHA-256 of every file leaves this job as an
+        # output, so the next jobs check the artifact they download against what was built here.
+        id: hashes
         run: |
-          mkdir -p dist/latest
-          cp -c dist/Parzr-*.dmg dist/latest/Parzr.dmg
-          cp -c dist/extensions/parzr-vscode-*.vsix dist/latest/parzr-vscode.vsix
-          cp -c dist/extensions/parzr-browser-extension-*.zip dist/latest/parzr-browser-extension.zip
-          (cd dist/latest && shasum -a 256 Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip >> ../SHA256SUMS)
+          out=dist/release-out
+          rm -rf "$out"; mkdir -p "$out"
+          cp -c dist/Parzr-*.dmg dist/extensions/parzr-* "$out/"
+          cp -c dist/Parzr-*.dmg "$out/Parzr.dmg"
+          cp -c dist/extensions/parzr-vscode-*.vsix "$out/parzr-vscode.vsix"
+          cp -c dist/extensions/parzr-browser-extension-*.zip "$out/parzr-browser-extension.zip"
+          (cd "$out" && shasum -a 256 Parzr-*.dmg parzr-vscode-*.vsix parzr-browser-extension-*.zip Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip > SHA256SUMS)
+          ditto -c -k --sequesterRsrc --keepParent dist/Parzr.app "$out/app-stapled.zip"
+          {
+            echo 'hashes<<PARZR_HASHES'
+            (cd "$out" && shasum -a 256 -- *)
+            echo 'PARZR_HASHES'
+          } >> "$GITHUB_OUTPUT"
+          (cd "$out" && shasum -a 256 -- *)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-build-${{ github.sha }}
+          path: dist/release-out/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        # The audit upload is a record, not a check: a GitHub artifact outage must not block a release.
+        continue-on-error: true
+        with:
+          name: release-build-audit-${{ github.sha }}
+          path: |
+            dist/build-report.json
+            dist/package-report.json
+            dist/app-notarization.json
+            dist/dmg-notarization.json
+  release-sparkle:
+    # The only job that maps the Sparkle EdDSA private key, and only in its feed-signing step: it runs on a fresh
+    # runner that never held the Developer ID keychain, receives the notarized app by hash, and builds nothing.
+    # It uses the `release` environment because that is where SPARKLE_ED_PRIVATE_KEY lives (docs/repo-settings.md).
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-build
+    runs-on: macos-26
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: read
+    outputs:
+      hashes: ${{ steps.hashes.outputs.hashes }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PARZR_RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-build-${{ github.sha }}
+          path: release-in
+      - name: Check the build hand-off against release-build's hashes
+        env:
+          HASHES: ${{ needs.release-build.outputs.hashes }}
+        run: |
+          printf '%s\n' "$HASHES" > "$RUNNER_TEMP/build.sha256"
+          [ "$(find release-in -type f | wc -l)" -eq "$(grep -c . "$RUNNER_TEMP/build.sha256")" ] || { echo "::error::release-in holds files release-build did not hash"; exit 1; }
+          (cd release-in && shasum -a 256 -c "$RUNNER_TEMP/build.sha256")
+          mkdir -p dist
+          ditto -x -k release-in/app-stapled.zip dist/
+          test -d dist/Parzr.app
       - name: Fetch previous update zips for delta updates
         # Up to 8 earlier releases that carry an update zip (a delta is a few MB; the app is about 80 MB without its models); releases without one (0.2.x) are skipped.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PARZR_RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mkdir -p dist/prev-zips
           n=0
@@ -205,11 +387,11 @@ jobs:
           done
           echo "Fetched $n previous update zip(s)"
       - name: Build, sign and verify the update feed
-        # Writes dist/update/{Parzr-X.Y.Z.zip,*.delta,appcast.xml} and fails unless every signature,
-        # length and delta checks out. The EdDSA key reaches the script on stdin, never a file or a log.
+        # Writes dist/update/{Parzr-X.Y.Z.zip,*.delta,appcast.xml} and fails unless every signature, length and delta
+        # checks out (and the app is stapled and Gatekeeper-approved). The EdDSA key reaches sign_update on stdin,
+        # never a file or a log; sign_update comes from the pinned Sparkle tarball, re-hashed on every run.
         env:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
-          PARZR_RELEASE_TAG: ${{ github.ref_name }}
           PARZR_CRITICAL: ${{ inputs.critical }}
           PARZR_NOTES: ${{ inputs.notes }}
         run: |
@@ -218,41 +400,138 @@ jobs:
           [ -n "$prev" ] && args+=(--git-range "$prev..$PARZR_RELEASE_TAG")
           [ "$PARZR_CRITICAL" = "true" ] && args+=(--critical)
           python3 scripts/make-appcast.py build "${args[@]}"
-      - name: Write release notes
-        # What's new from the commit subjects (internal areas such as CI and Tests folded away), the Highlights
-        # from the notes input, then downloads, install and update steps and the checksums.
+      - name: Hash the update feed
+        id: hashes
+        run: |
+          {
+            echo 'hashes<<PARZR_HASHES'
+            (cd dist/update && shasum -a 256 -- *)
+            echo 'PARZR_HASHES'
+          } >> "$GITHUB_OUTPUT"
+          (cd dist/update && shasum -a 256 -- *)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-update-${{ github.sha }}
+          path: dist/update/
+          if-no-files-found: error
+          retention-days: 14
+  release-publish:
+    # No signing secrets. Contents write publishes; id-token and attestations write sign the provenance attestations.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-build, release-sparkle]
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PARZR_RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Pin Xcode
+        run: |
+          test -d "$XCODE_DEVELOPER_DIR" || { echo "::error::$XCODE_DEVELOPER_DIR is not on this runner image; update XCODE_DEVELOPER_DIR (docs/releases.md)."; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR" >> "$GITHUB_ENV"
+      - name: Software bill of materials
+        # SPDX JSON of the tagged sources' locked dependencies (engine/Cargo.lock, mac/Package.resolved, the npm
+        # lockfiles), made from the clean checkout before any release file is downloaded next to it.
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: .
+          format: spdx-json
+          output-file: ${{ runner.temp }}/parzr-${{ github.ref_name }}.spdx.json
+          syft-version: v1.54.0
+          upload-artifact: false
+          upload-release-assets: false
+          dependency-snapshot: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-build-${{ github.sha }}
+          path: release-in
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-update-${{ github.sha }}
+          path: update-in
+      - name: Check both hand-offs and assemble the release files
         env:
-          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+          BUILD_HASHES: ${{ needs.release-build.outputs.hashes }}
+          UPDATE_HASHES: ${{ needs.release-sparkle.outputs.hashes }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          printf '%s\n' "$BUILD_HASHES" > "$RUNNER_TEMP/build.sha256"
+          printf '%s\n' "$UPDATE_HASHES" > "$RUNNER_TEMP/update.sha256"
+          [ "$(find release-in -type f | wc -l)" -eq "$(grep -c . "$RUNNER_TEMP/build.sha256")" ] || { echo "::error::release-in holds unhashed files"; exit 1; }
+          [ "$(find update-in -type f | wc -l)" -eq "$(grep -c . "$RUNNER_TEMP/update.sha256")" ] || { echo "::error::update-in holds unhashed files"; exit 1; }
+          (cd release-in && shasum -a 256 -c "$RUNNER_TEMP/build.sha256")
+          (cd update-in && shasum -a 256 -c "$RUNNER_TEMP/update.sha256")
+          mkdir -p dist/publish
+          cp release-in/* update-in/* LICENSE THIRD_PARTY_NOTICES "$RUNNER_TEMP/parzr-$VERSION.spdx.json" dist/publish/
+          rm dist/publish/app-stapled.zip
+          v="${VERSION#v}"
+          # Required assets must exist; deltas are optional (the first updater release has none to diff against).
+          for f in "Parzr-$v.dmg" Parzr.dmg "parzr-vscode-$v.vsix" parzr-vscode.vsix "parzr-browser-extension-$v.zip" parzr-browser-extension.zip \
+                   "Parzr-$v.zip" appcast.xml SHA256SUMS LICENSE THIRD_PARTY_NOTICES "parzr-$VERSION.spdx.json"; do
+            [ -f "dist/publish/$f" ] || { echo "::error::missing release asset $f"; exit 1; }
+          done
+      - name: Extend SHA256SUMS with the update feed and the SBOM
+        run: |
+          cd dist/publish
+          shasum -a 256 Parzr-*.zip appcast.xml parzr-*.spdx.json >> SHA256SUMS
+          for d in Parzr-*.delta; do [ -f "$d" ] && shasum -a 256 "$d" >> SHA256SUMS; done
+          cat SHA256SUMS
+      - name: Provenance attestations
+        # One attestation per file listed in SHA256SUMS: the DMG and its fixed-name copy, the update zip, every delta,
+        # appcast.xml, both extensions (versioned and fixed-name) and the SBOM.
+        # Verify a download: gh attestation verify FILE --repo jn-aman/parzr
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/publish/SHA256SUMS
+      - name: Write release notes
+        # What's new from the commit subjects (as plain text; internal areas such as CI and Tests folded away), the
+        # Highlights from the notes input, then downloads, install and update steps and the checksums.
+        env:
           PARZR_CRITICAL: ${{ inputs.critical }}
           PARZR_NOTES: ${{ inputs.notes }}
         run: |
-          args=(--version "${PARZR_RELEASE_TAG#v}" --notes "$PARZR_NOTES" --dist dist --out dist/release-notes.md)
+          args=(--version "${PARZR_RELEASE_TAG#v}" --notes "$PARZR_NOTES" --dist dist/publish --out dist/release-notes.md)
           prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${PARZR_RELEASE_TAG}^" 2>/dev/null || true)
           [ -n "$prev" ] && args+=(--git-range "$prev..$PARZR_RELEASE_TAG")
           [ "$PARZR_CRITICAL" = "true" ] && args+=(--critical)
           python3 scripts/release_notes.py "${args[@]}"
           cat dist/release-notes.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Publish immutable release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+      - name: Create the release as a draft
+        # A draft is invisible to releases/latest, so the update feed and the download links do not move yet.
         run: |
-          # Required assets must exist; deltas are optional (the first updater release has none to diff against).
           shopt -s nullglob
-          required=(dist/Parzr-*.dmg dist/latest/* dist/SHA256SUMS dist/extensions/parzr-* LICENSE THIRD_PARTY_NOTICES dist/update/Parzr-*.zip dist/update/appcast.xml)
-          for pattern in 'dist/Parzr-*.dmg' 'dist/latest/Parzr.dmg' 'dist/latest/parzr-vscode.vsix' 'dist/latest/parzr-browser-extension.zip' 'dist/extensions/parzr-*.vsix' 'dist/extensions/parzr-*.zip' 'dist/update/Parzr-*.zip' 'dist/update/appcast.xml'; do
-            matches=($pattern)
-            if [ ${#matches[@]} -eq 0 ]; then echo "::error::missing release asset $pattern"; exit 1; fi
+          files=(dist/publish/*)
+          echo "Uploading ${#files[@]} assets to a draft release"
+          gh release create "$PARZR_RELEASE_TAG" --draft --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --notes-file dist/release-notes.md "${files[@]}"
+      - name: Download the draft and verify what users will get
+        # Every asset back from GitHub: the same file names, SHA256SUMS, the appcast's signatures and lengths against
+        # the pinned public key, and Gatekeeper on the downloaded DMG (stapled ticket and Developer ID signature).
+        run: |
+          draft="$RUNNER_TEMP/draft"
+          rm -rf "$draft"; mkdir -p "$draft"
+          gh release download "$PARZR_RELEASE_TAG" --dir "$draft"
+          diff <(ls dist/publish) <(ls "$draft") || { echo "::error::the draft's assets differ from the files uploaded"; exit 1; }
+          (cd "$draft" && shasum -a 256 -c SHA256SUMS)
+          python3 scripts/make-appcast.py verify --appcast "$draft/appcast.xml" --version "${PARZR_RELEASE_TAG#v}" --dir "$draft"
+          for dmg in "$draft/Parzr-${PARZR_RELEASE_TAG#v}.dmg" "$draft/Parzr.dmg"; do
+            xcrun stapler validate "$dmg"
+            spctl -a -t open --context context:primary-signature -v "$dmg"
           done
-          deltas=(dist/update/*.delta)
-          echo "Publishing ${#required[@]} assets and ${#deltas[@]} deltas"
-          gh release create "$PARZR_RELEASE_TAG" --verify-tag --title "Parzr $PARZR_RELEASE_TAG" --notes-file dist/release-notes.md "${required[@]}" "${deltas[@]}"
+      - name: Publish
+        run: gh release edit "$PARZR_RELEASE_TAG" --draft=false --latest
       - name: Verify the published update feed
-        # The feed is live the moment the release is. Re-check what users will download; if it is bad,
-        # draft the release so the feed (releases/latest) falls back to the previous release.
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PARZR_RELEASE_TAG: ${{ github.ref_name }}
+        # The feed is live the moment the release is. Re-check what users will download through the public URLs; if
+        # it is bad, turn the release back into a draft so the feed (releases/latest) falls back to the previous one.
         run: |
           base="https://github.com/${GITHUB_REPOSITORY}/releases"
           verify() {
@@ -263,31 +542,43 @@ jobs:
               sleep 10
             done
             cmp -s "$RUNNER_TEMP/tag-appcast.xml" "$RUNNER_TEMP/latest-appcast.xml" || return 1
-            # The website's Download buttons: one byte of each fixed-name file through releases/latest.
+            # The website's Download buttons: each fixed-name file through releases/latest must be this release's file.
             for f in Parzr.dmg parzr-vscode.vsix parzr-browser-extension.zip; do
-              curl -fsSL -r 0-0 -o /dev/null "$base/latest/download/$f" || { echo "::error::$f is not reachable through releases/latest"; return 1; }
+              curl -fsSL "$base/latest/download/$f" -o "$RUNNER_TEMP/latest-$f" || { echo "::error::$f is not reachable through releases/latest"; return 1; }
+              cmp -s "$RUNNER_TEMP/latest-$f" "dist/publish/$f" || { echo "::error::releases/latest/download/$f is not this release's file"; return 1; }
             done
           }
           if ! verify; then
-            echo "::error::Published update feed failed verification; drafting the release so updates fall back to the previous release."
-            gh release edit "$PARZR_RELEASE_TAG" --draft
+            echo "::error::Published update feed failed verification; yanking the release so updates fall back to the previous one (docs/releases.md, Yanking a bad release)."
+            gh release edit "$PARZR_RELEASE_TAG" --draft=true || echo "::error::Could not turn the release back into a draft; delete it now: gh release delete $PARZR_RELEASE_TAG --yes"
             exit 1
           fi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         # The audit upload is a record, not a check: a GitHub artifact outage must not block a release.
         continue-on-error: true
         with:
           name: release-audit-${{ github.sha }}
           path: |
-            dist/build-report.json
-            dist/package-report.json
-            dist/app-notarization.json
-            dist/dmg-notarization.json
-            dist/update/appcast.xml
+            dist/publish/appcast.xml
+            dist/publish/SHA256SUMS
+            dist/publish/parzr-*.spdx.json
             dist/release-notes.md
-      - name: Remove ephemeral signing credentials
-        if: always()
+  website:
+    # parzr.app deploys after a release is published and verified, so its download links never point ahead of
+    # releases/latest. website.yml runs on main (the website-production environment only accepts main).
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Deploy parzr.app
         run: |
-          security delete-keychain "$RUNNER_TEMP/parzr-signing.keychain-db" || true
-          rm -f "$RUNNER_TEMP/parzr-signing.p12" "$RUNNER_TEMP/parzr-notary.p8"
+          gh workflow run website.yml --ref "${DEFAULT_BRANCH:-main}"
+          echo "Started website.yml on ${DEFAULT_BRANCH:-main} for $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"

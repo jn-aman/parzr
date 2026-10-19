@@ -1,11 +1,14 @@
 name: Deploy parzr.app
-# Deploys website/ to Cloudflare Workers static assets when it changes on main.
-# Needs repository secret CLOUDFLARE_API_TOKEN (Workers edit on the account, scoped to parzr.app)
-# and repository variable CLOUDFLARE_ACCOUNT_ID; without them the job skips with a notice.
+# Deploys website/ to Cloudflare Workers static assets. It runs:
+#   - after every published, verified app release: the `website` job of ci-release.yml starts it on main, so the
+#     site's download links never point ahead of releases/latest;
+#   - on demand (Actions, Deploy parzr.app, Run workflow on main, or `gh workflow run website.yml --ref main`)
+#     for website-only changes between releases.
+# Pushes to main no longer deploy by themselves (docs/releases.md, "Website").
+# CLOUDFLARE_API_TOKEN (Workers edit on the account, scoped to parzr.app) is a secret of the website-production
+# environment, which only main may deploy to; CLOUDFLARE_ACCOUNT_ID is a repository variable. Without them the job
+# skips with a notice. Only the deploy step sees the token.
 on:
-  push:
-    branches: [main]
-    paths: ['website/**', '.github/workflows/website.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,17 +17,21 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: website-production
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
     steps:
       - name: Check deployment credentials
         id: creds
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice::Set the CLOUDFLARE_API_TOKEN secret and CLOUDFLARE_ACCOUNT_ID variable to enable website deploys."
+          if [ "$HAS_TOKEN" != true ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Set the CLOUDFLARE_API_TOKEN secret (website-production environment) and CLOUDFLARE_ACCOUNT_ID variable to enable website deploys."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -36,8 +43,15 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         if: steps.creds.outputs.ready == 'true'
         with:
-          node-version: '22'
+          node-version: '22.23.3'
+      - name: Install the pinned wrangler
+        # website/package-lock.json pins wrangler and every dependency with integrity hashes; no install scripts run.
+        if: steps.creds.outputs.ready == 'true'
+        working-directory: website
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Deploy
         if: steps.creds.outputs.ready == 'true'
         working-directory: website
-        run: npx --yes wrangler@4 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: ./node_modules/.bin/wrangler deploy
