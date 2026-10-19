@@ -338,9 +338,11 @@ struct SelectionSnapshot {
         for edit in edits.reversed() {
             guard checkingEnabled else { throw ParzrError.message("Checking is paused or disabled for this app. \(applied) edits applied; use the editor's Undo if needed.") }
             // Verify between every range patch; never replace the entire document.
-            guard AX.text(element) == expected else {
+            // An editor may restyle quotes or spaces as it takes a write; plan from its text when every offset still holds.
+            guard let current = ReplacePlan.adopt(AX.text(element), expected: expected) else {
                 throw ParzrError.message("The editor changed during replacement. \(applied) edits applied; use the editor's Undo to revert.")
             }
+            expected = current
             let global = NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)
             let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement)
             do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String, automatic: automatic) }
@@ -351,7 +353,8 @@ struct SelectionSnapshot {
             expected = next as String
             applied += 1
         }
-        guard AX.text(element) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        guard let final = AX.text(element), ReplacePlan.sameText(final, expected) else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        if final.utf16.count == expected.utf16.count { expected = final }
         FixLearning.record(edits, in: self)
         let delta = edits.reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
         if expectedSelection.length == 0 {

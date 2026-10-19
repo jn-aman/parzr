@@ -157,9 +157,54 @@ enum ReplacePlan {
     /// Google Docs accepts the AXSelectedText write and does nothing, so it is typed at once instead of waiting out a write that cannot land.
     static func first(textSettable: Bool, rangeSettable: Bool, docs: Bool = false) -> Step? { rangeSettable ? (textSettable && !docs ? .axText : .typed) : nil }
     /// `unchanged` is the only state that may fall back to typing; anything else could double-apply.
+    /// Exact text decides first. Failing that, differences an editor makes on its own as it takes a write (quote form, no-break spaces,
+    /// line-break form, runs of spaces, trailing breaks) are ignored, unless the edit itself changes only such things: a quote or spacing
+    /// fix must land exactly.
     static func verdict(before: String, after: String?, expected: String) -> Verdict {
         guard let after else { return .diverged }
-        return after == expected ? .applied : after == before ? .unchanged : .diverged
+        if after == expected { return .applied }
+        if after == before { return .unchanged }
+        let (was, wanted, now) = (tolerant(before), tolerant(expected), tolerant(after))
+        guard was != wanted else { return .diverged }
+        return now == wanted ? .applied : now == was ? .unchanged : .diverged
+    }
+    /// The same text up to what `verdict` tolerates.
+    static func sameText(_ a: String?, _ b: String) -> Bool { a == b || a.map { tolerant($0) == tolerant(b) } == true }
+    /// The editor's text between two range patches, to plan the next one from: identical to what Parzr expects, or different only by
+    /// characters that keep their UTF-16 length (quote form, no-break spaces), so every later offset still holds. nil otherwise.
+    static func adopt(_ current: String?, expected: String) -> String? {
+        guard let current else { return nil }
+        if current == expected { return current }
+        guard current.utf16.count == expected.utf16.count, sameWidth(current) == sameWidth(expected) else { return nil }
+        return current
+    }
+    private static func plain(_ scalar: Unicode.Scalar) -> Unicode.Scalar? {
+        switch scalar {
+        case "\u{2018}", "\u{2019}", "\u{201A}", "\u{201B}", "\u{2032}": "'"
+        case "\u{201C}", "\u{201D}", "\u{201E}", "\u{201F}", "\u{2033}": "\""
+        case "\u{00A0}", "\u{202F}", "\u{2007}", "\u{2009}": " "
+        default: nil
+        }
+    }
+    /// One for one: quotes and no-break spaces in their plain form.
+    private static func sameWidth(_ text: String) -> String {
+        var out = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars { out.append(plain(scalar) ?? scalar) }
+        return String(out)
+    }
+    /// Quotes and spaces in their plain form, one space for each run of spaces or tabs, every line break as LF, and no trailing breaks or spaces.
+    static func tolerant(_ text: String) -> String {
+        var out = String.UnicodeScalarView(), space = false
+        for scalar in text.replacingOccurrences(of: "\r\n", with: "\n").unicodeScalars {
+            var mapped = plain(scalar) ?? scalar
+            if ["\r", "\u{2028}", "\u{2029}", "\u{0085}"].contains(mapped) { mapped = "\n" }
+            if mapped == " " || mapped == "\t" { space = true; continue }
+            if space { out.append(" "); space = false }
+            out.append(mapped)
+        }
+        var result = String(out)
+        while let last = result.unicodeScalars.last, last == "\n" { result.unicodeScalars.removeLast() }
+        return result
     }
     /// A readable leaf can differ from its writable ancestor, so fallback focus must use the snapshot's resolution mode.
     static func focusMatches<Element>(_ element: Element, automatic: Bool = false, resolve: (Bool) -> Element?, same: (Element, Element) -> Bool) -> Bool {
