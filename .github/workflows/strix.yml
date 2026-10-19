@@ -31,7 +31,7 @@ jobs:
             echo "::notice::Strix is not set up: add the STRIX_LLM and LLM_API_KEY repository secrets to scan pull requests."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.creds.outputs.ready == 'true'
         with:
           fetch-depth: 0 # diff scope needs the base branch
@@ -64,7 +64,7 @@ jobs:
           fi
       - name: Upload findings to code scanning
         if: always() && steps.creds.outputs.ready == 'true' && hashFiles('strix_runs/**/findings.sarif') != ''
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: strix_runs
           category: strix
