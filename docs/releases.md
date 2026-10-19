@@ -96,7 +96,7 @@ python3 scripts/model-pack.py publish --pack slips          # gh release create 
 python3 scripts/model-pack.py fetch --pack slips --models-dir "$(mktemp -d)" --verify
 ```
 
-Until it is published the app reports it as not available yet and retries hourly, with the typing-time slip check off (Option+Space still checks word choice with Qwen), and CI's `fetch --derive-fallback` skips it. The Slip check is on by default (Settings, Writing); switched off, the app neither downloads the pack on its own nor lets typing checks use it.
+Until it is published the app reports it as not available yet and retries hourly, with the typing-time slip check off (Option+Space still checks word choice with Qwen), and CI fails: `fetch` (with or without `--derive-fallback`, which rebuilds only the essential pack, and only on pull requests) stops at a pinned pack whose release is missing, so publish the pack before the change that pins it. The Slip check is on by default (Settings, Writing); switched off, the app neither downloads the pack on its own nor lets typing checks use it.
 
 **Publish `models-tone-2`** (the optional tone-check pack, 6 files, 23 MB; before the first app release that pins it). Like the slip pack, its Core ML model is compiled locally, so publish exactly the staged files that match the pins: `dist/tone-pack-v2/release-assets` on the machine that converted it (from `dist/tone-pack-v2/tone-build`), or retrain and convert again and re-pin with `scripts/tone-check/pack_manifest.py`. Version 1 (`models-tone-1`) was never published: it was trained with ParaDetox (OpenRAIL++), and version 2 leaves that corpus out.
 

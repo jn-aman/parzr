@@ -1,0 +1,3 @@
+# XCTest skips allowed on CI (scripts/check-xctest-skips.py): Module.Class/testName  # reason
+# Any other skip in the verify job fails it: on CI the engine, the model packs and the native runtime are all present.
+ParzrCoreTests.ToneCheckTests/testTheTokenizerMatchesHuggingFaceOnTheDevelopmentTexts  # needs PARZR_TONE_PARITY, written by scripts/tone-check/token_parity.py (Hugging Face transformers), not installed on CI
