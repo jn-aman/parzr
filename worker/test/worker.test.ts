@@ -17,11 +17,12 @@ const KEY = '0f8fad5b-d9cb-469f-a165-70867728950e';
 const KEY2 = '1f8fad5b-d9cb-469f-a165-70867728950e';
 const allow: RateLimit = { limit: async () => ({ success: true }) };
 
-/** An in-memory D1 that follows the Worker's statements: batch keys are unique, the day counter has a cap, and a failed batch stores nothing. */
+/** An in-memory D1 that follows the Worker's statements: batch keys are unique, the day and per-client counters have caps, and a failed batch stores nothing. */
 function fakeDB() {
   const rows: unknown[][] = [];
   const keys = new Set<string>();
   const days = new Map<string, number>();
+  const clients = new Map<string, number>();
   const meta = new Map<string, string>();
   const executed: string[] = [];
   let fail = false;
@@ -32,7 +33,7 @@ function fakeDB() {
     run: async () => ({ meta: { changes: 1 } }),
     first: async <T,>() => {
       if (fail) throw new Error('D1_ERROR: network');
-      if (sql.startsWith('SELECT (SELECT 1 FROM batches')) return { seen: keys.has(values[0] as string) ? 1 : null, used: days.get(values[1] as string) ?? null } as T;
+      if (sql.startsWith('SELECT (SELECT 1 FROM batches')) return { seen: keys.has(values[0] as string) ? 1 : null, used: days.get(values[1] as string) ?? null, client_used: clients.get(`${values[1]}|${values[2]}`) ?? null } as T;
       if (sql.includes('MIN(received_day)')) return { oldest: (rows.map((r) => r[0] as string).sort()[0] ?? null), pruned: meta.get('last_prune_ok') ?? null } as T;
       return null;
     },
@@ -43,7 +44,14 @@ function fakeDB() {
       if (fail) throw new Error('D1_ERROR: network');
       const all = list as ReturnType<typeof statement>[];
       const nextDays = new Map(days);
+      const nextClients = new Map(clients);
       for (const s of all) {
+        if (s.sql.startsWith('INSERT INTO client_counts')) {
+          const [day, client, n, cap] = s.values as [string, string, number, number];
+          const total = (nextClients.get(`${day}|${client}`) ?? 0) + n;
+          if (total > cap) throw new Error('D1_ERROR: CHECK constraint failed');
+          nextClients.set(`${day}|${client}`, total);
+        }
         if (s.sql.startsWith('INSERT INTO daily_counts')) {
           const [day, n, cap] = s.values as [string, number, number];
           const total = (nextDays.get(day) ?? 0) + n;
@@ -53,6 +61,7 @@ function fakeDB() {
         if (s.sql.startsWith('INSERT INTO batches') && keys.has(s.values[0] as string)) throw new Error('D1_ERROR: UNIQUE constraint failed');
       }
       for (const [k, v] of nextDays) days.set(k, v);
+      for (const [k, v] of nextClients) clients.set(k, v);
       for (const s of all) {
         executed.push(s.sql);
         if (s.sql.startsWith('INSERT INTO batches')) keys.add(s.values[0] as string);
@@ -62,7 +71,7 @@ function fakeDB() {
       return all.map(() => ({ meta: { changes: 1 } }));
     },
   };
-  return { db, rows, days, meta, executed, failNext: () => (fail = true) };
+  return { db, rows, days, clients, meta, executed, failNext: () => (fail = true) };
 }
 const env = (db: D1Database, over: Partial<Env> = {}): Env => ({ DB: db, REPORTS_LIMITER: allow, RATE_LIMIT_SALT: 'pepper', ...over });
 
@@ -157,13 +166,17 @@ test('batches: malformed bodies are rejected, bad reports dropped', () => {
 });
 
 test('POST stores reports with the day only, and never the address', async () => {
-  const { db, rows, days } = fakeDB();
+  const { db, rows, days, clients } = fakeDB();
   const response = await handleReports(post({ reports: [report(), report()] }), env(db), new Date('2026-10-19T15:04:05Z'));
   assert.equal(response.status, 202);
   assert.deepEqual(await response.json(), { stored: 2, dropped: 0 });
   assert.equal(rows.length, 2);
   assert.deepEqual(rows[0], ['2026-10-19', report().sentence, 17, 20, 'has', 'have', 'grammar.i_agreement', 'rules', 'reported', 'com.tinyspeck.slackmacgap', '0.5.0']);
   assert.equal(days.get('2026-10-19'), 2);
+  const [[clientKey, clientRows]] = [...clients];
+  assert.match(clientKey, /^2026-10-19\|[0-9a-f]{32}$/, 'the per-client counter is keyed by the day and a salted hash');
+  assert.equal(clientRows, 2);
+  assert.ok(!clientKey.includes('203'));
   assert.ok(!JSON.stringify(rows).includes('203.0.113.9'));
   assert.ok(!JSON.stringify(rows).includes('15:04'));
 });
@@ -188,6 +201,46 @@ test('the daily row cap answers 503 until midnight UTC and stores nothing past i
   assert.equal(rows.length, 2);
   assert.equal((await handleReports(post({ reports: [report()] }, { 'Idempotency-Key': KEY2 }), capped, now)).status, 202, 'what still fits is stored');
   assert.equal(rows.length, 3);
+});
+
+test('the per-client quota stops one client at its quota with 429, and only that client', async () => {
+  const { db, rows, days } = fakeDB();
+  const quota = env(db, { CLIENT_DAILY_ROW_CAP: '3' });
+  const now = new Date('2026-10-19T23:00:00Z');
+  const from = (ip: string, n: number) => handleReports(post({ reports: Array.from({ length: n }, () => report()) }, { 'Idempotency-Key': crypto.randomUUID(), 'CF-Connecting-IP': ip }), quota, now);
+  assert.equal((await from('203.0.113.7', 2)).status, 202);
+  const over = await from('203.0.113.7', 2);
+  assert.equal(over.status, 429);
+  assert.deepEqual(await over.json(), { error: 'daily quota reached' });
+  assert.equal(over.headers.get('Retry-After'), '3600', 'until midnight UTC');
+  assert.equal((await from('203.0.113.7', 1)).status, 202, 'what still fits the quota is stored');
+  assert.equal((await from('203.0.113.7', 1)).status, 429);
+  assert.equal((await from('198.51.100.20', 3)).status, 202, 'another network is unaffected');
+  assert.equal(rows.length, 6);
+  assert.equal(days.get('2026-10-19'), 6, 'refused batches never reached the global counter');
+  assert.equal((await handleReports(post({ reports: [report()] }, { 'Idempotency-Key': crypto.randomUUID(), 'CF-Connecting-IP': '203.0.113.7' }), quota, new Date('2026-10-20T00:00:01Z'))).status, 202, 'a new day, a new quota');
+});
+
+test('a request without a usable client address is refused, unless local development allows it', async () => {
+  const { db, rows } = fakeDB();
+  const missing = () => new Request('https://reports.parzr.app/v1/reports', { method: 'POST', body: JSON.stringify({ reports: [report()] }), headers: { 'Content-Type': 'application/json', 'Idempotency-Key': KEY } });
+  const refused = await handleReports(missing(), env(db));
+  assert.equal(refused.status, 503);
+  assert.deepEqual(await refused.json(), { error: 'client address unavailable' });
+  assert.equal((await handleReports(post({ reports: [report()] }, { 'CF-Connecting-IP': '   ' }), env(db))).status, 503);
+  const invalid = await handleReports(post({ reports: [report()] }, { 'CF-Connecting-IP': 'nonsense' }), env(db));
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(await invalid.json(), { error: 'invalid client address' });
+  assert.equal(rows.length, 0, 'nothing stored, nothing counted');
+  // The limiter is never consulted for a refused request: there is no shared "unknown" bucket in production.
+  const keys: string[] = [];
+  const watching = env(db, { REPORTS_LIMITER: { limit: async ({ key }) => (keys.push(key), { success: true }) } });
+  await handleReports(missing(), watching);
+  assert.equal(keys.length, 0);
+  assert.equal((await handleReports(missing(), { ...watching, ALLOW_MISSING_CLIENT_IP: '1' })).status, 202, 'local development opts in');
+  assert.equal(keys.length, 1);
+  assert.equal(rows.length, 1);
+  assert.equal((await handleReports(post({ reports: [report()] }, { 'CF-Connecting-IP': 'nonsense', 'Idempotency-Key': KEY2 }), { ...watching, ALLOW_MISSING_CLIENT_IP: 'yes' })).status, 400, 'only "1" opts in');
 });
 
 test('requests are checked before anything is stored', async () => {
@@ -310,7 +363,7 @@ test('age bands', () => {
 test('the daily prune', async () => {
   const { db, executed } = fakeDB();
   await prune(env(db, { RETENTION_DAYS: '30' }), new Date('2026-10-19T03:17:00Z'));
-  assert.deepEqual(executed.map((s) => s.split(' ').slice(0, 3).join(' ')), ['DELETE FROM reports', 'DELETE FROM batches', 'DELETE FROM daily_counts', 'INSERT INTO meta']);
+  assert.deepEqual(executed.map((s) => s.split(' ').slice(0, 3).join(' ')), ['DELETE FROM reports', 'DELETE FROM batches', 'DELETE FROM daily_counts', 'DELETE FROM client_counts', 'INSERT INTO meta']);
   const failing = fakeDB();
   failing.failNext();
   await assert.rejects(worker.scheduled({}, env(failing.db)), 'a failed clean-up fails the cron run instead of vanishing in waitUntil');

@@ -8,6 +8,7 @@ declare global {
       RATE_LIMIT_SALT: string;
       RETENTION_DAYS: string;
       DAILY_ROW_CAP: string;
+      CLIENT_DAILY_ROW_CAP: string;
       TEST_MIGRATIONS: D1Migration[];
     }
   }

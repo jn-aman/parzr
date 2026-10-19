@@ -4,9 +4,10 @@
 // GET  /v1/health   (HEAD too): the deployed version, a database read, the age of the oldest row, the last clean-up
 //
 // Privacy: the Worker reads the Content-Type, Content-Length and Idempotency-Key headers, and CF-Connecting-IP only to
-// derive the rate-limit key: the address (an IPv6 address cut to its /64 network) is hashed with a secret salt and the
-// day, and only that hash reaches Cloudflare's rate-limit counter. The address is never written to D1 or logged, and
-// Workers observability is off. Each stored row keeps the UTC day it arrived, not the time.
+// derive the client key: the address (an IPv6 address cut to its /64 network) is hashed with a secret salt and the
+// day. That hash keys Cloudflare's rate-limit counter and the client's row count for the day (client_counts, deleted
+// after a day or two); it is never stored with a report. The address is never written to D1 or logged, and Workers
+// observability is off. Each stored row keeps the UTC day it arrived, not the time.
 
 import { BATCH_KEY, LIMITS, validateBatch, type Report } from './validate.ts';
 
@@ -32,8 +33,15 @@ export interface Env {
   RATE_LIMIT_SALT?: string;
   /** Days a report is kept (default 180). */
   RETENTION_DAYS?: string;
-  /** The most report rows stored per UTC day, across every client (default 20000). */
+  /** The most report rows stored per UTC day across every client (default 100000): a backstop well above one client's quota. */
   DAILY_ROW_CAP?: string;
+  /** The most report rows one client (IPv4 address or IPv6 /64) stores per UTC day (default 200). */
+  CLIENT_DAILY_ROW_CAP?: string;
+  /**
+   * Local development and tests only, never in wrangler.toml: "1" lets a request without a usable CF-Connecting-IP
+   * through, as one shared client. In production Cloudflare always sets the header, so its absence is refused.
+   */
+  ALLOW_MISSING_CLIENT_IP?: string;
   /** The deployed version, for the health check (wrangler.toml [version_metadata]). */
   CF_VERSION_METADATA?: { id: string };
 }
@@ -55,7 +63,10 @@ function setting(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 export const retentionDays = (env: Env) => setting(env.RETENTION_DAYS, 180);
-export const dailyCap = (env: Env) => setting(env.DAILY_ROW_CAP, 20_000);
+export const dailyCap = (env: Env) => setting(env.DAILY_ROW_CAP, 100_000);
+export const clientDailyCap = (env: Env) => setting(env.CLIENT_DAILY_ROW_CAP, 200);
+/** Per-client day counters older than yesterday are deleted: the daily hash they are keyed by means nothing after its day. */
+export const CLIENT_COUNT_DAYS = 1;
 /** Batch keys are kept this long so a retried batch is stored once; the app drops reports queued longer than this. */
 export const BATCH_KEY_DAYS = 14;
 
@@ -65,8 +76,9 @@ async function sha256(text: string): Promise<string> {
 }
 
 /**
- * What the rate limit counts: an IPv4 address as is, an IPv6 address by its /64 network (one subscriber usually holds a
- * whole /64, so rotating the low bits must not buy more requests). Anything unparsable shares one bucket.
+ * What the rate limit and the per-client quota count: an IPv4 address as is, an IPv6 address by its /64 network (one
+ * subscriber usually holds a whole /64, so rotating the low bits must not buy more requests). Anything unparsable is
+ * 'unknown', which handleReports refuses unless ALLOW_MISSING_CLIENT_IP is set (then it is one shared client).
  */
 export function limitSubject(address: string | null): string {
   const raw = (address ?? '').trim().toLowerCase();
@@ -114,24 +126,41 @@ async function readBody(request: Request, limit: number): Promise<string | null>
   return new TextDecoder().decode(all);
 }
 
-const SEEN = 'SELECT (SELECT 1 FROM batches WHERE key = ?1) AS seen, (SELECT rows FROM daily_counts WHERE day = ?2) AS used';
-// The day's counter goes up in the same transaction as the rows. The table's CHECK (rows <= cap) fails the statement
-// when a batch would pass the cap, and D1 then rolls the whole batch back: nothing is stored.
+const SEEN =
+  'SELECT (SELECT 1 FROM batches WHERE key = ?1) AS seen, (SELECT rows FROM daily_counts WHERE day = ?2) AS used, (SELECT rows FROM client_counts WHERE day = ?2 AND client = ?3) AS client_used';
+// The day's counters go up in the same transaction as the rows. Each table's CHECK (rows <= cap) fails the statement
+// when a batch would pass that cap, and D1 then rolls the whole batch back: nothing is stored.
 const COUNT = 'INSERT INTO daily_counts (day, rows, cap) VALUES (?1, ?2, ?3) ON CONFLICT (day) DO UPDATE SET rows = rows + excluded.rows, cap = excluded.cap';
+const CLIENT_COUNT =
+  'INSERT INTO client_counts (day, client, rows, cap) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (day, client) DO UPDATE SET rows = rows + excluded.rows, cap = excluded.cap';
+type Seen = { seen: number | null; used: number | null; client_used: number | null };
 const INSERT_BATCH = 'INSERT INTO batches (key, received_day) VALUES (?, ?)';
 const INSERT_REPORT =
   'INSERT INTO reports (received_day, sentence, start_utf16, end_utf16, original, replacement, rule, model, action, app, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-export type StoreOutcome = 'stored' | 'duplicate' | 'full';
+/** 'quota': this client's rows for the day are used up. 'full': the global backstop for the day is used up. */
+export type StoreOutcome = 'stored' | 'duplicate' | 'quota' | 'full';
 
-export async function store(env: Env, key: string, reports: Report[], today: string): Promise<StoreOutcome> {
+/** `client` is the salted, daily hash of the client's network (32 hex characters), never the address. */
+export async function store(env: Env, key: string, reports: Report[], today: string, client: string): Promise<StoreOutcome> {
   const cap = dailyCap(env);
-  const seen = () => env.DB.prepare(SEEN).bind(key, today).first<{ seen: number | null; used: number | null }>();
-  const before = await seen();
-  if (before?.seen) return 'duplicate';
-  if ((before?.used ?? 0) + reports.length > cap) return 'full';
-  // One transaction: the day's count, the batch key and its reports go in together, or not at all.
-  const statements = [env.DB.prepare(COUNT).bind(today, reports.length, cap), env.DB.prepare(INSERT_BATCH).bind(key, today)];
+  const clientCap = clientDailyCap(env);
+  const seen = () => env.DB.prepare(SEEN).bind(key, today, client).first<Seen>();
+  const verdict = (row: Seen | null): StoreOutcome | null => {
+    if (row?.seen) return 'duplicate';
+    // The client's own quota first: a client past it is told so, even on a day the global backstop is also reached.
+    if ((row?.client_used ?? 0) + reports.length > clientCap) return 'quota';
+    if ((row?.used ?? 0) + reports.length > cap) return 'full';
+    return null;
+  };
+  const early = verdict(await seen());
+  if (early) return early;
+  // One transaction: the day's counts, the batch key and its reports go in together, or not at all.
+  const statements = [
+    env.DB.prepare(CLIENT_COUNT).bind(today, client, reports.length, clientCap),
+    env.DB.prepare(COUNT).bind(today, reports.length, cap),
+    env.DB.prepare(INSERT_BATCH).bind(key, today),
+  ];
   for (const r of reports) {
     statements.push(
       env.DB.prepare(INSERT_REPORT).bind(today, r.sentence, r.suggestion.start, r.suggestion.end, r.suggestion.original, r.suggestion.replacement, r.rule, r.model, r.action, r.app, r.version),
@@ -144,8 +173,8 @@ export async function store(env: Env, key: string, reports: Report[], today: str
     // Decided by reading the database again, not by the error's wording: a retry that raced its first attempt, or a
     // cap another request reached first.
     const after = await seen().catch(() => null);
-    if (after?.seen) return 'duplicate';
-    if (after && (after.used ?? 0) + reports.length > cap) return 'full';
+    const outcome = after && verdict(after);
+    if (outcome) return outcome;
     throw error;
   }
 }
@@ -165,7 +194,15 @@ export async function handleReports(request: Request, env: Env, now = new Date()
   const key = (request.headers.get('Idempotency-Key') ?? '').toLowerCase();
   if (!BATCH_KEY.test(key)) return reply(400, { error: 'expected an Idempotency-Key UUID' });
 
-  const subject = limitSubject(request.headers.get('CF-Connecting-IP'));
+  // Fail closed without a usable client address. Cloudflare always sets CF-Connecting-IP on the custom domain, so a
+  // request without one did not come through it; pooling such requests into one bucket would let them share one
+  // client's limits. Local development and tests opt in with ALLOW_MISSING_CLIENT_IP.
+  const address = request.headers.get('CF-Connecting-IP');
+  const subject = limitSubject(address);
+  if (subject === 'unknown' && env.ALLOW_MISSING_CLIENT_IP !== '1') {
+    if (!address?.trim()) return reply(503, { error: 'client address unavailable' }, { 'Retry-After': '3600' });
+    return reply(400, { error: 'invalid client address' });
+  }
   const hashed = (await sha256(`${env.RATE_LIMIT_SALT}|${day(now)}|${subject}`)).slice(0, 32);
   const { success } = await env.REPORTS_LIMITER.limit({ key: hashed });
   if (!success) return reply(429, { error: 'slow down' }, { 'Retry-After': '120' });
@@ -176,8 +213,10 @@ export async function handleReports(request: Request, env: Env, now = new Date()
   if (!result.ok) return reply(result.status, { error: result.error });
   if (result.reports.length === 0) return reply(202, { stored: 0, dropped: result.dropped });
   try {
-    const outcome = await store(env, key, result.reports, day(now));
+    const outcome = await store(env, key, result.reports, day(now), hashed);
     if (outcome === 'duplicate') return reply(200, { stored: 0, duplicate: true });
+    // Only this client waits until tomorrow; every other client is unaffected.
+    if (outcome === 'quota') return reply(429, { error: 'daily quota reached' }, { 'Retry-After': String(untilTomorrow(now)) });
     if (outcome === 'full') return reply(503, { error: 'daily limit reached' }, { 'Retry-After': String(untilTomorrow(now)) });
     return reply(202, { stored: result.reports.length, dropped: result.dropped });
   } catch {
@@ -185,12 +224,16 @@ export async function handleReports(request: Request, env: Env, now = new Date()
   }
 }
 
-/** Daily: drop reports past retention, batch keys and day counters after 14 days, then note the day it worked. */
+/**
+ * Daily: drop reports past retention, batch keys and day counters after 14 days, per-client counters from before
+ * yesterday, then note the day it worked.
+ */
 export async function prune(env: Env, now = new Date()): Promise<void> {
   await env.DB.batch([
     env.DB.prepare('DELETE FROM reports WHERE received_day < ?').bind(daysBefore(now, retentionDays(env))),
     env.DB.prepare('DELETE FROM batches WHERE received_day < ?').bind(daysBefore(now, BATCH_KEY_DAYS)),
     env.DB.prepare('DELETE FROM daily_counts WHERE day < ?').bind(daysBefore(now, BATCH_KEY_DAYS)),
+    env.DB.prepare('DELETE FROM client_counts WHERE day < ?').bind(daysBefore(now, CLIENT_COUNT_DAYS)),
     env.DB.prepare("INSERT INTO meta (key, value) VALUES ('last_prune_ok', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").bind(day(now)),
   ]);
 }

@@ -54,20 +54,28 @@ The Worker accepts exactly these keys (anything extra drops the report), checks 
 (well-formed UTF-16, no control, bidirectional or invisible format characters, offsets on character boundaries), and
 refuses any report that still contains a digit, an email address (also spelled out), a domain or link, an `@handle` or
 `#hashtag`, a key-like string, or three number words in a row (case-insensitive). A stored row adds only
-`received_day` (the UTC date). The Worker never stores or logs the IP address or any other header; rate limiting
-uses a salted, daily hash of the IPv4 address or IPv6 /64 that only Cloudflare's rate-limit counter sees. Workers
-observability is off. Rows are deleted after `RETENTION_DAYS` (180). Cloudflare runs the Worker and database as
+`received_day` (the UTC date). The Worker never stores or logs the IP address or any other header. A salted hash of
+the IPv4 address or IPv6 /64 and the UTC day (the salt is a secret, and the day makes the hash change daily) keys
+Cloudflare's rate-limit counter and the per-client row count in `client_counts`, which holds only the day, that hash
+and a number, is never joined to a report, and is deleted the day after next. Workers observability is off. Rows are deleted after `RETENTION_DAYS` (180). Cloudflare runs the Worker and database as
 Parzr's processor. Rows hold nothing that links them to a person, so a single sent report cannot be found and
 deleted on request.
 
 ## Limits
 
 - 4 requests a minute per client (IPv4 address or IPv6 /64), at most 25 reports and 64 KB a request.
-- `DAILY_ROW_CAP` (20,000) report rows a UTC day across every client: a `daily_counts` row is raised in the same D1
-  transaction as the reports, and its `CHECK (rows <= cap)` rolls back a batch that would pass the cap. Past it the
-  Worker answers `503` with `Retry-After` until midnight UTC.
+- `CLIENT_DAILY_ROW_CAP` (200) report rows a UTC day per client (IPv4 address or IPv6 /64, by its salted daily hash):
+  a `client_counts` row is raised in the same D1 transaction as the reports, and its `CHECK (rows <= cap)` rolls back
+  a batch that would pass the quota. Past it that client alone is answered `429 {"error":"daily quota reached"}` with
+  `Retry-After` until midnight UTC; other clients are unaffected.
+- `DAILY_ROW_CAP` (100,000) report rows a UTC day across every client, a backstop only distributed traffic (at least
+  500 networks at the quota) can reach: a `daily_counts` row is raised in the same transaction, and past it the Worker
+  answers `503` with `Retry-After` until midnight UTC.
 - `limits.cpu_ms = 50`. Every validation pattern is bounded.
 - Without its rate-limit binding or `RATE_LIMIT_SALT` the Worker answers `503` and stores nothing.
+- Without a usable `CF-Connecting-IP` (Cloudflare always sets it on the custom domain) the Worker answers `503` when
+  it is missing and `400` when it is not an address, rather than pooling such requests into one shared client. Local
+  development and tests can set `ALLOW_MISSING_CLIENT_IP=1` (in `.dev.vars` or test bindings, never in `wrangler.toml`).
 
 Responses: `202` stored (`{"stored": n, "dropped": m}`), `200` duplicate batch (decided by reading `batches` again,
 not by the error text), `400/413/415` refused for good, `429/503` retry later with `Retry-After`. The app drops a
@@ -80,7 +88,7 @@ and keeps at most 500 reports on disk (mode 0600, excluded from backups) while o
 "oldest": "<band>", "last_prune_ok": "<UTC day>", "prune": "ok"|"stale"}` after one indexed D1 read, or `503` when
 the database cannot be read. `oldest` is a band (`empty`, `under-8-days`, `under-31-days`, `under-91-days`,
 `under-181-days`, `over-retention`), never a date. The daily clean-up (cron `17 3 * * *`) deletes old reports, batch
-keys and day counters and then writes `last_prune_ok` to the `meta` table; it is awaited, so a failure fails the
+keys and day counters, and per-client counters from before yesterday, and then writes `last_prune_ok` to the `meta` table; it is awaited, so a failure fails the
 cron run, and `prune` reads `stale` once it has not succeeded for two days or rows outlive retention.
 
 `GET /` answers a short plain-text note (no scripts, `default-src 'none'`) pointing to the privacy page and the
@@ -98,14 +106,16 @@ npm run check       # wrangler deploy --dry-run: bundles and lists bindings, no 
 ```
 
 The D1 tests cover the migrations, CHECK constraints and trigger, duplicate batches (including a retry that races
-its first attempt), the daily cap, the IPv6 /64 rate limit, retention and health. The pool's workerd is older than
+its first attempt), the per-client quota (one network stopped, another still storing, and the CHECK rolling back a
+batch that raced past the pre-check), the daily cap, refusing a request without `CF-Connecting-IP`, the IPv6 /64 rate
+limit, retention and health. The pool's workerd is older than
 `compatibility_date`, so vitest.config.ts runs them at 2026-08-15.
 
 Local end to end, without an account:
 
 ```sh
 npx wrangler d1 migrations apply parzr-reports --local
-echo 'RATE_LIMIT_SALT=dev' > .dev.vars
+printf 'RATE_LIMIT_SALT=dev\nALLOW_MISSING_CLIENT_IP=1\n' > .dev.vars
 npx wrangler dev --local --port 8799
 curl -X POST localhost:8799/v1/reports -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: 0f8fad5b-d9cb-469f-a165-70867728950e' \

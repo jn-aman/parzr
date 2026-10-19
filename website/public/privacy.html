@@ -45,7 +45,7 @@
     <h2>Where reports go, and for how long</h2>
     <ul>
       <li>Reports go to <code>reports.parzr.app</code>, a Cloudflare Worker and database. Cloudflare runs that service for Parzr as its processor. Parzr’s maintainer decides what is collected and why: to find and fix wrong suggestions.</li>
-      <li>No account, device identifier, IP address or time of day is stored: a stored report keeps only the fields above and the day it arrived. The rate limit uses a salted hash of your IP address (or of its /64 network for IPv6), held only in Cloudflare’s rate-limit counter, never in the database. Request logs are off.</li>
+      <li>No account, device identifier, IP address or time of day is stored: a stored report keeps only the fields above and the day it arrived. The rate limit and a daily per-network quota use a salted hash of your IP address (or of its /64 network for IPv6) and the day, so it changes every day. The hash is held in Cloudflare’s rate-limit counter for about a minute, and in the database only next to a count of reports stored that day, never with a report, and deleted within two days. Your IP address itself is never stored. Request logs are off.</li>
       <li>Reports are deleted after 180 days.</li>
       <li>Because nothing links a report to you, a report that has been sent cannot be found and deleted on request. Turning reports off stops sending at once and deletes any reports on your Mac not yet sent.</li>
       <li>A reported sentence, as redacted, may become a test case in Parzr’s open-source repository, so the mistake does not come back.</li>
