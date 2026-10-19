@@ -35,7 +35,17 @@ fn everyday_hinglish_stays_as_typed() {
         "haan ji, done kar diya",
         "tension mat lo, ho jayega",
     ] {
-        assert_eq!(fix(text), text, "{text}");
+        // Every sentence takes its capital, Hinglish included (owner rule, 2026-10-19); nothing
+        // else in the sentence changes.
+        let mut chars = text.chars();
+        let opened: String = match text.strip_prefix("ok ") {
+            Some(rest) => format!("OK {rest}"),
+            None => chars
+                .next()
+                .map(|c| c.to_uppercase().chain(chars).collect())
+                .unwrap_or_default(),
+        };
+        assert_eq!(fix(text), opened, "{text}");
     }
 }
 
@@ -43,7 +53,7 @@ fn everyday_hinglish_stays_as_typed() {
 fn english_slips_in_hinglish_are_still_fixed() {
     assert_eq!(
         fix("sab theek hai, dont worry"),
-        "sab theek hai, don't worry"
+        "Sab theek hai, don't worry"
     );
     assert_eq!(fix("I recieved the file yaar"), "I received the file yaar");
 }

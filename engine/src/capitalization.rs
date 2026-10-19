@@ -94,6 +94,46 @@ pub fn code_start(text: &str, token: &Token<'_>) -> bool {
         || line.contains("();");
     glued_after || glued_before || shell || source || list_item(text, token)
 }
+/// The name under a closing line ("Thanks,\njen", "Best regards,\npriya k"): a line of at most
+/// three words right after a sign-off; it takes its capital like any line start.
+pub fn sign_off_name(text: &str, token: &Token<'_>) -> bool {
+    let before = &text[..token.start_byte];
+    let Some(previous) = before
+        .strip_suffix('\n')
+        .and_then(|b| b.rsplit('\n').next())
+    else {
+        return false;
+    };
+    let closing = previous.trim().to_lowercase();
+    let line = text[token.start_byte..]
+        .split('\n')
+        .next()
+        .unwrap_or("")
+        .trim();
+    [
+        "thanks,",
+        "thank you,",
+        "thanks again,",
+        "best,",
+        "regards,",
+        "best regards,",
+        "kind regards,",
+        "warm regards,",
+        "cheers,",
+        "sincerely,",
+        "warm wishes,",
+        "love,",
+        "many thanks,",
+        "thx,",
+        "ty,",
+        "yours,",
+    ]
+    .contains(&closing.as_str())
+        && (1..=3).contains(&line.split_whitespace().count())
+        && line
+            .chars()
+            .all(|c| c.is_alphabetic() || c == ' ' || c == '-' || c == '.')
+}
 /// The first word after a list number ("1. open the app", "2) tap settings"): a list keeps the case
 /// its writer chose, as items after "-" or "*" do.
 fn list_item(text: &str, token: &Token<'_>) -> bool {
