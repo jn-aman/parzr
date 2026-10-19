@@ -1707,7 +1707,7 @@ fn same_word(source: &str, output: &str) -> bool {
     if shortest < 3 {
         return false;
     }
-    let d = crate::model::distance(source, output);
+    let d = distance(source, output);
     if !crate::spelling::known(source) && d <= 3 {
         return true;
     }
@@ -2284,6 +2284,38 @@ pub(crate) fn texts(text: &str, segment: &Segment, edits: &[Edit]) -> Option<(St
         .collect();
     let output = apply_edits(&source, &shifted).ok()?.0;
     Some((source, output))
+}
+
+/// Edit distance counting an adjacent transposition as one edit.
+pub(crate) fn distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut rows: Vec<Vec<usize>> = (0..=a.len())
+        .map(|i| {
+            (0..=b.len())
+                .map(|j| {
+                    if i == 0 {
+                        j
+                    } else if j == 0 {
+                        i
+                    } else {
+                        0
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    for i in 1..=a.len() {
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            rows[i][j] = (rows[i - 1][j] + 1)
+                .min(rows[i][j - 1] + 1)
+                .min(rows[i - 1][j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                rows[i][j] = rows[i][j].min(rows[i - 2][j - 2] + 1);
+            }
+        }
+    }
+    rows[a.len()][b.len()]
 }
 
 #[cfg(test)]

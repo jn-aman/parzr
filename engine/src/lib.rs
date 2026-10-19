@@ -14,7 +14,7 @@ mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
 mod marks;
-#[cfg(feature = "local-model")]
+#[cfg_attr(not(feature = "local-model"), allow(dead_code))]
 mod meaning;
 #[cfg(feature = "local-model")]
 mod model;
@@ -1644,6 +1644,92 @@ pub unsafe extern "C" fn parzr_is_known_misspelling(word: *const c_char) -> i32 
     let word = unsafe { CStr::from_ptr(word) }.to_str();
     i32::from(word.is_ok_and(names::is_known_misspelling))
 }
+/// A rewrite written outside the engine (Apple Foundation Models on iOS) to check with the same
+/// meaning guard the engine's own tone rewrites pass. The tokens are the caller's linguistic hints
+/// for each text (as `Request::tokens`); without them the guard still runs on surface words.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuardRequest {
+    mode: Mode,
+    source: String,
+    output: String,
+    #[serde(default)]
+    source_tokens: Vec<TokenHint>,
+    #[serde(default)]
+    output_tokens: Vec<TokenHint>,
+}
+#[derive(Serialize)]
+struct GuardVerdict {
+    ok: bool,
+    /// The output without an announcing preamble ("Here is the edited text:").
+    output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+fn guard(req: GuardRequest) -> GuardVerdict {
+    let mut output = req.output.trim().to_string();
+    let mut output_tokens = req.output_tokens;
+    if let Some(head) = meaning::preamble(&output) {
+        output = output[head.len() + 1..].trim().to_string();
+        // The caller's hints index the text with its preamble.
+        output_tokens.clear();
+    }
+    let verdict = if output.is_empty() {
+        Err("the rewrite is empty".to_string())
+    } else if output == req.source.trim() {
+        Ok(())
+    } else {
+        meaning::keeps_meaning(
+            req.mode,
+            &req.source,
+            &output,
+            "",
+            &req.source_tokens,
+            &output_tokens,
+        )
+    };
+    GuardVerdict {
+        ok: verdict.is_ok(),
+        output,
+        reason: verdict.err(),
+    }
+}
+pub fn tone_guard_json(input: &str) -> String {
+    if input.len() > MAX_TEXT_BYTES * 8 {
+        return r#"{"error":"Request exceeds size limit."}"#.into();
+    }
+    match serde_json::from_str::<GuardRequest>(input) {
+        Ok(req) if req.source.len() <= MAX_TEXT_BYTES && req.output.len() <= MAX_TEXT_BYTES => {
+            serde_json::to_string(&guard(req))
+                .unwrap_or_else(|_| r#"{"error":"Could not encode result."}"#.into())
+        }
+        Ok(_) => r#"{"error":"Select at most 64 KB of text."}"#.into(),
+        Err(_) => r#"{"error":"Invalid guard request."}"#.into(),
+    }
+}
+/// Checks a rewrite written outside the engine with the tone meaning guard. Input is JSON
+/// `{"mode","source","output","source_tokens"?,"output_tokens"?}`; the result is
+/// `{"ok":bool,"output":string,"reason"?:string}` or `{"error":string}`.
+/// # Safety
+/// `input` must point to a valid NUL-terminated UTF-8 string alive for this call.
+/// Free the returned owned string exactly once with `parzr_string_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the C ABI caller guarantees a valid NUL-terminated string.
+        let input = unsafe { CStr::from_ptr(input) }.to_str().map_err(|_| ());
+        input
+            .map(tone_guard_json)
+            .unwrap_or_else(|_| r#"{"error":"Input is not UTF-8."}"#.into())
+    }))
+    .unwrap_or_else(|_| r#"{"error":"The writing engine could not complete the request."}"#.into());
+    CString::new(result)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1655,6 +1741,53 @@ mod tests {
         assert_eq!(typo_capital("THE".into(), "TEH", false), "THE");
         // Not a known misspelling: keep the case match (a name or a deliberate capital).
         assert_eq!(typo_capital("Mark".into(), "Mark", false), "Mark");
+    }
+    #[test]
+    fn the_tone_guard_checks_rewrites_written_outside_the_engine() {
+        let check = |mode: &str, source: &str, output: &str| -> serde_json::Value {
+            let input = serde_json::json!({"mode": mode, "source": source, "output": output});
+            serde_json::from_str(&tone_guard_json(&input.to_string())).unwrap()
+        };
+        let kept = check(
+            "professional",
+            "can u send me the report by friday",
+            "Could you send me the report by Friday?",
+        );
+        assert_eq!(kept["ok"], true, "{kept}");
+        // A preamble is dropped before the check, and the clean output is returned.
+        let announced = check(
+            "professional",
+            "can u send me the report by friday",
+            "Here is the edited text: Could you send me the report by Friday?",
+        );
+        assert_eq!(
+            announced["output"],
+            "Could you send me the report by Friday?"
+        );
+        // A changed number, a dropped negation and a refusal never pass.
+        assert_eq!(
+            check(
+                "concise",
+                "We need 12 chairs for the meeting.",
+                "We need 20 chairs for the meeting."
+            )["ok"],
+            false
+        );
+        assert_eq!(
+            check(
+                "direct",
+                "I do not want to join the call.",
+                "I want to join the call."
+            )["ok"],
+            false
+        );
+        let refusal = check(
+            "professional",
+            "Are you stupid?",
+            "I cannot rewrite this text as it is offensive and disrespectful. Is there anything else I can help you with?",
+        );
+        assert_eq!(refusal["ok"], false, "{refusal}");
+        assert!(tone_guard_json("{}").contains("error"));
     }
     #[test]
     fn a_dot_glued_to_a_lowercase_letter_is_not_a_sentence_end() {

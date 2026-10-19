@@ -1,4 +1,5 @@
 //! Bundled context and style refinement between the engine’s correctness passes.
+use crate::meaning::distance;
 use crate::{Edit, Mode, Request, RewriteResult, apply_edits, byte_at, overlaps, protected_spans};
 use similar::{ChangeTag, TextDiff};
 use std::{
@@ -1271,38 +1272,6 @@ fn describe(original: &str, replacement: &str) -> (String, String) {
             "Rewrite this phrase for correct grammar.".into()
         },
     )
-}
-
-/// Edit distance counting an adjacent transposition as one edit.
-pub(crate) fn distance(a: &str, b: &str) -> usize {
-    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
-    let mut rows: Vec<Vec<usize>> = (0..=a.len())
-        .map(|i| {
-            (0..=b.len())
-                .map(|j| {
-                    if i == 0 {
-                        j
-                    } else if j == 0 {
-                        i
-                    } else {
-                        0
-                    }
-                })
-                .collect()
-        })
-        .collect();
-    for i in 1..=a.len() {
-        for j in 1..=b.len() {
-            let cost = usize::from(a[i - 1] != b[j - 1]);
-            rows[i][j] = (rows[i - 1][j] + 1)
-                .min(rows[i][j - 1] + 1)
-                .min(rows[i - 1][j - 1] + cost);
-            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
-                rows[i][j] = rows[i][j].min(rows[i - 2][j - 2] + 1);
-            }
-        }
-    }
-    rows[a.len()][b.len()]
 }
 
 /// Function words a model may add or drop; any other inserted or deleted word is rejected.

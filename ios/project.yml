@@ -1,0 +1,128 @@
+# Parzr for iPhone and iPad. Generate the Xcode project with `xcodegen generate` in ios/
+# (ios/scripts/build.sh does it, after building the engine XCFramework).
+name: Parzr
+options:
+  bundleIdPrefix: app.parzr
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.5.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    # No team or certificate here: local builds are unsigned (or ad-hoc for the simulator).
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: ""
+    "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    # The engine XCFramework is built for Apple-silicon simulators only (aarch64-apple-ios-sim).
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+targets:
+  ParzrKit:
+    type: framework
+    platform: iOS
+    sources:
+      - path: Sources/ParzrKit
+      # Shared with the Mac app: engine request/result types and the NaturalLanguage hints.
+      - path: ../mac/Sources/ParzrCore/Models.swift
+        group: Sources/ParzrKit/Shared
+      - path: ../mac/Sources/ParzrCore/LinguisticHints.swift
+        group: Sources/ParzrKit/Shared
+    dependencies:
+      - framework: Engine/ParzrEngine.xcframework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.parzr.ios.kit
+        PRODUCT_NAME: ParzrKit
+        GENERATE_INFOPLIST_FILE: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        DEFINES_MODULE: YES
+        SKIP_INSTALL: YES
+        SWIFT_STRICT_CONCURRENCY: complete
+  Parzr:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+    dependencies:
+      - target: ParzrKit
+      - target: ParzrKeyboard
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        CFBundleDisplayName: Parzr
+        LSApplicationCategoryType: public.app-category.productivity
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        "UISupportedInterfaceOrientations~ipad": [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        CFBundleURLTypes:
+          - CFBundleURLName: app.parzr.ios
+            CFBundleURLSchemes: [parzr]
+    entitlements:
+      path: Sources/App/Parzr.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.parzr.ios]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.parzr.ios
+        PRODUCT_NAME: Parzr
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+  ParzrKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Keyboard
+    dependencies:
+      - target: ParzrKit
+        embed: false
+    info:
+      path: Sources/Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Parzr
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: en-US
+            # Full Access lets the keyboard write the App Group (rewrite handoff, its report).
+            # Parzr makes no network requests from the keyboard.
+            RequestsOpenAccess: true
+    entitlements:
+      path: Sources/Keyboard/ParzrKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.parzr.ios]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.parzr.ios.keyboard
+        PRODUCT_NAME: ParzrKeyboard
+        APPLICATION_EXTENSION_API_ONLY: YES
+  ParzrKitTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/ParzrKitTests
+    dependencies:
+      - target: ParzrKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.parzr.ios.kit.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Parzr:
+    build:
+      targets:
+        Parzr: all
+        ParzrKitTests: [test]
+    test:
+      targets:
+        - ParzrKitTests
