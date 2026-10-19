@@ -381,6 +381,34 @@ impl Bpe {
         }
         ids
     }
+    /// Subword ids of running text, split as RoBERTa's own tokenizer splits it: a space belongs to the
+    /// word after it, and of a run of spaces before a word only the last one does (GPT-2's
+    /// `\s+(?!\S)`, which the regex crate cannot write).
+    pub fn encode(&self, text: &str) -> Vec<i32> {
+        let mut out = vec![];
+        let mut carry = false;
+        for m in self.split.find_iter(text) {
+            let piece = m.as_str();
+            if carry {
+                out.extend(self.merge(&format!(" {piece}")));
+                carry = false;
+                continue;
+            }
+            let run = piece.chars().all(char::is_whitespace);
+            let next = text[m.end()..].chars().next();
+            if run
+                && piece.len() > 1
+                && piece.ends_with(' ')
+                && next.is_some_and(|c| !c.is_whitespace())
+            {
+                out.extend(self.merge(&piece[..piece.len() - 1]));
+                carry = true;
+                continue;
+            }
+            out.extend(self.merge(piece));
+        }
+        out
+    }
     /// Subword ids of one word, with the prefix space the GECToR tokenizer adds to every word.
     pub fn word(&self, word: &str) -> Vec<i32> {
         let spaced = format!(" {word}");

@@ -34,6 +34,21 @@ const TYPED_FLOOR: u16 = 300;
 pub const THRESHOLD: f64 = 8.0;
 /// The best candidate for a word must beat the next one by this much.
 const MARGIN: f64 = 0.5;
+/// The slip checker's masked-word gain (PLL of the candidate less that of the typed word, in nats,
+/// less SLIPS_COST times the slip's cost) at or above which a swap is suggested while typing.
+/// Calibrated on dev data only (`slips::tests::slips_dev`, scripts/eval-slips.py): the dev slip sets
+/// (held-out dev split, typo-fuzz dev, the everyday regression set, the owner's probe slips and
+/// 2,264 clean sentences) and 15,251 sentences of published technical prose. At 5.5 the dev sets
+/// give precision 0.94 and 85% of the fixes the candidates can reach, with 0.44 false alarms per
+/// 1,000 clean chat sentences and 3.1 per 1,000 sentences of prose; 5.0 catches one more probe slip
+/// at 1.5 times the prose false alarms, 6.0 drops four.
+pub const SLIPS_THRESHOLD: f64 = 5.5;
+const SLIPS_COST: f64 = 0.5;
+/// On an explicit check the writing model confirms the slip checker, which may then go lower: a
+/// swap it accepts at this threshold stands when the full-sentence gain, less the slip's cost,
+/// reaches CONFIRM (the writing model's own threshold still finds swaps alone).
+const SLIPS_CONFIRMED_THRESHOLD: f64 = 5.0;
+pub const CONFIRM: f64 = 2.0;
 /// Extra gain needed for a slip the fingers rarely make: a vowel for a distant vowel ("as" for "is"),
 /// an extra letter ("toe" for "to"), an extra first letter ("bits" for "its"); and for a sentence's
 /// first word, which the model sees without left context.
@@ -146,14 +161,28 @@ fn related(a: &str, b: &str) -> bool {
         && (0..long.len()).any(|i| long[..i] == short[..i] && long[i + 1..] == short[i..])
 }
 /// "year"/"years", "use"/"used", "provided"/"provides": one word in two forms, the writer's choice.
+/// Every reading of a suffix counts: "codes" is "cod" + "es" or "code" + "s", "removed" is "remov" +
+/// "ed" or "remove" + "d", "making" is "mak" + "ing" or "make" less its "e"; "thrown" is "throw" + "n".
 fn inflection(a: &str, b: &str) -> bool {
-    fn stem(w: &str) -> &str {
-        ["ing", "es", "ed", "s", "d"]
-            .iter()
-            .find_map(|s| w.strip_suffix(s).filter(|r| r.len() >= 3))
-            .unwrap_or(w)
+    fn stems(w: &str) -> Vec<String> {
+        let mut out = vec![w.to_owned()];
+        for s in ["ing", "es", "ed", "s", "d"] {
+            if let Some(r) = w.strip_suffix(s).filter(|r| r.len() >= 3) {
+                out.push(r.to_owned());
+                if s == "ing" {
+                    out.push(format!("{r}e"));
+                }
+            }
+        }
+        if w.ends_with("wn") && w.len() >= 5 {
+            out.push(w[..w.len() - 1].to_owned());
+        }
+        out
     }
-    a.len() >= 3 && b.len() >= 3 && stem(a) == stem(b)
+    a.len() >= 3 && b.len() >= 3 && {
+        let x = stems(a);
+        stems(b).iter().any(|s| x.contains(s))
+    }
 }
 fn homophones(a: &str, b: &str) -> bool {
     HOMOPHONES
@@ -344,16 +373,45 @@ fn upper_first(s: &str) -> String {
         .map(|f| f.to_uppercase().chain(c).collect())
         .unwrap_or_default()
 }
+/// How a scorer's gains become a verdict: the gain (less `cost` times the slip's cost) a swap needs,
+/// and how far it must beat the word's next candidate.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Decision {
+    pub threshold: f64,
+    pub cost: f64,
+    pub margin: f64,
+}
+/// The writing model's full-sentence gains.
+pub const MODEL: Decision = Decision {
+    threshold: THRESHOLD,
+    cost: 1.0,
+    margin: MARGIN,
+};
+/// The slip checker's masked-word gains (`slips`), calibrated on the dev sets (see `slips_dev`).
+pub const SLIPS: Decision = Decision {
+    threshold: SLIPS_THRESHOLD,
+    cost: SLIPS_COST,
+    margin: MARGIN,
+};
+/// The same, when the writing model will confirm the swap (explicit checks).
+const SLIPS_CONFIRMED: Decision = Decision {
+    threshold: SLIPS_CONFIRMED_THRESHOLD,
+    ..SLIPS
+};
 /// The accepted swap of one sentence from the scores: per word the best candidate (gain less its
 /// cost), clear of the next and over the threshold; then the single strongest word of the sentence.
+#[cfg(test)]
 pub fn choose(swaps: &[Swap], gains: &[Option<f64>]) -> Option<(Swap, f64)> {
+    choose_with(swaps, gains, MODEL)
+}
+pub fn choose_with(swaps: &[Swap], gains: &[Option<f64>], d: Decision) -> Option<(Swap, f64)> {
     let mut words: HashMap<(usize, usize), Vec<(f64, &Swap)>> = HashMap::new();
     for (s, g) in swaps.iter().zip(gains) {
         if let Some(g) = g {
             words
                 .entry((s.start, s.end))
                 .or_default()
-                .push((*g - s.cost, s));
+                .push((*g - d.cost * s.cost, s));
         }
     }
     let mut best: Option<(Swap, f64)> = None;
@@ -361,34 +419,46 @@ pub fn choose(swaps: &[Swap], gains: &[Option<f64>]) -> Option<(Swap, f64)> {
         v.sort_by(|a, b| b.0.total_cmp(&a.0));
         let (gain, swap) = v[0];
         let next = v.get(1).map_or(0.0, |s| s.0.max(0.0));
-        if gain >= THRESHOLD && gain - next >= MARGIN && best.as_ref().is_none_or(|b| gain > b.1) {
+        if gain >= d.threshold
+            && gain - next >= d.margin
+            && best.as_ref().is_none_or(|b| gain > b.1)
+        {
             best = Some((swap.clone(), gain));
         }
     }
     best
 }
 
+/// The swap a sentence's scores accept, its gain, and which checker found it (the edit's rule).
+#[derive(Clone, Debug, PartialEq)]
+struct Found {
+    swap: Swap,
+    gain: f64,
+    rule: &'static str,
+}
+const MODEL_RULE: &str = "context.sentence_swap";
+const SLIPS_RULE: &str = "context.slip_swap";
 /// A sentence's verdict, and whether every swap that passed the screen was scored (a typing verdict
 /// may not be; an explicit check then scores the sentence again).
-type Verdict = (Option<(Swap, f64)>, bool);
+type Verdict = (Option<Found>, bool);
 #[derive(Default)]
 struct Cache {
     map: HashMap<String, Verdict>,
     order: VecDeque<String>,
 }
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
-fn cached(sentence: &str) -> Option<Verdict> {
-    CACHE.lock().ok()?.as_ref()?.map.get(sentence).cloned()
+fn cached(key: &str) -> Option<Verdict> {
+    CACHE.lock().ok()?.as_ref()?.map.get(key).cloned()
 }
-fn remember(sentence: &str, verdict: Option<(Swap, f64)>, complete: bool) {
+fn remember(key: &str, verdict: Option<Found>, complete: bool) {
     if let Ok(mut guard) = CACHE.lock() {
         let cache = guard.get_or_insert_with(Cache::default);
         if cache
             .map
-            .insert(sentence.to_owned(), (verdict, complete))
+            .insert(key.to_owned(), (verdict, complete))
             .is_none()
         {
-            cache.order.push_back(sentence.to_owned());
+            cache.order.push_back(key.to_owned());
             if cache.order.len() > CACHE_ENTRIES
                 && let Some(old) = cache.order.pop_front()
             {
@@ -398,27 +468,102 @@ fn remember(sentence: &str, verdict: Option<(Swap, f64)>, complete: bool) {
     }
 }
 
-/// The rules' (and grammar model's) plan plus the language model's swaps, which never touch an edit
-/// of theirs, a protected range, a name or a user dictionary word.
+/// The scorers a check may use: the slip checker (`slips`, a small masked language model on the
+/// Neural Engine, cheap enough for every typing check) and the writing model (full-sentence
+/// gains). Typing uses the slip checker when it is downloaded, else the writing model; an explicit
+/// check uses both, the writing model confirming the slip checker.
+#[derive(Clone, Copy)]
+pub struct Scorers {
+    pub slips: Option<Scorer>,
+    pub model: Option<Scorer>,
+}
+impl Scorers {
+    fn model_for(&self, deep: bool) -> Option<Scorer> {
+        self.model.filter(|_| deep || self.slips.is_none())
+    }
+    /// Verdicts of different scorers never stand in for each other in the cache.
+    fn key(&self, deep: bool, window: &str) -> String {
+        let tag = match (self.slips.is_some(), self.model_for(deep).is_some()) {
+            (true, true) => "sm",
+            (true, false) => "s",
+            _ => "m",
+        };
+        format!("{tag}\u{0}{window}")
+    }
+}
+/// The rules' (and grammar model's) plan plus the swaps the language models find, which never touch
+/// an edit of theirs, a protected range, a name or a user dictionary word.
 pub fn combine(req: &Request, protected: &[TextRange], plan: Vec<Edit>) -> Vec<Edit> {
-    // Before the model pack is downloaded there is nothing to wait for: no pending follow-ups.
-    if !crate::model::model_available() {
+    let scorers = Scorers {
+        slips: crate::slips::available().then_some(crate::slips::scores as Scorer),
+        // Before the model pack is downloaded there is nothing to wait for: no pending follow-ups.
+        model: crate::model::model_available().then_some(native as Scorer),
+    };
+    if scorers.slips.is_none() && scorers.model.is_none() {
         return plan;
     }
-    combine_with(req, protected, plan, native)
+    combine_using(req, protected, plan, scorers)
+}
+fn found(swaps: &[Swap], gains: &[Option<f64>], d: Decision, rule: &'static str) -> Option<Found> {
+    choose_with(swaps, gains, d).map(|(swap, gain)| Found { swap, gain, rule })
+}
+/// One sentence's verdict from the scorers (see `Scorers`).
+fn decide(window: &str, swaps: &[Swap], how: Use, scorers: Scorers) -> Result<Verdict, Unscored> {
+    let deep = matches!(how, Use::Explicit { .. });
+    let fits = |s: Scored| {
+        if s.gains.len() == swaps.len() {
+            Ok(s)
+        } else {
+            Err(Unscored::Unavailable)
+        }
+    };
+    let slips = scorers.slips.map(|f| f(window, swaps, how).and_then(fits));
+    let model = scorers
+        .model_for(deep)
+        .map(|f| f(window, swaps, how).and_then(fits));
+    match (slips, model) {
+        (Some(s), None) => {
+            let s = s?;
+            Ok((found(swaps, &s.gains, SLIPS, SLIPS_RULE), s.complete))
+        }
+        (None, Some(m)) => {
+            let m = m?;
+            Ok((found(swaps, &m.gains, MODEL, MODEL_RULE), m.complete))
+        }
+        (Some(s), Some(m)) => match (s, m) {
+            (Ok(s), Ok(m)) => {
+                if let Some(f) = found(swaps, &m.gains, MODEL, MODEL_RULE) {
+                    return Ok((Some(f), m.complete));
+                }
+                // The slip checker's swap, if the whole sentence reads better with it too.
+                let confirmed = found(swaps, &s.gains, SLIPS_CONFIRMED, SLIPS_RULE).filter(|f| {
+                    swaps
+                        .iter()
+                        .zip(&m.gains)
+                        .any(|(w, g)| *w == f.swap && g.is_some_and(|g| g - f.swap.cost >= CONFIRM))
+                });
+                Ok((confirmed, s.complete && m.complete))
+            }
+            // The writing model is cold, busy or failed: the slip checker alone, and an explicit
+            // check scores the sentence again.
+            (Ok(s), Err(_)) => Ok((found(swaps, &s.gains, SLIPS, SLIPS_RULE), false)),
+            (Err(_), Ok(m)) => Ok((found(swaps, &m.gains, MODEL, MODEL_RULE), false)),
+            (Err(e), Err(_)) => Err(e),
+        },
+        (None, None) => Err(Unscored::Unavailable),
+    }
 }
 /// Scores a sentence and caches its verdict. Explicit checks call it directly; typing runs it in
 /// the background job. A cold or busy model leaves the sentence for a later check; a typing job that
 /// runs out of time marks the sentence done for typing (explicit checks score it again).
-fn score_sentence(piece: &str, swaps: &[Swap], how: Use, scorer: Scorer) -> Option<Verdict> {
-    let verdict = match scorer(piece, swaps, how) {
-        Ok(scored) if scored.gains.len() == swaps.len() => {
-            (choose(swaps, &scored.gains), scored.complete)
-        }
-        Err(Unscored::OutOfTime) if matches!(how, Use::Typing { .. }) => (None, false),
-        _ => return None,
+fn score_sentence(window: &str, swaps: &[Swap], how: Use, scorers: Scorers) -> Option<Verdict> {
+    let deep = matches!(how, Use::Explicit { .. });
+    let verdict = match decide(window, swaps, how, scorers) {
+        Ok(verdict) => verdict,
+        Err(Unscored::OutOfTime) if !deep => (None, false),
+        Err(_) => return None,
     };
-    remember(piece, verdict.0.clone(), verdict.1);
+    remember(&scorers.key(deep, window), verdict.0.clone(), verdict.1);
     Some(verdict)
 }
 /// True while the typing job runs: at most one, so typing never queues work on the model.
@@ -433,19 +578,19 @@ pub fn take_pending() -> bool {
     PENDING.with(|p| p.replace(false))
 }
 /// Starts the typing job for one sentence and waits for it at most `wait`.
-fn typing_job(piece: &str, swaps: Vec<Swap>, scorer: Scorer, wait: Duration) -> Option<Verdict> {
+fn typing_job(window: &str, swaps: Vec<Swap>, scorers: Scorers, wait: Duration) -> Option<Verdict> {
     if JOB.swap(true, Ordering::AcqRel) {
         return None;
     }
     let (send, receive) = mpsc::channel();
-    let piece = piece.to_owned();
+    let window = window.to_owned();
     let spawned = std::thread::Builder::new()
         .name("parzr-sentence-swaps".into())
         .spawn(move || {
             let how = Use::Typing {
                 budget_ms: TYPING_JOB_MS,
             };
-            let verdict = score_sentence(&piece, &swaps, how, scorer);
+            let verdict = score_sentence(&window, &swaps, how, scorers);
             JOB.store(false, Ordering::Release);
             let _ = send.send(verdict);
         });
@@ -458,11 +603,25 @@ fn typing_job(piece: &str, swaps: Vec<Swap>, scorer: Scorer, wait: Duration) -> 
 fn native(sentence: &str, swaps: &[Swap], how: Use) -> Result<Scored, Unscored> {
     crate::model::swap_scores(sentence, swaps, SCREEN, how)
 }
+/// The writing model's swaps alone, scored by `scorer` (tests and tools).
+#[cfg(test)]
 pub fn combine_with(
     req: &Request,
     protected: &[TextRange],
     plan: Vec<Edit>,
     scorer: Scorer,
+) -> Vec<Edit> {
+    let scorers = Scorers {
+        slips: None,
+        model: Some(scorer),
+    };
+    combine_using(req, protected, plan, scorers)
+}
+pub fn combine_using(
+    req: &Request,
+    protected: &[TextRange],
+    plan: Vec<Edit>,
+    scorers: Scorers,
 ) -> Vec<Edit> {
     let text = req.text.as_str();
     let started = Instant::now();
@@ -499,7 +658,7 @@ pub fn combine_with(
         previous = Some(a);
         let window = &text[from..a + piece.len()];
         let shift = a - from;
-        let verdict = match cached(window) {
+        let verdict = match cached(&scorers.key(req.deep, window)) {
             Some((hit, complete)) if complete || !req.deep => hit,
             _ => {
                 let spent = started.elapsed().as_millis() as u32;
@@ -515,17 +674,17 @@ pub fn combine_with(
                     })
                     .collect();
                 if swaps.is_empty() {
-                    remember(window, None, true);
+                    remember(&scorers.key(req.deep, window), None, true);
                     continue;
                 }
                 let verdict = if req.deep {
                     let how = Use::Explicit {
                         budget_ms: total - spent,
                     };
-                    score_sentence(window, &swaps, how, scorer)
+                    score_sentence(window, &swaps, how, scorers)
                 } else {
                     let wait = Duration::from_millis(u64::from(total - spent));
-                    typing_job(window, swaps, scorer, wait)
+                    typing_job(window, swaps, scorers, wait)
                 };
                 let Some((verdict, complete)) = verdict else {
                     if !req.deep {
@@ -539,7 +698,7 @@ pub fn combine_with(
                 verdict
             }
         };
-        let Some((swap, gain)) = verdict else {
+        let Some(Found { swap, gain, rule }) = verdict else {
             continue;
         };
         let (s, e) = (to16(from + swap.start), to16(from + swap.end));
@@ -574,12 +733,16 @@ pub fn combine_with(
             original: original.to_owned(),
             replacement: swap.candidate.clone(),
             category: "Word choice".into(),
-            rule_id: "context.sentence_swap".into(),
+            rule_id: rule.into(),
             explanation: format!(
                 "“{}” fits this sentence much better than “{original}”.",
                 swap.candidate
             ),
-            confidence: (0.5 + gain / 40.0).min(0.95) as f32,
+            confidence: if rule == SLIPS_RULE {
+                (0.5 + gain / 25.0).min(0.95)
+            } else {
+                (0.5 + gain / 40.0).min(0.95)
+            } as f32,
             group_id: None,
         });
     }
@@ -636,6 +799,16 @@ mod tests {
         // Inflections and rare words are never proposed; neither is a non-word or a single letter.
         assert!(!has("year", "years"));
         assert!(!has("use", "used"));
+        for (w, c) in [
+            ("removed", "remove"),
+            ("codes", "code"),
+            ("sometime", "sometimes"),
+            ("creates", "create"),
+            ("measure", "measures"),
+            ("thrown", "throw"),
+        ] {
+            assert!(!has(w, c) && !has(c, w), "{w} / {c} are one word");
+        }
         assert!(!has("in", "i"));
         assert!(candidates("zzzq").is_empty());
     }
@@ -737,6 +910,158 @@ mod tests {
             Err(Unscored::Unavailable)
         }
         assert!(combine_with(&req, &[], vec![], cold).is_empty());
+    }
+    /// The slip checker's gains: "hat" to "hate" and "then" to "than" fit far better; "form" to
+    /// "from" only a little (under the typing threshold, over the confirmed one).
+    fn slips_fake(sentence: &str, swaps: &[Swap], _: Use) -> Result<Scored, Unscored> {
+        let good = [("hat", "hate"), ("then", "than")];
+        let gains = swaps
+            .iter()
+            .map(|s| {
+                let pair = (&sentence[s.start..s.end], s.candidate.as_str());
+                Some(if good.contains(&pair) {
+                    SLIPS_THRESHOLD + 4.0
+                } else if pair == ("form", "from") {
+                    SLIPS_CONFIRMED_THRESHOLD + 0.2
+                } else {
+                    -6.0
+                })
+            })
+            .collect();
+        Ok(Scored {
+            gains,
+            complete: true,
+        })
+    }
+    /// The writing model agrees about "hate" (above CONFIRM, below its own threshold) and not "than".
+    fn model_fake(sentence: &str, swaps: &[Swap], _: Use) -> Result<Scored, Unscored> {
+        let gains = swaps
+            .iter()
+            .map(|s| {
+                Some(match (&sentence[s.start..s.end], s.candidate.as_str()) {
+                    ("hat", "hate") | ("form", "from") => CONFIRM + 1.0,
+                    ("then", "than") => -1.0,
+                    ("on", "in") => THRESHOLD + 2.0,
+                    _ => -8.0,
+                })
+            })
+            .collect();
+        Ok(Scored {
+            gains,
+            complete: true,
+        })
+    }
+    fn cold(_: &str, _: &[Swap], _: Use) -> Result<Scored, Unscored> {
+        Err(Unscored::Unavailable)
+    }
+    fn verdict(text: &str, how: Use, scorers: Scorers) -> Option<(String, &'static str, bool)> {
+        let swaps = sentence_swaps(text, &[]);
+        let (found, complete) = decide(text, &swaps, how, scorers).ok()?;
+        found.map(|f| (f.swap.candidate, f.rule, complete))
+    }
+    #[test]
+    fn typing_uses_the_slip_checker_and_explicit_checks_let_the_writing_model_confirm_it() {
+        let both = Scorers {
+            slips: Some(slips_fake),
+            model: Some(model_fake),
+        };
+        let typing = Use::Typing { budget_ms: 80 };
+        let explicit = Use::Explicit { budget_ms: 4000 };
+        // While typing the slip checker decides alone (the writing model is never asked).
+        let slips_only = Scorers {
+            slips: Some(slips_fake),
+            model: Some(cold),
+        };
+        assert_eq!(
+            verdict("This is so bad. I hat it.", typing, slips_only),
+            Some(("hate".into(), SLIPS_RULE, true))
+        );
+        assert_eq!(
+            verdict("It is better then before.", typing, both),
+            Some(("than".into(), SLIPS_RULE, true))
+        );
+        // On an explicit check the writing model confirms "hate" and overrules "than".
+        assert_eq!(
+            verdict("This is so bad. I hat it.", explicit, both),
+            Some(("hate".into(), SLIPS_RULE, true))
+        );
+        assert_eq!(verdict("It is better then before.", explicit, both), None);
+        // A borderline slip waits for the writing model's confirmation.
+        assert_eq!(verdict("Got your note form Priya.", typing, both), None);
+        assert_eq!(
+            verdict("Got your note form Priya.", explicit, both),
+            Some(("from".into(), SLIPS_RULE, true))
+        );
+        // The writing model still finds what the slip checker does not.
+        assert_eq!(
+            verdict("I'll be on the office.", explicit, both),
+            Some(("in".into(), MODEL_RULE, true))
+        );
+        // A cold writing model leaves the slip checker's verdict, scored again on the next explicit check.
+        assert_eq!(
+            verdict("It is better then before.", explicit, slips_only),
+            Some(("than".into(), SLIPS_RULE, false))
+        );
+        // Without the slip checker, typing and explicit checks use the writing model as before.
+        let model_only = Scorers {
+            slips: None,
+            model: Some(model_fake),
+        };
+        assert_eq!(
+            verdict("This is so bad. I hat it.", typing, model_only),
+            None
+        );
+        assert_eq!(
+            verdict("I'll be on the office.", typing, model_only),
+            Some(("in".into(), MODEL_RULE, true))
+        );
+        // Verdicts of different scorers never stand in for each other.
+        assert_ne!(both.key(false, "x"), both.key(true, "x"));
+        assert_eq!(model_only.key(false, "x"), model_only.key(true, "x"));
+    }
+    #[test]
+    fn slip_swaps_keep_every_guard() {
+        let run = |text: &str, dictionary: &[&str], names: &[&str], protected: &[TextRange]| {
+            let req = Request {
+                text: text.into(),
+                dictionary: dictionary.iter().map(|w| (*w).to_owned()).collect(),
+                names: names.iter().map(|w| (*w).to_owned()).collect(),
+                deep: true,
+                ..Request::default()
+            };
+            let scorers = Scorers {
+                slips: Some(slips_fake),
+                model: None,
+            };
+            combine_using(&req, protected, vec![], scorers)
+                .into_iter()
+                .map(|e| (e.original, e.replacement, e.rule_id))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            run("It is better then before.", &[], &[], &[]),
+            [("then".into(), "than".into(), SLIPS_RULE.into())]
+        );
+        // Quoted text, a protected range (code, a link), a dictionary word and a name stay as typed.
+        assert!(
+            run(
+                "He wrote \"it is better then before\" today.",
+                &[],
+                &[],
+                &[]
+            )
+            .is_empty()
+        );
+        let range = TextRange {
+            start_utf16: 13,
+            end_utf16: 17,
+        };
+        assert!(run("It is better then before.", &[], &[], &[range]).is_empty());
+        assert!(run("It is better then before.", &["then"], &[], &[]).is_empty());
+        assert!(run("I hat it, said Hat.", &[], &["hat"], &[]).is_empty());
+        // Code and paths never offer the word at all.
+        assert!(run("run better.then(before) now", &[], &[], &[]).is_empty());
+        assert!(run("see ~/then/before.txt", &[], &[], &[]).is_empty());
     }
     #[test]
     fn context_swap_does_not_share_start_with_insertion() {

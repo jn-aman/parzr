@@ -297,6 +297,93 @@ pub fn gec_forward(ids: &[i32]) -> Option<(Vec<f32>, Vec<f32>)> {
     };
     (status == 0).then_some((labels, detect))
 }
+type MlmPrepare = unsafe extern "C" fn(*const c_char, *mut i32, *mut i32, *mut i32) -> i32;
+type MlmForward =
+    unsafe extern "C" fn(*const i32, *const i32, *const i32, i32, i32, i32, *mut f32) -> i32;
+/// The slip checker's entry points; absent in a runtime built without it (the typing-time slip
+/// check is then off and sentence swaps fall back to the writing model).
+struct MlmApi {
+    prepare: MlmPrepare,
+    forward: MlmForward,
+}
+static MLM: OnceLock<Option<MlmApi>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+fn mlm_api() -> Option<&'static MlmApi> {
+    MLM.get_or_init(|| {
+        use std::os::unix::ffi::OsStrExt;
+        let library = std::env::var_os("PARZR_GEC_RUNTIME")
+            .map(PathBuf::from)
+            .or_else(|| library_path().ok())?;
+        let path = CString::new(library.as_os_str().as_bytes()).ok()?;
+        // SAFETY: NUL-terminated names; the handle is kept for the process lifetime.
+        unsafe {
+            let handle = dlopen(path.as_ptr(), 2);
+            if handle.is_null() {
+                return None;
+            }
+            let prepare = dlsym(handle, c"parzr_mlm_prepare".as_ptr());
+            let forward = dlsym(handle, c"parzr_mlm_forward".as_ptr());
+            (!prepare.is_null() && !forward.is_null()).then(|| MlmApi {
+                prepare: std::mem::transmute::<*mut c_void, MlmPrepare>(prepare),
+                forward: std::mem::transmute::<*mut c_void, MlmForward>(forward),
+            })
+        }
+    })
+    .as_ref()
+}
+#[cfg(not(target_os = "macos"))]
+fn mlm_api() -> Option<&'static MlmApi> {
+    MLM.get_or_init(|| None).as_ref()
+}
+/// The slip checker's shape once it is loaded: rows per batch, tokens per row, targets per row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MlmShape {
+    pub batch: usize,
+    pub length: usize,
+    pub targets: usize,
+}
+/// Loads (or compiles) the resident slip checker in `directory`. Idempotent; None when unavailable.
+pub fn mlm_prepare(directory: &Path) -> Option<MlmShape> {
+    let api = mlm_api()?;
+    let dir = CString::new(directory.to_string_lossy().as_bytes()).ok()?;
+    let (mut batch, mut length, mut targets) = (0, 0, 0);
+    // SAFETY: NUL-terminated directory name and three out-pointers, alive for this synchronous call.
+    let status = unsafe { (api.prepare)(dir.as_ptr(), &mut batch, &mut length, &mut targets) };
+    (status == 0 && batch > 0 && length > 2 && targets > 0).then_some(MlmShape {
+        batch: batch as usize,
+        length: length as usize,
+        targets: targets as usize,
+    })
+}
+/// Log-probabilities (rows x shape.targets) of each row's target ids at its masked position. `ids`
+/// holds rows x shape.length ids, padded with the pad id.
+pub fn mlm_forward(
+    shape: MlmShape,
+    ids: &[i32],
+    positions: &[i32],
+    targets: &[i32],
+) -> Option<Vec<f32>> {
+    let api = mlm_api()?;
+    let rows = positions.len();
+    if rows == 0 || ids.len() != rows * shape.length || targets.len() != rows * shape.targets {
+        return None;
+    }
+    let mut out = vec![0f32; rows * shape.targets];
+    // SAFETY: the buffers hold exactly rows x length ids, rows positions, rows x targets ids and
+    // rows x targets floats, as the runtime requires.
+    let status = unsafe {
+        (api.forward)(
+            ids.as_ptr(),
+            positions.as_ptr(),
+            targets.as_ptr(),
+            i32::try_from(rows).ok()?,
+            i32::try_from(shape.length).ok()?,
+            i32::try_from(shape.targets).ok()?,
+            out.as_mut_ptr(),
+        )
+    };
+    (status == 0).then_some(out)
+}
 pub fn cancel() {
     if let Some(Ok(r)) = LIBRARY.get() {
         // SAFETY: function pointer from the retained runtime library.

@@ -123,8 +123,9 @@ mod tests {
                 );
             }
         }
-        // The engine's two models come from a pack.
-        for role in ["writing_model", "grammar_model"] {
+        // The engine's models come from a pack: the writing and grammar models, and the slip checker
+        // (an optional pack of its own, so it downloads, updates and is removed separately).
+        for role in ["writing_model", "grammar_model", "slip_model"] {
             assert!(m.packs.iter().any(|p| p.provides.contains_key(role)));
         }
     }

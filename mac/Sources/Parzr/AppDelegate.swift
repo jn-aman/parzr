@@ -245,15 +245,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }.store(in: &subscriptions)
         // The grammar model compiles for the Neural Engine on first use (seconds): do it in the background once setup is finished, never during launch.
         Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
-            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar() } }.store(in: &subscriptions)
+            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar(); await WritingEngine.warmSlips() } }.store(in: &subscriptions)
         // Models are downloaded on demand (ModelCenter): until they arrive Parzr checks with its rules. Smart grammar warms the moment they do.
-        let models = ModelCenter.app
-        models.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } } }
-        if ModelCenter.downloadsAllowed {
-            models.watchNetwork()
+        // The slip-check pack (about 84 MB) follows the essential pack, one download at a time, and warms when it arrives.
+        let models = ModelCenter.app, slips = ModelCenter.slips
+        let allowed = ModelCenter.downloadsAllowed
+        models.onReady = {
+            if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } }
+            if allowed { slips?.startIfNeeded() }
+        }
+        slips?.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } } }
+        if allowed {
+            models.watchNetwork(); slips?.watchNetwork()
             // A finished welcome guide (an existing user after an update, or a returning one) downloads in the background without showing anything;
             // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
-            Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in try? await Task.sleep(for: .seconds(2)); models.startIfNeeded() } }.store(in: &subscriptions)
+            Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2)); models.startIfNeeded()
+                if models.isReady { slips?.startIfNeeded() }
+            } }.store(in: &subscriptions)
         }
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
@@ -338,7 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return main
     }
     @objc private func activated() {
-        Preferences.shared.refreshPermission(); ModelCenter.app.refresh()
+        Preferences.shared.refreshPermission(); ModelCenter.app.refresh(); ModelCenter.slips?.refresh()
         if let app = NSWorkspace.shared.frontmostApplication, let snapshot = panelModel.snapshot, app.processIdentifier != snapshot.app.processIdentifier && app.bundleIdentifier != Bundle.main.bundleIdentifier { closePanel() }
         passive?.attach()
     }
