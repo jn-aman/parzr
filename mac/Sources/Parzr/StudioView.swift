@@ -167,7 +167,6 @@ struct StudioView: View {
                                 SuggestionReview(model: model, apply: { edit in
                                     let related = EditPlan.related(to: edit, in: model.chosenEdits)
                                     guard model.source == draft, !model.provisional, let next = try? EditPlan.apply(related, to: draft) else { return }
-                                    model.report(related, .accepted, text: draft)
                                     draft = next
                                 }, ignore: { edit in model.report([edit], .dismissed, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) }, select: { edit in model.focusedEditID = edit.id; reviewVisible = false },
                                 report: model.canReport ? { edit in model.report([edit], .reported, text: draft); ignored.formUnion(EditPlan.related(to: edit, in: model.result?.edits ?? [edit]).map(\.id)); model.toggle(edit) } : nil)
@@ -178,7 +177,7 @@ struct StudioView: View {
                         NativeButton(title: "Check passage", symbol: "checkmark", enabled: !model.busy, action: { model.playground(draft) }).fixedSize().help("Review the whole passage with the selected writing mode")
                         NativeButton(title: model.status == "Copied to clipboard" ? "Copied" : "Copy", symbol: model.status == "Copied to clipboard" ? "checkmark" : "doc.on.doc", enabled: model.result != nil && !model.busy, action: { guard model.source == draft else { return }; model.copy() }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: model.status == "Copied to clipboard", isEnabled: animate)
-                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; model.report(model.chosenEdits, .accepted, text: draft); draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
+                        NativeButton(title: "Apply all", kind: .primary, enabled: !model.busy && !model.chosenEdits.isEmpty, action: { guard model.source == draft, !model.provisional else { return }; draft = model.preview; appliedCount += 1; model.playground(draft, debounce: true) }).fixedSize()
                             .changeEffect(.shine(duration: 0.3), value: appliedCount, isEnabled: animate)
                     }
                 }.font(.system(size: 11)).foregroundStyle(Color.textSecondary).padding(.horizontal, 16).padding(.vertical, 12)
@@ -361,7 +360,7 @@ struct StudioView: View {
         }
     }
     /// What a suggestion report holds, in the words Settings and the welcome guide use.
-    static let reportsDetail = "When you ignore, accept or report a suggestion, Parzr sends the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on this Mac first. A report also holds the suggestion, the rule or model that made it, what you did, the app's bundle ID and Parzr's version, nothing else. No account, device ID or IP address is kept. Turning this off stops sending and deletes reports not yet sent."
+    static let reportsDetail = "Only when you ignore a suggestion or report it as wrong, Parzr sends the sentence it was in, with names, email addresses, phone numbers, other numbers and links removed on this Mac first. Suggestions you accept are never sent. A report also holds the suggestion, the rule or model that made it, whether you ignored or reported it, the app's bundle ID and Parzr's version, nothing else. No account, device ID or IP address is kept. Turning this off stops sending and deletes reports not yet sent."
     private func stat(_ name: String, _ value: String) -> some View { HStack { Text(name).foregroundStyle(Color.textSecondary); Spacer(); Text(value).monospacedDigit() }.font(.system(size: 12)) }
     private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

@@ -12,7 +12,7 @@ struct DraftEditor: NSViewRepresentable {
     var highlightFill = true
     var focusedEditID: String? = nil
     var ignore: (WritingEdit) -> Void = { _ in }
-    /// Reports what the writer did with suggestions: the edits, the text they were made in, and the action. nil: never.
+    /// Reports a suggestion the writer turned down (Ignore, or Report wrong suggestion): the edits, the text they were made in, and the action. nil: never.
     var report: (([WritingEdit], String, ReportAction) -> Void)? = nil
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSScrollView {
@@ -152,7 +152,6 @@ final class CorrectionTextView: NSTextView {
     func accept(_ edit: WritingEdit) {
         let related = EditPlan.related(to: edit, in: suggestions)
         guard suggestions.contains(edit), (try? EditPlan.validate(related, in: string)) != nil else { dismissCorrection(); return }
-        report?(related, string, .accepted)
         // insertText follows NSTextView's normal binding, selection, and undo transaction.
         undoManager?.beginUndoGrouping()
         for item in related.reversed() { insertText(item.replacement, replacementRange: item.range) }
@@ -164,7 +163,6 @@ final class CorrectionTextView: NSTextView {
     func acceptSentence(_ edit: WritingEdit) {
         let batch = SentencePreview.edits(source: string, edits: suggestions, focused: edit)
         guard !batch.isEmpty, (try? EditPlan.validate(batch, in: string)) != nil else { dismissCorrection(); return }
-        report?(batch, string, .accepted)
         undoManager?.beginUndoGrouping()
         for item in batch.sorted(by: { $0.start_utf16 > $1.start_utf16 }) { insertText(item.replacement, replacementRange: item.range) }
         undoManager?.endUndoGrouping()

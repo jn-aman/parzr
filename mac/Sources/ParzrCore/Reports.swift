@@ -2,9 +2,10 @@ import Foundation
 import NaturalLanguage
 import os
 
-/// What the writer did with a suggestion.
+/// What the writer did with a suggestion. Only suggestions turned down are reported: Ignore (`dismissed`) and
+/// "Report wrong suggestion" (`reported`). Accepted suggestions are never sent.
 public enum ReportAction: String, Codable, Sendable, CaseIterable {
-    case dismissed, reported, accepted
+    case dismissed, reported
 }
 
 /// One anonymous wrong-suggestion report: exactly what is sent, and nothing else.

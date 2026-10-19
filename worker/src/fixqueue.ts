@@ -10,7 +10,7 @@ export interface Row {
   replacement: string;
   rule: string;
   model: string;
-  action: 'dismissed' | 'reported' | 'accepted';
+  action: 'dismissed' | 'reported';
   app: string;
   version: string;
 }
@@ -31,10 +31,8 @@ export interface Entry {
   model: string;
   original: string;
   replacement: string;
-  counts: { reported: number; dismissed: number; accepted: number };
-  /** (reported + dismissed) / all: how often writers turned this suggestion down. */
-  wrong_rate: number;
-  /** 3 x reported + dismissed - accepted / 2; entries at or below zero are left out. */
+  counts: { reported: number; dismissed: number };
+  /** 3 x reported + dismissed: an explicit "wrong" weighs three Ignores. */
   score: number;
   apps: Record<string, number>;
   versions: Record<string, number>;
@@ -79,26 +77,26 @@ export function build(rows: Row[], week: string): Entry[] {
     if (list) list.push(row);
     else groups.set(key, [row]);
   }
-  const order: Record<Row['action'], number> = { reported: 0, dismissed: 1, accepted: 2 };
+  const order: Record<Row['action'], number> = { reported: 0, dismissed: 1 };
   const entries: Omit<Entry, 'id' | 'item'>[] = [];
   for (const list of groups.values()) {
-    const counts = { reported: 0, dismissed: 0, accepted: 0 };
+    const counts = { reported: 0, dismissed: 0 };
     const apps: Record<string, number> = {};
     const versions: Record<string, number> = {};
     const models: Record<string, number> = {};
     for (const row of list) {
+      if (row.action !== 'reported' && row.action !== 'dismissed') continue;
       counts[row.action] += 1;
       apps[row.app] = (apps[row.app] ?? 0) + 1;
       versions[row.version] = (versions[row.version] ?? 0) + 1;
       models[row.model] = (models[row.model] ?? 0) + 1;
     }
-    const total = counts.reported + counts.dismissed + counts.accepted;
-    const score = 3 * counts.reported + counts.dismissed - counts.accepted / 2;
+    const score = 3 * counts.reported + counts.dismissed;
     if (score <= 0) continue;
     const seen = new Set<string>();
     const examples: Example[] = [];
     for (const row of [...list].sort((a, b) => order[a.action] - order[b.action])) {
-      if (seen.has(row.sentence) || examples.length >= 5) continue;
+      if (!(row.action in order) || seen.has(row.sentence) || examples.length >= 5) continue;
       seen.add(row.sentence);
       examples.push({ text: row.sentence, start: row.start_utf16, end: row.end_utf16, action: row.action, app: row.app, version: row.version });
     }
@@ -110,7 +108,6 @@ export function build(rows: Row[], week: string): Entry[] {
       original: list[0].original,
       replacement: list[0].replacement,
       counts,
-      wrong_rate: Math.round(((counts.reported + counts.dismissed) / total) * 100) / 100,
       score,
       apps,
       versions,
@@ -127,7 +124,7 @@ export function build(rows: Row[], week: string): Entry[] {
         id: `fq-${id}`,
         text: entry.examples[0].text,
         expected: null,
-        note: `${entry.rule} suggested "${entry.original}" -> "${entry.replacement}"; turned down ${entry.counts.reported + entry.counts.dismissed} of ${entry.counts.reported + entry.counts.dismissed + entry.counts.accepted} times. Fill in the expected text, then add it to a batch.`,
+        note: `${entry.rule} suggested "${entry.original}" -> "${entry.replacement}"; reported wrong ${entry.counts.reported} times, ignored ${entry.counts.dismissed} times. Fill in the expected text, then add it to a batch.`,
       },
     } as Entry;
   });
@@ -146,15 +143,15 @@ export function toMarkdown(entries: Entry[], week: string, totalRows: number): s
   const lines = [
     `# Parzr fix queue ${week}`,
     '',
-    `${range.from} to ${range.to}: ${totalRows} reports, ${entries.length} suggestions to look at (ranked by score = 3 x reported + dismissed - accepted / 2).`,
+    `${range.from} to ${range.to}: ${totalRows} reports, ${entries.length} suggestions to look at (ranked by score = 3 x reported + dismissed).`,
     '',
-    '| # | Score | Rule | Model | Suggestion | Reported | Dismissed | Accepted | Wrong rate | Example |',
-    '|---|---|---|---|---|---|---|---|---|---|',
+    '| # | Score | Rule | Model | Suggestion | Reported | Dismissed | Example |',
+    '|---|---|---|---|---|---|---|---|',
   ];
   for (const e of entries) {
     const example = e.examples[0];
     lines.push(
-      `| ${e.id.slice(-3)} | ${e.score} | \`${cell(e.rule)}\` | ${cell(e.model)} | ${cell(e.original || '(insert)')} → ${cell(e.replacement || '(remove)')} | ${e.counts.reported} | ${e.counts.dismissed} | ${e.counts.accepted} | ${Math.round(e.wrong_rate * 100)}% | ${cell(example.text)} |`,
+      `| ${e.id.slice(-3)} | ${e.score} | \`${cell(e.rule)}\` | ${cell(e.model)} | ${cell(e.original || '(insert)')} → ${cell(e.replacement || '(remove)')} | ${e.counts.reported} | ${e.counts.dismissed} | ${cell(example.text)} |`,
     );
   }
   lines.push('', 'Each line of the matching .jsonl file holds every example and a regression `item` to triage into a batch.', '');

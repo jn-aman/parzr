@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS reports (
   replacement  TEXT    NOT NULL CHECK (length(replacement) <= 300),
   rule         TEXT    NOT NULL CHECK (length(rule) BETWEEN 1 AND 100),
   model        TEXT    NOT NULL CHECK (length(model) BETWEEN 1 AND 40),
-  action       TEXT    NOT NULL CHECK (action IN ('dismissed', 'reported', 'accepted')),
+  action       TEXT    NOT NULL CHECK (action IN ('dismissed', 'reported')),
   app          TEXT    NOT NULL CHECK (length(app) BETWEEN 1 AND 255),
   version      TEXT    NOT NULL CHECK (length(version) BETWEEN 1 AND 32)
 );

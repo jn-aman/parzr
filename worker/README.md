@@ -15,8 +15,9 @@ test/                        node --test, no network or Cloudflare account neede
 
 ## What a report holds
 
-The app (mac/Sources/ParzrCore/Reports.swift) sends a report when the writer ignores, accepts or reports
-("Report wrong suggestion" in a card's More menu) a suggestion:
+The app (mac/Sources/ParzrCore/Reports.swift) sends a report only when the writer turns a suggestion down: Ignore
+(`dismissed`) or "Report wrong suggestion" in a card's More menu or the Review list (`reported`). Accepted suggestions
+are never sent, and the Worker refuses `"action": "accepted"`.
 
 ```json
 {"reports": [{
@@ -87,12 +88,12 @@ npm run fix-queue -- --week 2026-W43 --local
 
 `npm run fix-queue [-- --week 2026-W42]` (default: the last complete ISO week) writes `dist/fix-queue/<week>.jsonl`
 and `<week>.md`. Each JSONL line is one suggestion (same `rule`, `original` and `replacement`), ranked by
-`score = 3 x reported + dismissed - accepted / 2`; suggestions at or below zero are working and left out.
+`score = 3 x reported + dismissed` (an explicit "wrong" weighs three Ignores).
 
 ```json
 {"id": "2026-W42-001", "week": "2026-W42", "rule": "grammar.i_agreement", "model": "rules",
  "original": "has", "replacement": "have",
- "counts": {"reported": 3, "dismissed": 5, "accepted": 1}, "wrong_rate": 0.89, "score": 13.5,
+ "counts": {"reported": 3, "dismissed": 5}, "score": 14,
  "apps": {"com.apple.mail": 6, "com.tinyspeck.slackmacgap": 3}, "versions": {"0.5.0": 9},
  "examples": [{"text": "I has [number] dogs.", "start": 2, "end": 5, "action": "reported", "app": "com.apple.mail", "version": "0.5.0"}],
  "item": {"id": "fq-2026-W42-001", "text": "I has [number] dogs.", "expected": null, "note": "..."}}

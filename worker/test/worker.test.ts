@@ -64,6 +64,7 @@ test('unknown fields, wrong types and bad offsets are refused', () => {
   const { app: _app, ...missing } = report();
   assert.equal(validateReport(missing), null, 'no missing fields');
   assert.equal(validateReport(report({ action: 'liked' })), null);
+  assert.equal(validateReport(report({ action: 'accepted' })), null, 'accepted suggestions are never stored');
   assert.equal(validateReport(report({ model: 'gpt' })), null);
   assert.equal(validateReport(report({ app: 'my secret app' })), null);
   assert.equal(validateReport(report({ rule: 'rule with spaces' })), null);

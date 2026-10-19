@@ -1,7 +1,7 @@
 import AppKit
 import ParzrCore
 
-/// Anonymous suggestion reports: what the writer did with a suggestion, its sentence redacted on this Mac, sent in batches
+/// Anonymous suggestion reports: a suggestion the writer ignored or reported as wrong (never one they accepted), its sentence redacted on this Mac, sent in batches
 /// to Parzr's report endpoint so wrong suggestions can be fixed. On by default; Settings, Privacy (and the welcome guide)
 /// turn it off, which stops sending and erases the queue at once.
 @MainActor

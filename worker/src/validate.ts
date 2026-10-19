@@ -13,7 +13,8 @@ export const LIMITS = {
   version: 32,
 } as const;
 
-export const ACTIONS = ['dismissed', 'reported', 'accepted'] as const;
+// Only suggestions the writer turned down are reported; accepted suggestions are never sent and are refused here.
+export const ACTIONS = ['dismissed', 'reported'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export interface Report {

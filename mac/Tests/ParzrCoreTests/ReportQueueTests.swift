@@ -204,6 +204,10 @@ final class ReportBuilderTests: XCTestCase {
         XCTAssertEqual(Set(json.keys), ["sentence", "suggestion", "rule", "model", "action", "app", "version"])
         XCTAssertEqual(Set((json["suggestion"] as? [String: Any])?.keys ?? [:].keys), ["start", "end", "original", "replacement"])
     }
+    func testOnlyTurnedDownSuggestionsAreReported() throws {
+        XCTAssertEqual(ReportAction.allCases, [.dismissed, .reported], "accepted suggestions are never sent")
+        XCTAssertNil(try? JSONDecoder().decode(ReportAction.self, from: Data(#""accepted""#.utf8)))
+    }
     func testTheModelIsNamedFromTheRule() {
         XCTAssertEqual(ReportBuilder.model(rule: "gector.verb_form", mode: .fix), "gector")
         XCTAssertEqual(ReportBuilder.model(rule: "local-model", mode: .fix), "qwen")
@@ -213,9 +217,9 @@ final class ReportBuilderTests: XCTestCase {
     }
     func testIdentifiersCannotCarryFreeText() throws {
         let edit = WritingEdit(start: 0, end: 3, replacement: "The", original: "teh", ruleID: "spelling typo with words")
-        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .accepted, mode: .fix, app: "my secret app name", version: "1.0 (my build)"))
+        let report = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .dismissed, mode: .fix, app: "my secret app name", version: "1.0 (my build)"))
         XCTAssertEqual(report.rule, "unknown"); XCTAssertEqual(report.app, "unknown"); XCTAssertEqual(report.version, "unknown")
-        let none = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .accepted, mode: .fix, app: nil, version: "0.5.0"))
+        let none = try XCTUnwrap(ReportBuilder.report(edit: edit, source: "teh cat", action: .dismissed, mode: .fix, app: nil, version: "0.5.0"))
         XCTAssertEqual(none.app, "unknown")
     }
     func testAnEditThatNoLongerMatchesTheTextIsNotReported() {

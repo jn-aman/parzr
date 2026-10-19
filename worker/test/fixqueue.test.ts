@@ -33,19 +33,18 @@ test('ISO weeks', () => {
 
 test('suggestions are grouped, scored and ranked', () => {
   const rows = [
-    row(), row({ action: 'dismissed', sentence: 'So I has a plan.', start_utf16: 5, end_utf16: 8 }), row({ action: 'accepted', app: 'com.apple.Notes' }),
+    row(), row({ action: 'dismissed', sentence: 'So I has a plan.', start_utf16: 5, end_utf16: 8 }), row({ action: 'dismissed', app: 'com.apple.Notes' }),
     row({ rule: 'spelling.typo', original: 'teh', replacement: 'the', action: 'dismissed', sentence: 'teh end', start_utf16: 0, end_utf16: 3 }),
-    // Accepted far more than turned down: the rule works, so it stays out of the queue.
-    ...Array.from({ length: 4 }, () => row({ rule: 'spelling.good', original: 'recieve', replacement: 'receive', action: 'accepted', sentence: 'I recieve it.', start_utf16: 2, end_utf16: 9 })),
-    row({ rule: 'spelling.good', original: 'recieve', replacement: 'receive', action: 'dismissed', sentence: 'I recieve it.', start_utf16: 2, end_utf16: 9 }),
+    row({ rule: 'spelling.typo', original: 'teh', replacement: 'the', action: 'dismissed', sentence: 'teh end', start_utf16: 0, end_utf16: 3 }),
   ];
   const entries = build(rows, '2026-W42');
   assert.deepEqual(entries.map((e) => e.rule), ['grammar.i_agreement', 'spelling.typo']);
   const top = entries[0];
   assert.equal(top.id, '2026-W42-001');
-  assert.deepEqual(top.counts, { reported: 1, dismissed: 1, accepted: 1 });
-  assert.equal(top.score, 3.5);
-  assert.equal(top.wrong_rate, 0.67);
+  assert.deepEqual(top.counts, { reported: 1, dismissed: 2 });
+  assert.equal(top.score, 5);
+  assert.equal(entries[1].score, 2);
+  assert.ok(!('wrong_rate' in top));
   assert.deepEqual(top.apps, { 'com.apple.mail': 2, 'com.apple.Notes': 1 });
   assert.equal(top.examples[0].action, 'reported', 'reported sentences come first');
   assert.equal(top.examples.length, 2, 'repeated sentences are listed once');
@@ -56,8 +55,9 @@ test('suggestions are grouped, scored and ranked', () => {
   assert.equal(JSON.parse(lines[1]).rule, 'spelling.typo');
   const md = toMarkdown(entries, '2026-W42', rows.length);
   assert.match(md, /# Parzr fix queue 2026-W42/);
-  assert.match(md, /2026-10-12 to 2026-10-18: 9 reports, 2 suggestions/);
-  assert.match(md, /\| 001 \| 3.5 \| `grammar.i_agreement` \| rules \| has → have \| 1 \| 1 \| 1 \| 67% \|/);
+  assert.match(md, /2026-10-12 to 2026-10-18: 5 reports, 2 suggestions/);
+  assert.match(md, /\| 001 \| 5 \| `grammar.i_agreement` \| rules \| has → have \| 1 \| 2 \|/);
+  assert.ok(!/Accepted/.test(md));
 });
 
 test('the export script writes the week from an input file', () => {
