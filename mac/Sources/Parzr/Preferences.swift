@@ -271,6 +271,26 @@ final class Preferences: ObservableObject {
         if keepsWritingSummary { stats.recordFixes(edits, day: LearningDay.today()) }
     }
     func clearWritingSummary() { stats.clear() }
+    /// Settings, Privacy, Erase all Parzr data. Every preference goes back to its default and everything Parzr learned or counted on
+    /// this Mac goes: the dictionary, learned names and words, muted suggestions and Ignore counts, the repetition ledger, app pauses,
+    /// the weekly tally and known-words.json; queued suggestion reports are erased through the reports queue's own purge. Two choices
+    /// stay: finished setup (macOS keeps the Accessibility grant anyway) and the reports switch, so erasing never turns sharing back
+    /// on. Downloaded models stay too (Settings, Models removes them).
+    func eraseAllData(knownWords: URL = KnownWordsFile.url, purgeReports: (() -> Void)? = nil) {
+        let setup = onboardingCompleted, reports = shareReports
+        for key in defaults.dictionaryRepresentation().keys { defaults.removeObject(forKey: key) }
+        // The same defaults as `init` reads for missing keys (PreferencesEraseTests compares with a fresh instance). Each didSet writes its default back.
+        passive = true; paused = false; dialect = "american"; defaultMode = .fix; dictionary = ["parzr"]; disabledApps = []; clipboardFallback = false
+        shortcutKey = 49; shortcutModifiers = 2048; shortcutLabel = "Space"; checkingDelay = 90; selectedTextPopover = true; highlightFill = true
+        editorFontSize = 18; editorLineSpacing = 6; appearance = "graphite"; reduceMotion = false; contextRefinement = true; smartGrammar = true
+        toneCheck = true; slipCheck = true; showWordCount = true; showInDock = true; checkVSCode = false; firefoxHintDismissed = false; docsHintDismissed = false
+        learnedNames = []; useContactNames = false; contactNames = []; contactsNote = nil; nameCapitalization = NameCapitalization.everywhere.rawValue; learnedWords = []
+        mutes = SuggestionMutes(); stats = WritingStats(); keepsWritingSummary = true; ignoreCounts = [:]; ledger = RepetitionLedger(); automaticAppPauses = [:]
+        onboardingCompleted = setup
+        defaults.set(reports, forKey: "shareReports")
+        try? FileManager.default.removeItem(at: knownWords)
+        if let purgeReports { purgeReports() } else if let center = Reports.center { Task { await center.queue.purge() } }
+    }
     /// A lowercase word kept through a passive check. Learned as a word kept as typed after 3 sightings over 2 or more apps or days; see RepetitionLedger.
     /// Per check the system lexicon still treats it as a name when macOS knows it capitalized ("jatin"); learned here, it is never re-cased.
     func noteSighting(_ word: String, app: String, day: Int) {
