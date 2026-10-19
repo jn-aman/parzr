@@ -1,7 +1,15 @@
 /* Shared DOM capabilities. Highlighting never mutates the host's text. */
 (() => {
   'use strict';
-  const blocked = '[data-private],[data-parzr-ignore],[aria-disabled="true"],[aria-readonly="true"],[autocomplete="current-password"],[autocomplete="new-password"],[autocomplete="one-time-code"]';
+  // Never read: private and read-only fields, a page's opt-out (class or id parzr-disable, data-parzr-disable, as in the Mac app's host rules), and
+  // fields whose autocomplete names a secret or form data that holds no prose (passwords, codes, cards, email, phone, postal address).
+  // Autocomplete is a list of tokens ("shipping street-address"), matched word by word and without case.
+  const autocomplete = ['current-password','new-password','one-time-code','username','email','impp',
+    'cc-name','cc-given-name','cc-additional-name','cc-family-name','cc-number','cc-exp','cc-exp-month','cc-exp-year','cc-csc','cc-type',
+    'tel','tel-country-code','tel-national','tel-area-code','tel-local','tel-local-prefix','tel-local-suffix','tel-extension',
+    'street-address','address-line1','address-line2','address-line3','address-level1','address-level2','address-level3','address-level4','postal-code','country','country-name'];
+  const blocked = ['[data-private]','[data-parzr-ignore]','[aria-disabled="true"]','[aria-readonly="true"]','.parzr-disable','#parzr-disable','[data-parzr-disable]:not([data-parzr-disable="false"])',
+    ...autocomplete.map(token => `[autocomplete~="${token}" i]`)].join(',');
   function parent(e) { return e.parentElement || e.getRootNode()?.host; }
   function privateField(element) {
     for (let e = element; e; e = parent(e)) if (e.matches?.(blocked) || e.matches?.('input[type="password"]')) return true;
@@ -171,5 +179,5 @@
     }
     return {root,text,selected,protectedRanges:ranges,sentenceStart:!prefix || /[.!?\n]$/.test(prefix),sentenceEnd:b === fullText.length || /[.!?\n]\s*$/.test(text),valid,validate,apply,rects};
   }
-  globalThis.__parzrEditors = {find,active,capture};
+  globalThis.__parzrEditors = {find,active,capture,privateField};
 })();
