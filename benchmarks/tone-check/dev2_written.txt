@@ -1,0 +1,198 @@
+# DEV2 for the tone check: written after round 1, before round 2 trained, and scored once at the end. No training
+# decision used it. Settings: hotels, logistics, labs, open source, clubs, landlords, agencies, support desks.
+# Format: label<TAB>text; "neutral-hard" marks a civil message a naive classifier tends to flag.
+rude	The night auditor is a total moron.
+rude	Your pull request is the sloppiest thing in this repo.
+rude	Whoever packed this pallet should be fired.
+rude	You couldn't organize a sock drawer.
+rude	This grant draft reads like it was written by a bored teenager.
+rude	The landlord is a lying slumlord and you know it.
+rude	Stop being such a useless lump and help.
+rude	Your so-called analysis is a pile of garbage.
+rude	You're a nightmare to work with, honestly.
+rude	The driver you sent was clueless and rude, just like your dispatch team.
+rude	Are you dense? I've told you the code three times.
+rude	This is the dumbest feature request I've ever read.
+rude	You lot in procurement are hopeless.
+rude	What kind of clown runs a front desk like this?
+rude	Your feedback is petty and stupid.
+rude	Keep your crappy ideas to yourself.
+rude	Your lab notebook is a disgrace.
+rude	Shut up, nobody asked you.
+rude	You screwed the client and now I have to fix it.
+rude	this release is absolute garbage, who signed off on it
+rude	ur team is a joke lol
+rude	The maintainers here are arrogant idiots.
+rude	You're too stupid to understand the contract.
+rude	Every booking you touch turns into a disaster.
+rude	God, you're annoying.
+passive_aggressive	Thanks for letting the whole lab know before telling me.
+passive_aggressive	Must be nice to approve your own expenses.
+passive_aggressive	I'm sure you meant to reply to the tenant at some point this month.
+passive_aggressive	Wonderful, the shipment is late again. What a surprise.
+passive_aggressive	As you'd know if you read the onboarding guide, the van keys are in the lockbox.
+passive_aggressive	Oh good, you remembered we have a client today.
+passive_aggressive	I'll just keep doing the rota myself, it's not like anyone else will.
+passive_aggressive	Sure, merge it without review, what could go wrong.
+passive_aggressive	Nice of you to finally update the ticket.
+passive_aggressive	I didn't realize "urgent" meant "next week" in your team.
+passive_aggressive	Kudos on the report. Only three weeks late.
+passive_aggressive	Per the email I sent on Monday, and again on Wednesday, the room is booked.
+passive_aggressive	So glad I stayed until midnight for a meeting you cancelled.
+passive_aggressive	Feel free to read the issue template. Or not, apparently.
+passive_aggressive	Happy to explain the refund policy again for the fifth time.
+passive_aggressive	Interesting that the numbers only look wrong when I prepare them.
+passive_aggressive	I'm sure the guests didn't notice the dirty lobby at all.
+passive_aggressive	Don't worry, I enjoy answering the same question every day.
+passive_aggressive	Your slides were great, once I fixed them.
+passive_aggressive	Thanks for the help, I'll be sure to ask someone else next time.
+passive_aggressive	Glad to see you finally discovered the calendar.
+passive_aggressive	Wow, you read the whole thread this time.
+passive_aggressive	No, really, take your time. We only have a launch tomorrow.
+passive_aggressive	Not that anyone cares, but the freezer is broken.
+passive_aggressive	I guess documentation is optional for some contributors.
+curt	Send the manifest. Now.
+curt	Don't bother replying, just fix it.
+curt	Not my problem, call the landlord.
+curt	Get it done or I'll escalate.
+curt	Stop emailing me about refunds.
+curt	Answer the tenant. Today.
+curt	Just book the room.
+curt	I don't care whose fault it is. Fix it.
+curt	Close the ticket.
+curt	Unload it yourself.
+curt	Don't argue. Change the rota.
+curt	Do it again. Right this time.
+curt	Not my department. Try the front desk.
+curt	No. Final answer.
+curt	Read the contributing guide before you open another issue.
+curt	Be on the dock at five. Don't be late again.
+curt	Quit stalling and send the invoice.
+curt	I'm not explaining it again.
+curt	Get the samples to the lab. Immediately.
+curt	Whatever. Ship it.
+curt	stop pinging me
+curt	just send it
+curt	Take it up with your manager.
+curt	Don't touch the thermostat.
+curt	Hand it in by Friday or don't hand it in at all.
+over_apologetic	So sorry to bother you, I'm so sorry, but room 214 says the shower is cold? Sorry!
+over_apologetic	I'm really sorry, I know this is silly, sorry, but could you check my PR? Sorry for the ping!
+over_apologetic	Sorry, sorry, I'm the worst, I mislabeled the samples, I'm so sorry everyone.
+over_apologetic	I'm so sorry for the delay, I feel terrible, I'm really, really sorry, the report is attached.
+over_apologetic	Apologies for bothering you again, I'm so sorry, I know you're busy, is the van free tomorrow?
+over_apologetic	Sorry if this is a dumb question, sorry, but which form is the right one? So sorry.
+over_apologetic	I'm sorry I'm so useless with the booking system, sorry for asking again.
+over_apologetic	Sorry to be a pain, sorry, could you resend the lease? I'm so sorry.
+over_apologetic	Forgive me, I'm an idiot, I'm so sorry, I sent the invoice to the wrong client.
+over_apologetic	Sorry, I'm probably wrong, I usually am, but is the deadline today? Sorry!
+over_apologetic	omg sorry sorry sorry!! i'm so sorry i forgot the keys!!
+over_apologetic	Sorry for the long message, sorry for the typos, and sorry for bothering you on a Sunday.
+over_apologetic	I'm terribly sorry to trouble you, I hate asking, but could I get an extension? I'm so sorry.
+over_apologetic	Sorry, I know I'm being annoying, I'm really sorry, but any news on my visa letter?
+over_apologetic	I apologize, I apologize, I'm so sorry for the confusion about the dates.
+over_apologetic	Sorry, I feel awful, I'm so sorry, I think I broke the build, I'm so sorry.
+over_apologetic	Sorry to ask, sorry, I'm new and I'm probably slow, where are the gloves kept?
+over_apologetic	I'm so sorry this is late and probably not very good, sorry, I did my best.
+over_apologetic	Sorry, I hope I'm not overstepping, I'm sorry, I just moved the meeting to 3. Sorry!
+over_apologetic	Sorry again for asking, I'm sure you've answered this a hundred times, sorry.
+neutral	The airport shuttle leaves at 6:15.
+neutral	Can you confirm the booking for two nights?
+neutral	The pallet arrived damaged. Photos attached.
+neutral	Please label the samples with the date.
+neutral	Thanks for reviewing my PR so quickly!
+neutral	The rent is due on the first of the month.
+neutral	Could you send the signed lease by Friday?
+neutral	The club meets on Thursdays at 7.
+neutral	Our support hours are 9 to 5, Monday to Friday.
+neutral	The freezer in lab 2 is making a strange noise.
+neutral	I've updated the issue with steps to reproduce.
+neutral	Room 214 needs fresh towels.
+neutral	The truck is stuck in traffic, about 40 minutes late.
+neutral	Here's the draft of the grant proposal.
+neutral	Can we move the volunteer meeting to Saturday?
+neutral	Thanks for fixing the heating so fast.
+neutral	The maintainers will review it next week.
+neutral	I'll be working from home tomorrow.
+neutral	The client loved the new logo!
+neutral	The deposit will be returned within 14 days.
+neutral	Please wear closed shoes in the lab.
+neutral	Great match yesterday, everyone!
+neutral	I'm looking for a quote for 500 units.
+neutral	Your order will ship on Monday.
+neutral	The minutes from Tuesday are in the shared folder.
+neutral	Can I get an extra key for the storage unit?
+neutral	The guest in 305 checked out early.
+neutral	We'll start the inventory count at 8am.
+neutral	I'm happy to mentor the new volunteers.
+neutral	The release notes are ready for review.
+neutral	Could you add me to the mailing list?
+neutral	Let's grab lunch after the conference.
+neutral	The landlord fixed the leak this morning.
+neutral	Please return the equipment by Friday.
+neutral	The dock door is stuck again, I've called maintenance.
+neutral	The tenant asked about parking.
+neutral	Can you double-check the totals on page 2?
+neutral	I've attached the invoice and the receipt.
+neutral	See you at the open house!
+neutral	The fire drill is at 11 today.
+neutral-hard	No.
+neutral-hard	Nope, not today.
+neutral-hard	ok
+neutral-hard	Done.
+neutral-hard	Any update?
+neutral-hard	Status?
+neutral-hard	Why did it fail?
+neutral-hard	Is it fixed?
+neutral-hard	Can't, sorry.
+neutral-hard	Busy, will call later.
+neutral-hard	Fine, Thursday it is.
+neutral-hard	Whatever works for the guests.
+neutral-hard	Lock up when you leave.
+neutral-hard	Please don't park in the fire lane.
+neutral-hard	Send me the manifest when it's ready.
+neutral-hard	Close the ticket once it's verified.
+neutral-hard	Answer the tenant when you get a chance.
+neutral-hard	Read the contributing guide for the commit format.
+neutral-hard	I need the manifest by 5 today.
+neutral-hard	This needs to be fixed before check-in.
+neutral-hard	The deadline is Friday, no extensions this time.
+neutral-hard	You were late twice this week. Let's talk.
+neutral-hard	Your invoice is missing the VAT number.
+neutral-hard	I disagree with the reviewer's comment.
+neutral-hard	This patch breaks the tests on Windows.
+neutral-hard	The room was dirty when we arrived. We'd like a partial refund.
+neutral-hard	I'm unhappy with the delay.
+neutral-hard	I'm frustrated that the shipment is late again.
+neutral-hard	That's not what we agreed on.
+neutral-hard	That's not my area, but Maya can help.
+neutral-hard	Sorry for the delay, here's the report.
+neutral-hard	Sorry, I missed your email. Yes, that works.
+neutral-hard	Apologies, I sent the wrong file. Correct one attached.
+neutral-hard	So sorry, I can't make it tonight!
+neutral-hard	I'm sorry to hear about the flood. Let us know how we can help.
+neutral-hard	Just a reminder that the lab closes at 6 on Fridays.
+neutral-hard	Following up on the quote from last week.
+neutral-hard	Resending in case it got lost: the lease is attached.
+neutral-hard	As mentioned, the shuttle is free for guests.
+neutral-hard	Per the contract, notice is 30 days.
+neutral-hard	Thanks for getting back to me!
+neutral-hard	Thanks for finally fixing the wifi, it is so fast now!
+neutral-hard	Glad you're joining the trip!
+neutral-hard	Damn, the coffee machine is broken again.
+neutral-hard	Holy crap, we sold out in an hour!
+neutral-hard	This bug is driving me nuts.
+neutral-hard	Ugh, the printer jammed again.
+neutral-hard	That was a brutal shift. Thanks for sticking it out.
+neutral-hard	Hell yes, the grant got funded!
+neutral-hard	Stop the line, there's a defect in batch 7.
+neutral-hard	Kill the old cron job, it's not needed.
+neutral-hard	Don't merge yet, CI is still running.
+neutral-hard	Please stop using the old template.
+neutral-hard	I'd rather not take on another project right now.
+neutral-hard	I can't approve that, it's over budget.
+neutral-hard	No thanks, we're all set.
+neutral-hard	Not sure, let me check with the office.
+neutral-hard	lol no way
+neutral-hard	haha ok fine
+neutral-hard	You're right, I got the dates mixed up.

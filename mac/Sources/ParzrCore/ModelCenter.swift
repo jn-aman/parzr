@@ -2,14 +2,23 @@ import Combine
 import Foundation
 import Network
 
-/// The essential model pack's state for every surface (welcome guide, Settings, menu-bar popover, check card), and the
-/// policy around it: when a download starts, retries, cancel, remove. Parzr checks with its rules until the pack is ready.
+/// A model pack's state for every surface (welcome guide, Settings, menu-bar popover, check card), and the policy around
+/// it: when a download starts, retries, cancel, remove. Parzr checks with its rules until the essential pack is ready; the
+/// optional packs (`OptionalPack`: the slip check, the tone check) each have a center of their own, from `live(_:)`.
 @MainActor
 public final class ModelCenter: ObservableObject {
     @Published public private(set) var state: ModelPackState = .missing
     public let pack: ModelPack?
     public let store: ModelStore?
+    /// What the pack is for, in the surfaces' words ("Smart grammar", "Slip check", "Tone check").
+    public let feature: String
+    /// The optional pack this center serves; nil for the essential pack.
+    public let optional: OptionalPack?
+    /// Called on the main actor after the user removed the pack (a feature that keeps its model loaded lets go of it).
+    public var onRemove: (() -> Void)?
     private let defaults: UserDefaults
+    /// The default that records a Remove: the essential pack keeps the original key, any other pack has its own.
+    private let removedKey: String
     private let development: Bool
     private var download: Task<Void, Never>?
     private var retry: Task<Void, Never>?
@@ -23,9 +32,16 @@ public final class ModelCenter: ObservableObject {
     /// Retry delays after a failure the download can recover from on its own; the last one repeats.
     public var backoff: [Duration] = [.seconds(30), .seconds(120), .seconds(600), .seconds(1800)]
     static let removedKey = "modelPackRemoved"
+    static func removedKey(for pack: ModelPack?) -> String {
+        guard let pack, pack.provides["writing_model"] == nil else { return removedKey }
+        return "\(removedKey).\(pack.id)"
+    }
 
-    public init(pack: ModelPack?, store: ModelStore?, defaults: UserDefaults = .standard, development: Bool = false) {
-        self.pack = pack; self.store = store; self.defaults = defaults; self.development = development
+    /// `optional` describes a pack beyond the essential one (its feature, development variable and notes); nil is the essential pack.
+    public init(pack: ModelPack?, store: ModelStore?, defaults: UserDefaults = .standard, development: Bool = false, optional: OptionalPack? = nil) {
+        self.pack = pack; self.store = store; self.defaults = defaults; self.development = development; self.optional = optional
+        feature = optional?.feature ?? "Smart grammar"
+        removedKey = Self.removedKey(for: pack)
         refresh()
     }
     /// The app's center: the manifest compiled into the engine, ~/Library/Application Support/Parzr/Models, HTTPS from GitHub.
@@ -35,13 +51,24 @@ public final class ModelCenter: ObservableObject {
         let environment = ProcessInfo.processInfo.environment
         let development = ["PARZR_MODEL_PATH", "PARZR_GEC_DIR"].contains { !(environment[$0] ?? "").isEmpty }
         let pack = WritingEngine.modelManifest().flatMap { try? ModelManifest.decode($0) }?.essential
+        return ModelCenter(pack: pack, store: liveStore(environment), defaults: defaults, development: development)
+    }
+    /// An optional pack's center (the slip check's masked language model, the tone check's classifier). Its development
+    /// variable means the feature uses other files. Nil when this build pins no such pack.
+    public static func live(_ optional: OptionalPack, defaults: UserDefaults = .standard) -> ModelCenter? {
+        let environment = ProcessInfo.processInfo.environment
+        guard let pack = WritingEngine.modelManifest().flatMap({ try? ModelManifest.decode($0) })?.pack(providing: optional.role) else { return nil }
+        let development = !(environment[optional.developmentVariable] ?? "").isEmpty
+        return ModelCenter(pack: pack, store: liveStore(environment), defaults: defaults, development: development, optional: optional)
+    }
+    static func liveStore(_ environment: [String: String]) -> ModelStore {
         var store = ModelStore(root: ModelStore.defaultRoot(environment: environment), transport: URLSessionTransport())
         store.baseURL = environment["PARZR_MODELS_BASE_URL"].flatMap { $0.isEmpty ? nil : URL(string: $0) }
-        return ModelCenter(pack: pack, store: store, defaults: defaults, development: development)
+        return store
     }
 
     /// The user removed the pack: no automatic download until they ask for it again.
-    public var removedByUser: Bool { defaults.bool(forKey: Self.removedKey) }
+    public var removedByUser: Bool { defaults.bool(forKey: removedKey) }
     public var totalBytes: Int64 { pack?.bytes ?? 0 }
     public var isReady: Bool { state.isReady }
 
@@ -62,7 +89,7 @@ public final class ModelCenter: ObservableObject {
     }
     /// Starts (or resumes) the download unless the pack is ready or already downloading. `userInitiated` clears an earlier Remove.
     public func start(userInitiated: Bool = false) {
-        if userInitiated { defaults.removeObject(forKey: Self.removedKey); failures = 0 }
+        if userInitiated { defaults.removeObject(forKey: removedKey); failures = 0 }
         refresh()
         guard let pack, let store, !state.isReady, download == nil else { return }
         retry?.cancel(); retry = nil
@@ -80,14 +107,15 @@ public final class ModelCenter: ObservableObject {
         retry?.cancel(); retry = nil
         download?.cancel(); download = nil; generation += 1
         if state.isWorking { state = .missing }
-        defaults.set(true, forKey: Self.removedKey)
+        defaults.set(true, forKey: removedKey)
     }
     /// Deletes the pack from this Mac. Parzr goes back to the rules alone until the user downloads it again.
     public func remove() {
         cancel()
         guard let pack, let store else { return }
         do { try store.remove(pack); state = .missing } catch { state = .failed(.other("Parzr could not remove the models: \(error.localizedDescription)")) }
-        defaults.set(true, forKey: Self.removedKey)
+        defaults.set(true, forKey: removedKey)
+        onRemove?()
     }
     /// Deletes the pack and downloads it again from scratch.
     public func redownload() {
@@ -147,7 +175,7 @@ public final class ModelCenter: ObservableObject {
     public var statusLine: String {
         switch state {
         case .ready: "Ready. \(sizeText) on this Mac."
-        case .development: "Using the models named by PARZR_MODEL_PATH or PARZR_GEC_DIR."
+        case .development: optional.map { "Using the model named by \($0.developmentVariable)." } ?? "Using the models named by PARZR_MODEL_PATH or PARZR_GEC_DIR."
         case .downloading(let received, let total): "Downloading \(ByteCountFormatter.string(fromByteCount: received, countStyle: .file)) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))…"
         case .verifying: "Checking the download…"
         case .missing: removedByUser ? "Not downloaded. Parzr checks with its rules only." : "Not downloaded yet."
@@ -179,7 +207,7 @@ public final class ModelCenter: ObservableObject {
     /// Snapshots and previews only: shows a state without downloading anything.
     public func preview(_ state: ModelPackState, removed: Bool = false) {
         generation += 1; download = nil; self.state = state
-        if removed { defaults.set(true, forKey: Self.removedKey) } else { defaults.removeObject(forKey: Self.removedKey) }
+        if removed { defaults.set(true, forKey: removedKey) } else { defaults.removeObject(forKey: removedKey) }
     }
     /// The pack's models for Settings: one line per top-level item (a file, or a folder such as gector/), with its size, version, license and purpose.
     public var models: [(name: String, bytes: Int64, version: String, license: String, purpose: String)] {

@@ -1,0 +1,412 @@
+# neutral: ordinary workplace and everyday messages, including the hard cases a tone check must leave alone:
+# direct requests, civil criticism, bad news, short replies, firm boundaries, one ordinary apology, friendly swearing,
+# frustration aimed at things rather than people. Written for Parzr's tone check (synthetic; no real messages).
+Can you send me the report by tomorrow? I need it for the 3pm meeting.
+Thanks for the help yesterday, I really appreciate it.
+I'm running 10 minutes late, start without me.
+Did you get a chance to look at my PR? It's blocking the deploy.
+Can we move our 1:1 to Thursday? Something came up.
+No worries, I can take care of it tonight.
+Sounds good.
+ok
+OK, will do.
+On it.
+Got it, thanks.
+Thanks!
+Yep, that works for me.
+Sure, I'll take a look after lunch.
+Let me check and get back to you.
+I'll be out tomorrow, back on Monday.
+Here's the updated deck.
+Attached is the invoice for March.
+The build is green now.
+Deployed to staging. Please test when you can.
+Can you review this when you get a chance?
+Quick question: is the standup still at 9:30?
+I don't think this approach will scale. Can we talk about alternatives?
+I disagree with the timeline. Two weeks isn't enough for QA.
+This isn't ready to ship yet. The login flow still fails on Safari.
+The numbers in slide 4 don't match the spreadsheet. Can you double-check them?
+I'm not happy with how the launch went. Let's do a retro on Friday.
+We missed the deadline. Here's what happened and what we're changing.
+Unfortunately we can't approve the budget this quarter.
+No, we're not adding that feature to this release.
+I can't make it today, sorry.
+Sorry, my mistake. Fixed now.
+Sorry for the delay, here's the file.
+Sorry I'm late!
+Apologies for the confusion: the correct date is the 14th.
+Please stop pushing directly to main. Use a pull request.
+Please don't share the draft outside the team yet.
+I need the final numbers by 5pm today.
+This needs to be fixed before the release.
+Running late. Start without me.
+This feature is not available on the free plan.
+The server is down again. I'm looking into it.
+Ugh, the build is broken again. Looking into it.
+This bug is driving me crazy.
+Damn, I forgot my laptop charger.
+Holy shit, we hit our target! Amazing work everyone!
+This is fucking awesome, great job.
+Hell yeah, the demo went great.
+That was a crazy week. Glad it's over.
+lol that meeting was so long, I almost fell asleep
+haha nice
+lmao same
+Can't wait for the weekend.
+I'm swamped today, can we do this tomorrow?
+I don't have bandwidth for this right now. Can it wait until next sprint?
+I won't be able to take this on. Maybe ask Priya?
+That's not something I can approve. Check with finance.
+I'd rather we didn't change the scope this late.
+I think we should push the launch by a week.
+Honestly, I don't love the new logo. The colors feel off to me.
+The first draft needs work. The intro is too long and the argument isn't clear yet.
+The test coverage is low. Please add tests before we merge.
+This is a good start. A few comments inline.
+Nice work on the migration.
+Great job today, everyone.
+Thanks for jumping on this so quickly.
+Welcome to the team!
+Happy Friday!
+Hope you had a good weekend.
+Congrats on the promotion!
+Happy birthday! Hope it's a great one.
+Reminder: timesheets are due Friday.
+Friendly reminder: the office is closed on Monday.
+Just following up on the contract. Any update?
+Following up on my email from Tuesday. Do you have the figures yet?
+Checking in on this. Do you need anything from me?
+Bumping this in case it got buried.
+Any news on the invoice?
+When do you think this will be ready?
+What's the ETA on the fix?
+Status?
+ETA?
+Is this done?
+Done.
+Fixed.
+Merged.
+Shipped!
+no
+No.
+Nope, not yet.
+Not yet, maybe tomorrow.
+Yes.
+yes, please
+Fine by me.
+Fine, let's go with option B.
+Whatever works for you.
+Either is fine.
+I don't mind.
+I don't have a strong opinion.
+Your call.
+Up to you.
+Let's go with your plan.
+Agreed.
+Makes sense.
+Good point.
+Interesting, tell me more.
+Can you explain why we chose Postgres?
+Why did the job fail?
+What happened with the client call?
+Who owns the billing service?
+Where is the onboarding doc?
+How long will the migration take?
+Could you clarify what you mean by "soon"?
+I'm confused by the last section. Can we go over it?
+I don't understand the error. Can you send the logs?
+Can you walk me through the new process?
+Please send the signed contract by Wednesday.
+Please update the ticket with the root cause.
+Please add me to the design review.
+Please remove me from this list. I've moved teams.
+Please use the template for new requests.
+Check the wiki for the setup steps.
+The setup steps are in the README.
+It's in the shared drive under Q3.
+Use staging, not prod, for the test.
+Cancel my 2pm, please.
+Let's cancel the project. It isn't worth the cost.
+We're shutting down the old dashboard next month.
+Tell them we can't do Friday, but Monday works.
+Can you get the vendor on the phone? We need an answer today.
+Let's keep the update short this week.
+Keep it brief, we only have ten minutes.
+Skip the intro and go straight to the numbers.
+Let's skip the retro this week.
+Come by my desk when you have a minute.
+Can we talk later today? I have some feedback on the proposal.
+We need to talk about the budget. Are you free at 3?
+I'll need you to redo the summary. The figures changed this morning.
+Can you revert the last commit? It broke the build.
+Please revert it, the change broke checkout.
+Let's roll back and investigate.
+I'm worried we're overcommitting this quarter.
+I'm frustrated with how long the vendor is taking.
+I'm disappointed with the results, but I think we can recover.
+That's a fair concern. Let's discuss.
+I see your point, but I still think we should wait.
+I'm not sure that's right. The docs say the limit is 100.
+You're right, I was wrong about that.
+Good catch, thank you.
+My bad, I'll fix it.
+Oops, wrong channel.
+Sorry, wrong file. Here's the right one.
+Sorry to bother you, but do you have the key to the supply room?
+Sorry for the short notice, but can we move the call to 4?
+Sorry, I missed your message. Yes, Thursday works.
+I apologize for the error in the invoice. The corrected version is attached.
+Thanks for your patience while we fixed this.
+We're sorry for the outage. Service is restored.
+I'm sorry to hear about your dad. Take all the time you need.
+Thank you so much, this really helped.
+Thanks a ton!
+Appreciate it.
+Much appreciated.
+Cheers.
+See you tomorrow.
+Talk soon.
+Have a good one.
+Take care.
+Good luck with the presentation!
+You've got this.
+Let me know if you have questions.
+Let me know if you need anything else.
+Happy to help.
+Feel free to reach out.
+Can I help with anything?
+I can cover your shift on Saturday.
+I'll handle the client email.
+I'll take notes in the meeting.
+Who's taking the on-call this weekend?
+The meeting is moved to room 4B.
+Lunch is in the kitchen.
+Pizza's here!
+Coffee?
+Wanna grab coffee?
+Anyone want to grab lunch?
+Did you get my text?
+Are you free for a quick call?
+Can you hear me?
+You're on mute.
+I'll share my screen.
+Can everyone see the slides?
+Let's start in two minutes.
+Let's wrap up.
+That's all from me.
+Any other questions?
+No questions from me.
+I have to drop, thanks all.
+Sorry, I have to jump to another call.
+Notes from today's meeting are in the doc.
+Action items: Sam updates the spec, I send the invoice.
+The release is scheduled for Tuesday at 10am.
+The client approved the design.
+The client rejected the proposal. They want a lower price.
+We lost the deal. They went with a competitor.
+Revenue was down 8% this month.
+Our costs went up because of the new vendor.
+The survey results are in. Satisfaction dropped to 71%.
+The hiring freeze will continue through Q4.
+We're cutting the marketing budget by 20%.
+Your access will expire on Friday. Please renew it.
+Your password must be at least 12 characters.
+This field is required.
+Payment failed. Please update your card.
+The file is too large to upload.
+We can't process refunds after 30 days.
+Your order has shipped.
+Unfortunately, the item is out of stock.
+Your request has been denied because the form was incomplete.
+I'm going to say no to this one. It's outside our scope.
+I'd prefer not to work weekends this month.
+I need to leave at 5 today for a doctor's appointment.
+I'm taking a mental health day.
+I'm not comfortable sharing that information.
+I can't commit to that deadline.
+That won't work for us.
+That's too expensive for our budget.
+We'll need more time to review the contract.
+The contract has a few issues. See my comments.
+This paragraph is confusing. Can you rewrite it?
+This code is hard to follow. Can you split the function?
+The variable names are unclear.
+This query is slow. Let's add an index.
+The tests are flaky on CI.
+The design doesn't match the mockup.
+The font is too small on mobile.
+This doesn't meet the accessibility guidelines yet.
+I think the headline is weak. Can we try a few options?
+The report is late. When can we expect it?
+We're behind schedule. Let's prioritize the must-haves.
+I'm concerned about the quality of the last two releases.
+Several customers reported the same bug. We need to fix it this week.
+This is the third outage this month. We need a postmortem.
+We need to improve our response times.
+Please be on time for the client meeting tomorrow.
+Please make sure you review before merging.
+Please double-check the numbers before sending.
+Make sure the backup runs before the migration.
+Don't forget to submit your expenses.
+Don't share your password with anyone.
+Don't merge until QA signs off.
+Do not reply to this email.
+Stop the job if the error rate goes above 5%.
+Turn off the old server after the migration.
+Delete the test data when you're done.
+Send the final version to the client.
+Book the room for Thursday.
+Add the new hire to the payroll system.
+Update the README with the new steps.
+Fill out the form and send it back.
+Call me when you land.
+Call me when you get this, it's about the launch.
+Text me when you're outside.
+I'll be there in 5.
+omw
+brb
+ttyl
+np
+ty!
+thx
+kk
+cool
+cool cool
+nice
+yay!
+woohoo!
+Ugh, Mondays.
+I'm exhausted.
+So tired today.
+This weather is awful.
+Traffic was terrible this morning.
+The printer is jammed again.
+The wifi is so slow today.
+My laptop keeps crashing.
+I hate when the VPN drops in the middle of a call.
+This spreadsheet is a nightmare to work with.
+The old codebase is a mess, but we'll get there.
+That was a tough meeting.
+Tough day, but we got through it.
+I messed up the formula, fixing it now.
+I'm sorry, I can't help with that one.
+I'm not the right person for this. Try the platform team.
+I don't know, sorry. Maybe ask Alex?
+I have no idea. Let me find out.
+Not sure, I'll check.
+Good question, I don't know yet.
+I'll think about it.
+Let me sleep on it.
+Let's revisit this next week.
+Let's park this for now.
+Can we take this offline?
+Let's discuss in the next meeting.
+Do you have five minutes?
+Got a sec?
+Hey, are you around?
+Hi! Quick favor: can you approve my time off request?
+Hi team, the office will be closed for the holiday.
+Hi all, please welcome Maria to the design team.
+Hello, I'm reaching out about the open position.
+Dear Mr. Patel, thank you for your application.
+Thank you for your email. I'll respond by Friday.
+I'm out of the office until Monday with limited access to email.
+Kind regards, Sam
+Best, Jordan
+Thanks in advance.
+Looking forward to working with you.
+It was great meeting you today.
+Let's keep in touch.
+Hope this helps.
+Hope you're doing well.
+I wanted to share some feedback on the project.
+I wanted to flag a risk with the timeline.
+Heads up: the API will be down for maintenance tonight.
+FYI, the client moved the meeting.
+FYI, I updated the doc.
+PSA: the coffee machine is fixed.
+Just a heads-up that I'll be offline this afternoon.
+Just checking, did the payment go through?
+Just to confirm, the call is at 2pm Eastern?
+To clarify, we're only changing the header, not the footer.
+As discussed, I'll send the proposal by Friday.
+As mentioned in the meeting, the launch is on the 12th.
+Per the policy, expenses over $500 need approval.
+Per our call, here's the summary.
+As you know, the audit starts next week.
+In case it's useful, here's the link to the dashboard.
+Resending the link in case the first one didn't work.
+Re-attaching the file since the first one was corrupted.
+Sending again with the correct attachment.
+I'll follow up next week if I don't hear back.
+If I don't hear back by Friday, I'll assume we're good to go.
+No rush on this.
+No pressure, whenever you have time.
+Take your time.
+This can wait until Monday.
+This is urgent, please call me.
+It's urgent: production is down.
+Prod is down, all hands please.
+Need your sign-off by noon, the client is waiting.
+I need an answer on this today if possible.
+We need a decision by Friday.
+Can you prioritize this? It's blocking three teams.
+I have to say no to the meeting, I'm fully booked.
+I'll pass on this one, thanks.
+Thanks, but I'll pass.
+Not interested, thanks.
+No thanks.
+We've decided to go in a different direction.
+We won't be renewing the contract.
+I'm resigning, my last day will be the 30th.
+I accepted another offer. Thank you for everything.
+I'm leaving the team at the end of the month.
+Your feedback was really useful.
+That was a great presentation.
+The new design looks fantastic.
+I love this idea.
+Brilliant, thank you.
+Perfect.
+Exactly.
+100%
++1
+Same here.
+Me too.
+Thanks for flagging.
+Thanks for the heads-up.
+Thanks for letting me know.
+Thanks for catching that.
+Thanks for your patience.
+I'll keep you posted.
+Will update this thread when it's fixed.
+Fixed in the latest build. Please retest.
+The issue is resolved.
+Closing this ticket.
+Reopening, the bug is back.
+Escalating to the vendor.
+I'll escalate this to my manager.
+I've raised this with HR.
+I'd like to schedule a meeting to discuss my workload.
+I'd like to talk about my compensation.
+I need help prioritizing my tasks.
+I'm struggling with the new tool. Is there training?
+I made a mistake in the report. Here's the corrected version.
+I accidentally deleted the file. Can IT restore it?
+Sorry, I deleted the wrong branch. Restoring it now.
+Sorry about that, should be fixed now.
+My apologies, I sent the wrong link. Here's the right one.
+Sorry for the typo in the subject line.
+Sorry, can you repeat that?
+Sorry, what did you mean by the second point?
+Sorry, I didn't catch your name.
+Excuse me, is this seat taken?
+Pardon the interruption, the client is on line 2.
+Thank you, and sorry again for the mix-up.
+I really appreciate you staying late to help.
+I owe you one.
+You're a lifesaver.
+You rock!
+Well done!
+Kudos to the support team for handling the outage.
+Shout-out to Lee for fixing the build.

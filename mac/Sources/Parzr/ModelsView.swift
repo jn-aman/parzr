@@ -5,8 +5,49 @@ import SwiftUI
 extension ModelCenter {
     /// The app's model pack. Self tests, snapshots and `swift test` use the throwaway preferences suite and never start a download on their own.
     static let app = ModelCenter.live(defaults: Preferences.selfTestDefaults ?? .standard)
+    /// One center per optional pack (`OptionalPack.all`), in Settings order; a pack this build does not pin is left out.
+    static let optionalCenters: [ModelCenter] = OptionalPack.all.compactMap { ModelCenter.live($0, defaults: Preferences.selfTestDefaults ?? .standard) }
+    /// The slip check's pack (the typing-time word-choice check), downloaded after the essential pack is ready.
+    static var slips: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.slips } }
+    /// The tone check's pack, downloaded only once the user turns Tone check on. PARZR_TONE_DIR points at a local copy instead.
+    static var tone: ModelCenter? { optionalCenters.first { $0.optional == OptionalPack.tone } }
     /// A normal launch may download (never a self test, a snapshot or `swift test`).
     static var downloadsAllowed: Bool { !Preferences.isSelfTest && !Preferences.underXCTest && !CommandLine.arguments.contains("--health-check") }
+}
+
+/// Keeps the tone classifier in step with the setting: on downloads the pack (if needed) and loads it, off unloads it
+/// (the files stay until removed).
+@MainActor
+enum ToneModel {
+    static var center: ModelCenter? { .tone }
+    /// The installed classifier folder, or PARZR_TONE_DIR in development.
+    static func folder() -> URL? {
+        if let custom = ProcessInfo.processInfo.environment["PARZR_TONE_DIR"], !custom.isEmpty { return URL(fileURLWithPath: custom, isDirectory: true) }
+        guard let center, center.state == .ready, let pack = center.pack, let store = center.store, let relative = pack.provides[OptionalPack.tone.role] else { return nil }
+        return store.folder(pack).appendingPathComponent(relative, isDirectory: true)
+    }
+    static func load() {
+        guard Preferences.shared.toneCheck, let folder = folder() else { return }
+        Task.detached(priority: .utility) { try? await ToneChecker.shared.load(folder: folder) }
+    }
+    /// `userInitiated`: the user just switched it on, which also clears an earlier Remove of the pack.
+    static func apply(_ enabled: Bool, userInitiated: Bool) {
+        guard enabled else { Task { await ToneChecker.shared.unload() }; return }
+        guard let center else { return }
+        center.refresh()
+        if center.isReady { load(); return }
+        guard ModelCenter.downloadsAllowed else { return }
+        if userInitiated { center.start(userInitiated: true) } else { center.startIfNeeded() }
+    }
+    /// One line for Settings.
+    static var status: String {
+        guard let center else { return "This copy of Parzr has no tone model." }
+        return switch center.state {
+        case .ready, .development: "Checks a selection when you press your shortcut, and the playground as you type. It runs entirely on your Mac."
+        case .missing: Preferences.shared.toneCheck ? "Getting the tone model ready (\(center.sizeText))." : "Uses a small extra model (\(center.sizeText)), downloaded when you turn this on."
+        default: center.statusLine
+        }
+    }
 }
 
 /// A thin progress bar in the accent colour; indeterminate stripes are avoided so snapshots and reduced motion stay still.
@@ -41,13 +82,14 @@ struct ModelStatus: View {
     private var percent: String { "\(Int((center.state.fraction ?? 0) * 100))%" }
     private var title: String {
         switch center.state {
-        case .ready: compact ? "Smart grammar is ready" : "Downloaded and checked"
+        case .ready: compact ? "\(center.feature) is ready" : "Downloaded and checked"
         case .development: "Development models in use"
-        case .downloading(_, let total): compact ? "Smart grammar is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
-        case .verifying: compact ? "Smart grammar · checking the download" : "Checking the download…"
-        case .missing where center.removedByUser: compact ? "Smart grammar isn't downloaded" : "Not downloaded"
-        case .missing: compact ? "Smart grammar downloads soon" : "Waiting to download"
-        case .failed: compact ? "Smart grammar isn't downloaded" : "Download paused"
+        case .downloading(_, let total): compact ? "\(center.feature) is downloading · \(percent)" : "Downloading · \(percent) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+        case .verifying: compact ? "\(center.feature) · checking the download" : "Checking the download…"
+        case .missing where center.removedByUser: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
+        case .missing where center.optional?.automatic == false: compact ? "\(center.feature) isn't downloaded" : "Not downloaded"
+        case .missing: compact ? "\(center.feature) downloads soon" : "Waiting to download"
+        case .failed: compact ? "\(center.feature) isn't downloaded" : "Download paused"
         }
     }
     private var detail: String? {
@@ -55,6 +97,7 @@ struct ModelStatus: View {
         case .ready: "\(center.sizeText) on this Mac, each file checked against its pinned SHA-256."
         case .development: center.statusLine
         case .downloading, .verifying: nil
+        case .missing where center.optional != nil: center.removedByUser ? center.optional?.removedNote : center.optional?.missingNote
         case .missing: center.removedByUser ? "Parzr checks with its rules only until you download it." : "Parzr checks with its rules until it arrives."
         case .failed(let failure): failure.message
         }
@@ -80,28 +123,13 @@ struct ModelStatus: View {
 /// Settings, Models: what is on this Mac, how big, under which license, and Re-download / Remove.
 struct ModelsSettings: View {
     @ObservedObject var center: ModelCenter
+    /// The optional packs (slip check, tone check), each listed below the essential one with its own Download / Remove.
+    var optional: [ModelCenter] = []
     @State private var confirmRemove = false
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section(center.pack?.title.uppercased() ?? "MODELS") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(center.pack?.purpose ?? "").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
-                    ModelStatus(center: center)
-                }.padding(16)
-                divider
-                ForEach(Array(center.models.enumerated()), id: \.offset) { index, model in
-                    if index > 0 { divider }
-                    HStack(alignment: .top, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(model.name).font(.system(size: 12, weight: .medium))
-                            Text(model.purpose).font(.system(size: 11)).foregroundStyle(Color.textSecondary)
-                            Text("\(model.license) · \(model.version)").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.8)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 8)
-                        Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Color.textSecondary)
-                    }.padding(16)
-                }
-            }
+            PackSection(center: center)
+            ForEach(Array(optional.enumerated()), id: \.offset) { _, pack in PackSection(center: pack, removable: true) }
             section("MANAGE") {
                 row("Download again", detail: "Deletes the downloaded files and fetches them again from GitHub, checking each one.") {
                     NativeButton(title: "Re-download", label: "Download the models again", enabled: center.pack != nil && !center.state.isWorking && center.state != .development, action: { center.redownload() }).fixedSize()
@@ -128,4 +156,49 @@ struct ModelsSettings: View {
     private func row<Control: View>(_ title: String, detail: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(alignment: .center, spacing: 18) { VStack(alignment: .leading, spacing: 5) { Text(title).font(.system(size: 12, weight: .medium)); Text(detail).font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true).lineSpacing(2) }; Spacer(minLength: 8); control() }.padding(16)
     }
+}
+
+/// One pack in Settings, Models: its purpose, state and action, and one line per model with size, license and version.
+/// An optional pack (`removable`) also offers Remove here; the essential pack's Re-download and Remove are under MANAGE.
+struct PackSection: View {
+    @ObservedObject var center: ModelCenter
+    var removable = false
+    @State private var confirmRemove = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(center.pack?.title.uppercased() ?? "MODELS").font(.system(size: 9, weight: .semibold)).tracking(1.2).foregroundStyle(Color.textSecondary).padding(.leading, 2)
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(center.pack?.purpose ?? "").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                    ModelStatus(center: center)
+                }.padding(16)
+                divider
+                ForEach(Array(center.models.enumerated()), id: \.offset) { index, model in
+                    if index > 0 { divider }
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(model.name).font(.system(size: 12, weight: .medium))
+                            Text(model.purpose).font(.system(size: 11)).foregroundStyle(Color.textSecondary)
+                            Text("\(model.license) · \(model.version)").font(.system(size: 10)).foregroundStyle(Color.textSecondary.opacity(0.8)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 8)
+                        Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file)).font(.system(size: 11)).monospacedDigit().foregroundStyle(Color.textSecondary)
+                    }.padding(16)
+                }
+                if removable, center.state == .ready {
+                    divider
+                    HStack(alignment: .center, spacing: 18) {
+                        Text("Frees \(center.sizeText). Parzr does not download it again until you ask.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        NativeButton(title: "Remove", label: "Remove the \(center.feature.lowercased()) model", action: { confirmRemove = true }).fixedSize()
+                    }.padding(16)
+                }
+            }.graphiteSurface()
+        }
+        .confirmationDialog("Remove the \(center.feature.lowercased()) model?", isPresented: $confirmRemove) {
+            Button("Remove", role: .destructive) { center.remove() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("\(center.optional?.removedNote ?? "Parzr checks with its rules only until you download it again.") (\(center.sizeText))") }
+    }
+    private var divider: some View { Rectangle().fill(Color.hairline.opacity(0.5)).frame(height: 0.5).padding(.horizontal, 16) }
 }

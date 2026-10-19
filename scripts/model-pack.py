@@ -28,6 +28,9 @@ QWEN_SOURCE = ('https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/8fea62
                '37ae482d336108d23516fa35e8e0c4126688d81018b87178a18d752a1357814f')
 GECTOR_ZIP = ('https://github.com/jn-aman/parzr/releases/download/gector-v1/gector-roberta-base-5k-coreml-int8.zip',
               '9e3d2c433206b4eea2cb612c1a32765a24bf39ba2eef9a1c51a9ed8942427796')
+# Packs --derive can rebuild byte for byte. The slips pack's Core ML model is compiled by the local toolchain, so its pinned
+# hashes are those of the published assets: before its release exists, fetch --derive-fallback skips it (its tests skip too).
+DERIVABLE = {'essential'}
 
 
 def load():
@@ -132,10 +135,14 @@ def derive(work):
 
 def stage(manifest, args):
     out = pathlib.Path(args.out).resolve(); out.mkdir(parents=True, exist_ok=True)
+    packs = pick(manifest, args.pack)
+    if not args.from_app and not args.from_dir and any(p['id'] not in DERIVABLE for p in packs):
+        raise SystemExit(f"--derive rebuilds only {', '.join(sorted(DERIVABLE))}; stage the others --from-dir "
+                         "(the slips pack: scripts/convert-slips.py writes dist/slips-build, then --from-dir dist/slips-build --pack slips)")
     if args.from_app: base = pathlib.Path(args.from_app)/'Contents/Resources/Model'
     elif args.from_dir: base = pathlib.Path(args.from_dir)
     else: base = derive(pathlib.Path(args.work).resolve())
-    for pack in pick(manifest, args.pack):
+    for pack in packs:
         for f in pack['files']:
             source, target = base/f['path'], out/asset_name(f)
             if not source.is_file(): raise SystemExit(f'Missing {source}')
@@ -189,6 +196,10 @@ def fetch(manifest, args):
                 download(url, target, f['sha256'], f['bytes'])
         except urllib.error.HTTPError as error:
             if not args.derive_fallback: raise SystemExit(f'{error.url}: HTTP {error.code}. Is the {tag_of(pack)} release published?')
+            if pack['id'] not in DERIVABLE:
+                print(f"{tag_of(pack)} is not published yet (HTTP {error.code}) and pack {pack['id']} cannot be rebuilt here: skipped "
+                      "(Parzr works without it; its tests skip)", file=sys.stderr)
+                continue
             print(f'{tag_of(pack)} is not published yet (HTTP {error.code}); rebuilding the pack from its pinned upstream sources', file=sys.stderr)
             assets = pathlib.Path(tempfile.mkdtemp(prefix='parzr-pack-'))
             stage(manifest, argparse.Namespace(out=assets, from_app=None, from_dir=None, work=args.work, pack=pack['id']))

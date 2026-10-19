@@ -46,7 +46,7 @@ extension Preferences {
 }
 
 /// `~/Library/Application Support/Parzr/known-words.json`, shared with the browser native host, the language server and VS Code.
-/// Names are the user's own, learned and (if enabled) Contacts names. Names found in a document are session-only and never written.
+/// The dictionary is the user's words and the words Parzr learned; names are the user's own, learned and (if enabled) Contacts names. Names found in a document are session-only and never written.
 enum KnownWordsFile {
     static var url: URL { FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Parzr/known-words.json") }
     nonisolated static func data(dictionary: [String], names: [String]) throws -> Data {
@@ -59,7 +59,7 @@ enum KnownWordsFile {
     @MainActor static func writeCurrent() { guard !Preferences.isSelfTest else { return }; try? write(dictionary: KnownNames.dictionary(), names: KnownNames.persistentNames(), to: url) }
 }
 
-/// A fix Parzr just applied to one word. If the original comes back at the same spot within a minute, the user undid it: the word is a name.
+/// A fix Parzr just applied to one word. If the original comes back at the same spot within a minute, the user undid it: the word is meant, and is learned (`Preferences.learn`).
 @MainActor
 enum FixLearning {
     struct Fix { let pid: pid_t; let element: CFHashCode; let original: String, replacement: String; let location: Int; let time: Date }
@@ -87,6 +87,7 @@ enum FixLearning {
             shift += edit.replacement.utf16.count - edit.range.length
         }
         if recent.count > 16 { recent.removeFirst(recent.count - 16) }
+        Preferences.shared.noteFixes(edits)
     }
     /// Called on every passive capture of an editor.
     static func observe(_ snapshot: SelectionSnapshot) {
@@ -96,7 +97,7 @@ enum FixLearning {
             guard fix.pid == pid, fix.element == element else { return now.timeIntervalSince(fix.time) <= window }
             switch state(of: fix, in: full, now: now) {
             case .pending: return true
-            case .reverted: Preferences.shared.learnName(fix.original); return false
+            case .reverted: Preferences.shared.learn(fix.original); return false
             case .gone: return false
             }
         }

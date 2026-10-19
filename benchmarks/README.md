@@ -49,7 +49,7 @@ The set was written by hand without reading the checker's rules, lexicons or the
 Score it through the app's own path (ParzrCore's `WritingEngine` with Apple NaturalLanguage hints and the default name capitalization):
 
 ```sh
-swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \
+swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift \
   scripts/heldout-native.swift -o dist/qa/heldout-native
 PARZR_ENGINE_PATH=$PWD/engine/target/release/libparzr_engine.dylib \
 PARZR_MODEL_RUNTIME=$PWD/dist/model/libparzr_model.dylib PARZR_MODELS_DIR=$PWD/dist/models \
@@ -68,3 +68,17 @@ Test split, v0.3.6 against the build that added this set:
 The `gec` layer is scored with checks back to back, so the language-model swap check, which while typing runs in the background and lands on the next check, barely shows there; `deep` shows it (real-word slips 26% to 68% fixed). CI's verify job scores the test split for `rules` and `gec` and fails below the fix rates or above the false-alarm rates in `.github/workflows/ci-release.yml`; raise those gates when a change lifts the test score, never lower them to let a regression through.
 
 `scripts/run-public-gec-benchmark.py` compares the same layers with LanguageTool on CoNLL-2014, JFLEG and the GitHub Typo Corpus (downloaded into ignored `dist/gec-data/`; ERRANT and GLEU scoring). See the script's header for setup.
+
+## Tone check development sets
+
+`tone-check/dev.jsonl` (1,330 messages) and `tone-check/dev2.jsonl` (195) measure the optional tone check (`scripts/tone-check`), which flags a message as rude, passive-aggressive, curt or over-apologetic. Each item has `label` (`neutral` or one of those four) and `hard` (a civil message a naive classifier tends to flag).
+
+- **dev.jsonl:**
+  - lines written for it in settings the training seeds do not use (`scripts/tone-check/dev_written.txt`);
+  - bake-off 2's workplace probe and tone-set labels;
+  - everyday batch-002 texts written for Parzr (Enron lines excluded).
+
+  It chose the shipped threshold, and its error classes shaped the second training round, so it is a development set.
+- **dev2.jsonl** (`tone-check/dev2_written.txt`) was written before the second round trained and scored once at the end.
+
+Training removes every text of both sets. Results: dist/tone-check/README.md.

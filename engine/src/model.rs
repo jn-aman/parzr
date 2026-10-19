@@ -1,4 +1,5 @@
 //! Bundled context and style refinement between the engine’s correctness passes.
+use crate::meaning::distance;
 use crate::{Edit, Mode, Request, RewriteResult, apply_edits, byte_at, overlaps, protected_spans};
 use similar::{ChangeTag, TextDiff};
 use std::{
@@ -297,6 +298,93 @@ pub fn gec_forward(ids: &[i32]) -> Option<(Vec<f32>, Vec<f32>)> {
     };
     (status == 0).then_some((labels, detect))
 }
+type MlmPrepare = unsafe extern "C" fn(*const c_char, *mut i32, *mut i32, *mut i32) -> i32;
+type MlmForward =
+    unsafe extern "C" fn(*const i32, *const i32, *const i32, i32, i32, i32, *mut f32) -> i32;
+/// The slip checker's entry points; absent in a runtime built without it (the typing-time slip
+/// check is then off and sentence swaps fall back to the writing model).
+struct MlmApi {
+    prepare: MlmPrepare,
+    forward: MlmForward,
+}
+static MLM: OnceLock<Option<MlmApi>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+fn mlm_api() -> Option<&'static MlmApi> {
+    MLM.get_or_init(|| {
+        use std::os::unix::ffi::OsStrExt;
+        let library = std::env::var_os("PARZR_GEC_RUNTIME")
+            .map(PathBuf::from)
+            .or_else(|| library_path().ok())?;
+        let path = CString::new(library.as_os_str().as_bytes()).ok()?;
+        // SAFETY: NUL-terminated names; the handle is kept for the process lifetime.
+        unsafe {
+            let handle = dlopen(path.as_ptr(), 2);
+            if handle.is_null() {
+                return None;
+            }
+            let prepare = dlsym(handle, c"parzr_mlm_prepare".as_ptr());
+            let forward = dlsym(handle, c"parzr_mlm_forward".as_ptr());
+            (!prepare.is_null() && !forward.is_null()).then(|| MlmApi {
+                prepare: std::mem::transmute::<*mut c_void, MlmPrepare>(prepare),
+                forward: std::mem::transmute::<*mut c_void, MlmForward>(forward),
+            })
+        }
+    })
+    .as_ref()
+}
+#[cfg(not(target_os = "macos"))]
+fn mlm_api() -> Option<&'static MlmApi> {
+    MLM.get_or_init(|| None).as_ref()
+}
+/// The slip checker's shape once it is loaded: rows per batch, tokens per row, targets per row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MlmShape {
+    pub batch: usize,
+    pub length: usize,
+    pub targets: usize,
+}
+/// Loads (or compiles) the resident slip checker in `directory`. Idempotent; None when unavailable.
+pub fn mlm_prepare(directory: &Path) -> Option<MlmShape> {
+    let api = mlm_api()?;
+    let dir = CString::new(directory.to_string_lossy().as_bytes()).ok()?;
+    let (mut batch, mut length, mut targets) = (0, 0, 0);
+    // SAFETY: NUL-terminated directory name and three out-pointers, alive for this synchronous call.
+    let status = unsafe { (api.prepare)(dir.as_ptr(), &mut batch, &mut length, &mut targets) };
+    (status == 0 && batch > 0 && length > 2 && targets > 0).then_some(MlmShape {
+        batch: batch as usize,
+        length: length as usize,
+        targets: targets as usize,
+    })
+}
+/// Log-probabilities (rows x shape.targets) of each row's target ids at its masked position. `ids`
+/// holds rows x shape.length ids, padded with the pad id.
+pub fn mlm_forward(
+    shape: MlmShape,
+    ids: &[i32],
+    positions: &[i32],
+    targets: &[i32],
+) -> Option<Vec<f32>> {
+    let api = mlm_api()?;
+    let rows = positions.len();
+    if rows == 0 || ids.len() != rows * shape.length || targets.len() != rows * shape.targets {
+        return None;
+    }
+    let mut out = vec![0f32; rows * shape.targets];
+    // SAFETY: the buffers hold exactly rows x length ids, rows positions, rows x targets ids and
+    // rows x targets floats, as the runtime requires.
+    let status = unsafe {
+        (api.forward)(
+            ids.as_ptr(),
+            positions.as_ptr(),
+            targets.as_ptr(),
+            i32::try_from(rows).ok()?,
+            i32::try_from(shape.length).ok()?,
+            i32::try_from(shape.targets).ok()?,
+            out.as_mut_ptr(),
+        )
+    };
+    (status == 0).then_some(out)
+}
 pub fn cancel() {
     if let Some(Ok(r)) = LIBRARY.get() {
         // SAFETY: function pointer from the retained runtime library.
@@ -356,6 +444,7 @@ fn prompt(
     literals: &[Literal],
     strict: bool,
     careful: Option<&str>,
+    shots: bool,
 ) -> String {
     let context = careful.map(str::trim).filter(|c| !c.is_empty());
     let retry = careful.map(|_| {
@@ -431,13 +520,20 @@ fn prompt(
         _ => format!("Text to edit:\n{passage}"),
     };
     // One worked example per tone: the small model otherwise often answers a short message ("Are you stupid?")
-    // or hands it back unchanged, where the example shows it the rewrite.
-    let shown = match (example(req.mode), careful) {
-        (Some((input, output)), None) => format!(
-            "<|im_start|>user\nText to edit:\n{input}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>\n"
-        ),
-        _ => String::new(),
+    // or hands it back unchanged, where the example shows it the rewrite. A second attempt sees
+    // several (`shots`).
+    let single = example(req.mode);
+    let examples: &[(&str, &str)] = match (careful, shots) {
+        (Some(_), _) => &[],
+        (None, true) => worked_examples(req.mode),
+        (None, false) => single.as_slice(),
     };
+    let shown: String = examples
+        .iter()
+        .map(|(input, output)| format!(
+            "<|im_start|>user\nText to edit:\n{input}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>\n"
+        ))
+        .collect();
     format!(
         "<|im_start|>system\n{instruction}{keep}{dialect}{boundary}{ending}{protection}<|im_end|>\n{shown}<|im_start|>user\n{passage}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
@@ -449,6 +545,83 @@ fn example(mode: Mode) -> Option<(&'static str, &'static str)> {
         "this plan is dumb, who even approved it??",
         "I have concerns about this plan. Who approved it?",
     ))
+}
+/// The worked examples a tone's second attempt is shown, when the first one changed what the
+/// text said, answered it, or hardly moved it toward the tone. Each keeps every fact, keeps a
+/// question a question, and moves the text the way its tone should; their words are unlikely in
+/// real text, and a rewrite that borrows them is rejected (`meaning::borrows`).
+fn worked_examples(mode: Mode) -> &'static [(&'static str, &'static str)] {
+    match mode {
+        Mode::Professional => &[
+            (
+                "hey can u check the slides before the call",
+                "Hi, could you please check the slides before the call?",
+            ),
+            (
+                "why is the invoice still wrong??",
+                "Could you explain why the invoice is still incorrect?",
+            ),
+            (
+                "this plan is dumb, who even approved it??",
+                "I have concerns about this plan. Who approved it?",
+            ),
+            (
+                "thx, ill send the spreadsheet tmrw",
+                "Thank you. I will send the spreadsheet tomorrow.",
+            ),
+        ],
+        Mode::Friendly => &[
+            (
+                "Send me the slides by noon.",
+                "Could you send me the slides by noon? Thanks!",
+            ),
+            (
+                "This invoice is wrong again. Fix it today.",
+                "This invoice is wrong again. Could you please fix it today?",
+            ),
+            (
+                "why is the staging server still down?",
+                "Any idea why the staging server is still down?",
+            ),
+            (
+                "I can't make the call.",
+                "Unfortunately, I can't make the call.",
+            ),
+            (
+                "I wanted to take a moment to let you know that the invoice was paid on Monday.",
+                "Just a quick note: the invoice was paid on Monday. Thanks!",
+            ),
+        ],
+        Mode::Concise => &[
+            (
+                "I just wanted to take a moment to let you know that the spreadsheet has been updated with the new numbers.",
+                "The spreadsheet has been updated with the new numbers.",
+            ),
+            (
+                "Would you be able to take a look at the slides today, if possible?",
+                "Could you take a look at the slides today?",
+            ),
+            (
+                "At this point in time, we are not able to offer refunds for orders over $500.",
+                "We cannot offer refunds for orders over $500.",
+            ),
+        ],
+        Mode::Direct => &[
+            (
+                "I was wondering if you could maybe send me the slides by Friday.",
+                "Please send me the slides by Friday.",
+            ),
+            (
+                "I think we should probably move the invoice review to next week.",
+                "We should move the invoice review to next week.",
+            ),
+            (
+                "Is the staging server down again?",
+                "Is the staging server down again?",
+            ),
+        ],
+        Mode::Fix => &[],
+    }
 }
 /// One model call. Output that is blank or carries control tokens is not a suggestion.
 fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
@@ -472,13 +645,21 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     Ok(result)
 }
 fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
+    generate_with(req, passage, careful, false)
+}
+fn generate_with(
+    req: &Request,
+    passage: &str,
+    careful: Option<&str>,
+    shots: bool,
+) -> Result<String, String> {
     let r = runtime()?;
     let (masked, literals) = mask(passage, &kept_spans(req), &name_spans(req))?;
     let mut result = String::new();
     // The first answer must keep every placeholder. If it does not, ask once more with the
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
-        let output = infer(&r, &prompt(req, &masked, &literals, strict, careful))?;
+        let output = infer(&r, &prompt(req, &masked, &literals, strict, careful, shots))?;
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -499,6 +680,13 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
                 .map_or(output.clone(), |rest| rest.trim_start().to_owned()),
             _ => output,
         };
+        // A rewrite opens with a greeting only when the writer wrote one ("Hello, I would
+        // appreciate..." for "can u send me the file" is the model's, not the writer's).
+        let output = if req.mode == Mode::Fix {
+            output
+        } else {
+            drop_new_greeting(&masked, &output)
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -514,6 +702,53 @@ fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<Strin
     Ok(format!("{prefix}{body}{suffix}"))
 }
 
+/// Greetings a rewrite may open with.
+const GREETINGS: &[&str] = &[
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "hello there",
+    "hi there",
+    "hey there",
+    "greetings",
+    "hello",
+    "hiya",
+    "hey",
+    "hi",
+    "dear",
+];
+/// The greeting `text` opens with, if any ("Hello," "Hi there!").
+fn greeting(text: &str) -> Option<&'static str> {
+    let lower = text.trim_start().to_lowercase();
+    GREETINGS.iter().copied().find(|g| {
+        lower
+            .strip_prefix(g)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with([',', '!', '.', ' ', '\n']))
+    })
+}
+/// `output` without a greeting it opens with when `masked` (the passage) opened with none. A
+/// greeting before a name placeholder ("Hi ZXQPARZRKEEP0QXZ,") stays: the name is the writer's.
+fn drop_new_greeting(masked: &str, output: &str) -> String {
+    let Some(g) = greeting(output).filter(|_| greeting(masked).is_none()) else {
+        return output.to_owned();
+    };
+    let body = output.trim_start();
+    let rest = body[g.len()..].trim_start_matches([',', '!', '.', ' ']);
+    // "Hello everyone!" for "Everyone, …": the greeting addresses the writer's own first word.
+    let first_word = |t: &str| {
+        t.split(|c: char| !c.is_alphanumeric())
+            .find(|w| !w.is_empty())
+            .map(str::to_lowercase)
+    };
+    if rest.starts_with("ZXQPARZRKEEP")
+        || rest.trim().is_empty()
+        || body[g.len()..].starts_with(' ')
+            && first_word(rest).is_some_and(|w| first_word(masked) == Some(w))
+    {
+        return output.to_owned();
+    }
+    capitalize_first(rest)
+}
 /// `output` without the articles it puts right before a name placeholder where `masked` has
 /// none ("the ZXQPARZRKEEP0QXZ" for a name the passage wrote bare).
 fn drop_new_articles(masked: &str, output: &str, literals: &[Literal]) -> String {
@@ -1273,38 +1508,6 @@ fn describe(original: &str, replacement: &str) -> (String, String) {
     )
 }
 
-/// Edit distance counting an adjacent transposition as one edit.
-pub(crate) fn distance(a: &str, b: &str) -> usize {
-    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
-    let mut rows: Vec<Vec<usize>> = (0..=a.len())
-        .map(|i| {
-            (0..=b.len())
-                .map(|j| {
-                    if i == 0 {
-                        j
-                    } else if j == 0 {
-                        i
-                    } else {
-                        0
-                    }
-                })
-                .collect()
-        })
-        .collect();
-    for i in 1..=a.len() {
-        for j in 1..=b.len() {
-            let cost = usize::from(a[i - 1] != b[j - 1]);
-            rows[i][j] = (rows[i - 1][j] + 1)
-                .min(rows[i][j - 1] + 1)
-                .min(rows[i - 1][j - 1] + cost);
-            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
-                rows[i][j] = rows[i][j].min(rows[i - 2][j - 2] + 1);
-            }
-        }
-    }
-    rows[a.len()][b.len()]
-}
-
 /// Function words a model may add or drop; any other inserted or deleted word is rejected.
 const CLOSED_CLASS: [&str; 16] = [
     "a", "an", "the", "to", "of", "in", "on", "at", "for", "is", "are", "was", "were", "be", "it",
@@ -1710,6 +1913,57 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     if o.is_empty() && r == "," && optional_comma(before, after) {
         return None;
     }
+    // The writer's line breaks stay: "Thanks for the update\nI'll share it" is two lines of a
+    // thread, not one sentence to join.
+    if o.matches('\n').count() > r.matches('\n').count() {
+        return None;
+    }
+    // "6:30 p.m." takes no comma inside the time.
+    if o.is_empty()
+        && r == ","
+        && before.ends_with(|c: char| c.is_ascii_digit())
+        && after.trim_start().to_lowercase().starts_with(['a', 'p'])
+        && after.trim_start()[1..].starts_with(['.', 'm', 'M'])
+    {
+        return None;
+    }
+    // "e-mail" to "email", "Standup" to "Stand-up": a hyphen in a word the writer spelled
+    // correctly is their style.
+    let unhyphened = |s: &str| s.replace('-', "");
+    let part = |c: char| c.is_alphanumeric() || c == '-';
+    let left = &before[before.trim_end_matches(part).len()..];
+    let right = &after[..after.len() - after.trim_start_matches(part).len()];
+    let (wo, wr) = (format!("{left}{o}{right}"), format!("{left}{r}{right}"));
+    if wo != wr
+        && wo.contains('-') != wr.contains('-')
+        && unhyphened(&wo).to_lowercase() == unhyphened(&wr).to_lowercase()
+        && (crate::spelling::known(&unhyphened(&wo).to_lowercase())
+            || wo
+                .split('-')
+                .all(|p| crate::spelling::known(&p.to_lowercase())))
+    {
+        return None;
+    }
+    // "Eugene Water and Electric Board", "Tacoma City Light": no comma inside a capitalized name.
+    let capital_word = |s: &str| s.starts_with(|c: char| c.is_uppercase());
+    if o.is_empty()
+        && r == ","
+        && before
+            .split_whitespace()
+            .next_back()
+            .is_some_and(|w| capital_word(w) && !w.ends_with(['.', ',', ':', ';']))
+        && capital_word(after.trim_start())
+        && !before.trim_end().ends_with(['.', '!', '?'])
+    {
+        return None;
+    }
+    // "$PATH", "#general", "@sam", "~/Downloads": a sigil belongs to the code or handle it opens.
+    if ["$", "#", "@", "~"]
+        .iter()
+        .any(|s| o.matches(s).count() > r.matches(s).count())
+    {
+        return None;
+    }
     if o != r && o.to_lowercase() == r.to_lowercase() {
         let lead = before.trim_end_matches(|c: char| " \"“‘'(".contains(c));
         let starts = (lead.is_empty() || lead.ends_with(['.', '!', '?', '\n']))
@@ -1750,6 +2004,22 @@ fn vetted(source: &str, mut e: Edit) -> Option<Edit> {
     Some(e)
 }
 
+/// A plural verb after a group noun made singular ("The team are" to "is").
+fn group_noun_verb(source: &str, e: &Edit) -> bool {
+    let plural = ["are", "were", "have", "aren't", "weren't", "haven't"];
+    let singular = ["is", "was", "has", "isn't", "wasn't", "hasn't"];
+    let Some(at) = byte_at(source, e.start_utf16) else {
+        return false;
+    };
+    let noun = source[..at]
+        .split_whitespace()
+        .next_back()
+        .unwrap_or("")
+        .to_lowercase();
+    plural.contains(&e.original.trim().to_lowercase().as_str())
+        && singular.contains(&e.replacement.trim().to_lowercase().as_str())
+        && crate::structure::COLLECTIVE.contains(&noun.as_str())
+}
 /// Fix mode keeps only plausible corrections, minus the ones the model gets wrong on correct text.
 fn guard(source: &str, all: Vec<Edit>) -> Vec<Edit> {
     // A rejected edit takes the other half of its move with it.
@@ -1766,6 +2036,48 @@ fn guard(source: &str, all: Vec<Edit>) -> Vec<Edit> {
         .into_iter()
         .filter(|(g, _)| !g.as_ref().is_some_and(|g| gone.contains(g)))
         .filter_map(|(_, e)| e)
+        .collect()
+}
+
+/// A short chat message ("On my way", "Miss you") or one that ends in an emoji ("Just got home 🏠")
+/// reads as complete without a final mark, but the model ends nearly every passage with one. Its
+/// period, exclamation or question mark at the end of such a passage is no correction: the mark
+/// is taken out of the edit that adds it, and the rest of that edit ("u" to "you.") stays. Longer
+/// sentences still get their missing final punctuation, and a selection that continues past the
+/// passage is already told to add none.
+fn keep_chat_ending(req: &Request, edits: Vec<Edit>) -> Vec<Edit> {
+    const MARKS: [char; 3] = ['.', '!', '?'];
+    let text = req.text.trim_end();
+    let words = text
+        .split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
+        .count();
+    // The words before a closing emoji: the model puts its mark after them ("legs. 😅") as often
+    // as after the emoji ("legs 😅.").
+    let core = match emoji_regex().find_iter(text).last() {
+        Some(m) if m.end() == text.len() => text[..m.start()].trim_end(),
+        _ => text,
+    };
+    let emoji_end = core.len() < text.len();
+    if !req.sentence_end || core.is_empty() || core.ends_with(MARKS) || !(words <= 4 || emoji_end) {
+        return edits;
+    }
+    let end = core.encode_utf16().count();
+    edits
+        .into_iter()
+        .filter_map(|mut e| {
+            let r = e.replacement.trim_end();
+            if e.end_utf16 < end || !r.ends_with(MARKS) || e.original.trim_end().ends_with(MARKS) {
+                return Some(e);
+            }
+            let kept = format!("{}{}", r.trim_end_matches(MARKS), &e.replacement[r.len()..]);
+            if kept == e.original {
+                return None;
+            }
+            (e.category, e.explanation) = describe(&e.original, &kept);
+            e.replacement = kept;
+            Some(e)
+        })
         .collect()
 }
 
@@ -1946,26 +2258,184 @@ fn hints(text: &str) -> Vec<crate::TokenHint> {
 /// Keeps the rewrite of each sentence that still says what the corrected sentence said; asks
 /// once more, more strictly, for a sentence that does not, and otherwise leaves that sentence
 /// as corrected. Linked edits stay together.
-fn meaning_guard(req: &Request, all: Vec<Edit>) -> (Vec<Edit>, bool) {
+fn meaning_guard(req: &Request, all: Vec<Edit>, shots: bool) -> (Vec<Edit>, bool) {
     guard_segments(
         req,
         all,
-        |source, output, elsewhere| {
-            crate::meaning::keeps_meaning(
-                req.mode,
-                source,
-                output,
-                elsewhere,
-                &hints(source),
-                &hints(output),
-            )
-            .and_then(|()| match example(req.mode) {
-                Some((input, _)) => crate::meaning::borrows(input, source, output),
-                None => Ok(()),
-            })
-        },
+        |source, output, elsewhere| segment_keeps(req, shots, source, output, elsewhere),
         |segment| careful(req, segment),
     )
+}
+/// The meaning check of one segment of a tone rewrite, including that it borrows nothing from
+/// the worked examples its prompt showed (`shots`: the second attempt's set).
+fn segment_keeps(
+    req: &Request,
+    shots: bool,
+    source: &str,
+    output: &str,
+    elsewhere: &str,
+) -> Result<(), String> {
+    crate::meaning::keeps_meaning(
+        req.mode,
+        source,
+        output,
+        elsewhere,
+        &hints(source),
+        &hints(output),
+    )?;
+    if shots {
+        for (input, rewrite) in worked_examples(req.mode) {
+            crate::meaning::borrows(&format!("{input} {rewrite}"), source, output)?;
+        }
+        Ok(())
+    } else {
+        match example(req.mode) {
+            Some((input, _)) => crate::meaning::borrows(input, source, output),
+            None => Ok(()),
+        }
+    }
+}
+/// What a candidate rewrite would give before any retry: the number of its segments that fail
+/// the meaning check, and how far the segments that pass move the text toward its tone.
+fn candidate_score(req: &Request, all: &[Edit], shots: bool) -> (usize, i32) {
+    let mut failed = 0;
+    let mut kept = vec![];
+    for segment in crate::meaning::segments(&req.text, all) {
+        let Some((source, output)) = crate::meaning::texts(&req.text, &segment, all) else {
+            continue;
+        };
+        let elsewhere = outside(&req.text, segment.start, segment.end);
+        if segment_keeps(req, shots, &source, &output, &elsewhere).is_ok() {
+            kept.extend(segment.edits.iter().map(|&i| all[i].clone()));
+        } else {
+            failed += 1;
+        }
+    }
+    kept.sort_by_key(|e| (e.start_utf16, e.end_utf16));
+    let output = apply_edits(&req.text, &kept).map_or_else(|_| req.text.clone(), |(t, _)| t);
+    (failed, tone_gain(req.mode, &req.text, &output))
+}
+/// Letters and digits only, lowercased: two texts that differ only here differ in case or
+/// punctuation, not in wording.
+fn wording(text: &str) -> String {
+    text.chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .flat_map(char::to_lowercase)
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+/// How far `output` moves `source` toward `mode`: rude words removed, chat shorthand spelled
+/// out (Professional), hedges and padding cut and length saved (Concise, Direct), minus
+/// emphasis a softening tone added. Only ranks rewrites that already keep the meaning.
+fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
+    let (s, o) = (
+        crate::meaning::tone_marks(source),
+        crate::meaning::tone_marks(output),
+    );
+    let less = |a: usize, b: usize| a as i32 - b as i32;
+    let more = |a: usize, b: usize| (b as i32 - a as i32).max(0);
+    let words = s.words.max(1) as i32;
+    let changed = i32::from(wording(source) != wording(output));
+    // A complaint turned up ("I really hate it", "Are you really that stupid?") is no softening.
+    let harsher = if s.negative + s.rude > 0 {
+        2 * more(s.boosters, o.boosters)
+    } else {
+        0
+    };
+    match mode {
+        Mode::Professional | Mode::Friendly => {
+            // Rewording that leaves the insult in place has not reached the tone.
+            let reworded = if o.rude > 0 { 0 } else { changed };
+            let shorthand = if mode == Mode::Professional {
+                2 * less(s.chat, o.chat) - more(s.exclaims, o.exclaims)
+            } else {
+                // Friendly: padding said plainly ("Just a quick note: …").
+                less(s.padding, o.padding) / 2
+            };
+            3 * less(s.rude, o.rude) + reworded + shorthand
+                - 2 * more(s.emphasis, o.emphasis)
+                - harsher
+        }
+        Mode::Concise => {
+            less(s.rude, o.rude)
+                + changed
+                + 10 * less(s.words, o.words) / words
+                + less(s.padding, o.padding) / 2
+                + less(s.hedges, o.hedges)
+        }
+        Mode::Direct => {
+            less(s.rude, o.rude)
+                + changed
+                + 5 * less(s.words, o.words) / words
+                + less(s.padding, o.padding) / 2
+                + 2 * less(s.hedges, o.hedges)
+        }
+        Mode::Fix => 0,
+    }
+}
+/// A first rewrite worth a second attempt even though it keeps the meaning. Professional and
+/// Friendly: it left behind the insult or chat shorthand its tone removes, turned the text up,
+/// or left a complaint as it was; a polite or neutral sentence left as it was is already in
+/// the tone (on 480 everyday tone requests, retrying those added "ever", "successfully" and
+/// "delicious"). Concise and Direct: it left a longer text as it was. Every extra candidate is
+/// one more chance for a wrong one to pass the check.
+fn weak(mode: Mode, source: &str, output: &str) -> bool {
+    let (s, o) = (
+        crate::meaning::tone_marks(source),
+        crate::meaning::tone_marks(output),
+    );
+    let unchanged = wording(source) == wording(output);
+    let complaint = s.rude + s.negative > 0;
+    match mode {
+        Mode::Professional => {
+            unchanged && complaint || o.rude > 0 || o.chat > 0 || o.emphasis > s.emphasis
+        }
+        // A padded message whose padding all stayed ("I wanted to take a moment to let you know…")
+        // can be said more warmly and plainly.
+        Mode::Friendly => {
+            unchanged && complaint
+                || s.padding >= 3 && o.padding >= s.padding
+                || o.rude > 0
+                || o.emphasis > s.emphasis
+        }
+        Mode::Concise | Mode::Direct => unchanged && s.words >= 8,
+        Mode::Fix => false,
+    }
+}
+/// Intensifiers the model added to a Professional or Friendly rewrite ("This is definitely wrong
+/// again!"), and an exclamation it put on a negative sentence, are taken back: a softening tone
+/// never makes the text more emphatic than the writer did.
+fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    if !matches!(req.mode, Mode::Professional | Mode::Friendly) {
+        return all;
+    }
+    let lower_words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let marks = crate::meaning::tone_marks(&req.text);
+    let negative = marks.negative + marks.rude > 0;
+    // On a complaint "really" and "so" turn it up too ("I really hate it").
+    let emphatic = |w: &str| {
+        crate::meaning::EMPHASIS.contains(&w) || negative && crate::meaning::BOOSTERS.contains(&w)
+    };
+    all.into_iter()
+        .filter(|e| {
+            let (before, after) = (lower_words(&e.original), lower_words(&e.replacement));
+            let added: Vec<&String> = after.iter().filter(|w| !before.contains(w)).collect();
+            let emphasis_only = !added.is_empty()
+                && added.iter().all(|w| emphatic(w))
+                && before.iter().all(|w| after.contains(w));
+            let exclaims = e.replacement.matches('!').count() > e.original.matches('!').count()
+                && (req.mode == Mode::Professional || negative)
+                && before == after;
+            !(emphasis_only || exclaims)
+        })
+        .collect()
 }
 
 fn guard_segments(
@@ -2119,11 +2589,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     validate(req)?;
     let started = Instant::now();
     let protected = kept_spans(req);
-    let attempt = |careful: Option<&str>| -> Result<(String, Vec<Edit>), String> {
+    let attempt_with = |careful: Option<&str>,
+                        shots: bool|
+     -> Result<(String, Vec<Edit>), String> {
         let text = if req.text.trim().is_empty() {
             req.text.clone()
         } else {
-            generate(req, &req.text, careful)?
+            generate_with(req, &req.text, careful, shots)?
         };
         let all = edits(&req.text, &text, req.mode, &protected);
         if all.len() > 512 {
@@ -2152,6 +2624,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
             .collect();
         Ok((text, all))
     };
+    let attempt = |careful: Option<&str>| attempt_with(careful, false);
     // A tone rewrite that loses or moves a protected element (a number, a link, a name) or runs
     // away is asked once more as a light edit before the request fails.
     let (_, all) = attempt(None).or_else(|error| match req.mode {
@@ -2160,9 +2633,50 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
     })?;
     let all = keep_names(req, all);
     let (changes, withheld) = if req.mode == Mode::Fix {
-        (guard(&req.text, all), false)
+        let mut kept = guard(&req.text, all);
+        // "The team are working": British English lets a group noun take a plural verb.
+        if req.dialect == "british" {
+            kept.retain(|e| !group_noun_verb(&req.text, e));
+        }
+        (keep_chat_ending(req, kept), false)
     } else {
-        meaning_guard(req, all)
+        // A first rewrite that fails the meaning check somewhere, or barely moves the text toward
+        // its tone, gets one more attempt with worked examples. The candidate whose checked
+        // segments move the text further is kept (the first on a tie, then the one with fewer
+        // failed segments), and is guarded as usual, retries included.
+        let all = drop_added_emphasis(req, all);
+        let (failed, gain) = candidate_score(req, &all, false);
+        let first_output = apply_edits(&req.text, &all)?.0;
+        // A Professional or Friendly second answer can only earn its place by removing an
+        // insult, chat shorthand (Professional) or padding (Friendly), gain 2 or more: without
+        // one in the text, it is not asked.
+        let marks = crate::meaning::tone_marks(&req.text);
+        let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
+            || 3 * marks.rude
+                + 1
+                + if req.mode == Mode::Professional {
+                    2 * marks.chat
+                } else {
+                    marks.padding / 2
+                }
+                >= 2;
+        let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
+            .then(|| attempt_with(None, true).ok())
+            .flatten()
+            .map(|(_, e)| drop_added_emphasis(req, keep_names(req, e)))
+            .filter(|e| {
+                let (failed2, gain2) = candidate_score(req, e, true);
+                // Never more failed segments than the first; better on tone, or as good with fewer
+                // failures. A Professional or Friendly one must also take out what its tone
+                // removes (an insult, chat shorthand, padding): rewording alone ("known for its delicious
+                // food") is how examples-led answers embellish neutral text.
+                let earned = !matches!(req.mode, Mode::Professional | Mode::Friendly) || gain2 >= 2;
+                earned && failed2 <= failed && (gain2 > gain || gain2 == gain && failed2 < failed)
+            });
+        match second {
+            Some(e) => meaning_guard(req, e, true),
+            None => meaning_guard(req, all, false),
+        }
     };
     let changes = match pick_emoji(req, &apply_edits(&req.text, &changes)?.0) {
         Some(emoji) => end_with(&req.text, changes, emoji),
@@ -2771,6 +3285,67 @@ mod tests {
         apply_edits(source, &kept).unwrap().0
     }
     #[test]
+    fn short_chat_messages_and_emoji_endings_keep_their_open_end() {
+        let fixed = |source: &str, target: &str, sentence_end: bool| {
+            let req = Request {
+                text: source.into(),
+                sentence_end,
+                ..Request::default()
+            };
+            let kept = keep_chat_ending(&req, guard(source, edits(source, target, Mode::Fix, &[])));
+            apply_edits(source, &kept).unwrap().0
+        };
+        // Short messages stay open-ended.
+        for (source, target) in [
+            ("be there in five", "be there in five."),
+            ("Call me later", "Call me later!"),
+            ("Free tonight", "Free tonight?"),
+            ("Nice work, team", "Nice work, team."),
+            ("Got the tickets 🎉", "Got the tickets 🎉."),
+            (
+                "Our team shipped the new release today 🚀",
+                "Our team shipped the new release today. 🚀",
+            ),
+            (
+                "We finally fixed the build on the release branch 👍",
+                "We finally fixed the build on the release branch 👍.",
+            ),
+        ] {
+            assert_eq!(fixed(source, target, true), source, "{source:?}");
+        }
+        // The rest of an edit that also adds the mark stays.
+        assert_eq!(
+            fixed("see you tomorow", "see you tomorrow.", true),
+            "see you tomorrow"
+        );
+        assert_eq!(
+            fixed("i recieved it", "I received it.", true),
+            "I received it"
+        );
+        // A sentence of five words or more still gets its final punctuation.
+        assert_eq!(
+            fixed(
+                "The package arrived this morning",
+                "The package arrived this morning.",
+                true
+            ),
+            "The package arrived this morning."
+        );
+        // A mark the writer typed, and a selection that runs on past the passage, are left to
+        // the other checks.
+        for (source, target, end) in [
+            ("Call me later!", "Call me later.", true),
+            ("Big news on Monday! 🎉", "Big news on Monday. 🎉", true),
+            ("be there in five", "be there in five.", false),
+        ] {
+            assert_eq!(
+                fixed(source, target, end),
+                guarded(source, target),
+                "{source:?}"
+            );
+        }
+    }
+    #[test]
     fn curly_quotes_stay_curly() {
         let s = "“Stay here,” said the pilot’s sister.";
         assert_eq!(guarded(s, "\"Stay here,\" said the pilot's sister."), s);
@@ -2799,6 +3374,40 @@ mod tests {
     fn a_quote_mark_moved_elsewhere_stays_put() {
         let s = "He called it \"a fine job\", and left early.";
         assert_eq!(guarded(s, "He called it a fine job, and \"left early."), s);
+    }
+    #[test]
+    fn line_breaks_time_commas_and_sigils_survive_the_fix_pass() {
+        // Batch 3: Option+Space joined chat lines and emails into one paragraph.
+        let s = "Thanks for the update\nI'll share it with the team";
+        assert_eq!(
+            guarded(s, "Thanks for the update. I'll share it with the team."),
+            "Thanks for the update\nI'll share it with the team."
+        );
+        let s = "Lunch?\nI'm starving";
+        assert_eq!(guarded(s, "Lunch? I'm starving."), "Lunch?\nI'm starving.");
+        let s = "The mixer runs from 5:00 p.m. until 8:00 p.m. downtown.";
+        assert_eq!(
+            guarded(
+                s,
+                "The mixer runs from 5:00, p.m. until 8:00, p.m. downtown."
+            ),
+            s
+        );
+        let s = "Tacoma City Light, Eugene Water and Electric Board and others filed.";
+        assert_eq!(
+            guarded(
+                s,
+                "Tacoma City Light, Eugene, Water and Electric Board and others filed."
+            ),
+            s
+        );
+        let s = "I wrote by e-mail before the Standup.";
+        assert_eq!(guarded(s, "I wrote by email before the Stand-up."), s);
+        let s = "$PATH is wrong on my machine";
+        assert_eq!(
+            guarded(s, "PATH is wrong on my machine."),
+            "$PATH is wrong on my machine."
+        );
     }
     #[test]
     fn dashes_and_ellipses_are_not_rewritten() {
@@ -3365,5 +3974,152 @@ mod tests {
             let kept = keep_names(&req, edits(a, b, Mode::Professional, &[]));
             assert_eq!(apply_edits(a, &kept).unwrap().0, expected, "{a} -> {b}");
         }
+    }
+
+    #[test]
+    fn worked_examples_keep_their_meaning_and_show_in_the_second_prompt() {
+        for mode in [
+            Mode::Professional,
+            Mode::Friendly,
+            Mode::Concise,
+            Mode::Direct,
+        ] {
+            let req = Request {
+                mode,
+                ..Request::default()
+            };
+            let shown = prompt(&req, "the text", &[], false, None, true);
+            let first = prompt(&req, "the text", &[], false, None, false);
+            for (input, output) in worked_examples(mode) {
+                assert_eq!(
+                    crate::meaning::keeps_meaning(mode, input, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {input} -> {output}"
+                );
+                assert!(shown.contains(input) && shown.contains(output), "{mode:?}");
+                assert!(
+                    !first.contains(output) || example(mode).is_some_and(|e| e.1 == *output),
+                    "{mode:?}"
+                );
+            }
+            // A light-edit retry shows no examples at all.
+            let retry = prompt(&req, "the text", &[], false, Some(""), true);
+            assert_eq!(retry.matches("<|im_start|>user").count(), 1, "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn candidates_rank_by_the_marks_their_tone_removes() {
+        use Mode::*;
+        let chat = "hey can u send me the file asap I need it now";
+        assert!(
+            tone_gain(
+                Professional,
+                chat,
+                "Could you please send me the file as soon as possible? I need it now."
+            ) > tone_gain(
+                Professional,
+                chat,
+                "hey can you send me the file ASAP I need it now"
+            )
+        );
+        // Rewording that keeps the insult, or turns the complaint up, gains nothing.
+        let rude = "Are you stupid?";
+        assert!(tone_gain(Friendly, rude, "Are you really that stupid?") <= 0);
+        assert!(
+            tone_gain(
+                Friendly,
+                "This is wrong again.",
+                "This is really wrong again."
+            ) < 0
+        );
+        let padded = "I wanted to take a moment to let you know that the budget is still $450.";
+        assert!(
+            tone_gain(Concise, padded, "The budget is still $450.")
+                > tone_gain(
+                    Concise,
+                    padded,
+                    "I wanted to let you know the budget is still $450."
+                )
+        );
+        assert!(weak(Professional, chat, chat));
+        assert!(weak(Friendly, rude, rude));
+        assert!(weak(Direct, padded, padded));
+        assert!(!weak(Concise, "Fix it now.", "Fix it now."));
+        assert!(!weak(Direct, padded, "The budget is still $450."));
+    }
+
+    #[test]
+    fn a_rewrite_opens_with_a_greeting_only_when_the_writer_did() {
+        let cases = [
+            (
+                "Can you send me the deck?",
+                "Hello, could you please send me the deck?",
+                "Could you please send me the deck?",
+            ),
+            (
+                "Hey can you send me the deck?",
+                "Hello, could you please send me the deck?",
+                "Hello, could you please send me the deck?",
+            ),
+            (
+                "Thanks for the deck.",
+                "Hi there! Thanks so much for the deck.",
+                "Thanks so much for the deck.",
+            ),
+            (
+                "Send it to ZXQPARZRKEEP0QXZ.",
+                "Hi ZXQPARZRKEEP0QXZ, please send it.",
+                "Hi ZXQPARZRKEEP0QXZ, please send it.",
+            ),
+            (
+                "His team is ready.",
+                "His team is ready.",
+                "His team is ready.",
+            ),
+            (
+                "Everyone, the database is read-only on Sunday.",
+                "Hello everyone! The database is read-only on Sunday.",
+                "Hello everyone! The database is read-only on Sunday.",
+            ),
+        ];
+        for (masked, output, expected) in cases {
+            assert_eq!(drop_new_greeting(masked, output), expected, "{output}");
+        }
+    }
+
+    #[test]
+    fn softening_tones_take_back_added_emphasis() {
+        let text = "This is wrong again. Fix it before the demo.";
+        let output = "This is definitely wrong again! Please fix it before the demo.";
+        for (mode, expected) in [
+            (
+                Mode::Friendly,
+                "This is wrong again. Please fix it before the demo.",
+            ),
+            (
+                Mode::Professional,
+                "This is wrong again. Please fix it before the demo.",
+            ),
+            (Mode::Concise, output),
+        ] {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            let kept = drop_added_emphasis(&req, edits(text, output, mode, &[]));
+            assert_eq!(apply_edits(text, &kept).unwrap().0, expected, "{mode:?}");
+        }
+        // Good news may stay excited.
+        let text = "The demo went well.";
+        let output = "The demo went really well!";
+        let req = Request {
+            text: text.into(),
+            mode: Mode::Friendly,
+            ..Request::default()
+        };
+        let kept = drop_added_emphasis(&req, edits(text, output, Mode::Friendly, &[]));
+        assert_eq!(apply_edits(text, &kept).unwrap().0, output);
     }
 }

@@ -78,6 +78,41 @@ final class ModelPackTests: XCTestCase {
         XCTAssertTrue(pack.files.allSatisfy { $0.url.hasPrefix("https://github.com/jn-aman/parzr/releases/download/") })
         XCTAssertTrue(pack.files.allSatisfy { !$0.license.isEmpty && !$0.purpose.isEmpty && !$0.name.isEmpty && !$0.version.isEmpty })
         XCTAssertGreaterThan(pack.bytes, 100_000_000, "the essential pack holds the real models")
+        // The slip check is an optional pack of its own, under its own release tag.
+        let slips = try XCTUnwrap(manifest.slips)
+        XCTAssertNotEqual(slips.id, pack.id)
+        XCTAssertEqual(slips.provides["slip_model"], "slips")
+        XCTAssertTrue(slips.files.contains { $0.path == "slips/mlm.mlmodelc/weights/weight.bin" })
+        XCTAssertTrue(slips.files.allSatisfy { $0.url.contains("/models-slips-\(slips.version)/") })
+        XCTAssertLessThan(slips.bytes, 100_000_000)
+        // Every optional pack the app knows is pinned, under its own tag, and none provides the essential roles.
+        for optional in OptionalPack.all {
+            let found = try XCTUnwrap(manifest.pack(providing: optional.role), optional.feature)
+            XCTAssertNotEqual(found.id, pack.id)
+            XCTAssertTrue(found.files.allSatisfy { $0.url.contains("/models-\(found.id)-\(found.version)/") }, optional.feature)
+            XCTAssertNil(found.provides["writing_model"]); XCTAssertNil(found.provides["grammar_model"])
+        }
+    }
+    func testOptionalPacksAreDescribedOnceEach() {
+        XCTAssertEqual(Set(OptionalPack.all.map(\.role)).count, OptionalPack.all.count)
+        XCTAssertEqual(Set(OptionalPack.all.map(\.developmentVariable)).count, OptionalPack.all.count)
+        for optional in OptionalPack.all {
+            XCTAssertFalse(optional.feature.isEmpty); XCTAssertFalse(optional.missingNote.isEmpty); XCTAssertFalse(optional.removedNote.isEmpty)
+        }
+        XCTAssertTrue(OptionalPack.slips.automatic, "the slip check follows the essential pack on its own")
+        XCTAssertFalse(OptionalPack.tone.automatic, "the tone check downloads only when its setting is on")
+        let tone = ModelPack(id: "tone", version: "1", provides: ["tone_model": "tone"], files: [Self.file("tone/vocab.txt", Self.grammar)])
+        let manifest = ModelManifest(packs: [Self.pack, tone])
+        XCTAssertEqual(manifest.tone?.id, "tone"); XCTAssertNil(manifest.slips)
+        XCTAssertEqual(manifest.pack(providing: OptionalPack.tone.role)?.id, "tone")
+    }
+    func testTheSlipPackIsFoundByItsRole() throws {
+        let essential = Self.pack
+        let slips = ModelPack(id: "slips", version: "1", provides: ["slip_model": "slips"], files: [Self.file("slips/mlm.bin", Self.grammar)])
+        let manifest = ModelManifest(packs: [essential, slips])
+        XCTAssertEqual(manifest.essential?.id, "essential")
+        XCTAssertEqual(manifest.slips?.id, "slips")
+        XCTAssertNil(ModelManifest(packs: [essential]).slips)
     }
     func testManifestRejectsUnsafeEntries() throws {
         func manifest(_ edit: (inout ModelFile) -> Void) -> ModelManifest { var file = Self.file("a.bin", Self.grammar); edit(&file); return ModelManifest(packs: [ModelPack(id: "p", version: "1", files: [file])]) }
@@ -307,6 +342,43 @@ final class ModelCenterTests: XCTestCase {
         XCTAssertGreaterThan(transport.requests.filter { $0.name == "writer.gguf" }.last?.offset ?? 0, 0, "Download resumed the partial file")
         center.redownload(); await wait(center, for: .ready)
         XCTAssertEqual(transport.requests.filter { $0.name == "writer.gguf" }.last?.offset, 0)
+    }
+    func testTheSlipPackDownloadsAndIsRemovedOnItsOwn() async {
+        let data = Data("slip weights".utf8)
+        let pack = ModelPack(id: "slips", version: "1", title: "Word-choice check", provides: ["slip_model": "slips"], files: [ModelPackTests.file("slips/mlm.bin", data)])
+        let transport = fake(); transport.serve("slips.mlm.bin", data)
+        let essential = center(transport)
+        let slips = ModelCenter(pack: pack, store: ModelStore(root: root, transport: transport), defaults: defaults, optional: .slips)
+        XCTAssertEqual(slips.feature, "Slip check"); XCTAssertEqual(essential.feature, "Smart grammar")
+        slips.start(); await wait(slips, for: .ready)
+        essential.start(); await wait(essential, for: .ready)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent("slips/1/slips/mlm.bin").path))
+        // Removing the slip check leaves the essential pack alone, and its Remove is remembered separately.
+        slips.remove()
+        XCTAssertTrue(slips.removedByUser); XCTAssertFalse(essential.removedByUser)
+        XCTAssertEqual(essential.state, .ready); XCTAssertEqual(slips.state, .missing)
+        slips.startIfNeeded(); XCTAssertEqual(slips.state, .missing, "no automatic download after Remove")
+        essential.remove(); XCTAssertTrue(essential.removedByUser)
+        slips.start(userInitiated: true); XCTAssertFalse(slips.removedByUser); XCTAssertTrue(essential.removedByUser)
+        await wait(slips, for: .ready)
+    }
+    func testOptionalPacksKeepSeparateRemovesAndSayWhatTheyMiss() async {
+        let slipData = Data("slip weights".utf8), toneData = Data("tone weights".utf8)
+        let slipPack = ModelPack(id: "slips", version: "1", provides: ["slip_model": "slips"], files: [ModelPackTests.file("slips/mlm.bin", slipData)])
+        let tonePack = ModelPack(id: "tone", version: "1", provides: ["tone_model": "tone"], files: [ModelPackTests.file("tone/vocab.txt", toneData)])
+        let transport = fake(); transport.serve("slips.mlm.bin", slipData); transport.serve("tone.vocab.txt", toneData)
+        let slips = ModelCenter(pack: slipPack, store: ModelStore(root: root, transport: transport), defaults: defaults, optional: .slips)
+        let tone = ModelCenter(pack: tonePack, store: ModelStore(root: root, transport: transport), defaults: defaults, optional: .tone)
+        XCTAssertEqual(tone.feature, "Tone check"); XCTAssertEqual(tone.optional, .tone)
+        var removed = 0; tone.onRemove = { removed += 1 }
+        slips.start(); tone.start()
+        await wait(slips, for: .ready); await wait(tone, for: .ready)
+        tone.remove()
+        XCTAssertEqual(removed, 1, "the feature hears about a Remove")
+        XCTAssertTrue(tone.removedByUser); XCTAssertFalse(slips.removedByUser)
+        XCTAssertEqual(slips.state, .ready)
+        let dev = ModelCenter(pack: tonePack, store: ModelStore(root: root, transport: transport), defaults: defaults, development: true, optional: .tone)
+        XCTAssertEqual(dev.statusLine, "Using the model named by PARZR_TONE_DIR.")
     }
     func testDevelopmentModelsNeedNoDownload() {
         let center = ModelCenter(pack: ModelPackTests.pack, store: ModelStore(root: root, transport: fake()), defaults: defaults, development: true)

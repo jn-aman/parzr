@@ -1,0 +1,4 @@
+module ParzrEngineFFI {
+    header "parzr_engine.h"
+    export *
+}

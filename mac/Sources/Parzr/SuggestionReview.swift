@@ -6,6 +6,8 @@ struct SuggestionReview: View {
     var apply: (WritingEdit) -> Void
     var ignore: (WritingEdit) -> Void
     var select: (WritingEdit) -> Void
+    /// "Report": an anonymous, redacted wrong-suggestion report, then the suggestion is hidden. nil while reports are off.
+    var report: ((WritingEdit) -> Void)? = nil
     @ObservedObject var preferences = Preferences.shared
     @State private var category = "All"
     private var categories: [String] { ["All"] + Set(model.chosenEdits.map(\.category)).sorted() }
@@ -26,6 +28,7 @@ struct SuggestionReview: View {
                                 NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore(edit) }).fixedSize()
                                 if let name = edit.nameCandidate { NativeButton(title: "This is a name", kind: .utility, symbol: "person.text.rectangle", label: "Mark as a name", action: { preferences.learnName(name); ignore(edit) }).fixedSize() }
                                 else if edit.canAddToDictionary { NativeButton(title: "Save word", kind: .utility, label: "Add to dictionary", action: { preferences.saveWord(edit.original); ignore(edit) }).fixedSize() }
+                                if let report { NativeButton(title: "Report", kind: .utility, label: "Report wrong suggestion", action: { report(edit) }).fixedSize().help("Report this suggestion as wrong. Sends it anonymously, with names, numbers, emails and links removed.") }
                                 Spacer()
                                 NativeButton(title: "Apply", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", enabled: !model.busy, action: { apply(edit) }).fixedSize()
                             }

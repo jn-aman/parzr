@@ -4,6 +4,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import pathlib
 import plistlib
 import re
@@ -18,6 +19,7 @@ required = ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/Mac
 required += ['Contents/Resources/ThirdParty/EnglishFrequency-data.json', 'Contents/Resources/ThirdParty/EnglishFrequency-NOTICES.md', 'Contents/Resources/ThirdParty/EnglishFrequency-LICENSE.txt']
 required += ['Contents/Frameworks/libparzr_model.dylib', 'Contents/Resources/ThirdParty/llama-LICENSE.txt', 'Contents/Resources/ThirdParty/Qwen3.5-LICENSE.txt']
 required += ['Contents/Resources/ThirdParty/Pow-LICENSE.txt', 'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt']
+required += ['Contents/Resources/parzr-tables.dat']
 required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Contents/Resources/Integrations/extensions/browser/content.js', 'Contents/Resources/Integrations/extensions/browser/background.js']
 for name in required:
     if not (app/name).is_file():
@@ -46,6 +48,16 @@ if any('ParzrFixture' in path.name for path in app.rglob('*')): sys.exit('The te
 for name in ['Contents/MacOS/parzr','Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp','Contents/Frameworks/libparzr_engine.dylib','Contents/Frameworks/libparzr_model.dylib']:
     if subprocess.check_output(['lipo','-archs',str(app/name)],text=True).strip() != 'arm64':
         sys.exit('Parzr requires Apple Silicon only: '+name)
+# The engine's compiled tables ship once (Contents/Resources/parzr-tables.dat, engine/src/tables.rs):
+# no engine binary embeds its own copy, and the bundled engine accepts the bundled file.
+for name in ['Contents/MacOS/parzr-engine','Contents/MacOS/parzr-native-host','Contents/MacOS/parzr-lsp','Contents/Frameworks/libparzr_engine.dylib']:
+    if (app/name).stat().st_size > 12_000_000:
+        sys.exit(f'{name} embeds the engine tables; build the engine with --features external-tables.')
+probe = '{"text":"teh","tokens":[{"start_utf16":0,"end_utf16":3,"pos":"Noun"}]}\n'
+environment = {k: v for k, v in os.environ.items() if k != 'PARZR_TABLES_PATH'}
+answer = subprocess.run([str(app/'Contents/MacOS/parzr-engine')], input=probe, capture_output=True, text=True, env=environment).stdout
+if '"error"' in answer or '"text"' not in answer:
+    sys.exit('The bundled engine does not accept Contents/Resources/parzr-tables.dat: '+answer[:200])
 info = plistlib.loads((app/'Contents/Info.plist').read_bytes())
 # Sparkle: the framework is complete, arm64-only, free of sandbox-only XPC services, and its installer helpers are hardened.
 sparkle = app/'Contents/Frameworks/Sparkle.framework'
@@ -63,6 +75,9 @@ for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVer
 # Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, a daily check.
 feed, key = info.get('SUFeedURL', ''), info.get('SUPublicEDKey', '')
 if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) != 32: sys.exit('Info.plist needs an https SUFeedURL and a 32-byte SUPublicEDKey.')
+# Suggestion reports go only to an HTTPS endpoint (see worker/); a build without the key never reports.
+reports = info.get('ParzrReportsURL')
+if reports is not None and not str(reports).startswith('https://'): sys.exit('ParzrReportsURL in Info.plist must be an https URL.')
 if info.get('SUEnableSystemProfiling') is not False or info.get('SUEnableAutomaticChecks') is not True or info.get('SUScheduledCheckInterval') != 3600: sys.exit('Update settings in Info.plist differ from the privacy decisions (no profile, hourly automatic checks).')
 # Every Mach-O in the bundle must carry a valid signature of its own (a deep verify alone would not name an unsigned helper).
 for path in sorted(app.rglob('*')):

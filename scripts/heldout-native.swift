@@ -3,7 +3,7 @@ import Foundation
 // The held-out benchmark's app path: reads one JSON request per line on stdin ({text, gec, deep, dialect,
 // capitalize_names, and optionally mode and casual}) and answers with ParzrCore's WritingEngine result, so Apple NaturalLanguage hints are added
 // as in the app. capitalize_names defaults to true, the app's "Everywhere" default. Build:
-//   swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift \
+//   swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift \
 //     scripts/heldout-native.swift -o dist/qa/heldout-native
 // and run it with PARZR_ENGINE_PATH (libparzr_engine.dylib), PARZR_MODEL_RUNTIME and PARZR_MODEL_PATH set.
 @main

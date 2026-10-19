@@ -95,6 +95,10 @@ enum Compat {
         }
         return role == "AXWebArea" ? .blocked : .ancestor
     }
+    /// The host rules and sensitive-field keywords can only take an editor away from automatic checking, never add one.
+    static func applying(_ verdict: HostRules.Verdict, to eligibility: EditorEligibility) -> EditorEligibility {
+        eligibility == .editor && verdict != .allowed ? .blocked : eligibility
+    }
     static func editableAncestor<Element>(_ focused: Element, eligibility: (Element) -> EditorEligibility, parent: (Element) -> Element?) -> Element? {
         var element = focused
         for _ in 0..<8 {
@@ -157,9 +161,54 @@ enum ReplacePlan {
     /// Google Docs accepts the AXSelectedText write and does nothing, so it is typed at once instead of waiting out a write that cannot land.
     static func first(textSettable: Bool, rangeSettable: Bool, docs: Bool = false) -> Step? { rangeSettable ? (textSettable && !docs ? .axText : .typed) : nil }
     /// `unchanged` is the only state that may fall back to typing; anything else could double-apply.
+    /// Exact text decides first. Failing that, differences an editor makes on its own as it takes a write (quote form, no-break spaces,
+    /// line-break form, runs of spaces, trailing breaks) are ignored, unless the edit itself changes only such things: a quote or spacing
+    /// fix must land exactly.
     static func verdict(before: String, after: String?, expected: String) -> Verdict {
         guard let after else { return .diverged }
-        return after == expected ? .applied : after == before ? .unchanged : .diverged
+        if after == expected { return .applied }
+        if after == before { return .unchanged }
+        let (was, wanted, now) = (tolerant(before), tolerant(expected), tolerant(after))
+        guard was != wanted else { return .diverged }
+        return now == wanted ? .applied : now == was ? .unchanged : .diverged
+    }
+    /// The same text up to what `verdict` tolerates.
+    static func sameText(_ a: String?, _ b: String) -> Bool { a == b || a.map { tolerant($0) == tolerant(b) } == true }
+    /// The editor's text between two range patches, to plan the next one from: identical to what Parzr expects, or different only by
+    /// characters that keep their UTF-16 length (quote form, no-break spaces), so every later offset still holds. nil otherwise.
+    static func adopt(_ current: String?, expected: String) -> String? {
+        guard let current else { return nil }
+        if current == expected { return current }
+        guard current.utf16.count == expected.utf16.count, sameWidth(current) == sameWidth(expected) else { return nil }
+        return current
+    }
+    private static func plain(_ scalar: Unicode.Scalar) -> Unicode.Scalar? {
+        switch scalar {
+        case "\u{2018}", "\u{2019}", "\u{201A}", "\u{201B}", "\u{2032}": "'"
+        case "\u{201C}", "\u{201D}", "\u{201E}", "\u{201F}", "\u{2033}": "\""
+        case "\u{00A0}", "\u{202F}", "\u{2007}", "\u{2009}": " "
+        default: nil
+        }
+    }
+    /// One for one: quotes and no-break spaces in their plain form.
+    private static func sameWidth(_ text: String) -> String {
+        var out = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars { out.append(plain(scalar) ?? scalar) }
+        return String(out)
+    }
+    /// Quotes and spaces in their plain form, one space for each run of spaces or tabs, every line break as LF, and no trailing breaks or spaces.
+    static func tolerant(_ text: String) -> String {
+        var out = String.UnicodeScalarView(), space = false
+        for scalar in text.replacingOccurrences(of: "\r\n", with: "\n").unicodeScalars {
+            var mapped = plain(scalar) ?? scalar
+            if ["\r", "\u{2028}", "\u{2029}", "\u{0085}"].contains(mapped) { mapped = "\n" }
+            if mapped == " " || mapped == "\t" { space = true; continue }
+            if space { out.append(" "); space = false }
+            out.append(mapped)
+        }
+        var result = String(out)
+        while let last = result.unicodeScalars.last, last == "\n" { result.unicodeScalars.removeLast() }
+        return result
     }
     /// A readable leaf can differ from its writable ancestor, so fallback focus must use the snapshot's resolution mode.
     static func focusMatches<Element>(_ element: Element, automatic: Bool = false, resolve: (Bool) -> Element?, same: (Element, Element) -> Bool) -> Bool {
@@ -168,9 +217,29 @@ enum ReplacePlan {
     }
 }
 
+/// Parzr's own key events (typed replacements, Cmd+C and Cmd+V) carry this value in the event's source user-data field,
+/// so Parzr's monitors can tell them from the writer's keys: Parzr's typing never counts as the writer typing.
+enum SyntheticEvent {
+    /// "Parzr" in ASCII, then a fixed tail: any value works as long as nothing else posts it.
+    static let tag: Int64 = 0x5061_727A_7200_51A7
+    static func mark(_ event: CGEvent) { event.setIntegerValueField(.eventSourceUserData, value: tag) }
+    static func isParzr(_ event: CGEvent?) -> Bool { event?.getIntegerValueField(.eventSourceUserData) == tag }
+}
+
 enum TypedReplacement {
     enum Event: Equatable { case text([UInt16]), delete }
     static let chunkSize = 20
+    /// The key down and up for one event, tagged as Parzr's own.
+    static func keyEvents(for event: Event) -> [CGEvent] {
+        [true, false].compactMap { down in
+            let key: CGKeyCode = { if case .delete = event { return 51 } else { return 0 } }()
+            guard let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { return nil }
+            keyEvent.flags = [] // never inherit the Option held for the Parzr shortcut
+            if case .text(let units) = event { keyEvent.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units) }
+            SyntheticEvent.mark(keyEvent)
+            return keyEvent
+        }
+    }
     /// Whole characters per event, at most `chunk` UTF-16 units each (a longer character is sent alone); deleting needs a Delete key press.
     static func events(for replacement: String, chunk: Int = chunkSize) -> [Event] {
         guard !replacement.isEmpty else { return [.delete] }
@@ -289,42 +358,62 @@ extension AX {
 
     /// Replaces `range`: AXSelectedText when the editor honours it, otherwise Unicode key events posted to the app. Verified by re-reading the text.
     static func replace(_ element: AXUIElement, in app: NSRunningApplication, range: NSRange, with replacement: String, before: String, expected: String, automatic: Bool = false) async throws {
-        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: isDocsText(element)), select(element, range) else {
-            throw ParzrError.message("The editor refused a range edit.")
+        let docs = isDocsText(element)
+        func context() -> ApplyLog.Context {
+            ApplyLog.Context(bundle: app.bundleIdentifier ?? "pid.\(app.processIdentifier)", role: string(element, kAXRoleAttribute) ?? "unknown", automatic: automatic, chromium: isChromiumText(element), docs: docs)
         }
+        func fail(_ failure: ApplyFailure, _ stage: String, _ detail: String = "") -> ApplyError { ApplyLog.fail(failure, stage: stage, context: context(), detail: detail) }
+        guard let first = ReplacePlan.first(textSettable: settable(element, kAXSelectedTextAttribute), rangeSettable: canSelect(element), docs: docs) else {
+            throw fail(.rangeRefused, "plan", "rangeSettable=false")
+        }
+        guard select(element, range) else { throw fail(.rangeRefused, "select", "step=\(first)") }
         if first == .axText, AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, replacement as CFString) == .success {
             // Some editors accept the write and change nothing; a slow one may still apply it, so wait before deciding.
             switch await settled(element, before: before, expected: expected, attempts: 8) {
-            case .applied: return
-            case .diverged: throw ParzrError.message("The editor changed during replacement.")
+            case .applied: ApplyLog.note("edit landed", context: context(), detail: "step=axText"); return
+            case .diverged: throw fail(.changedDuring, "axText")
             case .unchanged: break
             }
         }
-        // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
-        let docs = isDocsText(element)
-        guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier, !IsSecureEventInputEnabled(),
-              ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }),
-              docs || select(element, range) else {
-            throw ParzrError.message("Your selection changed. Select the text again.")
+        // Typing goes to whichever field has the keyboard, so it waits for this field to have it (the card has just handed it back) and never
+        // moves it: a different field with focus means the writer went there.
+        guard SelfTestTarget.watched?.processIdentifier == app.processIdentifier else { throw fail(.editorNotInFront, "typed") }
+        guard !IsSecureEventInputEnabled() else { throw fail(.secureInput, "typed") }
+        var focused = false
+        for attempt in 0..<5 {
+            if ReplacePlan.focusMatches(element, automatic: automatic, resolve: { automatic in focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) }) { focused = true; break }
+            if attempt < 4 { try await Task.sleep(for: .milliseconds(40)) }
         }
+        guard focused else {
+            let focus = focusedText(app, automatic: automatic)
+            throw fail(ApplyFocus.focusFailure(editable: true, focusResolves: focus != nil), "typed", focus == nil ? "focus=none" : "focus=other")
+        }
+        // Docs handles a selection asynchronously: setting the same range twice in quick succession scrambles it, so it is set once and then waited for.
+        guard docs || select(element, range) else { throw fail(.rangeRefused, "typed-select") }
         // A Chromium composer must hold exactly the words being replaced before anything is typed: a selection that landed elsewhere would be overwritten.
         if !docs, isChromiumComposer(element) {
             let wanted = (before as NSString).substring(with: range)
             var held = false
             for _ in 0..<15 { if string(element, kAXSelectedTextAttribute) ?? "" == wanted { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
-            guard held else { throw ParzrError.message("The editor did not select the words to replace. Nothing was typed.") }
+            guard held else { throw fail(.selectionNotHeld, "typed-hold", "wanted=\(wanted.utf16.count)u") }
         }
         if docs {
             var held = false
             for _ in 0..<40 { if self.range(element) == range { held = true; break }; try await Task.sleep(for: .milliseconds(20)) }
-            guard held else { throw ParzrError.message("Docs did not select the text. Try again.") }
+            guard held else { throw fail(.docsNotSelected, "typed-hold") }
             try await Task.sleep(for: .milliseconds(120))
         }
         for event in TypedReplacement.events(for: replacement) {
             post(event, to: app.processIdentifier)
             try await Task.sleep(for: .milliseconds(8))
         }
-        guard await settled(element, before: before, expected: expected, attempts: 30) == .applied else { throw ParzrError.message("The editor did not accept the replacement.") }
+        let verdict = await settled(element, before: before, expected: expected, attempts: 30)
+        guard verdict == .applied else { throw fail(verdict == .diverged ? .changedDuring : .notAccepted, "typed", "verdict=\(verdict)") }
+        ApplyLog.note("edit landed", context: context(), detail: "step=typed axTextTried=\(first == .axText)")
+    }
+    /// Puts keyboard focus back into `element`, the field an inline fix belongs to, when no field has it (see `SelectionSnapshot.prepareToApply`).
+    static func restoreFocus(_ element: AXUIElement) {
+        _ = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     }
     private static func settled(_ element: AXUIElement, before: String, expected: String, attempts: Int) async -> ReplacePlan.Verdict {
         var verdict = ReplacePlan.Verdict.unchanged
@@ -336,12 +425,6 @@ extension AX {
         return verdict
     }
     private static func post(_ event: TypedReplacement.Event, to pid: pid_t) {
-        for down in [true, false] {
-            let key: CGKeyCode = { if case .delete = event { return 51 } else { return 0 } }()
-            guard let keyEvent = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down) else { continue }
-            keyEvent.flags = [] // never inherit the Option held for the Parzr shortcut
-            if case .text(let units) = event { keyEvent.keyboardSetUnicodeString(stringLength: units.count, unicodeString: units) }
-            keyEvent.postToPid(pid)
-        }
+        for keyEvent in TypedReplacement.keyEvents(for: event) { keyEvent.postToPid(pid) }
     }
 }

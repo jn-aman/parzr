@@ -596,11 +596,22 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     let casual = tokens[..=s]
         .iter()
         .find(|t| t.is_word && t.paragraph == tokens[s].paragraph)
-        .is_some_and(|t| t.surface.starts_with(char::is_lowercase));
+        // A capital this engine gave the sentence's first word still means it was typed lowercase.
+        .is_some_and(|t| {
+            t.surface.starts_with(char::is_lowercase) || t.pos == crate::AUTO_CAPITAL_HINT
+        });
+    // A message that stops without a full stop is chat, where the comma is the writer's choice
+    // ("thanks for dinner last night, it was lovely").
+    let unfinished = !tokens[end..e]
+        .iter()
+        .any(|t| [".", "!", "?"].contains(&t.surface));
+    // "i'm not sure this is right, what do you think": a question after the comma is its own
+    // sentence even in chat, and takes its question mark.
+    let asks = !question && (wh_question(tokens, r, end) || inverted_question(tokens, r, end));
     if question && inverted_question(tokens, r, end)
+        || (unfinished || casual) && !asks
         || ["let's", "lets", "don't", "dont"].contains(&right)
         || ["where", "whereas", "while", "which", "who", "whom", "whose"].contains(&right)
-        || casual
         || (s..c).any(|k| word(tokens, k) == "so" && spelling::flags(word(tokens, k + 1)) & 8 != 0)
         || !spelling::known(&tokens[s].normalized)
             && ["if", "when", "as", "because", "since", "while"]

@@ -133,6 +133,170 @@
           "purpose": "Smart grammar while you type"
         }
       ]
+    },
+    {
+      "id": "slips",
+      "version": "1",
+      "title": "Word-choice check while typing",
+      "purpose": "Catches word-choice slips as you type (\"I hat it\", then/than, its/it's, lose/loose) with a small language model on the Neural Engine. Without it these are checked on Option+Space only.",
+      "license": "distilroberta-base: Apache-2.0. RoBERTa tokenizer files: MIT.",
+      "provides": {
+        "slip_model": "slips"
+      },
+      "files": [
+        {
+          "path": "slips/manifest.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.manifest.json",
+          "bytes": 1562,
+          "sha256": "11cf11ef371c0500ddb68c70546444807dd46cb242b72e9d2e306f07df741b61",
+          "name": "Slip check manifest.json",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/merges.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.merges.txt",
+          "bytes": 456318,
+          "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+          "name": "Slip check merges.txt",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "MIT",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/mlm.mlmodelc/analytics/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.mlm.mlmodelc.analytics.coremldata.bin",
+          "bytes": 243,
+          "sha256": "3086ccc207b6909f6e29cf0ffa1745c2c10dbb7ecee3844b80750c67cc9a97dd",
+          "name": "distilroberta-base slip checker (Core ML int8)",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/mlm.mlmodelc/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.mlm.mlmodelc.coremldata.bin",
+          "bytes": 411,
+          "sha256": "61789e92f19574353d2bfa6cce41507605eb3fa8f10a24fc4f74e2601bda68d7",
+          "name": "distilroberta-base slip checker (Core ML int8)",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/mlm.mlmodelc/metadata.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.mlm.mlmodelc.metadata.json",
+          "bytes": 2700,
+          "sha256": "f508be632a18394ea90f50fa3a4ab30dc1df7be1f4f2a66399c1122e041b2042",
+          "name": "distilroberta-base slip checker (Core ML int8)",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/mlm.mlmodelc/model.mil",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.mlm.mlmodelc.model.mil",
+          "bytes": 95364,
+          "sha256": "6304bf70531509ecd51e7815ca69ad637d312b94cf74187f8b526520771b6b5c",
+          "name": "distilroberta-base slip checker (Core ML int8)",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/mlm.mlmodelc/weights/weight.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.mlm.mlmodelc.weights.weight.bin",
+          "bytes": 82534194,
+          "sha256": "9611f93c13f0efe0befe36026fe07b31dbd1daa9856daab095fbfa6fe34990ff",
+          "name": "distilroberta-base slip checker (Core ML int8)",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "Apache-2.0",
+          "purpose": "Word-choice slips while you type"
+        },
+        {
+          "path": "slips/vocab.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-slips-1/slips.vocab.json",
+          "bytes": 898823,
+          "sha256": "9e7f63c2d15d666b52e21d250d2e513b87c9b713cfa6987a82ed89e5e6e50655",
+          "name": "Slip check vocab.json",
+          "version": "distilbert/distilroberta-base@fb53ab8802853c8e4fbdbcd0529f21fc6f459b2b, slips-v1 int8",
+          "license": "MIT",
+          "purpose": "Word-choice slips while you type"
+        }
+      ]
+    },
+    {
+      "id": "tone",
+      "version": "2",
+      "title": "Tone check",
+      "purpose": "A small classifier that flags a message that may read as rude, passive-aggressive, curt or overly apologetic, before you send it. Downloaded only when Tone check is on.",
+      "license": "Apache-2.0 (fine-tuned from all-MiniLM-L6-v2, Apache-2.0; training data synthetic or openly licensed, see scripts/tone-check)",
+      "provides": {
+        "tone_model": "tone"
+      },
+      "files": [
+        {
+          "path": "tone/tone-config.json",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.tone-config.json",
+          "bytes": 133,
+          "sha256": "c6c2e30ec568ed06dce1cbee6e594991554536e5d3f81a1b32c79d1b041f684e",
+          "name": "Tone check settings",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/analytics/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.tone.mlmodelc.analytics.coremldata.bin",
+          "bytes": 243,
+          "sha256": "13e409c5654e668bf8e70235efcef70823676e77b148fddbb4478b211059ec57",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/coremldata.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.tone.mlmodelc.coremldata.bin",
+          "bytes": 559,
+          "sha256": "2d3d3266823bb7391bf78243f49314982d5d138325933991ebaead3f6d6ec812",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/model.mil",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.tone.mlmodelc.model.mil",
+          "bytes": 94768,
+          "sha256": "0faaf5abded12abb079891accfa60f6e759cf879e5374381636a9424cb7e4352",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/tone.mlmodelc/weights/weight.bin",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.tone.mlmodelc.weights.weight.bin",
+          "bytes": 22595840,
+          "sha256": "6b94ef7f5c92c2da2b42e3e0245bec064b879d69984bd40e7804fb9a47e99503",
+          "name": "Tone check classifier (Core ML 8-bit)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        },
+        {
+          "path": "tone/vocab.txt",
+          "url": "https://github.com/jn-aman/parzr/releases/download/models-tone-2/tone.vocab.txt",
+          "bytes": 231508,
+          "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+          "name": "Tone check vocabulary (BERT uncased WordPiece)",
+          "version": "sentence-transformers/all-MiniLM-L6-v2@1110a243fdf4706b3f48f1d95db1a4f5529b4d41, fine-tuned (scripts/tone-check), Core ML 8-bit",
+          "license": "Apache-2.0",
+          "purpose": "Tone check: flags messages that may read as rude, passive-aggressive, curt or overly apologetic"
+        }
+      ]
     }
   ]
 }

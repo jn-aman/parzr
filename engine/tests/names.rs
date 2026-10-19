@@ -8,20 +8,26 @@ fn names_contract_is_accepted_and_unknown_fields_are_not() {
     let ok = run(
         serde_json::json!({"text":"ask aman jain about it","names":["Aman Jain"],"capitalize_names":true}),
     );
-    assert_eq!(ok["text"], "ask Aman Jain about it");
-    assert_eq!(ok["edits"][0]["rule_id"], "names.capitalize");
-    assert_eq!(ok["edits"][0]["category"], "Style");
+    // Every sentence takes its capital too (owner rule, 2026-10-19).
+    assert_eq!(ok["text"], "Ask Aman Jain about it");
+    let name = ok["edits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["rule_id"] == "names.capitalize")
+        .unwrap();
+    assert_eq!(name["category"], "Style");
     assert!(run(serde_json::json!({"text":"x","name_index":[]}))["error"].is_string());
     assert!(run(serde_json::json!({"text":"x","names":vec!["a"; 2001]}))["error"].is_string());
 }
 #[test]
 fn default_keeps_chat_behaviour_and_real_typos_are_fixed() {
     let off = run(serde_json::json!({"text":"ask aman jain about it","names":["Aman Jain"]}));
-    assert_eq!(off["text"], "ask aman jain about it");
+    assert_eq!(off["text"], "Ask aman jain about it");
     for (input, expected) in [
         (
             "teh cat recieved the mesage",
-            "the cat received the message",
+            "The cat received the message",
         ),
         ("I will go and may said hi", "I will go and may said hi"),
     ] {

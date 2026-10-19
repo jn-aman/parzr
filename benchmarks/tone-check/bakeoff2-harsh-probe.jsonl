@@ -1,0 +1,88 @@
+{"id": "harsh-00", "category": "insult", "label": "harsh", "text": "Are you even qualified for this job?"}
+{"id": "harsh-01", "category": "insult", "label": "harsh", "text": "That's the stupidest thing I've heard all week."}
+{"id": "harsh-02", "category": "insult", "label": "harsh", "text": "Honestly, a child could have written better code."}
+{"id": "harsh-03", "category": "insult", "label": "harsh", "text": "You clearly have no idea what you're doing."}
+{"id": "harsh-04", "category": "insult", "label": "harsh", "text": "What an idiotic way to set this up."}
+{"id": "harsh-05", "category": "insult", "label": "harsh", "text": "Is anyone on your team actually competent?"}
+{"id": "harsh-06", "category": "insult", "label": "harsh", "text": "This design is a joke."}
+{"id": "harsh-07", "category": "insult", "label": "harsh", "text": "Your proposal is lazy and half-baked."}
+{"id": "harsh-08", "category": "insult", "label": "harsh", "text": "Nobody cares about your opinion on this."}
+{"id": "harsh-09", "category": "insult", "label": "harsh", "text": "Seriously, how are you this slow?"}
+{"id": "harsh-10", "category": "profanity", "label": "harsh", "text": "This deploy is a fucking mess."}
+{"id": "harsh-11", "category": "profanity", "label": "harsh", "text": "Who the hell approved this PR?"}
+{"id": "harsh-12", "category": "profanity", "label": "harsh", "text": "This is bullshit, we agreed on Friday."}
+{"id": "harsh-13", "category": "profanity", "label": "harsh", "text": "The client is being a total ass about the invoice."}
+{"id": "harsh-14", "category": "profanity", "label": "harsh", "text": "Damn it, you broke prod again."}
+{"id": "harsh-15", "category": "profanity", "label": "harsh", "text": "What the fuck happened to the staging server?"}
+{"id": "harsh-16", "category": "profanity", "label": "harsh", "text": "This crap keeps crashing every hour."}
+{"id": "harsh-17", "category": "profanity", "label": "harsh", "text": "Shit, did nobody test this before shipping?"}
+{"id": "harsh-18", "category": "passive_aggressive", "label": "harsh", "text": "Per my last three emails, the deadline was yesterday."}
+{"id": "harsh-19", "category": "passive_aggressive", "label": "harsh", "text": "As I already explained twice, the API key goes in the header."}
+{"id": "harsh-20", "category": "passive_aggressive", "label": "harsh", "text": "Not sure why this is so hard to understand, but here it is again."}
+{"id": "harsh-21", "category": "passive_aggressive", "label": "harsh", "text": "Thanks for finally getting back to me."}
+{"id": "harsh-22", "category": "passive_aggressive", "label": "harsh", "text": "I guess reading the spec was optional."}
+{"id": "harsh-23", "category": "passive_aggressive", "label": "harsh", "text": "Must be nice to leave at 4 every day."}
+{"id": "harsh-24", "category": "passive_aggressive", "label": "harsh", "text": "Let me spell it out for you one more time."}
+{"id": "harsh-25", "category": "passive_aggressive", "label": "harsh", "text": "Glad you could eventually join us."}
+{"id": "harsh-26", "category": "passive_aggressive", "label": "harsh", "text": "Maybe try reading the ticket before asking questions."}
+{"id": "harsh-27", "category": "passive_aggressive", "label": "harsh", "text": "I'm sure you were very busy, as always."}
+{"id": "harsh-28", "category": "curt_demand", "label": "harsh", "text": "Fix this now."}
+{"id": "harsh-29", "category": "curt_demand", "label": "harsh", "text": "I don't want excuses, just get it done."}
+{"id": "harsh-30", "category": "curt_demand", "label": "harsh", "text": "Stop asking me and figure it out yourself."}
+{"id": "harsh-31", "category": "curt_demand", "label": "harsh", "text": "Answer my question."}
+{"id": "harsh-32", "category": "curt_demand", "label": "harsh", "text": "Do it again, and do it right this time."}
+{"id": "harsh-33", "category": "curt_demand", "label": "harsh", "text": "Don't ever push to main without asking me."}
+{"id": "harsh-34", "category": "curt_demand", "label": "harsh", "text": "I need this today. No more delays."}
+{"id": "harsh-35", "category": "curt_demand", "label": "harsh", "text": "Just do what I told you."}
+{"id": "harsh-36", "category": "curt_demand", "label": "harsh", "text": "Quit complaining and finish the report."}
+{"id": "harsh-37", "category": "curt_demand", "label": "harsh", "text": "Get it done or I'll find someone who can."}
+{"id": "harsh-38", "category": "condescending_blame", "label": "harsh", "text": "This is the third time you've broken the build."}
+{"id": "harsh-39", "category": "condescending_blame", "label": "harsh", "text": "You always miss the deadline."}
+{"id": "harsh-40", "category": "condescending_blame", "label": "harsh", "text": "Your team keeps dropping the ball and we're paying for it."}
+{"id": "harsh-41", "category": "condescending_blame", "label": "harsh", "text": "This is entirely your fault."}
+{"id": "harsh-42", "category": "condescending_blame", "label": "harsh", "text": "Did you even test this?"}
+{"id": "harsh-43", "category": "condescending_blame", "label": "harsh", "text": "I can't believe I have to explain this to a senior engineer."}
+{"id": "harsh-44", "category": "condescending_blame", "label": "harsh", "text": "You never listen in these meetings."}
+{"id": "harsh-45", "category": "condescending_blame", "label": "harsh", "text": "Why is it always your code that breaks?"}
+{"id": "harsh-46", "category": "condescending_blame", "label": "harsh", "text": "Typical. Late again."}
+{"id": "harsh-47", "category": "condescending_blame", "label": "harsh", "text": "Wow, another bug from you. Shocking."}
+{"id": "civil-00", "category": "hard_negative", "label": "not_harsh", "text": "The build failed again and I'm not sure why."}
+{"id": "civil-01", "category": "hard_negative", "label": "not_harsh", "text": "I disagree with this approach, I think it adds too much complexity."}
+{"id": "civil-02", "category": "hard_negative", "label": "not_harsh", "text": "This report has a few errors we need to fix before Friday."}
+{"id": "civil-03", "category": "hard_negative", "label": "not_harsh", "text": "I'm frustrated that the vendor missed the deadline again."}
+{"id": "civil-04", "category": "hard_negative", "label": "not_harsh", "text": "We can't ship this until the tests pass."}
+{"id": "civil-05", "category": "hard_negative", "label": "not_harsh", "text": "Please don't merge into main until the review is done."}
+{"id": "civil-06", "category": "hard_negative", "label": "not_harsh", "text": "The demo didn't go well, let's talk about what to change."}
+{"id": "civil-07", "category": "hard_negative", "label": "not_harsh", "text": "I think we're behind schedule and need to cut scope."}
+{"id": "civil-08", "category": "hard_negative", "label": "not_harsh", "text": "That number looks wrong to me, can you double-check it?"}
+{"id": "civil-09", "category": "hard_negative", "label": "not_harsh", "text": "No, the meeting is on Tuesday, not Wednesday."}
+{"id": "civil-10", "category": "hard_negative", "label": "not_harsh", "text": "I don't have time for this today, can we do it tomorrow?"}
+{"id": "civil-11", "category": "hard_negative", "label": "not_harsh", "text": "The login page is broken on Safari."}
+{"id": "civil-12", "category": "hard_negative", "label": "not_harsh", "text": "Hell yeah, we hit our numbers this quarter!"}
+{"id": "civil-13", "category": "hard_negative", "label": "not_harsh", "text": "Damn, that demo was impressive."}
+{"id": "civil-14", "category": "hard_negative", "label": "not_harsh", "text": "This bug is killing me, I've been on it all day."}
+{"id": "civil-15", "category": "hard_negative", "label": "not_harsh", "text": "Sorry, I made a mistake in the spreadsheet."}
+{"id": "civil-16", "category": "hard_negative", "label": "not_harsh", "text": "This approach won't scale past a thousand users."}
+{"id": "civil-17", "category": "hard_negative", "label": "not_harsh", "text": "I need the slides by noon please."}
+{"id": "civil-18", "category": "hard_negative", "label": "not_harsh", "text": "Stop the deploy, I found a bug in the migration."}
+{"id": "civil-19", "category": "hard_negative", "label": "not_harsh", "text": "We lost the client, which is disappointing."}
+{"id": "civil-20", "category": "hard_negative", "label": "not_harsh", "text": "Can you fix the typo on slide 3?"}
+{"id": "civil-21", "category": "hard_negative", "label": "not_harsh", "text": "I'm not happy with how the launch went."}
+{"id": "civil-22", "category": "hard_negative", "label": "not_harsh", "text": "The server crashed twice last night."}
+{"id": "civil-23", "category": "hard_negative", "label": "not_harsh", "text": "Let's kill this feature, nobody uses it."}
+{"id": "civil-24", "category": "hard_negative", "label": "not_harsh", "text": "That was a terrible flight, I'm exhausted."}
+{"id": "civil-25", "category": "hard_negative", "label": "not_harsh", "text": "The old process was slow and confusing."}
+{"id": "civil-26", "category": "hard_negative", "label": "not_harsh", "text": "Please stop pushing directly to main."}
+{"id": "civil-27", "category": "hard_negative", "label": "not_harsh", "text": "This is urgent: the payment API is down."}
+{"id": "civil-28", "category": "hard_negative", "label": "not_harsh", "text": "I won't be able to make it, sorry."}
+{"id": "civil-29", "category": "hard_negative", "label": "not_harsh", "text": "We should have caught this in review."}
+{"id": "civil-30", "category": "hard_negative", "label": "not_harsh", "text": "The coffee here is awful lol"}
+{"id": "civil-31", "category": "hard_negative", "label": "not_harsh", "text": "I'm so done with this week \ud83d\ude05"}
+{"id": "civil-32", "category": "hard_negative", "label": "not_harsh", "text": "This bug is stupid, it only happens on Tuesdays."}
+{"id": "civil-33", "category": "hard_negative", "label": "not_harsh", "text": "Ugh, the wifi is down again."}
+{"id": "civil-34", "category": "hard_negative", "label": "not_harsh", "text": "Your proposal is good, but the budget is too high."}
+{"id": "civil-35", "category": "hard_negative", "label": "not_harsh", "text": "Honestly I think we should start over on the design."}
+{"id": "civil-36", "category": "hard_negative", "label": "not_harsh", "text": "Nobody replied to the survey, so we'll extend it."}
+{"id": "civil-37", "category": "hard_negative", "label": "not_harsh", "text": "The deadline was yesterday, can you send it today?"}
+{"id": "civil-38", "category": "hard_negative", "label": "not_harsh", "text": "I'm worried this release is rushed."}
+{"id": "civil-39", "category": "hard_negative", "label": "not_harsh", "text": "Thanks for the quick fix!"}

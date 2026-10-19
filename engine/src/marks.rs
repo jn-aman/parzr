@@ -1530,6 +1530,20 @@ const CLAUSE_OPENERS: [&str; 35] = [
     "she", "it", "there", "this", "that", "can", "could", "will", "would", "should", "do", "does",
     "did", "is", "are", "was", "were", "have", "has", "may", "shall", "must",
 ];
+/// A short heading at the start of a line, "Written for: your team" or "Includes: logs", is a
+/// label, not a sentence the colon splits; one that opens with a subject still reads as a clause.
+fn opens_label(tokens: &[Token<'_>], sentence_start: usize, colon: usize) -> bool {
+    const SUBJECTS: [&str; 22] = [
+        "the", "a", "an", "this", "that", "these", "those", "my", "our", "your", "his", "her",
+        "their", "its", "i", "we", "you", "he", "she", "it", "they", "there",
+    ];
+    let line_start = sentence_start == 0
+        || tokens[sentence_start - 1].paragraph != tokens[sentence_start].paragraph
+        || tokens[sentence_start - 1].surface.contains('\n');
+    line_start
+        && colon - sentence_start <= 3
+        && !SUBJECTS.contains(&tokens[sentence_start].normalized.as_str())
+}
 const CONJUNCTIONS: [&str; 5] = ["and", "but", "so", "or", "yet"];
 fn colons(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
     let text = &req.text;
@@ -1565,6 +1579,7 @@ fn colons(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 })
                 && i >= 2
                 && !prev.surface.starts_with(char::is_uppercase)
+                && !opens_label(tokens, sentence_start, i)
             {
                 put(
                     req,
@@ -1752,6 +1767,22 @@ mod tests {
         }
     }
     #[test]
+    fn a_label_colon_stays() {
+        for text in [
+            "Written for: your team, as the follow-up Slack message.",
+            "Prepared by: the platform team",
+            "Includes: logs, metrics and traces.",
+            "Linkedin Links\n\nWritten for: your team.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        assert_eq!(
+            fix("The reasons are: budget and timing."),
+            "The reasons are budget and timing."
+        );
+        assert_eq!(fix("We need: milk and eggs."), "We need milk and eggs.");
+    }
+    #[test]
     fn british_dates_take_no_comma() {
         let out = crate::pipeline::rewrite(&Request {
             text: "It opened on June 15 2008 and on 20 October 1861.".into(),
@@ -1784,7 +1815,7 @@ mod tests {
             ("Hi again,Ken", "Hi again, Ken"),
             (
                 "hey can u text me ur names cuz i got a new phone",
-                "hey can u text me ur names cuz I got a new phone",
+                "Hey can u text me ur names cuz I got a new phone",
             ),
             ("Two PR's are open.", "Two PRs are open."),
         ] {

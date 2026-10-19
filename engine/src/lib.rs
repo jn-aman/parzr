@@ -13,8 +13,9 @@ mod forms;
 mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
+mod hinglish;
 mod marks;
-#[cfg(feature = "local-model")]
+#[cfg_attr(not(feature = "local-model"), allow(dead_code))]
 mod meaning;
 #[cfg(feature = "local-model")]
 mod model;
@@ -26,12 +27,29 @@ mod pipeline;
 mod punctuation;
 mod real_word;
 mod rules;
+#[cfg(feature = "local-model")]
+mod slips;
 mod spelling;
 mod structure;
+mod table;
+pub mod tables;
 mod tokenizer;
+#[cfg(feature = "local-model")]
+mod tone_format;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
+/// The lazy DFA cache each rule pattern may grow to. The regex crate's default (2 MB per regex)
+/// would let the footprint of a long session climb with the rule patterns it compiles
+/// (`rules::COMPILED_PATTERNS_KEPT`); past this bound a search clears the cache or falls back to
+/// another of the crate's engines, with the same matches.
+pub(crate) const REGEX_CACHE_BYTES: usize = 16 * 1024;
+/// A rule regex with the engine's bounded cache (`REGEX_CACHE_BYTES`).
+pub(crate) fn regex(pattern: &str) -> Result<Regex, regex::Error> {
+    regex::RegexBuilder::new(pattern)
+        .dfa_size_limit(REGEX_CACHE_BYTES)
+        .build()
+}
 use serde::{Deserialize, Serialize};
 pub(crate) use spelling::AUTO_CAPITAL_HINT;
 use std::time::Instant;
@@ -129,6 +147,7 @@ impl Default for Request {
 }
 
 pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
+    tables::ready()?;
     #[cfg(feature = "local-model")]
     if req.tokens.is_empty() && !req.text.is_empty() {
         if req.text.len() > MAX_TEXT_BYTES {
@@ -163,6 +182,17 @@ pub extern "C" fn parzr_cancel_rewrite() {
 pub extern "C" fn parzr_gec_warm() -> i32 {
     #[cfg(feature = "local-model")]
     if catch_unwind(gec::warm).unwrap_or(false) {
+        return 1;
+    }
+    0
+}
+
+/// Loads the slip checker (the masked language model of the typing-time word-choice check) so the
+/// first check is fast. Safe to call from any thread, repeatedly. Returns 1 when it is ready, else 0.
+#[unsafe(no_mangle)]
+pub extern "C" fn parzr_slips_warm() -> i32 {
+    #[cfg(feature = "local-model")]
+    if catch_unwind(slips::warm).unwrap_or(false) {
         return 1;
     }
     0
@@ -673,7 +703,7 @@ fn match_case(replacement: &str, original: &str) -> String {
     }
 }
 /// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
-const DOUBLED_ON_PURPOSE: [&str; 47] = [
+pub(crate) const DOUBLED_ON_PURPOSE: [&str; 47] = [
     "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well", "blah",
     "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um", "la",
     "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi", "wow",
@@ -737,12 +767,6 @@ fn repeated_by_mistake(tokens: &[tokenizer::Token<'_>], index: usize) -> bool {
         && !(token.surface.starts_with(char::is_uppercase)
             && tokens[index - 1].surface.starts_with(char::is_uppercase)
             && before(2))
-}
-fn has_clause_start(text: &str) -> bool {
-    // A typed clause can be capitalized before final punctuation. Keep standalone
-    // fragments unchanged and respect sentence_start at the caller.
-    static PREFIX: OnceLock<Regex> = OnceLock::new();
-    PREFIX.get_or_init(|| Regex::new(r"(?i)^(?:this|that|it|he|she|we|they|you|there|here)\s+(?:am|is|are|was|were|have|has|had|do|does|did|can|could|will|would|should|must)\b").expect("constant clause prefix")).is_match(text)
 }
 
 fn starts_sentence(text: &str, byte: usize, req: &Request) -> bool {
@@ -1112,29 +1136,34 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             && !enumerator
             // "fyi the build is green", "lmk if": chat acronyms stay as typed, never "Fyi".
             && !names::is_chat_acronym(&token.normalized)
+            // "c u later", "k thanks": a chat letter is no word to capitalize.
+            && (token.surface.chars().count() > 1 || token.normalized == "a")
             && token.surface.chars().next().is_some_and(char::is_lowercase)
             && (spelling::known(&token.normalized)
                 || capitalization::interjection(&token.normalized)
+                || capitalization::sign_off_name(&req.text, token)
+                // "yaar kal meeting hai": Roman Hindi opens a sentence with a capital too.
+                || spelling::roman_hindi(&tokens, index)
                 || req.capitalize_names && level[index] >= names::MEDIUM)
-            && (req.text[token.start_byte..]
-                .trim_end()
-                .ends_with(['.', '!', '?'])
-                || has_clause_start(&req.text[token.start_byte..])
-                || capitalization::salutation(&req.text, token))
+            // Every sentence takes its capital, finished or not and in chat too ("yeah I think",
+            // "the link? Thanks"): only a line of code or a command keeps its lowercase start.
+            && !capitalization::code_start(&req.text, token)
         {
             let first = token.surface.chars().next().unwrap_or(' ');
             // "mcdonald" is "McDonald", "iphone" is "iPhone"; other words only need their first letter.
-            let (end, replacement) =
-                if let Some(canonical) = spelling::canonical_case(&token.normalized) {
-                    (token.end_utf16, canonical.to_string())
-                } else if level[index] >= names::MEDIUM {
-                    (token.end_utf16, names::title_case(token))
-                } else {
-                    (
-                        token.start_utf16 + first.len_utf16(),
-                        first.to_uppercase().to_string(),
-                    )
-                };
+            let (end, replacement) = if token.surface == "ok" {
+                // "ok sounds good": the opening "ok" is written "OK", as GECToR and the model write it.
+                (token.end_utf16, "OK".to_string())
+            } else if let Some(canonical) = spelling::canonical_case(&token.normalized) {
+                (token.end_utf16, canonical.to_string())
+            } else if level[index] >= names::MEDIUM {
+                (token.end_utf16, names::title_case(token))
+            } else {
+                (
+                    token.start_utf16 + first.len_utf16(),
+                    first.to_uppercase().to_string(),
+                )
+            };
             if let Some(e) = make_edit(
                 &req.text,
                 token.start_utf16,
@@ -1644,6 +1673,99 @@ pub unsafe extern "C" fn parzr_is_known_misspelling(word: *const c_char) -> i32 
     let word = unsafe { CStr::from_ptr(word) }.to_str();
     i32::from(word.is_ok_and(names::is_known_misspelling))
 }
+/// A rewrite written outside the engine (Apple Foundation Models on iOS) to check with the same
+/// meaning guard the engine's own tone rewrites pass. The tokens are the caller's linguistic hints
+/// for each text (as `Request::tokens`); without them the guard still runs on surface words.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GuardRequest {
+    mode: Mode,
+    source: String,
+    output: String,
+    #[serde(default)]
+    source_tokens: Vec<TokenHint>,
+    #[serde(default)]
+    output_tokens: Vec<TokenHint>,
+}
+#[derive(Serialize)]
+struct GuardVerdict {
+    ok: bool,
+    /// The output without an announcing preamble ("Here is the edited text:").
+    output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+fn guard(req: GuardRequest) -> GuardVerdict {
+    if let Err(error) = tables::ready() {
+        return GuardVerdict {
+            ok: false,
+            output: req.output,
+            reason: Some(error),
+        };
+    }
+    let mut output = req.output.trim().to_string();
+    let mut output_tokens = req.output_tokens;
+    if let Some(head) = meaning::preamble(&output) {
+        output = output[head.len() + 1..].trim().to_string();
+        // The caller's hints index the text with its preamble.
+        output_tokens.clear();
+    }
+    let verdict = if output.is_empty() {
+        Err("the rewrite is empty".to_string())
+    } else if output == req.source.trim() {
+        Ok(())
+    } else {
+        meaning::keeps_meaning(
+            req.mode,
+            &req.source,
+            &output,
+            "",
+            &req.source_tokens,
+            &output_tokens,
+        )
+    };
+    GuardVerdict {
+        ok: verdict.is_ok(),
+        output,
+        reason: verdict.err(),
+    }
+}
+pub fn tone_guard_json(input: &str) -> String {
+    if input.len() > MAX_TEXT_BYTES * 8 {
+        return r#"{"error":"Request exceeds size limit."}"#.into();
+    }
+    match serde_json::from_str::<GuardRequest>(input) {
+        Ok(req) if req.source.len() <= MAX_TEXT_BYTES && req.output.len() <= MAX_TEXT_BYTES => {
+            serde_json::to_string(&guard(req))
+                .unwrap_or_else(|_| r#"{"error":"Could not encode result."}"#.into())
+        }
+        Ok(_) => r#"{"error":"Select at most 64 KB of text."}"#.into(),
+        Err(_) => r#"{"error":"Invalid guard request."}"#.into(),
+    }
+}
+/// Checks a rewrite written outside the engine with the tone meaning guard. Input is JSON
+/// `{"mode","source","output","source_tokens"?,"output_tokens"?}`; the result is
+/// `{"ok":bool,"output":string,"reason"?:string}` or `{"error":string}`.
+/// # Safety
+/// `input` must point to a valid NUL-terminated UTF-8 string alive for this call.
+/// Free the returned owned string exactly once with `parzr_string_free`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_char {
+    if input.is_null() {
+        return std::ptr::null_mut();
+    }
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: the C ABI caller guarantees a valid NUL-terminated string.
+        let input = unsafe { CStr::from_ptr(input) }.to_str().map_err(|_| ());
+        input
+            .map(tone_guard_json)
+            .unwrap_or_else(|_| r#"{"error":"Input is not UTF-8."}"#.into())
+    }))
+    .unwrap_or_else(|_| r#"{"error":"The writing engine could not complete the request."}"#.into());
+    CString::new(result)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1655,6 +1777,53 @@ mod tests {
         assert_eq!(typo_capital("THE".into(), "TEH", false), "THE");
         // Not a known misspelling: keep the case match (a name or a deliberate capital).
         assert_eq!(typo_capital("Mark".into(), "Mark", false), "Mark");
+    }
+    #[test]
+    fn the_tone_guard_checks_rewrites_written_outside_the_engine() {
+        let check = |mode: &str, source: &str, output: &str| -> serde_json::Value {
+            let input = serde_json::json!({"mode": mode, "source": source, "output": output});
+            serde_json::from_str(&tone_guard_json(&input.to_string())).unwrap()
+        };
+        let kept = check(
+            "professional",
+            "can u send me the report by friday",
+            "Could you send me the report by Friday?",
+        );
+        assert_eq!(kept["ok"], true, "{kept}");
+        // A preamble is dropped before the check, and the clean output is returned.
+        let announced = check(
+            "professional",
+            "can u send me the report by friday",
+            "Here is the edited text: Could you send me the report by Friday?",
+        );
+        assert_eq!(
+            announced["output"],
+            "Could you send me the report by Friday?"
+        );
+        // A changed number, a dropped negation and a refusal never pass.
+        assert_eq!(
+            check(
+                "concise",
+                "We need 12 chairs for the meeting.",
+                "We need 20 chairs for the meeting."
+            )["ok"],
+            false
+        );
+        assert_eq!(
+            check(
+                "direct",
+                "I do not want to join the call.",
+                "I want to join the call."
+            )["ok"],
+            false
+        );
+        let refusal = check(
+            "professional",
+            "Are you stupid?",
+            "I cannot rewrite this text as it is offensive and disrespectful. Is there anything else I can help you with?",
+        );
+        assert_eq!(refusal["ok"], false, "{refusal}");
+        assert!(tone_guard_json("{}").contains("error"));
     }
     #[test]
     fn a_dot_glued_to_a_lowercase_letter_is_not_a_sentence_end() {
@@ -1776,18 +1945,18 @@ mod tests {
         );
         assert_eq!(
             fix_request(with_names("we met zoë and ZOË", &["Zoë"], true)),
-            "we met Zoë and ZOË"
+            "We met Zoë and ZOË"
         );
         assert_eq!(
             fix_request(with_names("send it to jean-luc today", &["Jean-Luc"], true)),
-            "send it to Jean-Luc today"
+            "Send it to Jean-Luc today"
         );
         assert_eq!(
             fix_request(with_names("ask o'neil about it", &["O'Neil"], true)),
-            "ask O'Neil about it"
+            "Ask O'Neil about it"
         );
         // Off by default: case is left alone mid-sentence.
-        let text = "ask aman jain about it";
+        let text = "Ask aman jain about it";
         assert_eq!(fix_request(with_names(text, &["Aman Jain"], false)), text);
     }
     #[test]
@@ -1825,12 +1994,12 @@ mod tests {
     fn file_names_and_domains_are_never_capitalized() {
         for text in [
             "aman.png",
-            "rename it to aman.png",
-            "send AMAN.PNG and priya_notes.docx",
-            "see parzr.app and github.com",
+            "Rename it to aman.png",
+            "Send AMAN.PNG and priya_notes.docx",
+            "See parzr.app and github.com",
             "Message in devops-general",
-            "post in aman-notes please",
-            "using jn-aman/m365-agent-gateway: a local gateway",
+            "Post in aman-notes please",
+            "Using jn-aman/m365-agent-gateway: a local gateway",
         ] {
             assert_eq!(
                 fix_request(with_names(text, &["Aman", "Priya"], true)),
@@ -1839,11 +2008,11 @@ mod tests {
         }
         assert_eq!(
             fix_request(with_names("send it to aman", &["Aman"], true)),
-            "send it to Aman"
+            "Send it to Aman"
         );
         assert_eq!(
             fix_request(with_names("send it to jean-luc", &["Jean-Luc"], true)),
-            "send it to Jean-Luc"
+            "Send it to Jean-Luc"
         );
     }
     #[test]
@@ -1902,7 +2071,7 @@ mod tests {
         for text in [
             "I borrowed johns car.",
             "We met the joneses at noon.",
-            "the jones family",
+            "The jones family",
             "Their kids play here.",
         ] {
             assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
@@ -1913,9 +2082,9 @@ mod tests {
         for text in [
             "I'm sooo tired.",
             "Yesss we did it!",
-            "haha true",
+            "Haha true",
             "idk... and idc either lmao",
-            "his name is bullseye bc you see",
+            "His name is bullseye bc you see",
             "doin' fine, thanks",
             "c) What is covered?",
             "She said (i) this is fine and (ii) that is too.",
@@ -1926,20 +2095,20 @@ mod tests {
             "fyi the build is green",
             "ofc!",
             "My username is jdoe42.",
-            "she uploaded jen_headshot.jpeg",
-            "the key is sk_test_abc123",
+            "She uploaded jen_headshot.jpeg",
+            "The key is sk_test_abc123",
             "c u later",
             "jk jk",
-            "see you there :)",
+            "See you there :)",
             "I was just saying (: do you need to talk",
-            "thanks ;) see you",
-            "love you <3",
-            "hey ppl can u text me",
+            "Thanks ;) see you",
+            "Love you <3",
+            "Hey ppl can u text me",
         ] {
             assert_eq!(fix_request(with_names(text, &[], true)), text, "{text}");
         }
         for (input, output) in [
-            ("he's not holdin you down", "he's not holding you down"),
+            ("he's not holdin you down", "He's not holding you down"),
             (
                 "Need a reviewer on the billin change.",
                 "Need a reviewer on the billing change.",
@@ -1977,7 +2146,7 @@ mod tests {
     fn list_items_names_and_titles_keep_their_number() {
         for text in [
             "Today: emails, code review, gym.",
-            "call mom, buy milk, finish report",
+            "Call mom, buy milk, finish report",
             "These Q&A Facts are regularly updated.",
             "Enron Net Works invites you to join us.",
             "Acme Industries invites you to our open house.",
@@ -2050,11 +2219,11 @@ mod tests {
         }
         assert_eq!(
             fix_request(with_names("thanks, will", &names, true)),
-            "thanks, Will"
+            "Thanks, Will"
         );
         assert_eq!(
             fix_request(with_names("Hey Hope! how are you", &names, true)),
-            "Hey Hope! how are you"
+            "Hey Hope! How are you"
         );
         assert_eq!(
             fix_request(Request {
@@ -2067,11 +2236,11 @@ mod tests {
     #[test]
     fn dictionary_matches_unicode_possessive_hyphen_and_phrases() {
         for (text, dictionary) in [
-            ("ask ZOË now", "zoë"),
-            ("ask Zoë’s team", "Zoë"),
-            ("we met jean-luc today", "Jean-Luc"),
-            ("visit new yrk today", "new yrk"),
-            ("see aman's mesage", "mesage"),
+            ("Ask ZOË now", "zoë"),
+            ("Ask Zoë’s team", "Zoë"),
+            ("We met jean-luc today", "Jean-Luc"),
+            ("Visit new yrk today", "new yrk"),
+            ("See aman's mesage", "mesage"),
         ] {
             let req = Request {
                 text: text.into(),
@@ -2081,7 +2250,7 @@ mod tests {
             assert_eq!(fix_request(req), text, "{text}");
         }
         let req = Request {
-            text: "we met jean-luc and new yrk".into(),
+            text: "We met jean-luc and new yrk".into(),
             dictionary: vec!["Jean-Luc".into(), "new yrk".into()],
             ..Request::default()
         };
@@ -2171,7 +2340,7 @@ mod tests {
         let text = "hey Aman can u send the file on friday";
         let tokens = tokenizer::tokenize(text, &[hint(text, "u"), hint(text, "friday")]);
         assert!(tokens.iter().all(|t| !t.proper_name));
-        assert_eq!(fix("ok pls send it thx"), "ok pls send it thx");
+        assert_eq!(fix("ok pls send it thx"), "OK pls send it thx");
         assert!(
             names::never_a_name("june")
                 && names::never_a_name("Friday")
@@ -2192,13 +2361,294 @@ mod tests {
     #[test]
     fn mentions_and_handles_stay_exact() {
         for input in [
-            "ping (@aman) about it",
+            "Ping (@aman) about it",
             "cc @aman.jain and @a_b-c please",
             "Thanks @aman.",
-            "see #teh and (#mesage) now",
+            "See #teh and (#mesage) now",
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
+    }
+    #[test]
+    fn every_sentence_takes_its_capital_in_chat_too() {
+        // The owner's rule (2026-10-19): no half fixes, chat included.
+        for (input, expected) in [
+            (
+                "yeah i think we should push the release to monday",
+                "Yeah I think we should push the release to Monday",
+            ),
+            (
+                "Could you send me the link? thanks",
+                "Could you send me the link? Thanks",
+            ),
+            (
+                "can we sync tmrw at 3pm? i have a conflict",
+                "Can we sync tmrw at 3pm? I have a conflict",
+            ),
+            ("sure. i can do it tomorrow", "Sure. I can do it tomorrow"),
+            ("haha nice", "Haha nice"),
+            ("ok sounds good", "OK sounds good"),
+            (
+                "hi mark,\ni've attached the report.\nthanks,",
+                "Hi mark,\nI've attached the report.\nThanks,",
+            ),
+            ("teh build is green", "The build is green"),
+            ("what should we do", "What should we do?"),
+            ("i don't know what to do", "I don't know what to do"),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+            assert_eq!(fix(expected), expected, "idempotent: {expected}");
+        }
+        // Shorthand, handles, code, commands, links and list items keep their case.
+        for text in [
+            "lol that was funny",
+            "fyi the build is green",
+            "ty",
+            "c u later",
+            "@mike can you check this?",
+            "git push origin main",
+            "npm install --save-dev typescript",
+            "make test && make lint",
+            "open -a Safari",
+            "main.py is where the bug is",
+            "x-api-key goes in the header",
+            "useEffect runs twice in dev mode",
+            "https://example.com/docs is the link",
+            "- buy milk\n- call the bank",
+            "1. open the app\n2. tap settings",
+            "a) yes\nb) no",
+            "e.g. the second option",
+            "echo \"Adding privileges to the cluster\"",
+            "return \"zookeeper authenticated\"",
+            "from browser import html, alert",
+            "new Thread(this).start();",
+            "it \"should create a new status\" do",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn a_question_after_a_chat_comma_is_its_own_sentence() {
+        // v0.5.0 split these; batch 3's chat-comma rule must not keep them joined.
+        for (input, expected) in [
+            (
+                "i'm not sure if this is the right approach, what do you think",
+                "I'm not sure if this is the right approach. What do you think?",
+            ),
+            (
+                "I'm not sure if this is the right approach, what do you think?",
+                "I'm not sure if this is the right approach. What do you think?",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+            assert_eq!(fix(expected), expected, "idempotent: {expected}");
+        }
+        // A statement after the comma stays in chat; a yes/no question with its own mark too.
+        for text in [
+            "I'm at the store, do you need anything?",
+            "Thanks for dinner last night, it was lovely",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn sign_off_names_take_their_capital() {
+        for (input, expected) in [
+            ("Thanks,\njen", "Thanks,\nJen"),
+            ("Best regards,\npriya k", "Best regards,\nPriya k"),
+            ("Cheers,\nsam", "Cheers,\nSam"),
+            ("Regards,\naman", "Regards,\nAman"),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn chat_commas_between_clauses_stay_without_a_full_stop() {
+        assert_eq!(
+            fix("thanks for dinner last night, it was lovely"),
+            "Thanks for dinner last night, it was lovely"
+        );
+        assert_eq!(
+            fix("Thanks for dinner last night, it was lovely."),
+            "Thanks for dinner last night. It was lovely."
+        );
+    }
+    #[test]
+    fn batch_three_grammar_misses_and_false_alarms() {
+        for (input, expected) in [
+            ("Me and him was late.", "He and I were late."),
+            ("My sister and I was late.", "My sister and I were late."),
+            (
+                "I bought a laptop last week and the screen has a dead pixel.",
+                "I bought a laptop last week, and the screen has a dead pixel.",
+            ),
+            (
+                "Him and me are on the same team.",
+                "He and I are on the same team.",
+            ),
+            (
+                "Him and Jake are coming later.",
+                "He and Jake are coming later.",
+            ),
+            (
+                "Me and the team finished the project early.",
+                "The team and I finished the project early.",
+            ),
+            (
+                "I seen the email this morning.",
+                "I saw the email this morning.",
+            ),
+            (
+                "I done the changes you asked for.",
+                "I did the changes you asked for.",
+            ),
+            ("Thanks, your the best!", "Thanks, you're the best!"),
+            (
+                "If your free later, call me.",
+                "If you're free later, call me.",
+            ),
+            ("Did you get you're invite?", "Did you get your invite?"),
+            (
+                "Their coming over for dinner.",
+                "They're coming over for dinner.",
+            ),
+            ("Is their any coffee left?", "Is there any coffee left?"),
+            (
+                "Please reply me as soon as possible.",
+                "Please reply to me as soon as possible.",
+            ),
+            (
+                "I will call you once I will reach the office.",
+                "I will call you once I reach the office.",
+            ),
+            ("She said me to wait.", "She told me to wait."),
+            (
+                "One of my friend lives there.",
+                "One of my friends lives there.",
+            ),
+            (
+                "Everyone have to sign the form.",
+                "Everyone has to sign the form.",
+            ),
+            (
+                "The quality of the photos are great.",
+                "The quality of the photos is great.",
+            ),
+            ("That sound great!", "That sounds great!"),
+            ("My laptop keep crashing.", "My laptop keeps crashing."),
+            (
+                "I am working here since 2019.",
+                "I have been working here since 2019.",
+            ),
+            ("He is having a car.", "He has a car."),
+            ("Sorry for late reply.", "Sorry for the late reply."),
+            (
+                "I am knowing him for a long time.",
+                "I have known him for a long time.",
+            ),
+            (
+                "We are wanting a car for a family trip.",
+                "We want a car for a family trip.",
+            ),
+            (
+                "If it will rain, we will cancel.",
+                "If it rains, we will cancel.",
+            ),
+            (
+                "I think there going to cancel the event.",
+                "I think they're going to cancel the event.",
+            ),
+            (
+                "Please send me you're slides.",
+                "Please send me your slides.",
+            ),
+            (
+                "Let me know if your available tomorrow.",
+                "Let me know if you're available tomorrow.",
+            ),
+            (
+                "Finish the report and than send it to me.",
+                "Finish the report and then send it to me.",
+            ),
+            (
+                "The report is done. Its due tomorrow.",
+                "The report is done. It's due tomorrow.",
+            ),
+            (
+                "Everyone in the office were surprised.",
+                "Everyone in the office was surprised.",
+            ),
+            (
+                "It crash when you open the settings.",
+                "It crashes when you open the settings.",
+            ),
+            ("He learn really fast.", "He learns really fast."),
+            (
+                "I will discuss about it with my manager.",
+                "I will discuss it with my manager.",
+            ),
+            (
+                "Their happy with the design.",
+                "They're happy with the design.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+            assert_eq!(fix(expected), expected, "idempotent: {expected}");
+        }
+        for text in [
+            "I could have finished it yesterday.",
+            "You should've told me last week.",
+            "Did you feed the cat?",
+            "Have I seen this before?",
+            "Are we done?",
+            "Physics was my worst class.",
+            "Fish and chips is on the menu.",
+            "Our team lead, along with two engineers, is on the call.",
+            "Anyone need anything else?",
+            "@sarah thanks, merged",
+            "Tell me when you will reach.",
+            "I am having a meeting at 3.",
+            "I'm staying for a few days.",
+            "Their coming-of-age film won.",
+            "Does that sound right?",
+            // From the 40k correct mined sentences.
+            "I visited your theatre and I was very disappointed.",
+            "Everybody was shocked and I was trying to keep the faith.",
+            "Usually, RSS feed readers have the right menu items.",
+            "I have been keen on mountain biking since three years ago.",
+            "This work, which sold very widely, had a big effect.",
+            "The snowflakes, that look like bees, are called snow bees.",
+            // Batch 3 emails.
+            "This NDA would be similar to those that you put together for DealBench.",
+            "Please see that final agreements are forwarded for signature.",
+            "Attached is a list of RSVP's I have received so far for the seminar.",
+            "Their happy hour starts at five.",
+            "Did he learn fast?",
+            "It is bigger than we need.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn british_group_nouns_keep_their_plural_verb() {
+        let british = |text: &str| {
+            fix_request(Request {
+                text: text.into(),
+                dialect: "british".into(),
+                ..Request::default()
+            })
+        };
+        for text in [
+            "The team are working on it.",
+            "The committee are meeting on Tuesday.",
+            "The band are playing tonight.",
+        ] {
+            assert_eq!(british(text), text, "{text}");
+        }
+        assert_eq!(
+            fix("The team are working on it."),
+            "The team is working on it."
+        );
     }
     #[test]
     fn canonical_case_opens_sentences() {
@@ -2248,20 +2698,20 @@ mod tests {
         for input in [
             "aman jain",
             "Hi aman, thanks",
-            "thanks, jain",
+            "Thanks, jain",
             "aman jain\nStaff Software Engineer",
             "priya sharma",
             "rahul",
             "anoop said hi",
-            "ask aman about it",
+            "Ask aman about it",
             "Thanks aman",
-            "Regards,\naman",
+            "Regards,\nAman",
             "Cheers\nanoop kumar",
-            "hey aman, are you free",
+            "Hey aman, are you free",
             "I want to see aman jain",
-            "please ask jain",
+            "Please ask jain",
             "aman is here",
-            "we met rahul sharma",
+            "We met rahul sharma",
             "I saw aman yesterday",
             "I met Priya sharma",
         ] {
@@ -2305,7 +2755,7 @@ mod tests {
         for (input, expected) in [
             ("I have alot of work.", "I have a lot of work."),
             ("I recieved the file.", "I received the file."),
-            ("teh cat", "the cat"),
+            ("teh cat", "The cat"),
             ("This si bod.", "This is bad."),
             ("I goes ot the maret", "I go to the market"),
             (
@@ -2396,7 +2846,7 @@ mod tests {
             "Thi is fine.",
             "I met arjun menon yesterday.",
             "Looping in hari for visibility.",
-            "tom and ann went home",
+            "Tom and ann went home",
             "lol tbh idk",
             "thx, pls send it",
             "gtg, ttyl",
@@ -2407,13 +2857,15 @@ mod tests {
             "We pin it in requirements.txt today.",
             "I can not believe it.",
             "Bhai yaar kya hai.",
-            "bas, that's it",
+            "Bas, that's it",
         ] {
             assert_eq!(fix(input), input, "{input}");
         }
+        // A Hinglish sentence keeps its words and takes its capital like any other.
+        assert_eq!(fix("bas, that's it"), "Bas, that's it");
         // A short Roman Hindi word alone in English is a slip; beside Roman Hindi it stays.
         assert_eq!(fix("I like aur house."), "I like our house.");
-        assert_eq!(fix("aur kya chal raha hai"), "aur kya chal raha hai");
+        assert_eq!(fix("aur kya chal raha hai"), "Aur kya chal raha hai");
     }
     #[test]
     fn valid_uses_of_rare_words_are_kept() {

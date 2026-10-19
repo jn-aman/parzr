@@ -103,12 +103,17 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(spacing: 24) {
             Spacer(minLength: 0)
-            hero(nil, "Welcome to Parzr", "Grammar and spelling help in every app. Offline. Your words never leave this Mac.")
+            hero(nil, "Welcome to Parzr", "Grammar and spelling help in every app, checked on your Mac. No account, no cloud service reading your writing.")
             HStack(spacing: 8) {
-                ForEach([("lock", "Offline"), ("person.crop.circle.badge.xmark", "No account"), ("macwindow", "Every app")], id: \.1) { symbol, text in
+                ForEach([("lock", "Checks on your Mac"), ("person.crop.circle.badge.xmark", "No account"), ("macwindow", "Every app")], id: \.1) { symbol, text in
                     HStack(spacing: 6) { Image(systemName: symbol).foregroundStyle(Color.mintAccent); Text(text) }.font(.system(size: 11, weight: .medium)).foregroundStyle(Color.textSecondary)
                         .padding(.horizontal, 11).frame(height: 27).background(Color.surface, in: Capsule()).overlay(Capsule().strokeBorder(Color.hairline.opacity(0.7), lineWidth: 0.5))
                 }
+            }
+            if Reports.configured {
+            row("exclamationmark.bubble", "Send anonymous suggestion reports", "When you ignore or report a suggestion, its sentence is sent with names, emails, numbers and links removed on your Mac first. Change it any time in Settings, Privacy.") {
+                Toggle("Send anonymous suggestion reports", isOn: $preferences.shareReports).labelsHidden().toggleStyle(.switch).controlSize(.small).fixedSize()
+            }.graphiteSurface().frame(maxWidth: 480).help(StudioView.reportsDetail)
             }
             Spacer(minLength: 0)
         }.frame(maxWidth: .infinity).padding(.bottom, 24)

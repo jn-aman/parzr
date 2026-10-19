@@ -139,7 +139,7 @@ def main():
             validate_edits(case["input"], {"text": case["expected"], "edits": case["expected_edits"]})
     engine = args.app / "Contents/MacOS/parzr-engine"
     library = args.app / "Contents/Frameworks/libparzr_engine.dylib"
-    sources = [ROOT / "mac/Sources/ParzrCore/Models.swift", ROOT / "mac/Sources/ParzrCore/WritingEngine.swift", ROOT / "scripts/benchmark-native.swift"]
+    sources = [ROOT / "mac/Sources/ParzrCore/Models.swift", ROOT / "mac/Sources/ParzrCore/WritingEngine.swift", ROOT / "mac/Sources/ParzrCore/LinguisticHints.swift", ROOT / "scripts/benchmark-native.swift"]
     harness = args.output / "native-benchmark"
     subprocess.run(["swiftc", "-O", "-parse-as-library", *map(str, sources), "-o", str(harness)], check=True)
     combined = args.output / "inputs.jsonl"

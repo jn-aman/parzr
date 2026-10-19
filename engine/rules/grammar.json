@@ -2803,5 +2803,27 @@
     "provenance": "Parzr original contextual passage rule",
     "positive": "I waited for her many times.",
     "negative": "I called her many times."
+  },
+  {
+    "id": "grammar.seen_as_past",
+    "pattern": "(?im)(?:^|[.!?,;]\\s+|\\b(?:and|but|so|then|because|when|yesterday|today|already|just) )(?:I|we|they|you|he|she) (?:already |just |also |never )?(?P<target>seen) (?:it|that|this|those|these|the|him|her|them|your|ur|ya|you|my|his|their|our|a|an|all|everything|something|nothing)\\b",
+    "replacement": "saw",
+    "category": "Tense",
+    "confidence": 0.95,
+    "reason": "“Seen” needs “have”; the simple past is “saw”.",
+    "provenance": "parzr original rule",
+    "positive": "I seen the email this morning.",
+    "negative": "I have seen the email. Have I seen this before? It was seen the day before."
+  },
+  {
+    "id": "grammar.done_as_past",
+    "pattern": "(?im)(?:^|[.!?,;]\\s+|\\b(?:and|but|so|then|because|when|yesterday|today|already|just) )(?:I|we|they|you|he|she) (?:already |just |also |never )?(?P<target>done) (?:it|that|this|those|these|the|my|his|her|their|our|your|a|an|all|everything|something|nothing)\\b",
+    "replacement": "did",
+    "category": "Tense",
+    "confidence": 0.95,
+    "reason": "“Done” needs “have”; the simple past is “did”.",
+    "provenance": "parzr original rule",
+    "positive": "I done the changes you asked for.",
+    "negative": "I have done the changes. Are we done? The work is done the right way."
   }
 ]

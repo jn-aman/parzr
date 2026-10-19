@@ -54,7 +54,7 @@ enum AX {
     private static var verdicts: [(element: AXUIElement, secure: Bool, time: TimeInterval)] = []
     private static var resolved: (raw: AXUIElement, text: AXUIElement, time: TimeInterval)?
     /// Focus moved: forget what was learned about the previous field.
-    static func forgetFocus() { verdicts = []; resolved = nil; forgetDocs(); forgetWeb() }
+    static func forgetFocus() { verdicts = []; resolved = nil; fieldVerdicts = []; forgetDocs(); forgetWeb() }
     /// Several attributes in one round trip to the app; any that fail come back nil.
     static func multiple(_ element: AXUIElement, _ attributes: [String]) -> [CFTypeRef?] {
         var values: CFArray?
@@ -88,9 +88,44 @@ enum AX {
     }
     static func automaticEligibility(_ element: AXUIElement) -> Compat.EditorEligibility {
         guard !isSecure(element) else { return .blocked }
-        return Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
-                                        valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
-                                        markerEditor: isMarkerEditor(element), search: isSearch(element))
+        let eligibility = Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
+                                                   valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
+                                                   markerEditor: isMarkerEditor(element), search: isSearch(element))
+        // Only a field that already qualifies is asked about: the rules can take it away (a one-time code box, a sign-in form), never add one.
+        return eligibility == .editor ? Compat.applying(hostVerdict(element), to: eligibility) : eligibility
+    }
+    private static var fieldVerdicts: [(element: AXUIElement, verdict: HostRules.Verdict, time: TimeInterval)] = []
+    /// What the host rules say about this field. Reads only names (labels, identifiers, DOM classes, the page URL), never the field's text;
+    /// remembered for as long as the secure-field verdict, or until focus moves.
+    static func hostVerdict(_ element: AXUIElement) -> HostRules.Verdict {
+        let now = ProcessInfo.processInfo.systemUptime
+        if let known = fieldVerdicts.first(where: { now - $0.time < verdictLifetime && CFEqual($0.element, element) }) { return known.verdict }
+        let field = fieldContext(element)
+        let verdict = HostRules.shared.verdict(for: field)
+        fieldVerdicts = Array((fieldVerdicts.filter { now - $0.time < verdictLifetime } + [(element, verdict, now)]).suffix(16))
+        return verdict
+    }
+    static func fieldContext(_ element: AXUIElement) -> HostRules.Field {
+        let attributes = [kAXRoleAttribute, "AXPlaceholderValue", kAXDescriptionAttribute, kAXTitleAttribute, kAXIdentifierAttribute, "AXDOMIdentifier", "AXDOMClassList", kAXParentAttribute]
+        func names(_ values: [CFTypeRef?]) -> (labels: [String], classes: [String]) {
+            (values[1...5].compactMap { $0 as? String }.filter { !$0.isEmpty }, (values[6] as? [String] ?? []).prefix(16).map { $0 })
+        }
+        var pid: pid_t = 0
+        _ = AXUIElementGetPid(element, &pid)
+        let values = multiple(element, attributes), own = names(values)
+        var field = HostRules.Field(bundle: NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, role: values[0] as? String, labels: own.labels, markers: own.classes)
+        var parent = values[7]
+        // Up to the page or window: their titles are page and document names, not this field's.
+        for _ in 0..<12 {
+            guard let next = parent, CFGetTypeID(next) == AXUIElementGetTypeID() else { break }
+            let current = next as! AXUIElement, values = multiple(current, attributes), role = values[0] as? String ?? ""
+            if role == "AXWebArea" { field.url = (get(current, "AXURL") as? URL)?.absoluteString; break }
+            if [kAXWindowRole, kAXApplicationRole].contains(role) { break }
+            let around = names(values)
+            if field.ancestors.count < 6 { field.ancestors.append(around.labels + around.classes) }
+            parent = values[7]
+        }
+        return field
     }
     static func isSecure(_ element: AXUIElement) -> Bool {
         let now = ProcessInfo.processInfo.systemUptime
@@ -160,6 +195,24 @@ enum AX {
         }
         guard let rect = bounds(element, range), rect.height < 40 else { return [] }
         return [rect]
+    }
+    /// The visible box a field scrolls in, in AppKit coordinates: its scroll area when it sits in one (an NSTextView's own frame is the whole document), else its own frame.
+    static func scrollArea(_ element: AXUIElement) -> CGRect? {
+        func frame(_ element: AXUIElement) -> CGRect? {
+            let values = multiple(element, [kAXPositionAttribute, kAXSizeAttribute])
+            guard let p = values[0], let s = values[1], CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
+            var origin = CGPoint.zero, size = CGSize.zero
+            guard AXValueGetValue(p as! AXValue, .cgPoint, &origin), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { return nil }
+            return cocoa(CGRect(origin: origin, size: size))
+        }
+        var cursor: AXUIElement? = element
+        for _ in 0..<4 {
+            guard let current = cursor else { break }
+            if string(current, kAXRoleAttribute) == kAXScrollAreaRole { return frame(current) }
+            guard let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+            cursor = (parent as! AXUIElement)
+        }
+        return frame(element)
     }
     static func attributed(_ element: AXUIElement, _ range: NSRange) -> NSAttributedString? {
         var cf = CFRange(location: range.location, length: range.length)
@@ -275,27 +328,115 @@ struct SelectionSnapshot {
         guard app == SelfTestTarget.watched else { return false }
         return ReplacePlan.focusMatches(element, automatic: true, resolve: { automatic in AX.focusedText(app, automatic: automatic) }, same: { CFEqual($0, $1) })
     }
-    func validate(preferences: Preferences = .shared) throws {
-        try validateCheckingEligibility(preferences: preferences)
-        guard automaticEditorIsCurrent() else { throw ParzrError.message("Your selection changed. Select the text again.") }
+    /// What the apply log records about this snapshot's field: names and flags only, never its text.
+    var logContext: ApplyLog.Context {
+        let headless = headlessEditor != nil
+        return ApplyLog.Context(bundle: bundle, role: headless ? "headless" : AX.string(element, kAXRoleAttribute) ?? "unknown", automatic: automatic,
+                                chromium: !headless && !copied && AX.isChromiumText(element), docs: docs)
+    }
+    /// Which guard a field that is no longer the focused editor fails: it is gone, it became read-only, another field has focus, or none does.
+    private func focusFailure() -> ApplyFailure {
+        if headlessEditor != nil { return .notEditable }
+        if app.isTerminated { return .editorClosed }
+        guard own || app == SelfTestTarget.watched else { return .editorNotInFront }
+        if automatic, !own, AX.text(element) == nil { return .editorUnavailable }
+        let editable = !automatic || AX.automaticEligibility(element) == .editor
+        return ApplyFocus.focusFailure(editable: editable, focusResolves: AX.focusedText(app, automatic: automatic) != nil)
+    }
+    /// `applying`: the last check before a fix is written. Its failures go to the apply log, and an inline mark's caret is not compared then:
+    /// the writer selected nothing, and the fix is placed by its offsets in the text verified here, so a caret that Chromium reports differently
+    /// (or not at all) once Parzr's card has taken the keyboard is no reason to refuse.
+    func validate(preferences: Preferences = .shared, applying: Bool = false) throws {
+        func fail(_ failure: ApplyFailure, _ detail: String = "") -> ApplyError {
+            applying ? ApplyLog.fail(failure, stage: "validate", context: logContext, detail: detail) : ApplyError(failure, automatic: automatic)
+        }
+        let caretMatters = !(applying && automatic)
+        guard preferences.checkingEnabled(for: app.bundleIdentifier ?? "", automatic: automatic) else { throw fail(.checkingOff) }
+        guard automaticEditorIsCurrent() else { throw fail(focusFailure(), "current=false") }
         if let editor = headlessEditor {
-            guard editor.string == fullText, editor.selectedRange() == expectedSelection else { throw ParzrError.message("Your selection changed. Select the text again.") }
+            guard editor.string == fullText else { throw fail(.textChanged) }
+            guard !caretMatters || editor.selectedRange() == expectedSelection else { throw fail(.selectionChanged) }
             return
+        }
+        guard !app.isTerminated else { throw fail(.editorClosed) }
+        guard !IsSecureEventInputEnabled() else {
+            if applying { ApplyLog.fail(.secureInput, stage: "validate", context: logContext) }
+            throw ApplyError(.secureInput, message: SecureInput.message(SecureInput.holder(watching: app) ?? .elsewhere))
         }
         if copied {
-            guard !app.isTerminated, app == SelfTestTarget.watched, !IsSecureEventInputEnabled() else { throw ParzrError.message("Your selection changed. Select the text again.") }
+            guard app == SelfTestTarget.watched else { throw fail(.editorNotInFront) }
             return
         }
-        guard !app.isTerminated, !IsSecureEventInputEnabled(), !AX.isSecure(element),
-              own || automatic || AX.focusedText(app).map({ CFEqual($0, element) }) == true,
-              let current = AX.selection(element), current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
-            throw ParzrError.message("Your selection changed. Select the text again.")
+        guard !AX.isSecure(element) else { throw fail(.secureField) }
+        guard own || automatic || AX.focusedText(app).map({ CFEqual($0, element) }) == true else { throw fail(focusFailure(), "explicit") }
+        if caretMatters {
+            let current = AX.selection(element)
+            guard let current, current == expectedSelection || (expectedSelection.length == 0 && current.length == 0) else {
+                throw fail(.selectionChanged, current == nil ? "selection=none" : "selection=moved")
+            }
         }
         if let fullText {
-            guard AX.text(element) == fullText else { throw ParzrError.message("Your text changed. Select it again.") }
+            guard AX.text(element) == fullText else { throw fail(.textChanged) }
         } else {
-            guard AX.string(element, kAXSelectedTextAttribute) == text else { throw ParzrError.message("Your selection changed. Select it again.") }
+            guard AX.string(element, kAXSelectedTextAttribute) == text else { throw fail(.selectionChanged, "selectedText") }
         }
+    }
+    /// The same check on a field that took over from this one (see `ApplyFocus.Seen.standIn`).
+    func moved(to editor: AXUIElement) -> SelectionSnapshot {
+        SelectionSnapshot(app: app, element: editor, selection: selection, expectedSelection: expectedSelection, text: text, fullText: fullText, bounds: bounds,
+                          richText: richText, copied: copied,
+                          canPatch: fullText != nil && ReplacePlan.first(textSettable: AX.settable(editor, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(editor), docs: docs) != nil,
+                          docs: docs, inlineBreaks: inlineBreaks, automatic: automatic)
+    }
+    /// Run once the card has handed the keyboard back (`AppModel.handOff`), before anything is written. The editor's window needs a moment to
+    /// take the keyboard again, and Chromium reports no focused field until it has, so focus is polled rather than read once. An inline mark's
+    /// field is accepted as it is, or as a rebuilt field with exactly the checked text in exactly the same place; when no field has focus, focus
+    /// is put back into the mark's own field once. Another field with focus is never touched: the writer moved there. An explicit selection only
+    /// waits for its field. Ends with the full pre-apply validation (text, secure input, eligibility) of the field that will be written.
+    func prepareToApply() async throws -> SelectionSnapshot {
+        if headlessEditor != nil || own || copied { try validate(applying: true); return self }
+        let context = logContext
+        guard checkingEnabled else { throw ApplyLog.fail(.checkingOff, stage: "prepare", context: context) }
+        var restored = false, others = 0
+        for attempt in 0..<ApplyFocus.attempts {
+            guard !app.isTerminated else { throw ApplyLog.fail(.editorClosed, stage: "prepare", context: context) }
+            guard app == SelfTestTarget.watched else { throw ApplyLog.fail(.editorNotInFront, stage: "prepare", context: context, detail: "attempt=\(attempt)") }
+            let focus = AX.focusedText(app, automatic: automatic)
+            let seen = ApplyFocus.seen(captured: element, focus: focus, same: { CFEqual($0, $1) }, isStandIn: { candidate in
+                // Geometry is measured only for a field that already reads exactly the checked text.
+                guard automatic, let now = AX.text(candidate), now == fullText else { return false }
+                return ApplyFocus.isStandIn(text: now, expected: fullText, bounds: AX.bounds(candidate, selection), captured: bounds)
+            })
+            others = seen == .other ? others + 1 : 0
+            if !automatic {
+                // An explicit selection is the writer's own: wait for its field, and let validation name what changed if it never comes back.
+                if seen == .captured || attempt + 1 == ApplyFocus.attempts { break }
+                try await Task.sleep(for: .milliseconds(ApplyFocus.pollInterval)); continue
+            }
+            let field: ApplyFocus.Field = seen != .none ? .usable : {
+                guard let now = AX.text(element) else { return .gone }
+                guard now == fullText else { return .changed }
+                return AX.automaticEligibility(element) == .editor ? .usable : .readOnly
+            }()
+            switch ApplyFocus.step(seen: seen, attempt: attempt, others: others, restored: restored, field: field) {
+            case .proceed:
+                var target = self
+                if seen == .standIn, let focus { target = moved(to: focus); ApplyLog.note("stand-in field", context: context, detail: "attempt=\(attempt)") }
+                if attempt > 0 { ApplyLog.note("focus back", context: context, detail: "attempt=\(attempt) restored=\(restored)") }
+                try target.validate(applying: true)
+                return target
+            case .restore:
+                restored = true
+                ApplyLog.note("restoring focus", context: context, detail: "attempt=\(attempt)")
+                AX.restoreFocus(element)
+            case .wait: break
+            case .fail(let failure):
+                throw ApplyLog.fail(failure, stage: "prepare", context: context, detail: "attempt=\(attempt) restored=\(restored) seen=\(seen) field=\(field)")
+            }
+            try await Task.sleep(for: .milliseconds(ApplyFocus.pollInterval))
+        }
+        try validate(applying: true)
+        return self
     }
     var startsSentence: Bool {
         guard let fullText, selection.location > 0, selection.location <= (fullText as NSString).length else { return true }
@@ -323,7 +464,7 @@ struct SelectionSnapshot {
         return ranges
     }
     func apply(_ edits: [WritingEdit]) async throws {
-        try validate(); try EditPlan.validate(edits, in: text)
+        try validate(applying: true); try EditPlan.validate(edits, in: text)
         if let editor = headlessEditor {
             editor.undoManager?.beginUndoGrouping()
             for edit in edits.reversed() { editor.insertText(edit.replacement, replacementRange: NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)) }
@@ -336,22 +477,32 @@ struct SelectionSnapshot {
         var expected = fullText
         var applied = 0
         for edit in edits.reversed() {
-            guard checkingEnabled else { throw ParzrError.message("Checking is paused or disabled for this app. \(applied) edits applied; use the editor's Undo if needed.") }
-            // Verify between every range patch; never replace the entire document.
-            guard AX.text(element) == expected else {
-                throw ParzrError.message("The editor changed during replacement. \(applied) edits applied; use the editor's Undo to revert.")
+            guard checkingEnabled else {
+                throw ApplyLog.fail(.checkingOff, stage: "apply", context: logContext).adding(ApplyFocus.outcome(applied: applied, untouched: applied == 0))
             }
+            // Verify between every range patch; never replace the entire document.
+            // An editor may restyle quotes or spaces as it takes a write; plan from its text when every offset still holds.
+            guard let current = ReplacePlan.adopt(AX.text(element), expected: expected) else {
+                throw ApplyLog.fail(applied == 0 ? .textChanged : .changedDuring, stage: "apply", context: logContext, detail: "applied=\(applied)")
+                    .adding(ApplyFocus.outcome(applied: applied, untouched: applied == 0))
+            }
+            expected = current
             let global = NSRange(location: selection.location + edit.start_utf16, length: edit.end_utf16 - edit.start_utf16)
             let next = NSMutableString(string: expected); next.replaceCharacters(in: global, with: edit.replacement)
             do { try await AX.replace(element, in: app, range: global, with: edit.replacement, before: expected, expected: next as String, automatic: automatic) }
             catch {
+                // Nothing is claimed unchanged unless the editor still reads exactly what it read before this edit.
+                let untouched = applied == 0 && AX.text(element) == expected
                 _ = AX.select(element, expectedSelection)
-                throw ParzrError.message("\(error.localizedDescription) \(applied) edits applied; use the editor's Undo if needed.")
+                let failure = (error as? ApplyError) ?? ApplyError(.notAccepted, message: error.localizedDescription)
+                throw failure.adding(ApplyFocus.outcome(applied: applied, untouched: untouched))
             }
             expected = next as String
             applied += 1
         }
-        guard AX.text(element) == expected else { throw ParzrError.message("The editor did not confirm the final edit. Check your text before continuing.") }
+        guard let final = AX.text(element), ReplacePlan.sameText(final, expected) else { throw ApplyLog.fail(.finalUnconfirmed, stage: "apply", context: logContext, detail: "applied=\(applied)") }
+        if final.utf16.count == expected.utf16.count { expected = final }
+        ApplyLog.note("applied", context: logContext, detail: "edits=\(applied)")
         FixLearning.record(edits, in: self)
         let delta = edits.reduce(0) { $0 + $1.replacement.utf16.count - $1.range.length }
         if expectedSelection.length == 0 {

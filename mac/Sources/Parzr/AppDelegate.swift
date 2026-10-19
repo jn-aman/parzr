@@ -182,11 +182,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         #endif
         panelModel.warm(); studioModel.warm()
+        // Sends suggestion reports an earlier launch queued (or erases them when reports are off).
+        Reports.start()
         Preferences.shared.purgeMisspelledNames()
         Preferences.shared.syncContacts()
-        // known-words.json mirrors the saved dictionary and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
+        // known-words.json mirrors the saved dictionary, learned words and persistent names for the browser host, LSP and VS Code; it fires once at launch, then on any change.
         let prefs = Preferences.shared
-        Publishers.CombineLatest4(prefs.$dictionary, prefs.$learnedNames, prefs.$contactNames, prefs.$useContactNames).debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+        Publishers.CombineLatest4(prefs.$dictionary.combineLatest(prefs.$learnedWords), prefs.$learnedNames, prefs.$contactNames, prefs.$useContactNames).debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { _ in KnownWordsFile.writeCurrent() }.store(in: &subscriptions)
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
@@ -226,15 +228,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if let self, self.inline.hasMarks, self.inline.overflow > 0 { return }
             self?.marker?.orderOut(nil); self?.marker?.contentView = nil
         }
+        passive.onClear = { [weak self] in
+            guard let self, !self.inline.isPresenting else { return }
+            self.inline.dismiss(); self.passive?.onDismiss?()
+        }
         passive.onSuggestion = { [weak self] snapshot, result in
-            guard let self, !self.isShown(self.panel), !self.inline.isPresenting else { return }
+            guard let self, !self.isShown(self.panel), !self.panelYielded, !self.inline.isPresenting else { return }
             if Preferences.shared.selectedTextPopover, snapshot.expectedSelection.length > 0, let anchor = snapshot.bounds {
                 _ = self.inline.present(snapshot: snapshot, result: result, anchor: anchor, activate: false)
                 return
             }
-            if !self.inline.show(snapshot: snapshot, result: result) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
+            if !self.inline.show(snapshot: snapshot, result: result, revealAfter: self.passive?.revealDelay ?? 0) || self.inline.overflow > 0 { self.showMarker(snapshot: snapshot, result: result) }
         }
         panelModel.dismiss = { [weak self] in self?.closePanel() }
+        // The card steps aside while a fix is written into another app, so that app's window has the keyboard (see AppModel.handOff).
+        panelModel.handOff = { [weak self] yielding in
+            guard let self, self.showsWindows, let panel = self.panel else { return }
+            self.panelYielded = yielding
+            if yielding { panel.orderOut(nil) } else if self.panelModel.snapshot != nil { panel.orderFrontRegardless() }
+        }
         // The selection card offers one rewrite after a Fix check; the Studio's checks do not.
         panelModel.offersRewrite = true
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(activated), name: NSWorkspace.didActivateApplicationNotification, object: nil)
@@ -245,16 +257,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }.store(in: &subscriptions)
         // The grammar model compiles for the Neural Engine on first use (seconds): do it in the background once setup is finished, never during launch.
         Preferences.shared.$permissionGranted.combineLatest(Preferences.shared.$onboardingCompleted, Preferences.shared.$smartGrammar).filter { $0 && $1 && $2 }.first()
-            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar() } }.store(in: &subscriptions)
+            .sink { _ in Task { try? await Task.sleep(for: .seconds(3)); await WritingEngine.warmGrammar(); await WritingEngine.warmSlips() } }.store(in: &subscriptions)
         // Models are downloaded on demand (ModelCenter): until they arrive Parzr checks with its rules. Smart grammar warms the moment they do.
-        let models = ModelCenter.app
-        models.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } } }
-        if ModelCenter.downloadsAllowed {
-            models.watchNetwork()
+        // Optional packs: an automatic one (the slip check, about 84 MB) follows the essential pack, one download at a time,
+        // and warms when it arrives; the tone check's downloads only when its setting is on (below).
+        let models = ModelCenter.app, optional = ModelCenter.optionalCenters, automatic = optional.filter { $0.optional?.automatic == true }
+        let allowed = ModelCenter.downloadsAllowed
+        models.onReady = {
+            if Preferences.shared.smartGrammar { Task { await WritingEngine.warmGrammar() } }
+            if allowed { automatic.forEach { $0.startIfNeeded() } }
+        }
+        ModelCenter.slips?.onReady = { if Preferences.shared.smartGrammar { Task { await WritingEngine.warmSlips() } } }
+        if allowed {
+            models.watchNetwork(); optional.forEach { $0.watchNetwork() }
             // A finished welcome guide (an existing user after an update, or a returning one) downloads in the background without showing anything;
             // a new user starts it on the guide's download step, and finishing the guide starts it if they went past it some other way.
-            Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in try? await Task.sleep(for: .seconds(2)); models.startIfNeeded() } }.store(in: &subscriptions)
+            Preferences.shared.$onboardingCompleted.filter { $0 }.first().sink { _ in Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2)); models.startIfNeeded()
+                if models.isReady { automatic.forEach { $0.startIfNeeded() } }
+            } }.store(in: &subscriptions)
         }
+        // Tone check (opt-in): its model is its own small pack, fetched when the setting is turned on and loaded once it is on disk.
+        ModelCenter.tone?.onReady = { ToneModel.load() }
+        ModelCenter.tone?.onRemove = { Task { await ToneChecker.shared.unload() } }
+        ToneModel.apply(Preferences.shared.toneCheck, userInitiated: false)
+        Preferences.shared.$toneCheck.dropFirst().removeDuplicates().sink { enabled in Task { @MainActor in ToneModel.apply(enabled, userInitiated: true) } }.store(in: &subscriptions)
         Preferences.shared.watchTrustChanges()
         Preferences.shared.refreshPermission()
         // First launch, or Accessibility missing: guided setup instead of a bare system prompt (its button triggers the prompt).
@@ -338,7 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return main
     }
     @objc private func activated() {
-        Preferences.shared.refreshPermission(); ModelCenter.app.refresh()
+        Preferences.shared.refreshPermission(); ModelCenter.app.refresh(); ModelCenter.optionalCenters.forEach { $0.refresh() }
         if let app = NSWorkspace.shared.frontmostApplication, let snapshot = panelModel.snapshot, app.processIdentifier != snapshot.app.processIdentifier && app.bundleIdentifier != Bundle.main.bundleIdentifier { closePanel() }
         passive?.attach()
     }
@@ -522,7 +549,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let visible = panel.screen?.visibleFrame { frame.origin.y = max(frame.origin.y, visible.minY) }
         panel.setFrame(frame, display: true)
     }
+    /// The selection card stepped aside for a fix in progress (`AppModel.handOff`).
+    private var panelYielded = false
     func closePanel() {
+        panelYielded = false
         panel?.orderOut(nil); panel.map { _ = headlessShown.remove(ObjectIdentifier($0)) }
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }
@@ -653,7 +683,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 tone.status = EmptyCheck.toneWithheld
                 try render(RewritePanel(model: tone), size: RewritePanel.size, to: URL(fileURLWithPath: directory).appendingPathComponent("tone-withheld.png"))
                 try cardSnapshots(to: URL(fileURLWithPath: directory))
-                for route in [StudioRoute.general, .writing, .models, .appearance, .privacy, .about] {
+                for route in [StudioRoute.general, .writing, .learning, .models, .appearance, .privacy, .about] {
                     try render(StudioView(model: studioModel, route: route, renderingSnapshot: true), size: NSSize(width: 920, height: 680), to: URL(fileURLWithPath: directory).appendingPathComponent("\(route.rawValue.lowercased()).png"))
                 }
                 try render(StudioView(model: studioModel, route: .writing, renderingSnapshot: true), size: NSSize(width: 920, height: 1240), to: URL(fileURLWithPath: directory).appendingPathComponent("writing-tall.png"))

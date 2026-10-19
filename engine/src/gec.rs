@@ -1271,7 +1271,12 @@ fn drops_meaning(text: &str, edit: Span, original: &str, replacement: &str) -> b
 }
 /// "The schedules were" made "was": a clause that opens with a determiner and a noun has that noun
 /// for its subject, and a helping verb rewritten against the noun's number is wrong.
-fn against_head_noun(tokens: &[crate::tokenizer::Token<'_>], at: usize, replacement: &str) -> bool {
+fn against_head_noun(
+    tokens: &[crate::tokenizer::Token<'_>],
+    at: usize,
+    replacement: &str,
+    british: bool,
+) -> bool {
     let singular = match replacement.trim().to_lowercase().as_str() {
         "is" | "was" | "has" | "does" | "doesn't" | "isn't" | "wasn't" | "hasn't" => true,
         "are" | "were" | "have" | "do" | "don't" | "aren't" | "weren't" | "haven't" => false,
@@ -1291,6 +1296,14 @@ fn against_head_noun(tokens: &[crate::tokenizer::Token<'_>], at: usize, replacem
         && det.sentence == noun.sentence
         && ["the", "my", "your", "his", "her", "our", "their"].contains(&det.normalized.as_str())
         && match crate::structure::plural(noun) {
+            // "The government have announced": British English lets a group noun take a plural verb.
+            Some(false)
+                if singular
+                    && british
+                    && crate::structure::COLLECTIVE.contains(&noun.normalized.as_str()) =>
+            {
+                true
+            }
             Some(many) => many == singular,
             // A misspelled noun ("schedles") has no number the model can read, and "data" or "staff"
             // take either: the writer's verb stands.
@@ -1455,7 +1468,8 @@ fn merge(
         .collect();
     let grammar: Vec<Span> = parzr
         .iter()
-        .filter(|e| ["Grammar", "Repetition"].contains(&e.category.as_str()))
+        // "He has went": a tense or agreement fix is a grammar edit too ("has" stays for "gone").
+        .filter(|e| ["Grammar", "Repetition", "Tense", "Agreement"].contains(&e.category.as_str()))
         .filter_map(|e| span(e.start_utf16, e.end_utf16))
         .collect();
     let mut shielded: Vec<Span> = protected
@@ -1537,7 +1551,28 @@ fn merge(
         let writers_choice = !as_verb
             && pluralizes_after_determiner(text, edit.0, original, &e.replacement)
             || verb_form_after_determiner(text, edit.0, original, &e.replacement);
+        // "love this idea, let's try it": a chat message without a full stop keeps its comma
+        // between clauses, as the rules leave it.
+        // So does a statement before a question ("I can't make it today, can we reschedule?").
+        let chat_comma = original.contains(',')
+            && e.replacement.contains(['.', ';'])
+            && !e.replacement.contains(',')
+            && (!text.trim_end().ends_with(['.', '!', '?'])
+                || text.get(edit.1..end).is_some_and(|rest| {
+                    rest.split(['.', '!', '\n'])
+                        .next()
+                        .is_some_and(|r| r.contains('?'))
+                }));
+        // "no no no", "bye bye": a word written twice on purpose stays when its copy goes on.
+        let doubled = e.replacement.trim().is_empty() && {
+            let w = original.trim().to_lowercase();
+            crate::DOUBLED_ON_PURPOSE.contains(&w.as_str())
+                && (text[..edit.0].trim_end().to_lowercase().ends_with(&w)
+                    || text[edit.1..].trim_start().to_lowercase().starts_with(&w))
+        };
         let dropped = strange >= CODE_MIXED
+            || chat_comma
+            || doubled
             || rules.iter().any(|r| overlaps(text, edit, *r))
             || beside_a_rule(text, edit, original, &e.replacement, &grammar)
             || touches(edit, &shielded)
@@ -1555,7 +1590,7 @@ fn merge(
             || thanks_for(text, edit.0, original)
             || invents_a_word(text, &e.replacement)
             || drops_meaning(text, edit, original, &e.replacement)
-            || against_head_noun(&tokens, edit.0, &e.replacement);
+            || against_head_noun(&tokens, edit.0, &e.replacement, req.dialect == "british");
         number.push(writers_choice);
         verdicts.push(if dropped {
             Verdict::Drop

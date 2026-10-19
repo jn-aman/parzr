@@ -28,12 +28,16 @@ final class InlineSuggestions {
     private var stopped = false
     /// Headless tests never watch global events or order the invisible warm-up card on screen.
     private let headless: Bool
-    private var shown: (snapshot: SelectionSnapshot, result: RewriteResult, probe: (range: NSRange, rect: CGRect)?)?
+    /// `visible`: ids of the edits whose marks are on screen; the rest of a fresh check may still be waiting out the typing delay.
+    private var shown: (snapshot: SelectionSnapshot, result: RewriteResult, probe: (range: NSRange, rect: CGRect)?, visible: Set<String>)?
+    private var reveal: Task<Void, Never>?
     private(set) var overflow = 0
     private var relayout: Task<Void, Never>?
     private let maxMarks = 32
     var hasMarks: Bool { overlay.hasMarks }
-    var isPresenting: Bool { correction?.isVisible == true }
+    /// The card stepped aside for a fix in progress: it still counts as presenting, and stale checks wait for the fix to finish.
+    private var yielded = false
+    var isPresenting: Bool { correction?.isVisible == true || yielded }
     var correctionSize: CGSize? { correction?.frame.size }
     var correctionView: NSView? { correction?.contentView }
     func markedView(for edit: WritingEdit) -> MarkElement? { overlay.element(for: edit.id) }
@@ -46,6 +50,13 @@ final class InlineSuggestions {
     init(headless: Bool = false) {
         self.headless = headless
         model.dismiss = { [weak self] in self?.closeCard(); self?.dismissIfStale() }
+        // While a fix is written the card steps aside, so the editor's window has the keyboard again (see AppModel.handOff); it comes back,
+        // without taking the keyboard, only when the fix did not go through and the session is still open.
+        model.handOff = { [weak self] yielding in
+            guard let self, let card = self.correction else { return }
+            self.yielded = yielding
+            if yielding { card.orderOut(nil) } else if self.model.snapshot != nil { card.orderFrontRegardless() }
+        }
         model.didAnalyze = { [weak self] in
             guard let self else { return }
             self.model.selectedEdits.subtract(IgnoreKey.ids(in: self.model.result?.edits ?? [], ignored: self.ignored))
@@ -70,16 +81,34 @@ final class InlineSuggestions {
         }
         monitorInstalls += 1
     }
-    /// Scrolling hides marks at once and re-places them once it settles, if the text is unchanged.
+    /// Scrolling moves the marks with the text (one mark is re-measured per run-loop pass and all follow it, clipped to the scroll area);
+    /// editors whose geometry is too costly or cannot be measured (Docs) hide them instead. Either way the marks are re-placed once the
+    /// scroll settles, if the text is unchanged.
     private func scrolled() {
         closeCard()
-        guard shown != nil else { return }
-        overlay.hide()
+        guard let s = shown else { return }
+        if relayout == nil { scrollClip = s.snapshot.docs ? nil : AX.scrollArea(s.snapshot.element) }
+        if s.snapshot.docs || s.probe == nil { overlay.hide() } else { follow() }
         relayout?.cancel()
         relayout = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
             if self.textIsCurrent, let s = self.shown { self.reset(); self.show(snapshot: s.snapshot, result: s.result) } else { self.dismiss() }
+        }
+    }
+    private var scrollClip: CGRect?
+    private var following = false
+    /// One re-measure per main-actor turn, however many wheel events arrive in it.
+    private func follow() {
+        guard !following else { return }
+        following = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.following = false
+            guard let s = self.shown, let probe = s.probe, !s.snapshot.docs else { return }
+            guard let offset = ScrollFollow.offset(from: probe.rect, to: AX.bounds(s.snapshot.element, probe.range)) else { self.overlay.hide(); return }
+            // A little slack below and beside the area keeps the stroke under its last visible line.
+            self.overlay.follow(offset: offset, clip: self.scrollClip?.insetBy(dx: -4, dy: -6))
         }
     }
     private var textIsCurrent: Bool {
@@ -95,22 +124,37 @@ final class InlineSuggestions {
         return abs(now.minX - p.rect.minX) < s.snapshot.markDrift && abs(now.minY - p.rect.minY) < s.snapshot.markDrift
     }
     private func closeCard() {
+        yielded = false
         correction?.orderOut(nil)
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor); self.keyMonitor = nil }
         model.clearSession()
     }
     func dismiss() { overlay.clear(); reset() }
     /// Forgets the shown result and the card but leaves the marks on screen, so the next show can keep the unchanged ones.
-    private func reset() { closeCard(); shown = nil; overflow = 0; relayout?.cancel(); relayout = nil }
+    private func reset() { closeCard(); shown = nil; overflow = 0; relayout?.cancel(); relayout = nil; reveal?.cancel(); reveal = nil }
     func dismissIfStale() {
         // Marks and an open card persist across clicks and caret moves; they go only
         // when the text, focus, position or the passive/app settings no longer match.
         let prefs = Preferences.shared
         guard prefs.passive, !prefs.paused else { dismiss(); return }
+        // A fix is being written: the text and focus are expected to move, and the fix itself closes the card (or brings it back with the reason).
+        if yielded { return }
         if let snapshot = shown?.snapshot ?? model.snapshot, !snapshot.checkingEnabled { dismiss(); return }
-        if shown != nil, !marksAreCurrent { dismiss(); return }
+        if shown != nil, !marksAreCurrent { if !carryOver() { dismiss() }; return }
         if isPresenting, (try? model.snapshot?.validate()) == nil { if shown != nil { closeCard() } else { dismiss() }; return }
         if shown == nil, !isPresenting { dismiss() }
+    }
+    /// Typing changed the text under the marks: the marks the change did not touch move with the text and stay on screen until the next
+    /// check replaces them, instead of all vanishing on every keystroke. False when nothing could be carried (the caller then clears).
+    private func carryOver() -> Bool {
+        guard let s = shown?.snapshot, let visible = shown?.visible, s.automatic, s.headlessEditor == nil, s.expectedSelection.length == 0, let old = s.fullText, s.checkingEnabled,
+              !s.app.isTerminated, s.app == SelfTestTarget.watched, s.automaticEditorIsCurrent(), let now = AX.text(s.element), now != old,
+              let caret = AX.selection(s.element), caret.length == 0, let result = shown?.result,
+              let carried = MarkCarry.remap(edits: result.edits.filter { visible.contains($0.id) }, selection: s.selection, inlineBreaks: s.inlineBreaks, from: old, to: now), !carried.edits.isEmpty else { return false }
+        let text = WebGeometry.joining((now as NSString).substring(with: carried.selection), origin: carried.selection.location, breaks: carried.inlineBreaks)
+        let moved = SelectionSnapshot(app: s.app, element: s.element, selection: carried.selection, expectedSelection: caret, text: text, fullText: now, bounds: s.bounds,
+                                      richText: nil, copied: false, canPatch: s.canPatch, docs: s.docs, inlineBreaks: carried.inlineBreaks, automatic: true)
+        return show(snapshot: moved, result: result.replacingEdits(carried.edits))
     }
     func stop() {
         stopped = true; relayout?.cancel(); dismiss()
@@ -122,27 +166,69 @@ final class InlineSuggestions {
         let next = IgnoreRevision(pid: snapshot.app.processIdentifier, element: CFHash(snapshot.element))
         if revision != next { ignored = []; revision = next }
     }
+    /// `revealAfter` (ms): how long marks that were not already on screen wait while the writer types fast (`TypingMonitor`); marks already shown stay put.
     @discardableResult
-    func show(snapshot: SelectionSnapshot, result: RewriteResult) -> Bool {
+    func show(snapshot: SelectionSnapshot, result: RewriteResult, revealAfter: Double = 0) -> Bool {
         guard snapshot.checkingEnabled, snapshot.automaticEditorIsCurrent() else { dismiss(); return false }
-        if let current = shown, overlay.hasMarks, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
+        if let current = shown, overlay.hasMarks || reveal != nil, CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText,
            current.snapshot.selection == snapshot.selection, current.result.edits == result.edits, marksAreCurrent {
-            shown = (snapshot, result, current.probe); return true
+            shown = (snapshot, result, current.probe, current.visible); return true
         }
+        // Marks already on screen over this same text, in document offsets: they are not new to the writer.
+        let onScreen: Set<MarkReveal.Key> = shown.flatMap { current in
+            guard CFEqual(current.snapshot.element, snapshot.element), current.snapshot.fullText == snapshot.fullText else { return nil }
+            return Set(current.result.edits.filter { current.visible.contains($0.id) }.map { MarkReveal.Key($0, at: current.snapshot.selection.location) })
+        } ?? []
         reset(); prepareRevision(snapshot)
         guard snapshot.app == SelfTestTarget.watched, !snapshot.text.isEmpty else { overlay.clear(); return false }
         let edits = result.edits.filter { !ignored.contains(IgnoreKey.of($0)) }
-        shown = (snapshot, result, nil)
+        shown = (snapshot, result, nil, [])
         if edits.isEmpty { overlay.clear(); return true }
         overflow = max(0, edits.count - maxMarks)
         var probe: (range: NSRange, rect: CGRect)?
-        let placed: [(edit: WritingEdit, global: NSRange, bounds: CGRect)] = edits.prefix(maxMarks).compactMap { edit in
-            let local = edit.range.length > 0 ? edit.range : (snapshot.text as NSString).rangeOfComposedCharacterSequence(at: min(edit.start_utf16, max(0, snapshot.text.utf16.count - 1)))
+        let placed: [Placed] = edits.prefix(maxMarks).compactMap { edit in
+            let text = snapshot.text as NSString
+            let local = edit.range.length > 0 ? edit.range : text.rangeOfComposedCharacterSequence(at: min(edit.start_utf16, max(0, snapshot.text.utf16.count - 1)))
             let global = NSRange(location: snapshot.selection.location + local.location, length: local.length)
             guard let bounds = AX.bounds(snapshot.element, global), bounds.width > 0, bounds.height < 70,
                   SelfTestTarget.shows(bounds) else { return nil }
-            return (edit, global, bounds)
+            // The underline covers only the words the fix changes, one stroke per visual line; the highlight covers the whole edit.
+            let original = text.substring(with: local)
+            let span = edit.range.length > 0 ? MarkSpan.changed(original: original, replacement: edit.replacement) : NSRange(location: 0, length: local.length)
+            let changed = NSRange(location: global.location + span.location, length: span.length)
+            @MainActor func rects(_ range: NSRange, whole: CGRect?) -> [CGRect] {
+                let words = (snapshot.text as NSString).substring(with: NSRange(location: range.location - snapshot.selection.location, length: range.length))
+                if MarkSpan.mayWrap(words) {
+                    let lines = AX.lineRects(snapshot.element, range).filter { $0.width > 0 && $0.height < 70 && SelfTestTarget.shows($0) }
+                    if lines.count > 1 { return lines }
+                }
+                if let whole { return [whole] }
+                guard let rect = AX.bounds(snapshot.element, range), rect.width > 0, rect.height < 70, SelfTestTarget.shows(rect) else { return [] }
+                return [rect]
+            }
+            let highlights = Preferences.shared.highlightFill || changed == global ? rects(global, whole: bounds) : [bounds]
+            let underlines = changed == global ? highlights : rects(changed, whole: nil)
+            return (edit, global, bounds, underlines.isEmpty ? highlights : underlines, highlights)
         }
+        let fresh = revealAfter > 0 ? MarkReveal.fresh(placed.map(\.edit), at: snapshot.selection.location, visible: onScreen) : []
+        let now = placed.filter { !fresh.contains($0.edit.id) }
+        overlay.apply(items(for: now, snapshot: snapshot, result: result))
+        if let first = now.first ?? placed.first { probe = (first.global, first.bounds) }
+        shown = (snapshot, result, probe, Set(now.map(\.edit.id)))
+        guard !fresh.isEmpty else { return overlay.hasMarks }
+        // New marks land when typing slows, unless the text moves first (then the carried marks and the next check take over).
+        reveal = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(Int(revealAfter.rounded())))
+            guard !Task.isCancelled, let self, let current = self.shown, current.snapshot.selection == snapshot.selection, current.snapshot.fullText == snapshot.fullText, self.textIsCurrent else { return }
+            self.reveal = nil
+            self.overlay.apply(self.items(for: placed, snapshot: snapshot, result: result))
+            self.shown = (snapshot, result, current.probe, Set(placed.map(\.edit.id)))
+        }
+        return true
+    }
+    /// Washes, highlights and underlines for the placed edits of one check.
+    private typealias Placed = (edit: WritingEdit, global: NSRange, bounds: CGRect, underlines: [CGRect], highlights: [CGRect])
+    private func items(for placed: [Placed], snapshot: SelectionSnapshot, result: RewriteResult) -> [MarkItem] {
         var items: [MarkItem] = []
         if Preferences.shared.highlightFill, !placed.isEmpty {
             var washes = 0
@@ -156,18 +242,17 @@ final class InlineSuggestions {
                 }
             }
         }
-        for (edit, global, bounds) in placed {
+        for (edit, global, bounds, underlines, highlights) in placed {
             let style = ["Style", "Tone"].contains(edit.category)
-            if Preferences.shared.highlightFill { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: bounds, style: style), owner: edit.id)) }
-            items.append(MarkItem(shape: MarkShape(kind: .underline, rect: bounds, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
-                guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
-                self?.present(snapshot: snapshot, result: result, focused: edit, anchor: bounds)
-            })
-            if probe == nil { probe = (global, bounds) }
+            if Preferences.shared.highlightFill { for rect in highlights { items.append(MarkItem(shape: MarkShape(kind: .highlight, rect: rect, style: style), owner: edit.id)) } }
+            for rect in underlines {
+                items.append(MarkItem(shape: MarkShape(kind: .underline, rect: rect, style: style), owner: edit.id, label: "Review \(edit.category.lowercased()) correction", tip: "Parzr: \(edit.explanation)") { [weak self] in
+                    guard snapshot.checkingEnabled, let now = AX.bounds(snapshot.element, global), abs(now.minY - bounds.minY) < max(2, snapshot.markDrift), abs(now.minX - bounds.minX) < max(2, snapshot.markDrift) else { self?.dismiss(); return }
+                    self?.present(snapshot: snapshot, result: result, focused: edit, anchor: rect)
+                })
+            }
         }
-        overlay.apply(items)
-        shown = (snapshot, result, probe)
-        return overlay.hasMarks
+        return items
     }
     private func card() -> FloatingPanel {
         if let correction { return correction }
@@ -256,6 +341,8 @@ struct InlineCorrection: View {
     var applySentence: (() -> Void)? = nil
     var ignore: () -> Void
     var close: () -> Void
+    /// Reports what the writer did with this suggestion; nil when reports are off (or for the welcome guide's sample).
+    var report: ((ReportAction) -> Void)? = nil
     private var sentenceEdits: [WritingEdit] { SentencePreview.edits(source: source, edits: edits, focused: edit) }
     var body: some View {
         let count = sentenceEdits.count
@@ -276,8 +363,8 @@ struct InlineCorrection: View {
                     NativeButton(title: "\(edit.actionTitle)  ⏎", kind: .primary, label: "Apply correction: \(edit.replacementLabel)", key: "\r", enabled: canApply, action: apply)
                 }
                 Spacer(minLength: 0)
-                CardMore(edit: edit, done: ignore)
-                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); ignore() }).fixedSize()
+                CardMore(edit: edit, done: ignore, report: report.map { report in { report(.reported); ignore() } })
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); report?(.dismissed); ignore() }).fixedSize()
             }.frame(height: 28)
         }.padding(12).frame(width: Self.size.width, height: Self.size.height).background(Color.canvas).foregroundStyle(Color.textPrimary)
     }

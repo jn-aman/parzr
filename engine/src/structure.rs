@@ -89,8 +89,104 @@ fn emit(
         edits.push(edit);
     }
 }
+/// Group nouns that British English pairs with a plural verb when it means the members.
+pub(crate) const COLLECTIVE: [&str; 30] = [
+    "team",
+    "staff",
+    "family",
+    "government",
+    "committee",
+    "band",
+    "audience",
+    "jury",
+    "crew",
+    "company",
+    "board",
+    "council",
+    "class",
+    "club",
+    "group",
+    "public",
+    "management",
+    "panel",
+    "army",
+    "party",
+    "union",
+    "firm",
+    "department",
+    "couple",
+    "orchestra",
+    "choir",
+    "cast",
+    "squad",
+    "faculty",
+    "community",
+];
+/// Pairs joined by "and" that name one thing and take a singular verb.
+const ONE_THING: [(&str, &str); 6] = [
+    ("fish", "chips"),
+    ("bread", "butter"),
+    ("salt", "pepper"),
+    ("macaroni", "cheese"),
+    ("mac", "cheese"),
+    ("rock", "roll"),
+];
+/// "He and I", "Sarah and I", "My sister and I" opening a clause before the verb at `i`: two
+/// subjects, unlike "the theatre and I was" where "and" joins two clauses.
+fn pair_with_i(tokens: &[Token<'_>], i: usize) -> bool {
+    if i < 3 || tokens[i - 1].normalized != "i" || tokens[i - 2].normalized != "and" {
+        return false;
+    }
+    let opens = |k: usize| {
+        k == 0
+            || tokens[k - 1].sentence != tokens[k].sentence
+            || tokens[k - 1].paragraph != tokens[k].paragraph
+            || [",", ";", ":"].contains(&tokens[k - 1].surface)
+            || [
+                "but", "so", "because", "when", "if", "that", "since", "although", "while",
+            ]
+            .contains(&tokens[k - 1].normalized.as_str())
+    };
+    let x = &tokens[i - 3];
+    let person = ["he", "she", "they", "we", "you"].contains(&x.normalized.as_str())
+        || x.proper_name
+        || x.surface.starts_with(char::is_uppercase) && !spelling::ordinary(&x.normalized);
+    person && opens(i - 3)
+        || i >= 4
+            && x.is_word
+            && ["my", "our", "his", "her", "their", "your", "the"]
+                .contains(&tokens[i - 4].normalized.as_str())
+            && opens(i - 4)
+}
 pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     let word = subject.normalized.as_str();
+    // "Physics was my worst class", "Statistics are…": a field ending in -ics may take either.
+    if [
+        "physics",
+        "mathematics",
+        "economics",
+        "politics",
+        "ethics",
+        "statistics",
+        "athletics",
+        "gymnastics",
+        "linguistics",
+        "electronics",
+        "genetics",
+        "logistics",
+        "aerobics",
+        "acoustics",
+        "robotics",
+        "analytics",
+        "mechanics",
+        "phonetics",
+        "thermodynamics",
+        "aeronautics",
+    ]
+    .contains(&word)
+    {
+        return None;
+    }
     if [
         "i", "you", "we", "they", "people", "children", "men", "women", "police",
     ]
@@ -826,6 +922,17 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let Some(mut is_plural) = plural(p) else {
             continue;
         };
+        // British English lets a group noun take a plural verb ("The team are working on it").
+        if req.dialect == "british" && !is_plural && COLLECTIVE.contains(&p.normalized.as_str()) {
+            continue;
+        }
+        // "Fish and chips is on the menu": one dish, not two subjects.
+        if i >= 3
+            && tokens[i - 2].normalized == "and"
+            && ONE_THING.contains(&(tokens[i - 3].normalized.as_str(), p.normalized.as_str()))
+        {
+            continue;
+        }
         // "Today: emails, code review, gym.", "call mom, finish report": a noun pair that makes up
         // a whole list item is a noun phrase, not a subject and its verb.
         let item_start = i < 2
@@ -940,11 +1047,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         }) {
             continue;
         }
+        // "He and I was": a pair closed by "I" is a plural subject the copula check can read.
         if before
             .last()
             .is_some_and(|x| ["and", "or"].contains(&x.normalized.as_str()))
             && i >= 3
             && plural(&tokens[i - 3]).is_some()
+            && !(v.base == "be" && pair_with_i(&tokens, i))
         {
             continue;
         }
@@ -1001,11 +1110,28 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         // already written in the present ("... yesterday ...; it is only now that it has been").
         let frame = clause_prefix.rsplit([';', ':']).next().unwrap_or("");
         // Nor one before ", yet" or ", but": "last month, yet nothing has happened".
-        let frame = [", yet ", ", but "]
-            .iter()
-            .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
-            .max()
-            .map_or(frame, |at| &frame[at..]);
+        // Nor one before a second clause with its own subject: "I bought it last week and the
+        // screen has a dead pixel".
+        let frame = [
+            ", yet ",
+            ", but ",
+            " and the ",
+            " and my ",
+            " and our ",
+            " and your ",
+            " and it ",
+            " and this ",
+            " and his ",
+            " and her ",
+            " and their ",
+            " but the ",
+            " but my ",
+            " but it ",
+        ]
+        .iter()
+        .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
+        .max()
+        .map_or(frame, |at| &frame[at..]);
         let markers = ["yesterday", "last week", "last month", "last night"];
         let present_frame = markers
             .iter()
@@ -1055,8 +1181,18 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .iter()
             .any(|m| clause_prefix.contains(m));
-            let replacement = match (w, is_plural, p.normalized.as_str()) {
-                _ if named => None,
+            // "He and I are": "I" closing a pair is one of two subjects, never "I am"; "He and I
+            // was" takes "were".
+            let paired_i = pair_with_i(&tokens, i);
+            let head = if paired_i {
+                "pair"
+            } else {
+                p.normalized.as_str()
+            };
+            let is_plural = is_plural || paired_i;
+            let replacement = match (w, is_plural, head) {
+                // "Me and him are": the pronoun rules fix the subject first.
+                _ if named || ["me", "him", "us", "them"].contains(&head) => None,
                 ("are", _, "i") => Some("am"),
                 ("was", true, "i") => None,
                 ("was", true, _) => Some("were"),
@@ -1107,9 +1243,40 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     || spelling::flags(w) & 2 != 0
                         && tokens.get(i + 1).is_some_and(|n| {
                             crate::punctuation::finite(n)
+                                // "Our team lead, along with two engineers, is": a noun before an aside.
+                                || n.surface == ","
+                                // "RSS feed readers have": a noun inside a longer noun phrase.
+                                || (spelling::flags(&n.normalized) & 2 != 0
+                                    || spelling::flags(n.normalized.trim_end_matches('s')) & 2
+                                        != 0)
+                                    && tokens.get(i + 2).is_some_and(|m| {
+                                        [
+                                            "is", "are", "was", "were", "has", "have", "will",
+                                            "can", "should", "must",
+                                        ]
+                                        .contains(&m.normalized.as_str())
+                                    })
                                 || ["about", "on", "of", "for", "in", "at", "by", "from"]
                                     .contains(&n.normalized.as_str())
                         }));
+            // "Anyone need anything else?": chat drops the "Does" of a question.
+            let dropped_do = [
+                "anyone",
+                "anybody",
+                "someone",
+                "somebody",
+                "everyone",
+                "everybody",
+            ]
+            .contains(&p.normalized.as_str())
+                && tokens
+                    .iter()
+                    .take(i - 1)
+                    .all(|x| x.sentence != t.sentence || !x.is_word)
+                && tokens[i..]
+                    .iter()
+                    .take_while(|x| x.sentence == t.sentence)
+                    .any(|x| x.surface == "?");
             let narrative = !clause_prefix.contains("if ")
                 && tokens
                     .iter()
@@ -1129,7 +1296,7 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                             && morphology::verb(&x.normalized)
                                 .is_some_and(|v| x.normalized == v.past && v.past != v.base)
                     });
-            if !subjunctive && !compound && !narrative {
+            if !subjunctive && !compound && !narrative && !dropped_do {
                 emit(
                     req,
                     t,

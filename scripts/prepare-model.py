@@ -42,7 +42,7 @@ for arch in architectures:
     command += ['-framework', 'Metal', '-framework', 'MetalKit']
     # AppKit: NSSpellChecker tells lowercase names apart from typos (see parzr_model_token_hints).
     command += ['-framework', 'AppKit']
-    # CoreML: GECToR on the Neural Engine (parzr_gec_*).
+    # CoreML: GECToR and the slip checker on the Neural Engine (parzr_gec_*, parzr_mlm_*).
     command += ['-framework', 'CoreML']
     command += ['-Wl,-install_name,@rpath/libparzr_model.dylib', '-o', out]
     run(command)

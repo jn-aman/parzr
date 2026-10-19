@@ -22,8 +22,12 @@ final class AppModel: ObservableObject {
     @Published var selectionHint = false
     /// The rewrite offered after a Fix check (the selection card only), in the tone that fits the app; written in the background.
     @Published var suggestion: SuggestedVersion?
+    /// Tone check (opt-in): set after a Fix check when the text may read as rude, passive-aggressive, curt or overly apologetic.
+    @Published var toneFlag: ToneFlag?
     /// Set for the selection card: a Fix check of a few words or more also offers one rewrite.
     var offersRewrite = false
+    /// What the writer does with this model's suggestions is reported (when reports are on). The welcome guide's sample turns it off.
+    var reports = true
     var snapshot: SelectionSnapshot?
     var dismiss: (() -> Void)?
     var didAnalyze: (() -> Void)?
@@ -32,6 +36,7 @@ final class AppModel: ObservableObject {
     var pasteboard = NSPasteboard.general
     private var analysisTask: Task<Void, Never>?
     private var suggestionTask: Task<Void, Never>?
+    private var toneTask: Task<Void, Never>?
     private var generation = 0
     private var clipboard: ClipboardTransaction?
     var chosenEdits: [WritingEdit] { result?.edits.filter { selectedEdits.contains($0.id) } ?? [] }
@@ -76,6 +81,7 @@ final class AppModel: ObservableObject {
         selectedEdits = Set(result.edits.map(\.id)); focusedEditID = focused?.id
         provisional = false; busy = false; engineReady = true; error = nil; status = nil
         status = Self.statusText(result.warnings)
+        toneFlag = nil; checkTone(source, generation: generation)
     }
     func playground(_ text: String, debounce: Bool = false) {
         let old = source
@@ -104,9 +110,10 @@ final class AppModel: ObservableObject {
         let current = generation; let original = source; let checkingSnapshot = snapshot
         error = nil; status = nil
         // An explicit check clears the old answer and shows Checking at once; typing keeps its marks and only shows Checking if the wait is long.
-        if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true }
+        if !debounce { result = nil; selectedEdits = []; provisional = false; busy = true; toneFlag = nil }
         // Typing always takes the fast grammar path. Tone and passage review are explicit.
         let requestMode: RewriteMode = debounce ? .fix : mode
+        if requestMode != .fix { toneTask?.cancel(); toneFlag = nil }
         let (dialect, fullText, protected) = (Preferences.shared.dialect, snapshot?.fullText ?? original, snapshot?.protectedRanges() ?? [])
         let capitalize = Preferences.shared.capitalizeNames(for: snapshot?.app.bundleIdentifier)
         // A tone rewrite starts with the same correction pass as Fix, so Smart grammar applies to it too; a chat app's Friendly rewrite may end with an emoji.
@@ -123,12 +130,13 @@ final class AppModel: ObservableObject {
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: deep, gec: gec, casual: casual)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
                 let engine = request.deep || request.mode != .fix ? WritingEngine.shared : WritingEngine.typing
-                let result = KnownNames.dropMacLearned(try await engine.rewrite(request), from: original)
+                let result = KnownNames.screened(try await engine.rewrite(request), from: original)
                 guard !Task.isCancelled, current == generation, source == original else { return }
                 try checkingSnapshot?.validateCheckingEligibility()
                 self.result = result; selectedEdits = Set(result.edits.map(\.id)); provisional = false; busy = false; engineReady = true
                 self.status = Self.statusText(result.warnings)
                 if !debounce, requestMode == .fix, offersRewrite, SuggestedRewrite.offered(for: original) { suggest(original, generation: current) }
+                if requestMode == .fix { checkTone(original, generation: current) }
                 didAnalyze?()
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
@@ -152,11 +160,30 @@ final class AppModel: ObservableObject {
                 let request = EngineRequest(text: original, mode: tone, dictionary: KnownNames.dictionary(), names: await KnownNames.names(for: fullText, request: original), capitalizeNames: capitalize,
                                             dialect: dialect, protectedRanges: protected, sentenceStart: starts, sentenceEnd: ends, deep: true, gec: gec, casual: casual)
                 try Task.checkCancellation(); try checkingSnapshot?.validateCheckingEligibility()
-                written = KnownNames.dropMacLearned(try await WritingEngine.shared.rewrite(request), from: original)
+                written = KnownNames.screened(try await WritingEngine.shared.rewrite(request), from: original)
             } catch {}
             guard !Task.isCancelled, current == generation, source == original, suggestion?.source == original, checkingSnapshot?.checkingEnabled != false else { return }
             suggestion?.result = written; suggestion?.done = true
         }
+    }
+    /// Asks the tone classifier about `original` (a few milliseconds, off the main actor) and shows its flag if the text is still current.
+    private func checkTone(_ original: String, generation current: Int) {
+        toneTask?.cancel()
+        // Off, or checking paused or disabled for this app: no flag.
+        guard Preferences.shared.toneCheck, snapshot?.checkingEnabled != false else { toneFlag = nil; return }
+        toneTask = Task { @MainActor in
+            let flag = await ToneChecker.shared.check(original)
+            guard !Task.isCancelled, current == generation, source == original else { return }
+            toneFlag = flag
+        }
+    }
+    /// The tone that softens the flagged text where it is written.
+    var softenTone: RewriteMode? { toneFlag.map { $0.category.softenMode(bundle: snapshot?.app.bundleIdentifier, text: source) } }
+    /// One tap: rewrite in the tone that softens the flagged text, through the usual tone rewrite (and its meaning guard).
+    func soften() {
+        guard !busy, let tone = softenTone else { return }
+        toneFlag = nil
+        changeMode(tone)
     }
     /// Puts the offered rewrite on the card as that tone's result and applies all of it.
     func useSuggestion() {
@@ -167,8 +194,8 @@ final class AppModel: ObservableObject {
     /// A tone's finished result shown without a new check.
     private func show(_ written: RewriteResult, as tone: RewriteMode) {
         guard snapshot?.checkingEnabled != false else { return }
-        analysisTask?.cancel(); suggestionTask?.cancel(); generation += 1
-        mode = tone; result = written; suggestion = nil
+        analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); generation += 1
+        mode = tone; result = written; suggestion = nil; toneFlag = nil
         selectedEdits = Set(written.edits.map(\.id)); focusedEditID = written.edits.first?.id
         provisional = false; busy = false; error = nil
         status = Self.statusText(written.warnings)
@@ -185,66 +212,94 @@ final class AppModel: ObservableObject {
         let ids = Set(EditPlan.related(to: edit, in: result?.edits ?? [edit]).map(\.id))
         if selectedEdits.contains(edit.id) { selectedEdits.subtract(ids) } else { selectedEdits.formUnion(ids) }
     }
+    /// The app the text belongs to: the editor's, or Parzr's own for its writing space.
+    private var reportApp: String? { snapshot?.app.bundleIdentifier ?? Bundle.main.bundleIdentifier }
+    /// Reports what the writer did with `edits` of the current text. `text` overrides the source (the writing space's draft can be a keystroke ahead).
+    func report(_ edits: [WritingEdit], _ action: ReportAction, text: String? = nil) {
+        guard reports else { return }
+        Reports.record(edits, source: text ?? source, action: action, mode: mode, app: reportApp)
+    }
+    var canReport: Bool { reports && Reports.available }
     func copy() { guard !busy, !provisional, result != nil, snapshot?.checkingEnabled != false else { return }; pasteboard.clearContents(); pasteboard.setString(preview, forType: .string); status = "Copied to clipboard" }
     func applyCurrent() { if let edit = focusedEdit { apply(edits: EditPlan.related(to: edit, in: chosenEdits)) } }
     func applySentence() { apply(edits: sentenceEdits) }
     func applyBest() { if focusedEdit == nil, suggestionReady { useSuggestion() } else if fixesSentence { applySentence() } else { applyCurrent() } }
     func apply() { apply(edits: chosenEdits) }
+    /// Parzr's card is the key window while the writer clicks in it, so the editor's own window has no keyboard: Chromium then reports no
+    /// focused field, and keys posted to the editor reach nothing. `handOff(true)` gives the keyboard back to the editor before a fix is written
+    /// into another app; `handOff(false)` shows the card again, without taking the keyboard, when the fix did not go through.
+    var handOff: ((Bool) -> Void)?
+    /// A fix goes into another app's field (not Parzr's own writing space or a headless test editor), so the card steps aside first.
+    private func yields(_ snapshot: SelectionSnapshot) -> Bool { !snapshot.own && snapshot.headlessEditor == nil }
+    private func failed(_ error: Error, yielded: Bool) {
+        self.error = error.localizedDescription; busy = false
+        if yielded { handOff?(false) }
+    }
     private func apply(edits: [WritingEdit]) {
         guard canApply, let snapshot else { return }
         guard !edits.isEmpty, edits.allSatisfy({ chosenEdits.contains($0) }) else { return }
-        do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
-        busy = true
+        // Only what does not depend on the keyboard is checked here: while the card has it, a Chromium editor reports no focused field.
+        // Focus, caret and text are checked once the editor has it back (`prepareToApply`, then `apply`).
+        do { try snapshot.validateCheckingEligibility() } catch { self.error = error.localizedDescription; return }
+        let yielded = yields(snapshot)
+        busy = true; error = nil
+        if yielded { handOff?(true) }
         if !snapshot.own { SelfTestTarget.bringForward(snapshot.app) }   // Parzr's own writing space is already in front
-        if snapshot.copied { applyCopied(snapshot, edits); return }
+        if snapshot.copied { applyCopied(snapshot, edits, yielded: yielded); return }
         Task { @MainActor in
             do {
                 try await Task.sleep(for: .milliseconds(80))
-                try await snapshot.apply(edits)
+                let target = try await snapshot.prepareToApply()
+                try await target.apply(edits)
                 self.snapshot = nil; busy = false; dismiss?()
-            } catch { self.error = error.localizedDescription; busy = false }
+            } catch { failed(error, yielded: yielded) }
         }
     }
     /// Canvas editors (Google Docs): re-copy to prove the selection is unchanged, then paste the whole replacement over it.
     /// Independent of `clipboardFallback`: the user explicitly ran a copy-based check.
-    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit]) {
+    private func applyCopied(_ snapshot: SelectionSnapshot, _ edits: [WritingEdit], yielded: Bool) {
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
                 let replacement = try EditPlan.apply(edits, to: source)
                 try await Task.sleep(for: .milliseconds(80))
+                try snapshot.validate(applying: true)
                 guard let again = try await ClipboardTransaction.copySelection(from: snapshot.app.processIdentifier), SelectionSnapshot.sameCopiedText(again, snapshot.text) else {
-                    throw ParzrError.message("Your selection changed. Select the text again.")
+                    throw ApplyLog.fail(.selectionChanged, stage: "copied", context: snapshot.logContext)
                 }
-                try snapshot.validate()
+                try snapshot.validate(applying: true)
                 try transaction.stage(replacement); self.clipboard = transaction
                 try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
                 FixLearning.record(edits, in: snapshot)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 self.snapshot = nil; busy = false; dismiss?()
-            } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
+            } catch { transaction.restore(); self.clipboard = nil; failed(error, yielded: yielded) }
         }
     }
     func pasteFallback() {
         guard Preferences.shared.clipboardFallback, !chosenEdits.isEmpty, !busy, let snapshot else { return }
         let replacement = preview, edits = chosenEdits
         let attributed = snapshot.richText.flatMap { try? EditPlan.apply(chosenEdits, to: $0) }
-        do { try snapshot.validate() } catch { self.error = error.localizedDescription; return }
-        busy = true; SelfTestTarget.bringForward(snapshot.app)
+        do { try snapshot.validateCheckingEligibility() } catch { self.error = error.localizedDescription; return }
+        let yielded = yields(snapshot)
+        busy = true; error = nil
+        if yielded { handOff?(true) }
+        SelfTestTarget.bringForward(snapshot.app)
         Task { @MainActor in
             let transaction = ClipboardTransaction()
             do {
-                try await Task.sleep(for: .milliseconds(100)); try snapshot.validate()
-                guard AX.select(snapshot.element, snapshot.selection) || snapshot.selection == snapshot.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
+                try await Task.sleep(for: .milliseconds(100))
+                let target = try await snapshot.prepareToApply()
+                guard AX.select(target.element, target.selection) || target.selection == target.expectedSelection else { throw ParzrError.message("The editor cannot select this range safely.") }
                 try transaction.stage(replacement, attributed: attributed); self.clipboard = transaction
-                try ClipboardTransaction.paste(to: snapshot.app.processIdentifier)
-                FixLearning.record(edits, in: snapshot)
+                try ClipboardTransaction.paste(to: target.app.processIdentifier)
+                FixLearning.record(edits, in: target)
                 try await Task.sleep(for: .milliseconds(800)); transaction.restore(); self.clipboard = nil
                 busy = false; self.snapshot = nil; dismiss?()
-            } catch { transaction.restore(); self.clipboard = nil; self.error = error.localizedDescription; busy = false }
+            } catch { transaction.restore(); self.clipboard = nil; failed(error, yielded: yielded) }
         }
     }
-    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
+    func clearSession() { analysisTask?.cancel(); suggestionTask?.cancel(); toneTask?.cancel(); toneFlag = nil; suggestion = nil; generation += 1; result = nil; source = ""; snapshot = nil; error = nil; selectionHint = false; status = nil; selectedEdits = []; focusedEditID = nil; provisional = false; busy = false; clearDraftUndo?(); inspector = "Session cleared. No writing history is stored." }
 }
 
 /// The rewrite a Fix check offers: its tone, the text it was written for, and the result once written (nil when it failed).

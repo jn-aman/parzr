@@ -1,0 +1,182 @@
+# neutral, round 2: near neighbours of the harsh seeds that must stay unflagged (reminders, follow-ups, thanks,
+# friendly swearing, plain disagreement, greetings and sign-offs, notes to self). Written for Parzr's tone check.
+Gentle reminder: the survey closes on Friday.
+Just a gentle reminder to book your flu shot.
+Gentle reminder on the mail below, when you get a chance.
+A quick reminder that the office closes early today.
+Reminder to everyone: badges are required from Monday.
+Kind reminder to submit your hours by Thursday.
+Following up on the quote I sent last week. Happy to answer questions.
+Hello again, just following up on the order.
+Hi, following up on this. Any thoughts?
+Just following up to see if you need anything else from me.
+Circling back on the budget. Do you have a minute today?
+Checking in: did the package arrive?
+Thanks for getting back to me so quickly!
+Thanks for getting back to me, that answers it.
+Thanks for replying so fast.
+Thanks for finally sharing the photos, they're great!
+Thanks for staying late, it really helped.
+Thanks for covering for me yesterday.
+Thanks for your reply. I'll update the doc.
+Thanks for the reminder, I'd forgotten.
+I appreciate you getting back to me.
+Glad you could join us today!
+Glad you made it, grab a seat.
+Nice to see you at the offsite!
+Good to see you back in the office.
+Welcome back! How was the trip?
+Must be nice weather where you are, it's pouring here.
+Must have been a long flight. Rest up.
+Damn, I missed the bus.
+Damn, that was close.
+Hell of a launch, well done.
+Holy crap, the numbers look amazing.
+Shit, I left my badge at home. Can someone let me in?
+Crap, I forgot to attach the file. Here it is.
+What the heck, the coffee machine works again!
+This bug is so annoying, it only shows up on Fridays.
+This printer is the worst.
+The old dashboard is useless now that we have the new one.
+That idea didn't work, let's try another.
+That's not what I meant. Let me rephrase.
+That's not quite what I said, but close enough.
+Hey, that's not what I meant, sorry for the confusion.
+That's the third outage this week, so I'm opening a postmortem.
+That's the second time the vendor slipped. Let's talk about a backup.
+This is the last reminder before the deadline.
+Last call for pizza orders!
+That's not my call, but I can ask my manager.
+Not my team, but I'll forward it to them.
+I'm not sure it's worth it.
+I'm not sure whether we should wait.
+I wasn't sure if you'd seen it, so I'm resending.
+I wasn't sure which version you wanted, so I attached both.
+In case you missed it, the all-hands moved to 2pm.
+As I mentioned, I'm out on Friday.
+As we discussed, I'll take the first draft.
+As I said in my email, the quote includes shipping.
+Like I said, happy to help anytime.
+Per our discussion, I've updated the timeline.
+Per my email, the invoice is attached again for convenience.
+Done for today, back tomorrow.
+Signing off for the day.
+Talk soon,
+Speak soon!
+Thanks,
+Regards,
+Best wishes,
+Cheers, Lee
+Dear Dr. Patel, thank you for your time last week.
+Dear team, please find the minutes attached.
+Hello world, this is my first post.
+Hi everyone, I'm the new intern.
+To do: finish report, send invoice, call Sam.
+Notes: budget approved, launch moved to May.
+Agenda: updates, risks, next steps.
+TODO: fix the flaky test.
+Let's kill the old feature flag, nobody uses it.
+Let's kill the meeting and do it async.
+Let's drop this from the sprint.
+Kill the job, it's stuck.
+Stop the build, I pushed the wrong branch.
+Hold the release, we found a bug.
+Please don't reply-all.
+Please don't call after 9.
+Please be on time, the client is strict about it.
+Please answer the survey by Friday.
+Please reply to confirm.
+Please read the doc before the meeting.
+Please check the wiki for the steps.
+Please follow the checklist before deploying.
+Make sure you lock the door.
+Send me the file when you can.
+Send the numbers today if possible.
+I need this by noon, please.
+I need an answer today, the vendor is waiting.
+Can you call me? It's urgent.
+Can you call me when you're free?
+Call me, it's about the contract.
+We need to talk about the schedule. Free at 3?
+Come find me when you're back.
+Can you redo slide 3? The numbers changed.
+Can you fix it before the demo?
+Could you fix the typo when you get a chance?
+I disagree. I think we should wait.
+I don't agree with that, but let's discuss.
+You're right, I misread it.
+You're wrong about the date, it's actually the 21st. Easy mix-up!
+Actually, the meeting is on Tuesday, not Wednesday.
+No, that's not right. The limit is 100, not 1000.
+No thanks, I'm good.
+Nah, I'm fine.
+Not today, maybe next week.
+Can't, I'm in meetings all day.
+Busy right now, can I call you back?
+I'm slammed, can it wait until tomorrow?
+I'll pass, thanks for asking.
+Sorry, I can't make it.
+Sorry, running five minutes late.
+Sorry for the noise in the background.
+Sorry, that was my mistake. Fixed.
+Sorry to bother you, quick question about the form.
+Sorry, I forgot. Sending it now.
+Apologies for the delay, here are the slides.
+My apologies, I misread your message.
+I'm sorry, I didn't mean to cut you off.
+I'm really sorry about the mix-up, we've refunded the fee.
+So sorry to hear you're sick, feel better!
+Sorry for your loss.
+I owe you an apology for yesterday. I was out of line.
+I hate to ask, but could you cover my shift on Sunday?
+I know you're busy, so no rush on this.
+Whenever you have a minute, no rush.
+Feel free to ignore this if you're busy.
+If you have time, could you look at my draft?
+Quick question, sorry if it's obvious: where's the template?
+Is it done yet? The client is asking.
+Done yet? No pressure, just checking.
+Any update on the contract?
+Any news?
+Status update please when you have a moment.
+What's the status?
+Where are we on this?
+Why did this break?
+Why is the build red?
+Who changed the config?
+Who owns this?
+What happened?
+Explain this to me? I'm lost.
+Can you explain the error?
+Your point about the timeline is fair.
+Your design is great, but the colors need work.
+Your proposal is solid, a few small notes inline.
+Your numbers look off, can you double-check the totals?
+Your code works, but it needs tests.
+Your essay is coherent and well argued.
+Your team did great work on the launch.
+You always bring the best snacks.
+You never fail to make me laugh.
+You're always so helpful, thank you.
+You did a great job on the demo.
+Wow, you finished early! Great job.
+Wow, that was fast. Thanks!
+Oh, you're here early today! Coffee?
+Great, thanks!
+Cool, thanks for sorting it.
+Fine, let's do Thursday then.
+Fine by me, go ahead.
+Whatever you prefer works for me.
+Sure, whatever's easiest for you.
+Sounds good, whatever you think.
+OK, noted.
+Noted, thanks.
+Got it.
+Understood.
+Will do.
+Yes, done.
+Not yet, working on it.
+No, not yet.
+Nope, all good.
+Yep, sent.
+Right, that makes sense.

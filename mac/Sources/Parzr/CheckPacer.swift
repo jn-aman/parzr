@@ -29,3 +29,37 @@ struct CheckPacer {
         return CharacterSet.whitespacesAndNewlines.contains(scalar) || CharacterSet.punctuationCharacters.contains(scalar)
     }
 }
+
+/// How fast the writer is typing, in characters per second over the last few seconds, and how long new marks should wait because of it.
+/// Fast typing holds new underlines back so they do not flash up mid-word; slow typing shows them almost at once. Marks already on screen
+/// are never delayed. Pure: the caller passes the clock (seconds). Only key times are kept, never which keys.
+struct TypingMonitor {
+    /// Speed is measured over this many seconds of keys.
+    static let window = 5.0
+    /// A pause this long ends the burst: the next key starts a new measurement.
+    static let idle = 1.0
+    /// A burst shorter than this is measured as if it had lasted this long, so two quick keys do not read as a sprint.
+    static let shortest = 1.0
+    static let capacity = 100
+    /// Below `slow` characters a second new marks wait `minDelay`; at `fast` and above, `maxDelay`; linear between (ms).
+    static let slow = 3.0, fast = 8.0, minDelay = 0.0, maxDelay = 600.0
+    private var keys: [Double] = []
+    mutating func key(at time: Double) {
+        if let last = keys.last, time - last > Self.idle || time < last { keys.removeAll() }
+        keys.append(time)
+        keys.removeAll { time - $0 > Self.window }
+        if keys.count > Self.capacity { keys.removeFirst(keys.count - Self.capacity) }
+    }
+    /// Characters per second, or 0 once the writer has paused.
+    func speed(at time: Double) -> Double {
+        guard let last = keys.last, time - last <= Self.idle else { return 0 }
+        let recent = keys.filter { time - $0 <= Self.window }
+        guard let first = recent.first, recent.count > 1 else { return 0 }
+        return Double(recent.count - 1) / max(Self.shortest, last - first)
+    }
+    /// How long new marks wait now, in ms.
+    func delay(at time: Double) -> Double {
+        let fraction = min(1, max(0, (speed(at: time) - Self.slow) / (Self.fast - Self.slow)))
+        return Self.minDelay + fraction * (Self.maxDelay - Self.minDelay)
+    }
+}
