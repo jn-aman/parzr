@@ -95,6 +95,8 @@ if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) 
 # Suggestion reports go only to an HTTPS endpoint (see worker/); a build without the key never reports.
 reports = info.get('ParzrReportsURL')
 if reports is not None and not str(reports).startswith('https://'): sys.exit('ParzrReportsURL in Info.plist must be an https URL.')
+# The feed itself is EdDSA-signed by scripts/make-appcast.py (sign_update), and each archive is verified before it is extracted.
+if info.get('SURequireSignedFeed') is not True or info.get('SUVerifyUpdateBeforeExtraction') is not True: sys.exit('Info.plist must set SURequireSignedFeed and SUVerifyUpdateBeforeExtraction (the release feed is signed).')
 if info.get('SUEnableSystemProfiling') is not False or info.get('SUEnableAutomaticChecks') is not True or info.get('SUScheduledCheckInterval') != 3600: sys.exit('Update settings in Info.plist differ from the privacy decisions (no profile, hourly automatic checks).')
 # Every Mach-O in the bundle must carry a valid signature of its own (a deep verify alone would not name an unsigned helper).
 for path in sorted(app.rglob('*')):
