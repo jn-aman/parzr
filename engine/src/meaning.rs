@@ -2389,6 +2389,7 @@ pub(crate) fn retain_composition(
             return withheld;
         }
     }
+}
 
 /// Edit distance counting an adjacent transposition as one edit.
 pub(crate) fn distance(a: &str, b: &str) -> usize {
