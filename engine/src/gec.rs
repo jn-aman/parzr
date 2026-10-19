@@ -1563,8 +1563,16 @@ fn merge(
                         .next()
                         .is_some_and(|r| r.contains('?'))
                 }));
+        // "no no no", "bye bye": a word written twice on purpose stays when its copy goes on.
+        let doubled = e.replacement.trim().is_empty() && {
+            let w = original.trim().to_lowercase();
+            crate::DOUBLED_ON_PURPOSE.contains(&w.as_str())
+                && (text[..edit.0].trim_end().to_lowercase().ends_with(&w)
+                    || text[edit.1..].trim_start().to_lowercase().starts_with(&w))
+        };
         let dropped = strange >= CODE_MIXED
             || chat_comma
+            || doubled
             || rules.iter().any(|r| overlaps(text, edit, *r))
             || beside_a_rule(text, edit, original, &e.replacement, &grammar)
             || touches(edit, &shielded)

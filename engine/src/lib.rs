@@ -673,7 +673,7 @@ fn match_case(replacement: &str, original: &str) -> String {
     }
 }
 /// Words written twice on purpose: "that that", "had had", "very very", "bye bye", "no no".
-const DOUBLED_ON_PURPOSE: [&str; 47] = [
+pub(crate) const DOUBLED_ON_PURPOSE: [&str; 47] = [
     "had", "do", "very", "so", "really", "no", "yes", "yeah", "ha", "haha", "bye", "well", "blah",
     "bla", "knock", "night", "hush", "chop", "tsk", "ok", "okay", "oh", "ah", "uh", "um", "la",
     "there", "now", "go", "more", "many", "far", "again", "too", "much", "ho", "hey", "hi", "wow",
