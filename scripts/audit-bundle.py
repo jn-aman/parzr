@@ -89,7 +89,7 @@ if not args.qa:
 sparkle_license = (app/'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt').read_text()
 for part in ['Andy Matuschak', 'bsdiff', 'sais-lite', 'ed25519', 'SUSignatureVerifier']:
     if part not in sparkle_license: sys.exit('Sparkle-LICENSE.txt is incomplete (missing '+part+')')
-# Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, a daily check.
+# Update trust and privacy settings: HTTPS feed, a 32-byte EdDSA public key, no system profile, an hourly check.
 feed, key = info.get('SUFeedURL', ''), info.get('SUPublicEDKey', '')
 if not feed.startswith('https://') or len(base64.b64decode(key, validate=True)) != 32: sys.exit('Info.plist needs an https SUFeedURL and a 32-byte SUPublicEDKey.')
 # Suggestion reports go only to an HTTPS endpoint (see worker/); a build without the key never reports.
