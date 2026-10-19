@@ -21,15 +21,17 @@ wrangler.jsonc    Cloudflare Workers static assets config
 ```sh
 python3 -m http.server -d website/public 8080   # then open http://localhost:8080
 # or, to exercise _headers and the 404 handling the way Cloudflare does:
-cd website && npx wrangler dev
+cd website && npm ci --ignore-scripts && npx --no-install wrangler dev
 ```
 
 `python3 -m http.server` does not apply `_headers`, so the CSP is not enforced there. Use `wrangler dev` to check it.
 
 ## Deploy
 
+CI deploys it (`.github/workflows/website.yml`): after every published release, and on demand from `main` for website-only changes (`gh workflow run website.yml --ref main`); see docs/releases.md, "Website". By hand, with the wrangler version locked in `package-lock.json`:
+
 ```sh
-cd website && npx wrangler deploy
+cd website && npm ci --ignore-scripts && npx --no-install wrangler deploy
 ```
 
 This publishes `public/` as Workers static assets and binds the custom domain `parzr.app` (see `wrangler.jsonc`). Deployment needs a Cloudflare account that owns the zone.
