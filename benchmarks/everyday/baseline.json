@@ -1,5 +1,5 @@
 {
-"about": "Per-item labels of the everyday set (benchmarks/everyday/items.jsonl) on the build that set the baseline; scripts/everyday-batch.py gate fails when an item labelled correct here is not correct any more.",
+"about": "Per-item labels of the everyday set (benchmarks/everyday/items.jsonl) on the build that set the baseline; scripts/everyday-batch.py gate fails when an item labelled correct here is not correct any more. b001-0106 typing is recorded as wrong from CI run 39300808214 (2026-10-20): CI's Mac runners have no Neural Engine, and Smart grammar on their CPU turns \"the build\" into \"the building.\" while an Apple-silicon Mac keeps it, so local runs list it as newly correct.",
 "deep": {
 "b001-0001": "correct",
 "b001-0002": "correct",
@@ -2968,7 +2968,7 @@
 "b001-0103": "correct",
 "b001-0104": "correct",
 "b001-0105": "correct",
-"b001-0106": "correct",
+"b001-0106": "wrong",
 "b001-0108": "correct",
 "b001-0109": "correct",
 "b001-0110": "wrong",
