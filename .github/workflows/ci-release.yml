@@ -109,7 +109,7 @@ jobs:
           toolchain: '1.91.0'
           components: rustfmt, clippy
           targets: aarch64-apple-darwin
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -263,7 +263,7 @@ jobs:
           cargo deny --manifest-path engine/Cargo.toml --features external-tables --config engine/deny.toml check
       - name: cargo-audit on the shipped engine graphs
         run: python3 scripts/cargo-audit-shipped.py
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: npm audit
@@ -311,7 +311,7 @@ jobs:
           toolchain: '1.91.0'
           components: rustfmt, clippy
           targets: aarch64-apple-darwin
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Validate release version
