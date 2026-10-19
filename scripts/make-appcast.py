@@ -18,8 +18,8 @@ from release_notes import is_internal  # scripts/ is on sys.path when this scrip
 
 REPO = 'jn-aman/parzr'
 PUBLIC_KEY = 'j0Fo7VqKBmJXHWEzVHZX0KeGWCPpTng6tW8jmcoEVo0='  # SUPublicEDKey in Info.plist
-SPARKLE_VERSION = '2.9.5'
-SPARKLE_SHA256 = '015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc'
+SPARKLE_VERSION = '2.9.6'
+SPARKLE_SHA256 = '52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e192'
 SPARKLE_URL = f'https://github.com/sparkle-project/Sparkle/releases/download/{SPARKLE_VERSION}/Sparkle-{SPARKLE_VERSION}.tar.xz'
 MIN_OS = '13.0'
 MAX_DELTAS = 8
