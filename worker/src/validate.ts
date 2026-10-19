@@ -4,7 +4,7 @@
 
 export const LIMITS = {
   bodyBytes: 64 * 1024,
-  reportsPerBatch: 50,
+  reportsPerBatch: 25,
   sentence: 1000,
   text: 300,
   rule: 100,
@@ -13,8 +13,9 @@ export const LIMITS = {
   version: 32,
 } as const;
 
-// Only suggestions the writer turned down are reported; accepted suggestions are never sent and are refused here.
-export const ACTIONS = ['dismissed', 'reported'] as const;
+// A report is sent only when the writer clicks "Report wrong suggestion". Ignored ("dismissed") and accepted
+// suggestions are never sent, and are refused here (older app versions still send "dismissed").
+export const ACTIONS = ['reported'] as const;
 export type Action = (typeof ACTIONS)[number];
 
 export interface Report {
@@ -37,28 +38,65 @@ const APP = /^[A-Za-z0-9._-]+$/;
 const VERSION = /^[A-Za-z0-9.+-]+$/;
 export const BATCH_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// Defence in depth: the app redacts before sending, and the server refuses anything that still looks private.
-const PLACEHOLDER = /\[(?:email|link|phone|number|name)\]/g;
+// Defence in depth: the app redacts before sending (mac/Sources/ParzrCore/Redaction.swift), and the server refuses
+// anything that still looks private. Every pattern is case-insensitive and bounded, so a 1,000-character field costs
+// microseconds whatever it holds.
+const PLACEHOLDER = /\[(?:email|link|key|phone|number|name)\]/gi;
 const DIGIT = /\p{N}/u;
-const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/u;
+// Bounded local part and labels: no quadratic backtracking on long runs of word characters.
+const EMAIL = /[\p{L}\p{N}._%+-]{1,64}@[\p{L}\p{N}-]{1,63}(?:\.[\p{L}\p{N}-]{1,63}){1,8}/iu;
+// "aman at gmail dot com", "aman (at) gmail (dot) com", "aman at gmail.com".
+const SPELLED_EMAIL = /[\p{L}\p{N}._%+-]{1,64}\s{0,3}(?:\bat\b|\(at\)|\[at\])\s{0,3}[\p{L}\p{N}-]{1,63}(?:\s{0,3}(?:\bdot\b|\(dot\)|\[dot\])\s{0,3}|\.)[\p{L}\p{N}-]{2,63}/iu;
 const SCHEME = /\b[a-z][a-z0-9+.-]{1,20}:\/\/|\bwww\.|\bmailto:/i;
-const DOMAIN = /(?<![\p{L}\p{N}@.-])(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.)+(?:com|org|net|edu|gov|io|ai|app|dev|info|co\.uk|uk|de|fr)(?![\p{L}\p{N}-])/u;
+// Any domain-shaped token: labels, a dot, and a 2 to 24 letter top-level domain, in any case. Stricter than the app
+// (which needs a known lowercase TLD so "home.So tired" stays a typo); here a dropped report is the safe outcome.
+const DOMAIN = /(?<![\p{L}\p{N}@.-])(?:[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?\.){1,8}\p{L}{2,24}(?![\p{L}\p{N}-])/iu;
+const HASHTAG = /(?<![\p{L}\p{N}_&])#[\p{L}_][\p{L}\p{N}_]*/u;
+const HANDLE = /(?<![\p{L}\p{N}_@.])@[\p{L}\p{N}_]/u;
+// Access keys and tokens: well-known prefixes, and any long unbroken run that mixes cases, digits or underscores.
+const KEY_PREFIX = /\b(?:(?:sk|pk|rk)_(?:live|test)_|sk-(?:proj-|ant-)?|gh[pousr]_|github_pat_|xox[abposr]-|glpat-|AKIA|ASIA|AIza|eyJ)[A-Za-z0-9_-]{4,}/i;
+const LONG_TOKEN = /[A-Za-z0-9_+/=-]{20,}/g;
+// Three or more number words in a row: a PIN, a phone number or an account number read out.
+const NUMBER_WORD = '(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|double|triple)';
+const SPELLED_NUMBERS = new RegExp(`\\b${NUMBER_WORD}(?:[\\s,-]{1,3}(?:and[\\s]{1,3})?${NUMBER_WORD}){2,}\\b`, 'i');
 
-/** True when `text` still holds a digit, an email address or a link once placeholders are removed. */
+function keyLike(text: string): boolean {
+  if (KEY_PREFIX.test(text)) return true;
+  for (const [token] of text.matchAll(LONG_TOKEN)) {
+    const mixedCase = /[a-z]/.test(token) && /[A-Z]/.test(token.slice(1));
+    if (/\d/.test(token) || token.includes('_') || mixedCase) return true;
+  }
+  return false;
+}
+
+/** True when `text` still holds a digit, an email address, a link, a handle or hashtag, a key, or spelled-out digits, once placeholders are removed. */
 export function looksPrivate(text: string): boolean {
   const stripped = text.replace(PLACEHOLDER, ' ');
-  return DIGIT.test(stripped) || EMAIL.test(stripped) || SCHEME.test(stripped) || DOMAIN.test(stripped);
+  if (DIGIT.test(stripped) || SCHEME.test(stripped) || DOMAIN.test(stripped)) return true;
+  if (stripped.includes('@') && (EMAIL.test(stripped) || HANDLE.test(stripped))) return true;
+  if (stripped.includes('#') && HASHTAG.test(stripped)) return true;
+  return SPELLED_EMAIL.test(stripped) || SPELLED_NUMBERS.test(stripped) || keyLike(stripped);
 }
 
+// C0 and C1 controls except tab and newline; bidirectional controls (which can make stored text read differently from
+// what it holds); and invisible format characters other than the joiners emoji and some scripts need.
+const FORBIDDEN = /[\p{Cc}؜​‎‏‪-‮⁠-⁤⁦-⁩﻿]/u;
+function isText(value: unknown, max: number): value is string {
+  if (typeof value !== 'string' || value.length > max || !value.isWellFormed()) return false;
+  return !FORBIDDEN.test(value.replace(/[\t\n]/g, ''));
+}
 function isString(value: unknown, max: number, pattern?: RegExp): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= max && (!pattern || pattern.test(value));
-}
-function isText(value: unknown, max: number): value is string {
-  return typeof value === 'string' && value.length <= max && !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(value);
 }
 function exactKeys(value: object, keys: string[]): boolean {
   const own = Object.keys(value);
   return own.length === keys.length && keys.every((k) => Object.prototype.hasOwnProperty.call(value, k));
+}
+/** False when a UTF-16 offset falls between the two halves of a surrogate pair. */
+function onBoundary(text: string, offset: number): boolean {
+  if (offset <= 0 || offset >= text.length) return true;
+  const before = text.charCodeAt(offset - 1), after = text.charCodeAt(offset);
+  return !(before >= 0xd800 && before <= 0xdbff && after >= 0xdc00 && after <= 0xdfff);
 }
 
 /** One report, or null when it breaks any rule. */
@@ -74,6 +112,7 @@ export function validateReport(input: unknown): Report | null {
   const { start, end } = s;
   // Offsets are UTF-16, as in the app: JavaScript string indices.
   if (!Number.isInteger(start) || !Number.isInteger(end) || (start as number) < 0 || (end as number) < (start as number) || (end as number) > sentence.length) return null;
+  if (!onBoundary(sentence, start as number) || !onBoundary(sentence, end as number)) return null;
   if (sentence.slice(start as number, end as number) !== s.original) return null;
   if (!isString(r.rule, LIMITS.rule, RULE) || !isString(r.model, LIMITS.model, MODEL)) return null;
   if (typeof r.action !== 'string' || !(ACTIONS as readonly string[]).includes(r.action)) return null;

@@ -25,10 +25,10 @@ function query(): Row[] {
   const input = option('input');
   if (input) {
     const rows = JSON.parse(readFileSync(input, 'utf8')) as Row[];
-    return rows.filter((r) => r.received_day >= from && r.received_day <= to);
+    return rows.filter((r) => r.received_day >= from && r.received_day <= to && r.action === 'reported');
   }
   // Both values come from weekRange (digits and dashes only), so they are safe to put in the SQL text.
-  const sql = `SELECT received_day, sentence, start_utf16, end_utf16, original, replacement, rule, model, action, app, version FROM reports WHERE received_day BETWEEN '${from}' AND '${to}' ORDER BY id`;
+  const sql = `SELECT received_day, sentence, start_utf16, end_utf16, original, replacement, rule, model, action, app, version FROM reports WHERE received_day BETWEEN '${from}' AND '${to}' AND action = 'reported' ORDER BY id`;
   const args = ['wrangler', 'd1', 'execute', 'parzr-reports', process.argv.includes('--local') ? '--local' : '--remote', '--json', '--command', sql];
   const persist = option('persist-to');
   if (persist) args.push('--persist-to', persist);
