@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Privacy | Parzr</title>
-<meta name="description" content="What the Parzr Mac app sends and keeps: an update check, a one-time model download, and suggestion reports only when you click Report wrong suggestion.">
+<meta name="description" content="What the Parzr Mac app sends and keeps: an hourly update check, model downloads, and suggestion reports only when you click Report wrong suggestion.">
 <link rel="canonical" href="https://parzr.app/privacy">
 <meta name="theme-color" content="#202629">
 <meta name="color-scheme" content="dark">
@@ -31,8 +31,8 @@
 
     <h2>Requests the app makes</h2>
     <ul>
-      <li><strong>Update check.</strong> Hourly, unless you turn it off: a request to GitHub for the latest release. It carries nothing about you or your writing.</li>
-      <li><strong>Model download.</strong> Once, when you set Parzr up: two models from GitHub, checked against pinned hashes.</li>
+      <li><strong>Update check.</strong> Hourly, unless you turn it off: a request to GitHub for the latest release’s signed update feed. It carries nothing about you or your writing, and Parzr installs only an update whose signature verifies.</li>
+      <li><strong>Model downloads.</strong> From GitHub, once each: the Smart grammar and rewriting models (727 MB) when you set Parzr up, then the Slip check (84 MB) and Tone check (23 MB) models while those checks are on (both are by default). Every file is checked against a pinned SHA-256 before use. The downloads carry nothing about you or your writing.</li>
       <li><strong>Suggestion reports.</strong> On by default, off with one switch. See below.</li>
     </ul>
 
@@ -53,6 +53,9 @@
 
     <h2>Turning reports off</h2>
     <p>Settings, Privacy, “Send anonymous suggestion reports” (also in the welcome guide). Off is immediate.</p>
+
+    <h2>What stays on your Mac</h2>
+    <p>Your dictionary, learned names and words, muted suggestions, preferences and, if you keep it, a private weekly summary of your fixes (Settings, Learning) are saved on this Mac only. Settings, Privacy, “Erase all Parzr data” removes them, along with any reports not yet sent. Downloaded models stay until you remove them in Settings, Models.</p>
 
     <h2>This website</h2>
     <p>parzr.app counts visits with Rybbit, cookieless. It sets no cookies and asks for nothing.</p>

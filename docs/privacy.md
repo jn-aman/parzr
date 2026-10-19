@@ -5,10 +5,11 @@ things that leave your Mac. The same text is on the website at <https://parzr.ap
 
 ## What leaves your Mac
 
-- **Update check.** Hourly, unless you turn it off: a request to GitHub for the latest release. It carries nothing about
-  you or your writing.
-- **Model download.** Once, when you set Parzr up: the two models are downloaded from GitHub and checked against pinned
-  hashes.
+- **Update check.** Hourly, unless you turn it off: a request to GitHub for the latest release's signed update feed. It
+  carries nothing about you or your writing, and Parzr installs only an update whose signature verifies.
+- **Model downloads.** From GitHub, once each: the Smart grammar and rewriting models (727 MB) when you set Parzr up,
+  then the Slip check (84 MB) and Tone check (23 MB) models while those checks are on (both are by default). Every file
+  is checked against a pinned SHA-256 before use. The downloads carry nothing about you or your writing.
 - **Suggestion reports.** On by default; you can turn them off. See below.
 
 ## Suggestion reports
@@ -51,6 +52,12 @@ Parzr as its processor. Parzr's maintainer decides what is collected and why: to
 ## Turning reports off
 
 Settings, Privacy, "Send anonymous suggestion reports" (also in the welcome guide). Off is immediate.
+
+## What stays on your Mac
+
+Your dictionary, learned names and words, muted suggestions, preferences and, if you keep it, a private weekly summary
+of your fixes (Settings, Learning) are saved on this Mac only. Settings, Privacy, "Erase all Parzr data" removes them,
+along with any reports not yet sent. Downloaded models stay until you remove them in Settings, Models.
 
 ## Contact
 
