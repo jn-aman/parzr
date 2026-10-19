@@ -2,12 +2,10 @@
 name = "parzr-reports"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
-# Served on the account's workers.dev address, which the app's Info.plist names (ParzrReportsURL).
-# To move to reports.parzr.app later: put parzr.app in the account, set workers_dev = false and add
-# routes = [{ pattern = "reports.parzr.app", custom_domain = true }], then change ParzrReportsURL.
-workers_dev = true
-# No per-version preview addresses: only the one deployed endpoint answers.
+# Served only on the custom domain the app's Info.plist names (ParzrReportsURL).
+workers_dev = false
 preview_urls = false
+routes = [{ pattern = "reports.parzr.app", custom_domain = true }]
 
 # No Workers Logs or traces: invocation logs would carry request metadata the Worker itself never stores.
 [observability]

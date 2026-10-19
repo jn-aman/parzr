@@ -1,0 +1,74 @@
+name: Deploy reports Worker
+# Deploys worker/ (suggestion reports: Cloudflare Worker + D1) to reports.parzr.app when it changes on main.
+# Needs repository secret REPORTS_CLOUDFLARE_API_TOKEN (Workers Scripts edit, D1 edit, Workers Routes and zone read
+# on parzr.app) and repository variable CLOUDFLARE_ACCOUNT_ID; without them the job skips with a notice.
+on:
+  push:
+    branches: [main]
+    paths: ['worker/**', '.github/workflows/worker.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: parzr-reports-worker
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.REPORTS_CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - name: Check deployment credentials
+        id: creds
+        working-directory: .
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Set the REPORTS_CLOUDFLARE_API_TOKEN secret and CLOUDFLARE_ACCOUNT_ID variable to enable Worker deploys."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: steps.creds.outputs.ready == 'true'
+        with:
+          node-version: '22'
+      - name: Install
+        if: steps.creds.outputs.ready == 'true'
+        run: npm ci
+      - name: Test and type-check
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          npm test
+          npm run typecheck
+      - name: Apply database migrations
+        if: steps.creds.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply parzr-reports --remote
+      - name: Create the rate-limit salt once
+        if: steps.creds.outputs.ready == 'true'
+        # The salt is never rotated by a deploy: an existing one is kept, a missing one is created at random.
+        run: |
+          if ! npx wrangler secret list --format json | grep -q '"RATE_LIMIT_SALT"'; then
+            openssl rand -hex 32 | npx wrangler secret put RATE_LIMIT_SALT
+          fi
+      - name: Deploy
+        if: steps.creds.outputs.ready == 'true'
+        run: npx wrangler deploy
+      - name: Health check
+        if: steps.creds.outputs.ready == 'true'
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if [ "$(curl -fsS --max-time 10 https://reports.parzr.app/v1/health)" = '{"ok":true}' ]; then exit 0; fi
+            sleep 10
+          done
+          echo "::error::reports.parzr.app/v1/health did not answer after the deploy."
+          exit 1

@@ -27,7 +27,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>ParzrReportsURL</key>
-	<string>https://parzr-reports.amanjain.workers.dev/v1/reports</string>
+	<string>https://reports.parzr.app/v1/reports</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Parzr contributors. Third-party notices included.</string>
 	<key>SUAllowsAutomaticUpdates</key>

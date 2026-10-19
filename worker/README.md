@@ -70,7 +70,15 @@ curl -X POST localhost:8799/v1/reports -H 'Content-Type: application/json' \
 npm run fix-queue -- --week 2026-W43 --local
 ```
 
-## Deploy (owner)
+## Automatic deploys
+
+`.github/workflows/worker.yml` deploys this Worker whenever `worker/**` changes on main (and on demand from the Actions tab):
+tests and type-check, then remote D1 migrations, a `RATE_LIMIT_SALT` secret created once if the Worker has none, `wrangler deploy`,
+and a health check of `https://reports.parzr.app/v1/health`. It needs the repository secret `REPORTS_CLOUDFLARE_API_TOKEN`
+(Workers Scripts edit, D1 edit, Workers Routes and zone read on parzr.app) and the repository variable `CLOUDFLARE_ACCOUNT_ID`;
+without them it skips with a notice. Live since 2026-10-19: D1 `parzr-reports` (01da2683-fd5d-4948-8850-05750a027744).
+
+## Deploy (owner) (manual, first time only)
 
 1. `cd worker && npm ci && npx wrangler login` (or export `CLOUDFLARE_API_TOKEN` with Workers Scripts:Edit,
    D1:Edit and Zone:Workers Routes on parzr.app, plus `CLOUDFLARE_ACCOUNT_ID`).
@@ -78,9 +86,9 @@ npm run fix-queue -- --week 2026-W43 --local
 3. Set `namespace_id` under `[[ratelimits]]` to any integer not used by another rate limit in the account.
 4. `npx wrangler secret put RATE_LIMIT_SALT` with a long random value (`openssl rand -hex 32`).
 5. `npm run migrate` (applies migrations/ to the remote database).
-6. `npm run deploy`. It serves on the account's workers.dev address (live: `https://parzr-reports.amanjain.workers.dev`); for a custom domain see the note in wrangler.toml.
-7. `curl https://parzr-reports.amanjain.workers.dev/v1/health` should answer `{"ok":true}`.
-8. Turn reports on in the app: add `<key>ParzrReportsURL</key><string>https://parzr-reports.amanjain.workers.dev/v1/reports</string>`
+6. `npm run deploy`. This also binds the custom domain `reports.parzr.app` (parzr.app is a zone in the account).
+7. `curl https://reports.parzr.app/v1/health` should answer `{"ok":true}`.
+8. Turn reports on in the app: add `<key>ParzrReportsURL</key><string>https://reports.parzr.app/v1/reports</string>`
    to resources/Info.plist (change it and `routes` here if you use another host), restore the reports wording on the
    website and in README, and release. Builds without that key show no reports switch and send nothing.
 
