@@ -19,6 +19,7 @@ required = ['Contents/MacOS/parzr', 'Contents/MacOS/parzr-engine', 'Contents/Mac
 required += ['Contents/Resources/ThirdParty/EnglishFrequency-data.json', 'Contents/Resources/ThirdParty/EnglishFrequency-NOTICES.md', 'Contents/Resources/ThirdParty/EnglishFrequency-LICENSE.txt']
 required += ['Contents/Frameworks/libparzr_model.dylib', 'Contents/Resources/ThirdParty/llama-LICENSE.txt', 'Contents/Resources/ThirdParty/Qwen3.5-LICENSE.txt']
 required += ['Contents/Resources/ThirdParty/Pow-LICENSE.txt', 'Contents/Resources/ThirdParty/Sparkle-LICENSE.txt']
+required += ['Contents/Resources/ThirdParty/spaCy-MIT-LICENSE.txt', 'Contents/Resources/ThirdParty/RoBERTa-fairseq-MIT-LICENSE.txt', 'Contents/Resources/ThirdParty/similar-2.7.0/LICENSE', 'Contents/Resources/ThirdParty/unicode-segmentation-1.13.3/LICENSE-MIT', 'Contents/Resources/ThirdParty/unicode-segmentation-1.13.3/LICENSE-APACHE']
 required += ['Contents/Resources/parzr-tables.dat']
 required += ['Contents/Resources/Integrations/extensions/browser/editor.js', 'Contents/Resources/Integrations/extensions/browser/content.js', 'Contents/Resources/Integrations/extensions/browser/background.js']
 for name in required:
