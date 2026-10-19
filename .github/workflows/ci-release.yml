@@ -49,6 +49,10 @@ jobs:
     if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      # The Xcode the quality baselines were measured with (the macos-26 image's default in October 2026): a new image
+      # default must not change the compiler, the SDK or Core ML under the gates silently. Bump it on purpose.
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -78,12 +82,22 @@ jobs:
           key: model-pack-${{ hashFiles('engine/models.json') }}
       - name: Build engine and test native bridge
         run: |
+          set -o pipefail
+          xcodebuild -version
           python3 scripts/prepare-model.py
-          # Verified against the manifest's SHA-256s; before the pack's release is published, rebuilt from its pinned upstream sources.
-          python3 scripts/model-pack.py fetch --models-dir dist/models --derive-fallback
+          # Verified against the manifest's SHA-256s. A missing release fails the fetch; only a pull request may rebuild the
+          # essential pack from its pinned upstream sources (a re-pin before its release is out). Slip and tone packs always need theirs.
+          python3 scripts/model-pack.py fetch --models-dir dist/models ${{ github.event_name == 'pull_request' && '--derive-fallback' || '' }}
+          # The slip and tone checks' real packs, for this step's tests and the later ones (they must not skip here).
+          slips="$PWD/dist/models/slips/$(jq -r '.packs[] | select(.id == "slips").version' engine/models.json)/slips"
+          tone="$PWD/dist/models/tone/$(jq -r '.packs[] | select(.id == "tone").version' engine/models.json)/tone"
+          printf 'PARZR_SLIP_DIR=%s\nPARZR_TONE_DIR=%s\n' "$slips" "$tone" >> "$GITHUB_ENV"
+          export PARZR_SLIP_DIR="$slips" PARZR_TONE_DIR="$tone"
           cargo build --release --locked --manifest-path engine/Cargo.toml
-          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py
-          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" python3 scripts/run-name-benchmark.py --baseline
+          mkdir -p dist/qa
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" swift test --package-path mac 2>&1 | tee dist/qa/swift-test.log
+          python3 scripts/check-xctest-skips.py dist/qa/swift-test.log
       - name: Everyday-error quality gate
         # The held-out test split (benchmarks/heldout, never used for tuning) through the app's own path. Fails when
         # what runs while typing fixes less, or changes more correct text, than the last measured build allows.
@@ -91,14 +105,51 @@ jobs:
           swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift scripts/heldout-native.swift -o dist/qa/heldout-native
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --split test --layers rules,gec --output dist/qa/heldout \
-            --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02
+            --min-fix-rate rules=0.43 --min-fix-rate gec=0.62 --max-false-alarm-rate rules=0.02 --max-false-alarm-rate gec=0.02 --baseline heldout-test
       - name: Keystroke-typo quality gate
         # benchmarks/typo-fuzz test set: every keystroke slip type on 200 sentences written after the fixes.
         run: |
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/test.jsonl --clean benchmarks/typo-fuzz/test-clean.jsonl \
             --split all --layers rules,gec --output dist/qa/typo-fuzz \
-            --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03
+            --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03 --baseline typo-fuzz-test
+      - name: Frozen benchmark corpora
+        # benchmarks/frozen.json pins every frozen corpus by SHA-256: a corpus is never edited to pass a gate.
+        run: python3 scripts/check-frozen-corpora.py
+      - name: English challenge sets
+        # benchmarks/english-1000 and -2000: every paragraph corrected exactly and every clean control left alone, on the
+        # Rust engine and on the app's NaturalLanguage path.
+        run: |
+          for set in 1000:100 2000:200; do
+            python3 scripts/run-english-benchmark.py --engine engine/target/release/parzr-engine --library engine/target/release/libparzr_engine.dylib \
+              --corpus "benchmarks/english-${set%%:*}.jsonl" --controls "benchmarks/english-${set##*:}-clean.jsonl" --output "dist/qa/english-${set%%:*}" --require-exact
+          done
+      - name: Slip check on the typing route
+        # The real slip pack (PARZR_SLIP_DIR) through the engine's typing route with the app's follow-ups.
+        run: |
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            cargo test --release --locked --manifest-path engine/Cargo.toml --lib -- --ignored typing_route
+      - name: Everyday regression set
+        # benchmarks/everyday: real everyday texts with certain expectations, on the typing path (followed up until it settles)
+        # and Option+Space on a fixed sample. Fails when an item correct in benchmarks/everyday/baseline.json no longer is.
+        timeout-minutes: 20
+        run: |
+          PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native --engine engine/target/release/libparzr_engine.dylib --paths typing,deep --deep-sample 40
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        # Totals only (the sealed test sets never write per-item results): what update-baselines.py takes.
+        continue-on-error: true
+        with:
+          name: quality-summaries-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            dist/qa/heldout/summary.*
+            dist/qa/typo-fuzz/summary.*
+            dist/qa/names/report.json
+            dist/qa/english-*/summary.json
+            dist/qa/everyday/summary.json
+            dist/qa/swift-test.log
       - name: Browser and editor integration checks
         run: |
           npm ci
