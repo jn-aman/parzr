@@ -13,6 +13,7 @@ mod forms;
 mod gec;
 #[cfg(feature = "local-model")]
 mod gec_text;
+mod hinglish;
 mod marks;
 #[cfg(feature = "local-model")]
 mod meaning;

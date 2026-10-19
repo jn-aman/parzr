@@ -1162,26 +1162,35 @@ fn in_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) ->
 }
 /// Common Roman Hindi words that are not English words: Hinglish is written, not misspelled.
 const HINGLISH: &[&str] = &[
-    "aa", "aaj", "aana", "aao", "aap", "aapka", "abhi", "accha", "acha", "achha", "aise", "aloo",
-    "apna", "apne", "arey", "arre", "aur", "baad", "baat", "baba", "badhai", "bahot", "bahut",
-    "baje", "bas", "bata", "batao", "behen", "beta", "beti", "bhabhi", "bhai", "bhaisaab",
-    "bhaiya", "bhaiyya", "bhej", "bheje", "bhejo", "bhi", "bhool", "bilkul", "bohat", "bohot",
-    "bolo", "chaat", "chahiye", "chahta", "chahti", "chal", "chala", "chalega", "chalein", "chalo",
-    "chinta", "dekh", "dekha", "dekhna", "dekho", "dekhte", "dena", "dhyan", "didi", "diya",
-    "dost", "ek", "ekdum", "galat", "garmi", "gaya", "gayi", "ghar", "haa", "haan", "hai", "hain",
-    "haina", "hoga", "hoge", "hogi", "honge", "hoon", "hua", "hue", "hui", "hum", "humein",
-    "humne", "isko", "itna", "jaana", "jaao", "jaise", "jaldi", "jaunga", "jayega", "ji", "jo",
-    "jugaad", "ka", "kaafi", "kaam", "kab", "kahan", "kahin", "kaisa", "kaise", "kal", "kamaal",
-    "karega", "karenge", "karna", "karo", "karte", "kaun", "ke", "kha", "khana", "ki", "kitna",
-    "kitne", "kiya", "kiye", "koi", "kuch", "kya", "kyon", "kyonki", "kyu", "kyun", "kyunki",
-    "ladoo", "laga", "lagega", "lagi", "lagta", "lekin", "liya", "maine", "mat", "matlab", "maza",
-    "mein", "mera", "mere", "meri", "milte", "mujhe", "na", "nahi", "nahin", "nai", "ne", "nikal",
-    "nikalna", "paas", "paisa", "pakka", "paratha", "pata", "pe", "peene", "pehle", "phir", "pura",
-    "purana", "raha", "rahe", "rahi", "rakhna", "ruko", "sab", "sabko", "sabse", "sahi", "samajh",
-    "samjha", "samjho", "se", "shaadi", "sirf", "sunna", "suno", "tak", "tera", "teri", "tha",
-    "theek", "thi", "thik", "thoda", "thodi", "toh", "tujhe", "tumhara", "tumhe", "tumne", "unka",
-    "usko", "usne", "vasool", "wah", "wahan", "wahi", "waisa", "waise", "wala", "wale", "wali",
-    "woh", "wohi", "yaar", "yahan", "yahi", "yeh", "zyada",
+    "aa", "aaj", "aana", "aao", "aap", "aapka", "aapko", "aapne", "aaya", "aaye", "aayi", "abhi",
+    "accha", "acha", "achha", "aise", "aloo", "apna", "apne", "arey", "arre", "aur", "baad",
+    "baar", "baat", "baba", "badhai", "badhiya", "bahot", "bahut", "baje", "bas", "bata", "batao",
+    "behen", "beta", "beti", "bhabhi", "bhai", "bhaisaab", "bhaiya", "bhaiyya", "bhej", "bheje",
+    "bhejna", "bhejo", "bhi", "bhool", "bilkul", "bohat", "bohot", "bola", "bolna", "bolo",
+    "bulana", "chaat", "chahiye", "chahta", "chahte", "chahti", "chal", "chala", "chalega",
+    "chalein", "chalo", "chalta", "chinta", "dekh", "dekha", "dekhenge", "dekhna", "dekho",
+    "dekhte", "dena", "dhyan", "didi", "dikha", "dikhao", "diya", "diye", "dost", "dunga", "dungi",
+    "ek", "ekdum", "galat", "garmi", "gaya", "gaye", "gayi", "ghar", "haa", "haan", "haanji",
+    "hai", "hain", "haina", "hamara", "hamare", "hamari", "ho", "hoga", "hoge", "hogi", "hona",
+    "honge", "hoon", "hota", "hote", "hoti", "hu", "hua", "hue", "hui", "hum", "humein", "humne",
+    "hun", "iska", "iski", "isko", "itna", "jaa", "jaana", "jaao", "jaata", "jaate", "jaati",
+    "jaise", "jaldi", "jaunga", "jayega", "jayegi", "ji", "jo", "jugaad", "ka", "kaafi", "kaam",
+    "kab", "kaha", "kahaan", "kahan", "kahin", "kaisa", "kaise", "kaisi", "kal", "kamaal", "kar",
+    "karega", "karenge", "karke", "karna", "karni", "karo", "karta", "karte", "karti", "karunga",
+    "karungi", "kaun", "ke", "kha", "khana", "khatam", "ki", "kisi", "kisko", "kitna", "kitne",
+    "kiya", "kiye", "ko", "koi", "kuch", "kuchh", "kya", "kyaa", "kyon", "kyonki", "kyu", "kyun",
+    "kyunki", "ladoo", "laga", "lagega", "lagi", "lagta", "lekin", "liya", "lo", "mai", "maine",
+    "mat", "matlab", "maza", "mein", "mera", "mere", "meri", "milenge", "milna", "milte", "mujhe",
+    "mujhko", "na", "nahi", "nahin", "nai", "ne", "nhi", "nikal", "nikalna", "paas", "padega",
+    "padta", "paisa", "pakka", "paratha", "pata", "paunga", "payega", "pe", "peene", "pehle",
+    "phir", "pura", "purana", "raat", "raha", "rahe", "rahi", "rakhna", "rehna", "rehta", "ruko",
+    "sab", "sabko", "sabse", "sacchi", "sahi", "sakta", "sakte", "sakti", "samajh", "samjha",
+    "samjho", "se", "shaadi", "shukriya", "sirf", "sunke", "sunna", "suno", "tak", "tera", "teri",
+    "tha", "theek", "thi", "thik", "thoda", "thodi", "toh", "tu", "tujhe", "tum", "tumhara",
+    "tumhari", "tumhe", "tumko", "tumne", "unka", "unki", "unko", "uska", "uski", "usko", "usne",
+    "vasool", "wah", "waha", "wahan", "wahi", "waisa", "waise", "wala", "wale", "wali", "wo",
+    "woh", "wohi", "yaad", "yaar", "yaha", "yahan", "yahi", "ye", "yeh", "zaroor", "zarur",
+    "zyada",
 ];
 /// Common Indian English vocabulary (food, kinship, culture) that no English dictionary lists: never a typo.
 const INDIAN: &[&str] = &[
@@ -1194,11 +1203,13 @@ const INDIAN: &[&str] = &[
     "bazaar",
     "bhajan",
     "bhaji",
+    "bhel",
     "bindi",
     "biryani",
     "chacha",
     "chachi",
     "chai",
+    "chaiwala",
     "chapati",
     "chappal",
     "chole",
@@ -1224,6 +1235,7 @@ const INDIAN: &[&str] = &[
     "jalebi",
     "kebab",
     "kheer",
+    "kirana",
     "kirtan",
     "kulfi",
     "kurta",
@@ -1240,6 +1252,7 @@ const INDIAN: &[&str] = &[
     "mehndi",
     "mithai",
     "naan",
+    "namaste",
     "nani",
     "paise",
     "pakora",
@@ -1269,6 +1282,7 @@ const INDIAN: &[&str] = &[
     "thali",
     "tiffin",
     "tikka",
+    "timepass",
     "upma",
     "uttapam",
     "vada",
@@ -1285,10 +1299,17 @@ const HINGLISH_ALONE: [&str; 5] = ["bas", "haa", "ji", "na", "wah"];
 pub fn roman_hindi(tokens: &[Token<'_>], index: usize) -> bool {
     let word = tokens[index].normalized.as_str();
     hinglish(word)
-        && (word.len() > 3 || HINGLISH_ALONE.contains(&word) || hindi_beside(tokens, index))
+        && (word.len() > 3 || HINGLISH_ALONE.contains(&word) || hindi_beside(tokens, index, true))
+        || HINGLISH_BESIDE.contains(&word) && hindi_beside(tokens, index, false)
 }
-/// Another Roman Hindi word within four words of `tokens[index]`, in the same paragraph.
-fn hindi_beside(tokens: &[Token<'_>], index: usize) -> bool {
+/// Roman Hindi words that are also English words or names ("main" is "I", "lena" "to take",
+/// "par" "on"): Hindi only beside other Roman Hindi ("main kal aaunga", "review kar lena"), and
+/// never protected from English checks on their own.
+const HINGLISH_BESIDE: [&str; 5] = ["bole", "lena", "main", "mile", "par"];
+/// Another Roman Hindi word within four words of `tokens[index]`, in the same paragraph. With
+/// `homographs`, a word that is Hindi only in company counts too ("kar lena"), so two of those
+/// alone never make each other Hindi ("the main par").
+fn hindi_beside(tokens: &[Token<'_>], index: usize, homographs: bool) -> bool {
     tokens
         .iter()
         .enumerate()
@@ -1297,7 +1318,8 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize) -> bool {
         .any(|(j, t)| {
             j != index
                 && t.paragraph == tokens[index].paragraph
-                && hinglish(&t.normalized)
+                && (hinglish(&t.normalized)
+                    || homographs && HINGLISH_BESIDE.contains(&t.normalized.as_str()))
                 && t.normalized != "thik"
         })
 }
