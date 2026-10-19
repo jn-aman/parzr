@@ -36,12 +36,24 @@ final class FakeTransport: ModelTransport, @unchecked Sendable {
     }
 }
 
-/// Starts an install and cancels it after `delay`. A free function with an explicit `update` closure: Swift 6.3's
-/// region checker on CI could not analyse a `Task` closure in the test class calling `install` with its default argument.
-func installThenCancel(_ store: ModelStore, _ pack: ModelPack, after delay: Duration) async -> ModelPackState {
+/// Polls `condition` every 10 ms until it holds or `seconds` pass; returns whether it held. For waits on progress a
+/// test cannot observe through a callback, instead of a fixed sleep that a slow machine outlasts.
+func eventually(_ seconds: Double = 10, _ condition: @Sendable () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(seconds)
+    while !condition() {
+        if Date() > deadline { return false }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return true
+}
+
+/// Starts an install and cancels it once `ready` holds (some bytes are on disk). A free function with an explicit `update`
+/// closure: Swift 6.3's region checker on CI could not analyse a `Task` closure in the test class calling `install` with its
+/// default argument.
+func installThenCancel(_ store: ModelStore, _ pack: ModelPack, when ready: @escaping @Sendable () -> Bool) async -> ModelPackState {
     await withTaskGroup(of: ModelPackState.self) { group in
         group.addTask { await store.install(pack, update: { _ in }) }
-        try? await Task.sleep(for: delay)
+        _ = await eventually { ready() }
         group.cancelAll()
         return await group.next() ?? .missing
     }
@@ -222,9 +234,10 @@ final class ModelPackTests: XCTestCase {
         if case .other = ModelStore.failure(for: NSError(domain: "x", code: 1), needed: 1) {} else { XCTFail() }
     }
     func testCancellingKeepsThePartialFileForLater() async throws {
-        let result = await installThenCancel(store(transport(.slow)), Self.pack, after: .milliseconds(300))
+        let partial = staging.appendingPathComponent("writer.gguf.partial")
+        let result = await installThenCancel(store(transport(.slow)), Self.pack, when: { (ModelStore.size(partial) ?? 0) > 0 })
         XCTAssertEqual(result, .missing)
-        XCTAssertGreaterThan(ModelStore.size(staging.appendingPathComponent("writer.gguf.partial")) ?? 0, 0)
+        XCTAssertGreaterThan(ModelStore.size(partial) ?? 0, 0)
         XCTAssertFalse(FileManager.default.fileExists(atPath: final.path))
     }
     func testRemoveTakesThePackAway() async throws {
@@ -335,7 +348,12 @@ final class ModelCenterTests: XCTestCase {
         let transport = fake(.slow)
         let center = center(transport)
         center.start()
-        try await Task.sleep(for: .milliseconds(200))
+        // Cancel once some of the file has arrived (a fixed sleep let a slow machine cancel before the first byte).
+        var started = false
+        for _ in 0..<500 where !started {
+            if case .downloading(let received, _) = center.state, received > 0 { started = true } else { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        XCTAssertTrue(started, "the download made progress")
         center.cancel()
         XCTAssertEqual(center.state, .missing)
         transport.set("writer.gguf", .serve)
