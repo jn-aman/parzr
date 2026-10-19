@@ -258,8 +258,8 @@ jobs:
         # The default graph and the app bundle's (external-tables); the maintainer-only baseline-harper feature is
         # never shipped and is not checked (engine/deny.toml).
         run: |
-          cargo deny --manifest-path engine/Cargo.toml check --config engine/deny.toml
-          cargo deny --manifest-path engine/Cargo.toml --features external-tables check --config engine/deny.toml
+          cargo deny --manifest-path engine/Cargo.toml --config engine/deny.toml check
+          cargo deny --manifest-path engine/Cargo.toml --features external-tables --config engine/deny.toml check
       - name: cargo-audit on the shipped engine graphs
         run: python3 scripts/cargo-audit-shipped.py
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
