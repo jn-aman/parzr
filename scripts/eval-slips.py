@@ -217,6 +217,36 @@ def build_prose(out, words):
     print(f"{len(picked)} sentences, {n} words (of {total} available) in {out}", file=sys.stderr)
 
 
+def pipeline(items, path):
+    """Scores the whole-engine harness (slips_pipeline): the slip-check edits after every guard of the real path."""
+    def char(text, unit):
+        n = 0
+        for i, c in enumerate(text):
+            if n >= unit: return i
+            n += 2 if ord(c) > 0xFFFF else 1
+        return len(text)
+    tp = flags = clean_flags = clean_items = flagged_items = gold = any_fix = 0
+    ms, fa = [], []
+    for line in open(path, encoding="utf-8"):
+        r = json.loads(line); it = items[r["id"]]; text = it["input"]
+        ms.append(r["ms"])
+        spans = {(s["start"], s["end"]): norm(s["fix"]) for s in it["spans"]}
+        if not spans:
+            clean_items += 1; clean_flags += len(r["slips"]); flagged_items += bool(r["slips"])
+            fa += [(r["id"], e[2], e[3]) for e in r["slips"]]
+        gold += len(spans)
+        for s0, s1, orig, rep, *rule in r["slips"]:
+            flags += 1
+            tp += spans.get((char(text, s0), char(text, s1))) == norm(rep)
+        # Fixed by any edit (on an explicit check the writing model's rewrite may fix the slip itself).
+        any_fix += sum(spans.get((char(text, e[0]), char(text, e[1]))) == norm(e[3]) for e in r.get("edits", []))
+    ms.sort()
+    print(f"  pipeline: precision {tp / max(flags, 1):.3f}, recall {tp / max(gold, 1):.3f} ({tp}/{gold}; fixed by any edit {any_fix}), "
+          f"clean items flagged {flagged_items}/{clean_items} ({flagged_items / max(clean_items, 1):.2%}), {clean_flags} false alarms; "
+          f"whole check p50 {ms[len(ms) // 2]:.1f} ms, p95 {ms[int(len(ms) * 0.95)]:.1f} ms")
+    for e in fa[:60]: print("   ", *e)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--items")
@@ -226,12 +256,14 @@ def main():
     ap.add_argument("--model", help="the writing model's gains for the same swaps")
     ap.add_argument("--ship", type=float, nargs=2, metavar=("T", "C"), help="the operating point to report on all of DEV")
     ap.add_argument("--confirm", type=float, nargs="*", default=[0.0, 1.0, 2.0, 3.0, 4.0])
+    ap.add_argument("--pipeline", help="score the whole-engine harness output (slips_pipeline) against --items")
     ap.add_argument("--no-tune", action="store_true", help="skip the half-A/half-B threshold search (clean-only probes)")
     ap.add_argument("--out")
     ap.add_argument("scored", nargs="*")
     a = ap.parse_args()
     if a.build: return build(a.build)
     if a.build_prose: return build_prose(a.build_prose, a.words)
+    if a.pipeline: return pipeline({json.loads(l)["id"]: json.loads(l) for l in open(a.items, encoding="utf-8")}, a.pipeline)
     items = {json.loads(l)["id"]: json.loads(l) for l in open(a.items, encoding="utf-8")}
     model = load_model_gains(a.model, items) if a.model else None
     report = {}

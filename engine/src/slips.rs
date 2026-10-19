@@ -477,7 +477,13 @@ mod tests {
         let spec = std::env::var("PARZR_SLIPS_PIPELINE").expect("PARZR_SLIPS_PIPELINE=in:out");
         let (input, output) = spec.split_once(':').expect("in:out");
         assert!(warm(), "the slip checker did not load");
-        assert!(!crate::model::model_available(), "run without the writing model");
+        // PARZR_SLIPS_WITH_MODEL=1: with the writing model too (the explicit check it confirms).
+        let with_model = std::env::var("PARZR_SLIPS_WITH_MODEL").is_ok_and(|v| v == "1");
+        assert_eq!(
+            crate::model::model_available(),
+            with_model,
+            "writing model presence"
+        );
         let mut out = std::fs::File::create(output).unwrap();
         for line in std::fs::read_to_string(input).unwrap().lines() {
             let item: serde_json::Value = serde_json::from_str(line).unwrap();
@@ -492,12 +498,25 @@ mod tests {
             let started = std::time::Instant::now();
             let edits = crate::rewrite(&req).map(|r| r.edits).unwrap_or_default();
             let ms = started.elapsed().as_secs_f64() * 1000.0;
+            let json = |e: &crate::Edit| {
+                serde_json::json!([
+                    e.start_utf16,
+                    e.end_utf16,
+                    e.original,
+                    e.replacement,
+                    e.rule_id
+                ])
+            };
+            let swaps = ["context.slip_swap", "context.sentence_swap"];
             let slips: Vec<_> = edits
                 .iter()
-                .filter(|e| e.rule_id == "context.slip_swap")
-                .map(|e| serde_json::json!([e.start_utf16, e.end_utf16, e.original, e.replacement]))
+                .filter(|e| swaps.contains(&e.rule_id.as_str()))
+                .map(json)
                 .collect();
-            let record = serde_json::json!({"id": item["id"], "ms": ms, "slips": slips});
+            // Every edit too: on an explicit check the writing model's rewrite may fix a slip itself.
+            let all: Vec<_> = edits.iter().map(json).collect();
+            let record =
+                serde_json::json!({"id": item["id"], "ms": ms, "slips": slips, "edits": all});
             writeln!(out, "{record}").unwrap();
         }
     }
