@@ -62,5 +62,10 @@ fn english_slips_in_hinglish_are_still_fixed() {
 fn short_hindi_words_alone_in_english_stay_correctable() {
     // "tha", "ko", "wo" are Hindi beside other Hindi, and slips of English words otherwise.
     assert_eq!(fix("tha is teh best."), "That is the best.");
+    // "thik" is Hindi beside Hindi ("thik hai") and a slip of "think" in English (English 1000).
+    assert_eq!(
+        fix("I thik you're going to enjoy the workshop."),
+        "I think you're going to enjoy the workshop."
+    );
     assert_eq!(fix("Send me the main file."), "Send me the main file.");
 }

@@ -1237,8 +1237,13 @@ const HINGLISH_ALONE: [&str; 5] = ["bas", "haa", "ji", "na", "wah"];
 /// is a typo, and it is Roman Hindi only beside other Roman Hindi.
 pub fn roman_hindi(tokens: &[Token<'_>], index: usize) -> bool {
     let word = tokens[index].normalized.as_str();
+    // "I thik you're going": a slip of "think" alone in English is Hindi only beside Hindi
+    // ("thik hai").
+    let slip = word == "thik";
     hinglish(word)
-        && (word.len() > 3 || HINGLISH_ALONE.contains(&word) || hindi_beside(tokens, index, true))
+        && (word.len() > 3 && !slip
+            || HINGLISH_ALONE.contains(&word)
+            || hindi_beside(tokens, index, true))
         || HINGLISH_BESIDE.contains(&word) && hindi_beside(tokens, index, false)
 }
 /// Roman Hindi words that are also English words or names ("main" is "I", "lena" "to take",
