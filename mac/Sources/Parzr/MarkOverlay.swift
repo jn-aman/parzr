@@ -32,6 +32,24 @@ enum MarkDiff {
     }
 }
 
+/// Marks that follow a scroll: one re-measured mark gives the offset, and every window of marks moves by it, clipped to the scroll area.
+/// Pure geometry in AppKit screen coordinates.
+enum ScrollFollow {
+    /// How far the text moved, from where the probe mark was drawn to where the editor now reports it; nil when it cannot be measured.
+    static func offset(from drawn: CGRect, to now: CGRect?) -> CGPoint? {
+        guard let now, now.width > 0, now.height > 0, abs(now.height - drawn.height) < max(4, drawn.height / 2) else { return nil }
+        return CGPoint(x: now.minX - drawn.minX, y: now.minY - drawn.minY)
+    }
+    /// Where a window of marks drawn at `base` goes after `offset`, kept inside the scroll area and its screen; nil when nothing of it is left to show.
+    static func frame(base: CGRect, offset: CGPoint, clip: CGRect?, screen: CGRect) -> CGRect? {
+        var frame = base.offsetBy(dx: offset.x, dy: offset.y).intersection(screen)
+        if let clip { frame = frame.intersection(clip) }
+        return frame.isNull || frame.width < 1 || frame.height < 1 ? nil : frame
+    }
+    /// The bounds origin of the layer that holds the marks, so marks drawn for global rects appear moved by `offset` inside a window at `origin`.
+    static func contentOrigin(window origin: CGPoint, offset: CGPoint) -> CGPoint { CGPoint(x: origin.x - offset.x, y: origin.y - offset.y) }
+}
+
 /// What assistive tech sees for one underline: a button that opens the same card a click does.
 final class MarkElement: NSAccessibilityElement {
     var press: (() -> Void)?
@@ -48,6 +66,8 @@ final class MarkView: NSView, NSViewToolTipOwner {
     private var elements: [MarkElement] = []
     private(set) var hovered: Int?
     private(set) var pressed: Int?
+    /// How far the marks have followed a scroll since they were drawn.
+    private var scrollOffset = CGPoint.zero
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override init(frame: NSRect) {
@@ -89,7 +109,7 @@ final class MarkView: NSView, NSViewToolTipOwner {
     /// Sets the origin of the container to the window's, then brings the layers in line with `items`.
     func apply(_ items: [MarkItem], origin: CGPoint) {
         CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
-        container.bounds = CGRect(origin: origin, size: bounds.size)
+        container.bounds = CGRect(origin: origin, size: bounds.size); scrollOffset = .zero
         let (added, removed) = MarkDiff.diff(old: Set(layers.keys), new: items.map(\.shape))
         for shape in removed { layers.removeValue(forKey: shape)?.removeFromSuperlayer() }
         for shape in added {
@@ -106,8 +126,17 @@ final class MarkView: NSView, NSViewToolTipOwner {
         let index = Int(bitPattern: data) - 1
         return items.indices.contains(index) ? items[index].tip : ""
     }
+    /// Moves every mark by `offset` without touching the layers; the window now sits at `origin`.
+    func follow(offset: CGPoint, origin: CGPoint) {
+        CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
+        container.bounds = CGRect(origin: ScrollFollow.contentOrigin(window: origin, offset: offset), size: bounds.size)
+        scrollOffset = offset
+    }
     /// Index of the topmost underline under the global point.
-    func hitIndex(at point: CGPoint) -> Int? { items.indices.last { items[$0].shape.kind == .underline && items[$0].shape.hit.contains(point) } }
+    func hitIndex(at point: CGPoint) -> Int? {
+        let drawn = CGPoint(x: point.x - scrollOffset.x, y: point.y - scrollOffset.y)
+        return items.indices.last { items[$0].shape.kind == .underline && items[$0].shape.hit.contains(drawn) }
+    }
     func setHover(_ index: Int?) {
         guard index != hovered else { return }
         CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
@@ -167,6 +196,8 @@ final class MarkWindow: NSPanel {
 @MainActor
 final class MarkOverlay {
     private var windows: [CGDirectDisplayID: MarkWindow] = [:]
+    /// Each window's frame and screen as `apply` placed it, which a scroll moves from.
+    private var placed: [CGDirectDisplayID: (frame: CGRect, screen: CGRect)] = [:]
     private var monitors: [Any] = []
     private var cursorIsHand = false
     private(set) var items: [MarkItem] = []
@@ -180,17 +211,29 @@ final class MarkOverlay {
             guard let surface = SelfTestTarget.surface(for: item.shape.rect) else { continue }
             byScreen[surface.id, default: (surface.frame, [])].1.append(item)
         }
-        for (id, window) in windows where byScreen[id] == nil { window.orderOut(nil); window.marks.apply([], origin: .zero); window.ignoresMouseEvents = true }
+        for (id, window) in windows where byScreen[id] == nil { window.orderOut(nil); window.marks.apply([], origin: .zero); window.ignoresMouseEvents = true; placed[id] = nil }
         for (id, (frame, group)) in byScreen {
             let window = windows[id] ?? MarkWindow()
             windows[id] = window
             let box = group.reduce(CGRect.null) { $0.union($1.shape.extent) }.insetBy(dx: -8, dy: -8).intersection(frame)
             if window.frame != box { window.setFrame(box, display: false) }
             window.marks.apply(group, origin: box.origin)
+            placed[id] = (box, frame)
             if !window.isVisible { window.orderFrontRegardless() }
         }
         monitorPointer(hasMarks)
         if hasMarks { pointerMoved() }
+    }
+    /// Moves every mark by `offset` from where `apply` drew it, clipped to `clip` (the editor's scroll area): the marks ride along with a scroll.
+    func follow(offset: CGPoint, clip: CGRect?) {
+        for (id, window) in windows {
+            guard let base = placed[id], !window.marks.items.isEmpty else { continue }
+            guard let frame = ScrollFollow.frame(base: base.frame, offset: offset, clip: clip, screen: base.screen) else { window.orderOut(nil); window.ignoresMouseEvents = true; continue }
+            if window.frame != frame { window.setFrame(frame, display: false) }
+            window.marks.follow(offset: offset, origin: frame.origin)
+            if !window.isVisible { window.orderFrontRegardless() }
+        }
+        if hasMarks { monitorPointer(true); pointerMoved() }
     }
     /// Takes the marks off screen but keeps their layers, so showing the same marks again is free.
     func hide() { for window in windows.values { window.orderOut(nil); window.ignoresMouseEvents = true }; monitorPointer(false) }

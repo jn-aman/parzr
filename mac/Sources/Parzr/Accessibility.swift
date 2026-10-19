@@ -196,6 +196,24 @@ enum AX {
         guard let rect = bounds(element, range), rect.height < 40 else { return [] }
         return [rect]
     }
+    /// The visible box a field scrolls in, in AppKit coordinates: its scroll area when it sits in one (an NSTextView's own frame is the whole document), else its own frame.
+    static func scrollArea(_ element: AXUIElement) -> CGRect? {
+        func frame(_ element: AXUIElement) -> CGRect? {
+            let values = multiple(element, [kAXPositionAttribute, kAXSizeAttribute])
+            guard let p = values[0], let s = values[1], CFGetTypeID(p) == AXValueGetTypeID(), CFGetTypeID(s) == AXValueGetTypeID() else { return nil }
+            var origin = CGPoint.zero, size = CGSize.zero
+            guard AXValueGetValue(p as! AXValue, .cgPoint, &origin), AXValueGetValue(s as! AXValue, .cgSize, &size), size.width > 0, size.height > 0 else { return nil }
+            return cocoa(CGRect(origin: origin, size: size))
+        }
+        var cursor: AXUIElement? = element
+        for _ in 0..<4 {
+            guard let current = cursor else { break }
+            if string(current, kAXRoleAttribute) == kAXScrollAreaRole { return frame(current) }
+            guard let parent = get(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+            cursor = (parent as! AXUIElement)
+        }
+        return frame(element)
+    }
     static func attributed(_ element: AXUIElement, _ range: NSRange) -> NSAttributedString? {
         var cf = CFRange(location: range.location, length: range.length)
         guard let parameter = AXValueCreate(.cfRange, &cf) else { return nil }

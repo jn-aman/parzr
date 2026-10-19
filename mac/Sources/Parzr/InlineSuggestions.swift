@@ -72,16 +72,34 @@ final class InlineSuggestions {
         }
         monitorInstalls += 1
     }
-    /// Scrolling hides marks at once and re-places them once it settles, if the text is unchanged.
+    /// Scrolling moves the marks with the text (one mark is re-measured per run-loop pass and all follow it, clipped to the scroll area);
+    /// editors whose geometry is too costly or cannot be measured (Docs) hide them instead. Either way the marks are re-placed once the
+    /// scroll settles, if the text is unchanged.
     private func scrolled() {
         closeCard()
-        guard shown != nil else { return }
-        overlay.hide()
+        guard let s = shown else { return }
+        if relayout == nil { scrollClip = s.snapshot.docs ? nil : AX.scrollArea(s.snapshot.element) }
+        if s.snapshot.docs || s.probe == nil { overlay.hide() } else { follow() }
         relayout?.cancel()
         relayout = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled, let self else { return }
             if self.textIsCurrent, let s = self.shown { self.reset(); self.show(snapshot: s.snapshot, result: s.result) } else { self.dismiss() }
+        }
+    }
+    private var scrollClip: CGRect?
+    private var following = false
+    /// One re-measure per main-actor turn, however many wheel events arrive in it.
+    private func follow() {
+        guard !following else { return }
+        following = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.following = false
+            guard let s = self.shown, let probe = s.probe, !s.snapshot.docs else { return }
+            guard let offset = ScrollFollow.offset(from: probe.rect, to: AX.bounds(s.snapshot.element, probe.range)) else { self.overlay.hide(); return }
+            // A little slack below and beside the area keeps the stroke under its last visible line.
+            self.overlay.follow(offset: offset, clip: self.scrollClip?.insetBy(dx: -4, dy: -6))
         }
     }
     private var textIsCurrent: Bool {
