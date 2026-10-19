@@ -22,12 +22,13 @@ through scripts/heldout-native.swift):
   score  python3 scripts/everyday-batch.py score --items dist/batches/regression.jsonl [--native BIN] [--engine DYLIB]
          runs typing and deep on every item and prints label counts; --outputs FILE scores saved outputs.
          --baseline FILE (a previous --save) lists the items whose label changed.
-  gate   python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native [--paths typing,deep] [--update]
-         CI's everyday gate: scores the committed set (benchmarks/everyday/items.jsonl) on typing (with its
-         follow-ups) and, when the writing model is present, Option+Space; fails when an item the committed
-         baseline (benchmarks/everyday/baseline.json) had correct is not correct any more, or when p50/p95
-         latency or peak memory exceed 1.5x the performance baseline (benchmarks/baselines.json). Writes
-         dist/qa/everyday/summary.json and outputs.jsonl. --update records this run as the baseline, on purpose.
+  gate   python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native [--paths typing,deep] [--deep-sample N] [--update]
+         CI's everyday gate: scores the committed set (benchmarks/everyday/items.jsonl) on typing, following
+         each check up until the typing route settles, and, when the writing model is present, Option+Space.
+         Fails when an item the committed baseline (benchmarks/everyday/baseline.json) had correct is not
+         correct any more, or when p50/p95 latency or peak memory exceed 1.5x the performance baseline
+         (benchmarks/baselines.json). Writes dist/qa/everyday/summary.json and outputs.jsonl. --update records
+         this run as the baseline, on purpose.
 
 Build the harness once:
   swiftc -O -parse-as-library mac/Sources/ParzrCore/Models.swift mac/Sources/ParzrCore/WritingEngine.swift mac/Sources/ParzrCore/LinguisticHints.swift \\
@@ -96,18 +97,19 @@ class Engine:
             raise RuntimeError("engine exited")
         return json.loads(line)
 
-    def check(self, text, path, dialect=None, follow_ups=3):
+    def check(self, text, path, dialect=None, follow_ups=3, interval=0.9):
         start = time.time()
         result = self.ask(text, path, dialect)
         self.latency.setdefault(path, []).append((time.time() - start) * 1000)
         follow = 0
         while path == "typing" and "context.pending" in (result.get("warnings") or []) and follow < follow_ups:
-            time.sleep(0.9)
+            time.sleep(interval)
             result = self.ask(text, path, dialect)
             follow += 1
         return {"text": result.get("text"), "error": result.get("error"),
                 "edits": [{k: e.get(k) for k in ("original", "replacement", "rule_id", "start_utf16")} for e in result.get("edits", [])],
-                "warnings": result.get("warnings") or [], "followups": follow, "ms": round((time.time() - start) * 1000)}
+                "warnings": result.get("warnings") or [], "followups": follow, "ms": round((time.time() - start) * 1000),
+                "settled": "context.pending" not in (result.get("warnings") or [])}
 
     def close(self):
         """Ends the harness; returns its peak resident memory in MB."""
@@ -208,6 +210,10 @@ def score(items, outputs, baseline=None, save=None, show=40):
 
 
 EVERYDAY = ROOT / "benchmarks/everyday"
+# The gate follows a typing check up until the engine stops answering "context.pending" (every 0.1 s, at most 10 s),
+# not the app's three looks 0.9 s apart: it scores what the typing route settles on, the same on a fast Mac and a slow
+# CI runner, while summary.json still records each check's first-answer latency and how many follow-ups it took.
+SETTLE = {"follow_ups": 100, "interval": 0.1}
 WARM_UP = ["This is so bad. I hat it.", "Its late, lets go home.", "She dont know were the meeting is."]
 
 
@@ -230,13 +236,13 @@ def gate(items, paths, native, dylib, baseline_path, output, update=False, deep_
     # Load the models (and the slip checker's background job) before anything is timed or scored.
     for text in WARM_UP:
         for path in paths:
-            engine.check(text, path, follow_ups=10)
+            engine.check(text, path, **SETTLE)
     engine.latency = {}
     started, rss, outputs = time.time(), [], {}
     for path in paths:
         for n, it in enumerate(scored[path]):
             try:
-                result = engine.check(it["text"], path, it.get("dialect"))
+                result = engine.check(it["text"], path, it.get("dialect"), **SETTLE)
             except Exception as error:  # noqa: BLE001 - a crash is a finding, not a stop
                 result = {"text": None, "error": f"crash: {error}"}
                 latency = engine.latency
@@ -258,13 +264,14 @@ def gate(items, paths, native, dylib, baseline_path, output, update=False, deep_
     for p in paths:
         counts = Counter(labels[p].values())
         follow_ups = Counter(outputs[i][p].get("followups", 0) for i in labels[p])
+        unsettled = sorted(i for i in labels[p] if outputs[i][p].get("settled") is False)
         old = baseline.get(p, {})
         worse = sorted(i for i, lab in labels[p].items() if old.get(i) == "correct" and lab != "correct")
         better = sorted(i for i, lab in labels[p].items() if i in old and old[i] != "correct" and lab == "correct")
         unknown = sorted(i for i in labels[p] if i not in old)
         summary["paths"][p] = {"scored": len(labels[p]), "counts": dict(counts), "correct_rate": round(counts["correct"] / max(1, len(labels[p])), 4),
                                "latency": quality_gates.latency(latency.get(p, [])), "follow_ups": dict(follow_ups),
-                               "newly_wrong": worse, "newly_correct": better, "not_in_baseline": len(unknown)}
+                               "unsettled": unsettled, "newly_wrong": worse, "newly_correct": better, "not_in_baseline": len(unknown)}
         print(f"{p:7s} n={len(labels[p])} " + " ".join(f"{k}={counts[k]}" for k in ("correct", "missed", "wrong", "false_alarm", "crash"))
               + f"  p50 {summary['paths'][p]['latency']['p50_ms']} ms, p95 {summary['paths'][p]['latency']['p95_ms']} ms"
               + f"  vs baseline: {len(better)} newly correct, {len(worse)} newly wrong")
