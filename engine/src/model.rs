@@ -734,7 +734,17 @@ fn drop_new_greeting(masked: &str, output: &str) -> String {
     };
     let body = output.trim_start();
     let rest = body[g.len()..].trim_start_matches([',', '!', '.', ' ']);
-    if rest.starts_with("ZXQPARZRKEEP") || rest.trim().is_empty() {
+    // "Hello everyone!" for "Everyone, …": the greeting addresses the writer's own first word.
+    let first_word = |t: &str| {
+        t.split(|c: char| !c.is_alphanumeric())
+            .find(|w| !w.is_empty())
+            .map(str::to_lowercase)
+    };
+    if rest.starts_with("ZXQPARZRKEEP")
+        || rest.trim().is_empty()
+        || body[g.len()..].starts_with(' ')
+            && first_word(rest).is_some_and(|w| first_word(masked) == Some(w))
+    {
         return output.to_owned();
     }
     capitalize_first(rest)
@@ -3963,6 +3973,11 @@ mod tests {
                 "His team is ready.",
                 "His team is ready.",
                 "His team is ready.",
+            ),
+            (
+                "Everyone, the database is read-only on Sunday.",
+                "Hello everyone! The database is read-only on Sunday.",
+                "Hello everyone! The database is read-only on Sunday.",
             ),
         ];
         for (masked, output, expected) in cases {
