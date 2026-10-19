@@ -30,6 +30,9 @@ updates:
     cooldown: {default-days: 14}
     groups:
       npm-worker-minor-patch: {update-types: [minor, patch]}
+    # @types/node follows the Node major the worker workflow runs (22); move both together by hand.
+    ignore:
+      - {dependency-name: '@types/node', update-types: ['version-update:semver-major']}
   - package-ecosystem: npm
     directory: /extensions/vscode
     schedule: {interval: weekly, day: monday}
