@@ -48,7 +48,7 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -95,7 +95,7 @@ jobs:
       # default must not change the compiler, the SDK or Core ML under the gates silently. Bump it on purpose.
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Pin Xcode and reproducible timestamps
@@ -109,7 +109,7 @@ jobs:
           toolchain: '1.91.0'
           components: rustfmt, clippy
           targets: aarch64-apple-darwin
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -188,7 +188,7 @@ jobs:
         run: |
           PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/everyday-batch.py gate --native dist/qa/heldout-native --engine engine/target/release/libparzr_engine.dylib --paths typing,deep --deep-sample 40
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         # Totals only (the sealed test sets never write per-item results): what update-baselines.py takes.
         continue-on-error: true
@@ -239,7 +239,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Review dependency changes
@@ -263,7 +263,7 @@ jobs:
           cargo deny --manifest-path engine/Cargo.toml --features external-tables --config engine/deny.toml check
       - name: cargo-audit on the shipped engine graphs
         run: python3 scripts/cargo-audit-shipped.py
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: npm audit
@@ -286,7 +286,7 @@ jobs:
     outputs:
       hashes: ${{ steps.hashes.outputs.hashes }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -311,7 +311,7 @@ jobs:
           toolchain: '1.91.0'
           components: rustfmt, clippy
           targets: aarch64-apple-darwin
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Validate release version
@@ -407,7 +407,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       PARZR_RELEASE_TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -481,7 +481,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       PARZR_RELEASE_TAG: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0

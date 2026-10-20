@@ -100,16 +100,16 @@ health check; every other path is `404`.
 cd worker
 npm ci
 npm test            # node --test (Node 22.18+ runs the TypeScript directly)
-npm run typecheck   # tsc (src, test, scripts, and test-d1 with the pool's types)
-npm run test:d1     # vitest + @cloudflare/vitest-pool-workers: real local D1 from migrations/, in workerd
+npm run typecheck   # tsc (src, test, scripts, and test-d1 with the plugin's types)
+npm run test:d1     # vitest + @cloudflare/vitest-plugin: real local D1 from migrations/, in workerd
 npm run check       # wrangler deploy --dry-run: bundles and lists bindings, no account needed
 ```
 
 The D1 tests cover the migrations, CHECK constraints and trigger, duplicate batches (including a retry that races
 its first attempt), the per-client quota (one network stopped, another still storing, and the CHECK rolling back a
 batch that raced past the pre-check), the daily cap, refusing a request without `CF-Connecting-IP`, the IPv6 /64 rate
-limit, retention and health. The pool's workerd is older than
-`compatibility_date`, so vitest.config.ts runs them at 2026-08-15.
+limit, retention and health. They run at wrangler.toml's `compatibility_date`, in the workerd that
+`@cloudflare/vitest-plugin` pins.
 
 Local end to end, without an account:
 

@@ -37,8 +37,8 @@ Compiled default graph:
   serde 1.0.229
   serde_core 1.0.229
   serde_derive 1.0.229
-  serde_json 1.0.151
-  similar 2.7.0
+  serde_json 1.0.154
+  similar 3.2.0
   syn 3.0.6
   unicode-ident 1.0.26
   unicode-segmentation 1.13.3
@@ -164,8 +164,8 @@ are exported from spaCy, Copyright ExplosionAI GmbH, spaCy GmbH and Matthew Honn
 https://github.com/explosion/spaCy. The full license text ships as resources/ThirdParty/spaCy-MIT-LICENSE.txt
 (in the app: Resources/ThirdParty/spaCy-MIT-LICENSE.txt).
 
-Production edit alignment uses similar 2.7.0 (Apache-2.0,
-resources/ThirdParty/similar-2.7.0/LICENSE) and unicode-segmentation 1.13.3
+Production edit alignment uses similar 3.2.0 (Apache-2.0,
+resources/ThirdParty/similar-3.2.0/LICENSE) and unicode-segmentation 1.13.3
 (MIT/Apache-2.0, resources/ThirdParty/unicode-segmentation-1.13.3).
 The rule and frequency credits above cover production grammar/spelling passes
 and research source. Production combines those passes with the bundled model.

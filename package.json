@@ -6,6 +6,6 @@
     "test:editors": "node --test tests/editor.test.cjs tests/lsp.test.cjs tests/browser-background.test.cjs tests/vscode-automatic.test.cjs tests/native-host.test.cjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.0"
+    "@playwright/test": "^1.64.1"
   }
 }
