@@ -26,6 +26,10 @@ The [1,000-paragraph challenge](../benchmarks/README.md) includes spelling, gram
 
 “All English grammar” is the coverage ambition, not a verified claim. Many valid constructions are ambiguous without wider discourse. We must expand detection and explanations without guessing changes to names, facts, negation, timing or intended tone. Uncertain spelling candidates are labeled lower-confidence and remain explicit review choices.
 
+## Rule packs
+
+`engine/rules/packs/*.json` hold one category of contextual rules each (see the README there). The verb complementation pack (`verb-complements.json`, ids `vcomp.`) covers gerund versus infinitive after a governing verb, a missing or surplus "to", "to" followed by the wrong verb form, a person plus a bare verb, "suggest me to go", adjective plus "to" plus -ing, and a transitive verb left without its object; its coverage map and the constructions it leaves out on purpose are in [rule-packs/verb-complements.md](rule-packs/verb-complements.md). Its rules are generated and self-checked by `scripts/gen-verb-complements.py`.
+
 ## Extending coverage
 
 Rules live in `engine/rules/grammar.json`, `usage.json` (real-word confusions and word-choice usage) and `phrases.json`. Every contextual rule has a stable ID, target capture, exact replacement, explanation, confidence, provenance, positive case and valid negative case. A rule with a `moved` capture after its target removes the target and inserts the replacement after the capture as one linked pair, so a name is moved but never respelled ("Me and Sarah are" to "Sarah and I are"). Add end-to-end corpus examples with expected output and intent checks; include counterexamples beyond the regex fixture itself. Run all grammar pipeline, Unicode, rich-text and editor tests. Do not silently drop invalid packs or regexes.
