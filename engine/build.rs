@@ -286,5 +286,9 @@ fn rule_packs(out: &Path) {
             all.push(rule);
         }
     }
-    fs::write(out.join("rule-packs.json"), serde_json::to_string(&all).unwrap()).unwrap();
+    fs::write(
+        out.join("rule-packs.json"),
+        serde_json::to_string(&all).unwrap(),
+    )
+    .unwrap();
 }

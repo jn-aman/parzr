@@ -301,7 +301,11 @@ mod tests {
         );
         let mut ids = std::collections::HashSet::new();
         for c in contextual() {
-            assert!(ids.insert(c.rule.id.as_str()), "duplicate rule id {}", c.rule.id);
+            assert!(
+                ids.insert(c.rule.id.as_str()),
+                "duplicate rule id {}",
+                c.rule.id
+            );
         }
         // A pack rule without a required literal would run on every check: packs must carry one.
         for rule in &packs {

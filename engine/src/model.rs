@@ -2779,7 +2779,13 @@ mod tests {
     #[ignore = "needs the model runtime and PARZR_PROBE_TEXT"]
     fn probe_raw_model() {
         let text = std::env::var("PARZR_PROBE_TEXT").expect("PARZR_PROBE_TEXT");
-        for mode in [Mode::Fix, Mode::Professional, Mode::Friendly, Mode::Concise, Mode::Direct] {
+        for mode in [
+            Mode::Fix,
+            Mode::Professional,
+            Mode::Friendly,
+            Mode::Concise,
+            Mode::Direct,
+        ] {
             let req = Request {
                 text: text.clone(),
                 mode,
