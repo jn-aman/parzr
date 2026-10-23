@@ -9,12 +9,19 @@ use std::collections::{HashMap, HashSet};
 use std::{env, fs, path::Path};
 
 #[allow(dead_code)]
+#[path = "src/rules/literals.rs"]
+mod literals;
+#[allow(dead_code)]
 #[path = "src/table.rs"]
 mod table;
 
 fn main() {
     println!("cargo:rerun-if-changed=rules/packs");
     for file in [
+        "rules/grammar.json",
+        "rules/tone.json",
+        "rules/usage.json",
+        "src/rules/literals.rs",
         "rules/lexicon.json",
         "rules/frequency.json",
         "rules/bigrams.json",
@@ -289,6 +296,32 @@ fn rule_packs(out: &Path) {
     fs::write(
         out.join("rule-packs.json"),
         serde_json::to_string(&all).unwrap(),
+    )
+    .unwrap();
+    // The prefilter literal of every rule (base files and packs), computed once here instead of
+    // at every engine start: `rule-literals.json` maps a rule id to its set, or null.
+    let mut lits = serde_json::Map::new();
+    for text in [
+        fs::read_to_string("rules/grammar.json").unwrap(),
+        fs::read_to_string("rules/tone.json").unwrap(),
+        fs::read_to_string("rules/usage.json").unwrap(),
+    ]
+    .into_iter()
+    .chain(std::iter::once(serde_json::to_string(&all).unwrap()))
+    {
+        let rules: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap();
+        for rule in rules {
+            let id = rule["id"].as_str().expect("rule id").to_owned();
+            let pattern = rule["pattern"].as_str().expect("rule pattern");
+            let set = literals::required(pattern).map(|set| {
+                serde_json::Value::Array(set.into_iter().map(serde_json::Value::String).collect())
+            });
+            lits.insert(id, set.unwrap_or(serde_json::Value::Null));
+        }
+    }
+    fs::write(
+        out.join("rule-literals.json"),
+        serde_json::to_string(&serde_json::Value::Object(lits)).unwrap(),
     )
     .unwrap();
 }

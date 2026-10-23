@@ -30,9 +30,17 @@ pub fn required(pattern: &str) -> Option<Vec<String>> {
 fn usable(set: &[String]) -> bool {
     !set.is_empty() && set.iter().all(|s| !s.is_empty())
 }
-fn score(set: &[String]) -> (usize, Reverse<usize>) {
-    let shortest = set.iter().map(|s| s.chars().count()).min().unwrap_or(0);
-    (shortest, Reverse(set.len()))
+/// Which set filters best: long literals are rarer, but a set of many literals ("being", "doing",
+/// "going", ... 166 of them) hits far more text than a few short ones ("want", "wants"), so each
+/// doubling of the set costs one character of length.
+fn score(set: &[String]) -> (i64, Reverse<usize>) {
+    let shortest = set.iter().map(|s| s.chars().count()).min().unwrap_or(0) as i64;
+    let doublings = (usize::BITS - set.len().max(1).leading_zeros()) as i64 - 1;
+    // One or two characters ("to", "is") occur everywhere: rank them below any real word.
+    let weak = if shortest <= 2 { 3 } else { 0 };
+    // A cross product of hundreds of strings costs the filter more than it saves.
+    let bulky = if set.len() > 32 { 8 } else { 0 };
+    (2 * shortest - doublings - weak - bulky, Reverse(set.len()))
 }
 fn keep(best: &mut Option<Vec<String>>, set: Vec<String>) {
     if usable(&set) && best.as_ref().is_none_or(|b| score(&set) > score(b)) {
