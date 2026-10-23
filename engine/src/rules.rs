@@ -27,6 +27,10 @@ pub struct Rule {
     pub positive: String,
     #[cfg(test)]
     pub negative: String,
+    /// The rules/packs file this rule came from (set by build.rs), none for the three base files.
+    #[cfg(test)]
+    #[serde(default)]
+    pub pack: Option<String>,
 }
 fn grammar() -> String {
     "Tone".into()
@@ -117,6 +121,14 @@ fn pack() -> &'static Pack {
         grammar.extend(
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/usage.json"))
                 .expect("valid embedded rule pack"),
+        );
+        // One file per category under rules/packs/, joined by build.rs (rules/packs/README.md).
+        grammar.extend(
+            serde_json::from_str::<Vec<Rule>>(include_str!(concat!(
+                env!("OUT_DIR"),
+                "/rule-packs.json"
+            )))
+            .expect("valid embedded rule packs"),
         );
         let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
         for (i, rule) in grammar.iter().enumerate() {
@@ -280,7 +292,26 @@ mod tests {
             serde_json::from_str(include_str!("../rules/grammar.json")).unwrap();
         let tone: Vec<Rule> = serde_json::from_str(include_str!("../rules/tone.json")).unwrap();
         let usage: Vec<Rule> = serde_json::from_str(include_str!("../rules/usage.json")).unwrap();
-        assert_eq!(grammar.len() + tone.len() + usage.len(), contextual().len());
+        let packs: Vec<Rule> =
+            serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/rule-packs.json")))
+                .unwrap();
+        assert_eq!(
+            grammar.len() + tone.len() + usage.len() + packs.len(),
+            contextual().len()
+        );
+        let mut ids = std::collections::HashSet::new();
+        for c in contextual() {
+            assert!(ids.insert(c.rule.id.as_str()), "duplicate rule id {}", c.rule.id);
+        }
+        // A pack rule without a required literal would run on every check: packs must carry one.
+        for rule in &packs {
+            assert!(
+                literals::required(&rule.pattern).is_some(),
+                "{} ({}): no required literal for the prefilter",
+                rule.id,
+                rule.pack.as_deref().unwrap_or("?")
+            );
+        }
         for c in contextual() {
             assert!(!c.rule.provenance.is_empty());
             assert!(

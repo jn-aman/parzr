@@ -13,6 +13,7 @@ use std::{env, fs, path::Path};
 mod table;
 
 fn main() {
+    println!("cargo:rerun-if-changed=rules/packs");
     for file in [
         "rules/lexicon.json",
         "rules/frequency.json",
@@ -23,6 +24,7 @@ fn main() {
     }
     let out = env::var("OUT_DIR").expect("OUT_DIR");
     let out = Path::new(&out);
+    rule_packs(out);
     let frequencies = frequencies();
     let frequency = write(
         frequencies
@@ -252,4 +254,37 @@ fn write_sorted(
     }
     out.extend(arena);
     out
+}
+
+/// Every `rules/packs/*.json` (one JSON array of contextual rules per file, in name order) joined
+/// into one array, `rule-packs.json` in OUT_DIR, so a new category file is picked up without a
+/// code change. Each rule gets a `pack` field naming its file.
+fn rule_packs(out: &Path) {
+    let dir = Path::new("rules/packs");
+    let mut files: Vec<_> = fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    let mut all = Vec::new();
+    for path in files {
+        println!("cargo:rerun-if-changed={}", path.display());
+        let text = fs::read_to_string(&path).unwrap();
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let rules: Vec<serde_json::Value> = serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("{}: not a JSON array of rules: {e}", path.display()));
+        for mut rule in rules {
+            let object = rule
+                .as_object_mut()
+                .unwrap_or_else(|| panic!("{}: every rule is an object", path.display()));
+            object.insert("pack".into(), serde_json::Value::String(name.clone()));
+            all.push(rule);
+        }
+    }
+    fs::write(out.join("rule-packs.json"), serde_json::to_string(&all).unwrap()).unwrap();
 }
