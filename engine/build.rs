@@ -9,11 +9,19 @@ use std::collections::{HashMap, HashSet};
 use std::{env, fs, path::Path};
 
 #[allow(dead_code)]
+#[path = "src/rules/literals.rs"]
+mod literals;
+#[allow(dead_code)]
 #[path = "src/table.rs"]
 mod table;
 
 fn main() {
+    println!("cargo:rerun-if-changed=rules/packs");
     for file in [
+        "rules/grammar.json",
+        "rules/tone.json",
+        "rules/usage.json",
+        "src/rules/literals.rs",
         "rules/lexicon.json",
         "rules/frequency.json",
         "rules/bigrams.json",
@@ -23,6 +31,7 @@ fn main() {
     }
     let out = env::var("OUT_DIR").expect("OUT_DIR");
     let out = Path::new(&out);
+    let (packs, literals) = rule_packs(out);
     let frequencies = frequencies();
     let frequency = write(
         frequencies
@@ -36,7 +45,14 @@ fn main() {
     // One file, `tables::FILE_NAME`: embedded by default, shipped once in the Mac app's
     // Resources with the `external-tables` feature. Its hash and length are compiled into the
     // engine, which accepts only the exact file it was built with.
-    let tables = table::bundle(&[&lexicon, &deletes, &frequency, &bigrams()]);
+    let tables = table::bundle(&[
+        &lexicon,
+        &deletes,
+        &frequency,
+        &bigrams(),
+        &packs,
+        &literals,
+    ]);
     fs::write(out.join("parzr-tables.dat"), &tables).unwrap();
     fs::write(
         out.join("tables_meta.rs"),
@@ -252,4 +268,82 @@ fn write_sorted(
     }
     out.extend(arena);
     out
+}
+
+/// Every `rules/packs/*.json` (one JSON array of contextual rules per file, in name order) joined
+/// into one array, `rule-packs.json` in OUT_DIR, so a new category file is picked up without a
+/// code change. Each rule gets a `pack` field naming its file.
+/// Returns the two tables the engine reads at run time: the pack rules without their test-only
+/// fields (positive, negative, pack), and the prefilter literal of every rule.
+fn rule_packs(out: &Path) -> (Vec<u8>, Vec<u8>) {
+    let dir = Path::new("rules/packs");
+    let mut files: Vec<_> = fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "json"))
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    let mut all = Vec::new();
+    for path in files {
+        println!("cargo:rerun-if-changed={}", path.display());
+        let text = fs::read_to_string(&path).unwrap();
+        let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+        let rules: Vec<serde_json::Value> = serde_json::from_str(&text)
+            .unwrap_or_else(|e| panic!("{}: not a JSON array of rules: {e}", path.display()));
+        for mut rule in rules {
+            let object = rule
+                .as_object_mut()
+                .unwrap_or_else(|| panic!("{}: every rule is an object", path.display()));
+            object.insert("pack".into(), serde_json::Value::String(name.clone()));
+            all.push(rule);
+        }
+    }
+    // The full array (with each rule's positive, negative and pack) is what the tests read.
+    fs::write(
+        out.join("rule-packs.json"),
+        serde_json::to_string(&all).unwrap(),
+    )
+    .unwrap();
+    // The engine reads the rules from the tables file (shipped once in the app, not inside each
+    // engine binary), without the fields only the tests use.
+    let runtime: Vec<serde_json::Value> = all
+        .iter()
+        .map(|rule| {
+            let mut object = rule.as_object().unwrap().clone();
+            for key in ["positive", "negative", "pack"] {
+                object.remove(key);
+            }
+            serde_json::Value::Object(object)
+        })
+        .collect();
+    let packs = serde_json::to_vec(&runtime).unwrap();
+    // The prefilter literal of every rule (base files and packs), computed once here instead of
+    // at every engine start: a map from rule id to its set, or null (also written as
+    // `rule-literals.json` for inspection).
+    let mut lits = serde_json::Map::new();
+    for text in [
+        fs::read_to_string("rules/grammar.json").unwrap(),
+        fs::read_to_string("rules/tone.json").unwrap(),
+        fs::read_to_string("rules/usage.json").unwrap(),
+    ]
+    .into_iter()
+    .chain(std::iter::once(serde_json::to_string(&all).unwrap()))
+    {
+        let rules: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap();
+        for rule in rules {
+            let id = rule["id"].as_str().expect("rule id").to_owned();
+            let pattern = rule["pattern"].as_str().expect("rule pattern");
+            let set = literals::required(pattern).map(|set| {
+                serde_json::Value::Array(set.into_iter().map(serde_json::Value::String).collect())
+            });
+            lits.insert(id, set.unwrap_or(serde_json::Value::Null));
+        }
+    }
+    let literals = serde_json::to_vec(&serde_json::Value::Object(lits)).unwrap();
+    fs::write(out.join("rule-literals.json"), &literals).unwrap();
+    (packs, literals)
 }

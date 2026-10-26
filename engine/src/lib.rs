@@ -44,6 +44,11 @@ use regex::Regex;
 /// would let the footprint of a long session climb with the rule patterns it compiles
 /// (`rules::COMPILED_PATTERNS_KEPT`); past this bound a search clears the cache or falls back to
 /// another of the crate's engines, with the same matches.
+/// On the Mac the packs' long alternations need room to stay in the fast automaton (16 KB
+/// makes a 12 KB passage cost a pattern ~10 ms in the fallback engines, ~0.3 ms with 192 KB).
+#[cfg(target_os = "macos")]
+pub(crate) const REGEX_CACHE_BYTES: usize = 192 * 1024;
+#[cfg(not(target_os = "macos"))]
 pub(crate) const REGEX_CACHE_BYTES: usize = 16 * 1024;
 /// A rule regex with the engine's bounded cache (`REGEX_CACHE_BYTES`).
 pub(crate) fn regex(pattern: &str) -> Result<Regex, regex::Error> {
@@ -976,24 +981,34 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             edits.push(e);
         }
     }
-    for (compiled, hit) in rules::contextual().iter().zip(rules::candidates(&req.text)) {
+    for (compiled, windows) in rules::contextual().iter().zip(rules::windows(&req.text)) {
         let rule = &compiled.rule;
-        if !hit
-            || tone_only == rule.modes.is_empty()
+        let Some(windows) = windows else { continue };
+        if tone_only == rule.modes.is_empty()
             || (!rule.modes.is_empty() && !rule.modes.contains(&req.mode))
         {
             continue;
         }
-        for captures in compiled.regex().captures_iter(&req.text) {
+        let regex = compiled.regex();
+        // Each window is a slice of the text; positions below are made absolute with `ws`.
+        // `is_match` runs the fast automaton; the capturing engines, which are much slower on the
+        // long alternations the packs use, run only on a window that has a match.
+        for captures in windows
+            .iter()
+            .filter(|&&(ws, we)| regex.is_match(&req.text[ws..we]))
+            .flat_map(|&(ws, we)| regex.captures_iter(&req.text[ws..we]).map(move |c| (ws, c)))
+        {
+            let (ws, captures) = captures;
             let Some(m) = captures.name("target").or_else(|| captures.get(0)) else {
                 continue;
             };
+            let (m_start, m_end) = (ws + m.start(), ws + m.end());
             let mut replacement = String::new();
             captures.expand(&rule.replacement, &mut replacement);
             // "Me and Sarah are" to "Sarah and I are": the name only moves, never respelled. The
             // words before it go and the replacement follows it, as one linked pair of edits.
             if let Some(moved) = captures.name("moved") {
-                let group = format!("{}@{}", rule.id, m.start());
+                let group = format!("{}@{}", rule.id, m_start);
                 let at = |b| utf16_at(&req.text, b);
                 let edit = |start, end, text: String| {
                     make_edit(
@@ -1008,8 +1023,8 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                     )
                 };
                 if let (Some(mut cut), Some(mut put)) = (
-                    edit(at(m.start()), at(moved.start()), String::new()),
-                    edit(at(moved.end()), at(moved.end()), replacement),
+                    edit(at(m_start), at(ws + moved.start()), String::new()),
+                    edit(at(ws + moved.end()), at(ws + moved.end()), replacement),
                 ) {
                     cut.group_id = Some(group.clone());
                     put.group_id = Some(group);
@@ -1026,16 +1041,16 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 typo_capital(
                     match_case(&replacement, m.as_str()),
                     m.as_str(),
-                    starts_sentence(&req.text, m.start(), req),
+                    starts_sentence(&req.text, m_start, req),
                 )
             };
-            if starts_sentence(&req.text, m.start(), req) && !replacement.is_empty() {
+            if starts_sentence(&req.text, m_start, req) && !replacement.is_empty() {
                 replacement = upper_first(&replacement);
             }
             if let Some(e) = make_edit(
                 &req.text,
-                utf16_at(&req.text, m.start()),
-                utf16_at(&req.text, m.end()),
+                utf16_at(&req.text, m_start),
+                utf16_at(&req.text, m_end),
                 replacement.clone(),
                 &rule.category,
                 &rule.id,
@@ -1050,8 +1065,8 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                 let first = action.as_str().chars().next().unwrap_or(' ');
                 if let Some(e) = make_edit(
                     &req.text,
-                    utf16_at(&req.text, action.start()),
-                    utf16_at(&req.text, action.start() + first.len_utf8()),
+                    utf16_at(&req.text, ws + action.start()),
+                    utf16_at(&req.text, ws + action.start() + first.len_utf8()),
                     first.to_uppercase().to_string(),
                     "Tone",
                     "tone.action_capitalization",
@@ -1063,12 +1078,12 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             }
             if matches!(req.mode, Mode::Direct | Mode::Concise)
                 && (rule.id.ends_with(".request") || rule.id.ends_with(".hedged_request"))
-                && let Some((offset, c)) = req.text[m.end()..]
+                && let Some((offset, c)) = req.text[m_end..]
                     .char_indices()
                     .find(|(_, c)| ['?', '!', '.', '\n'].contains(c))
                 && c == '?'
             {
-                let byte = m.end() + offset;
+                let byte = m_end + offset;
                 if let Some(e) = make_edit(
                     &req.text,
                     utf16_at(&req.text, byte),

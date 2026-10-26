@@ -1,0 +1,35 @@
+[
+  {
+    "id": "grammar.missing_object_after_modal",
+    "pattern": "(?i)\\b(?:I|we|you|they|he|she)\\s+(?:can(?:no|')t|can not|could(?:n't| not)|won't|will not|wouldn't|would not|didn't|did not|haven't|have not|hasn't|has not|(?:am|'m|was|were|is|are) (?:not able|unable) to)(?: also| still| even| just| really| yet)? (?P<target>delete|remove|revert|attach|forward|resend|reopen|rename|modify|undo|reassign|unassign|overwrite|discard|restore|edit|fix|find)(?:\\s*[(,.;:!?)\\n]|\\s+(?:but|because|as|since|so|until|unless|though|either|now|yet|anymore|any more|myself|ourselves)\\b|\\s*$)",
+    "replacement": "${target} it",
+    "category": "Grammar",
+    "confidence": 0.88,
+    "reason": "Say what cannot be done: this verb needs an object.",
+    "provenance": "parzr original rule",
+    "positive": "Hey, I cannot delete (don't have the permissions), but this role is good to delete.",
+    "negative": "I cannot delete the file. You can delete or archive it. I cannot delete and recreate it. We can't remove any of them."
+  },
+  {
+    "id": "grammar.dropped_subject_in_aside",
+    "pattern": "(?i)\\bI\\b[^.!?\\n]*?(?:\\(|, |,| - |—|–)\\s*(?P<target>don't|do not|didn't|did not|haven't|have not|can't|cannot|couldn't|could not|won't|will not|wasn't|was not) (?:have|know|think|remember|want|need|see|like|understand|recall|get|mean|believe|suppose|care|expect)\\b",
+    "replacement": "I ${target}",
+    "category": "Grammar",
+    "confidence": 0.85,
+    "reason": "The aside needs its subject: “I don't have”.",
+    "provenance": "parzr original rule",
+    "positive": "I will check later (don't know the answer yet).",
+    "negative": "I tried, don't worry. I think they don't know. If I don't have time, I will skip it. I said (don't ask) and left."
+  },
+  {
+    "id": "grammar.have_permission",
+    "pattern": "(?i)\\b(?:don't|dont|do not|doesn't|does not|didn't|did not|haven't|have not|hasn't|has not|never|no longer|not) (?:have|had|has|having|got|gotten) (?P<target>the permissions?)(?:\\s*[(),.;:!?\\n]|\\s+(?:to|for|yet|anymore|any more|on|in|here|there|now|either|at all|so|but|because|as|since|and|or)\\b|\\s*$)",
+    "replacement": "permission",
+    "category": "Grammar",
+    "confidence": 0.9,
+    "reason": "“Have permission” takes no article.",
+    "provenance": "parzr original rule",
+    "positive": "I cannot delete it (don't have the permissions), but this role is good to delete.",
+    "negative": "I have permission to delete it. He set the permissions on the folder. She doesn't have the permission set configured. Check the permissions list."
+  }
+]

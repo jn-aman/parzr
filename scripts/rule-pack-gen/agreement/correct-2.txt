@@ -1,0 +1,190 @@
+The files are ready.
+The file is ready.
+The students who are late must wait.
+The student who is late must wait.
+Does the student have a pen?
+Do the students have pens?
+Where do the students live?
+Where does the student live?
+The student's files are here.
+The users' guide is here.
+The user guide is here.
+The files folder is empty.
+The settings page is open.
+Her glasses are on the desk.
+Our team is ready.
+Our team are ready.
+The staff is on holiday.
+The staff are on holiday.
+The government has decided.
+The government have decided.
+The company has grown.
+The company have grown.
+The class is full.
+The class are talking.
+Each of the students has a pen.
+Each student has a pen.
+Every one of the files is here.
+One of the reasons users leave is price.
+One of the problems customers have is cost.
+One of the issues students face is stress.
+One of the things they want is a refund.
+The number of people who have left is small.
+A large number of people have left.
+The list of items that are missing is long.
+The list of items you sent is long.
+Most of the files are here.
+Most of the information is here.
+Half of the cake is gone.
+Half of the students are absent.
+A lot of the work is done.
+A lot of people are here.
+The rest of the files are here.
+The rest of the team is here.
+The majority of the students are here.
+There are two files.
+There is a file.
+There were three students.
+There was a student.
+There's a student at the door.
+There are a file and a folder on the desk.
+There is a file and a folder on the desk.
+There are a pen, a book and a cup on the desk.
+Here are the files.
+Here is the file.
+Here's the file you asked for.
+Here's the thing.
+Here are a file and a folder.
+Here is a file and a folder.
+Neither the manager nor the employees are happy.
+Not only the manager but also the employees are happy.
+The manager, along with the employees, is happy.
+The employees, along with the manager, are happy.
+Are you sure?
+Is he coming?
+Am I late?
+Are they here?
+Was he there?
+Were you there?
+Does he know?
+Do they know?
+Do you know?
+Does it work?
+Do it now.
+Do the dishes after dinner.
+Do the work before lunch.
+Do the students need help?
+Does the student need help?
+Learning languages is fun.
+Learning a language is fun.
+Learning a language and exploring a culture are fun.
+Playing the guitar and singing are my hobbies.
+Running shoes are expensive.
+Cooking times are listed.
+Having a car is expensive.
+She can go.
+He will make it.
+It may work.
+She goes to school.
+He works hard.
+We want to go.
+I need to know.
+I want to have it.
+To err is human.
+It does not matter.
+He does not care.
+They do not care.
+Tom has a car.
+Mary has a dog.
+Tom and Mary have a dog.
+Tom and Mary are here.
+I think Tom has a car.
+I think Tom and Mary have a car.
+What do you want?
+What does she want?
+Who is she?
+Who are they?
+The actors who are late must wait.
+The staff who are late must wait.
+Anyone who is late must wait.
+Anyone who has a ticket may enter.
+Everyone who does the work gets paid.
+Those who do the work get paid.
+She is one of the people who are always late.
+These are the files.
+This is the file.
+Each of them has a key.
+Each of the boys has a key.
+Both of the boys have keys.
+Both are fine.
+Most of them are fine.
+All of it is fine.
+Some of it is fine.
+None of it is fine.
+Who do you think she is?
+What he does is fine.
+Why is she here?
+How are the files?
+How is the file?
+When does he arrive?
+When do they arrive?
+Where is the report?
+Where are the reports?
+If the files are ready, send them.
+If the file is ready, send it.
+I wish the files were ready.
+If the file were ready, I would send it.
+It is vital that the file be ready.
+I demand that the student have a pen.
+My brother and my sister are twins.
+The manager and the director are here.
+The manager and director is here.
+The pros and the cons are listed.
+The Lion and the Mouse is a fable.
+The Tortoise and the Hare is a fable.
+Bread and butter is simple.
+The United States is large.
+The United Nations has met.
+Tom and I are here.
+She and I are friends.
+He and she are friends.
+You and I are friends.
+Neither of the options is good.
+Either of the options is fine.
+Neither of them is good.
+Everyone is here.
+Everybody has a pen.
+Nobody knows.
+Somebody has a key.
+Nothing is wrong.
+Something is wrong.
+Everything is fine.
+Everything we need is here.
+Let everyone have a say.
+Let everyone go.
+Make everyone feel welcome.
+If everyone were here, we would start.
+The news is good.
+Mathematics is hard.
+Physics is hard.
+The data show a trend.
+The criteria are clear.
+The phenomenon is rare.
+The bacteria are harmful.
+The bacterium is harmful.
+The alumni are invited.
+The police are here.
+The people are here.
+The children are here.
+The jeans are in the wash.
+The scissors are sharp.
+The money is gone.
+The water is cold.
+The traffic is heavy.
+The weather is nice.
+The information is correct.
+The advice is good.
+The equipment is new.
+Our research is ongoing.
+Feedback is welcome.
+Progress is slow.

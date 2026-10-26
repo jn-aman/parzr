@@ -2772,6 +2772,33 @@ pub const TONE_WITHHELD: &str = "tone.withheld";
 mod tests {
     use super::*;
 
+    /// Development probe: `PARZR_PROBE_TEXT="..." cargo test --release probe_raw_model -- --ignored --nocapture`
+    /// prints the model's raw answer per mode before any guard, with the runtime and packs set as the
+    /// app sets them (PARZR_MODEL_RUNTIME, PARZR_MODELS_DIR).
+    #[test]
+    #[ignore = "needs the model runtime and PARZR_PROBE_TEXT"]
+    fn probe_raw_model() {
+        let text = std::env::var("PARZR_PROBE_TEXT").expect("PARZR_PROBE_TEXT");
+        for mode in [
+            Mode::Fix,
+            Mode::Professional,
+            Mode::Friendly,
+            Mode::Concise,
+            Mode::Direct,
+        ] {
+            let req = Request {
+                text: text.clone(),
+                mode,
+                deep: true,
+                ..Request::default()
+            };
+            let raw = generate(&req, &req.text, None);
+            println!("RAW {mode:?}: {raw:?}");
+            let shots = generate_with(&req, &req.text, None, true);
+            println!("RAW+SHOTS {mode:?}: {shots:?}");
+        }
+    }
+
     fn boundary_retry_edits(
         req: &Request,
         segment: &crate::meaning::Segment,

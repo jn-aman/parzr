@@ -27,6 +27,10 @@ pub struct Rule {
     pub positive: String,
     #[cfg(test)]
     pub negative: String,
+    /// The rules/packs file this rule came from (set by build.rs), none for the three base files.
+    #[cfg(test)]
+    #[serde(default)]
+    pub pack: Option<String>,
 }
 fn grammar() -> String {
     "Tone".into()
@@ -42,6 +46,11 @@ pub struct CompiledRule {
 /// and one-pass DFA, mostly Unicode word classes); keeping all ~470 that a long, varied session
 /// reaches cost about 20 MB, too much for a keyboard extension. Past this many, the pattern used
 /// least recently is dropped and compiled again when next needed, with the same matches.
+/// On the Mac the packs run to thousands of patterns and a long passage touches hundreds at once, so
+/// the cache keeps 768 (about 54 MB at worst); a keyboard extension keeps the small cache.
+#[cfg(target_os = "macos")]
+pub const COMPILED_PATTERNS_KEPT: usize = 768;
+#[cfg(not(target_os = "macos"))]
 pub const COMPILED_PATTERNS_KEPT: usize = 48;
 struct Compiled {
     regexes: Vec<Option<Arc<Regex>>>,
@@ -99,8 +108,8 @@ pub fn contextual() -> &'static [CompiledRule] {
 struct Pack {
     rules: Vec<CompiledRule>,
     filter: AhoCorasick,
-    /// Rule index of each filter literal.
-    owner: Vec<usize>,
+    /// The rules each filter literal belongs to.
+    owner: Vec<Vec<usize>>,
     /// Rules with no safe required literal: always candidates.
     always: Vec<usize>,
 }
@@ -118,13 +127,44 @@ fn pack() -> &'static Pack {
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/usage.json"))
                 .expect("valid embedded rule pack"),
         );
+        // One file per category under rules/packs/, joined by build.rs (rules/packs/README.md)
+        // into the tables file, which the app ships once (`tables`); the tests read the full
+        // array with each rule's positive and negative.
+        #[cfg(test)]
+        let packs: &str = include_str!(concat!(env!("OUT_DIR"), "/rule-packs.json"));
+        #[cfg(not(test))]
+        let packs: &str =
+            std::str::from_utf8(crate::tables::get().rule_packs).expect("rule packs are UTF-8");
+        grammar
+            .extend(serde_json::from_str::<Vec<Rule>>(packs).expect("valid embedded rule packs"));
+        // Computed by build.rs from the same patterns; a rule it does not know (never, unless the
+        // build is stale) is computed here.
+        let precomputed: std::collections::HashMap<String, Option<Vec<String>>> =
+            serde_json::from_slice(crate::tables::get().rule_literals)
+                .expect("valid rule literals");
         let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
+        let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for (i, rule) in grammar.iter().enumerate() {
             assert!(!rule.provenance.is_empty(), "rule provenance");
-            match literals::required(&rule.pattern) {
+            let set = match precomputed.get(&rule.id) {
+                Some(set) => set.clone(),
+                None => literals::required(&rule.pattern),
+            };
+            match set {
                 Some(set) => {
-                    owner.extend(set.iter().map(|_| i));
-                    words.extend(set);
+                    for word in set {
+                        // One automaton pattern per distinct literal; the packs share many.
+                        let key = word.to_ascii_lowercase();
+                        let slot = *index.entry(key).or_insert_with(|| {
+                            words.push(word);
+                            owner.push(Vec::new());
+                            words.len() - 1
+                        });
+                        let owners: &mut Vec<usize> = &mut owner[slot];
+                        if owners.last() != Some(&i) {
+                            owners.push(i);
+                        }
+                    }
                 }
                 None => always.push(i),
             }
@@ -147,7 +187,9 @@ fn pack() -> &'static Pack {
     })
 }
 /// Which contextual rules can match `text`: those whose required literal occurs in it. A rule
-/// reported false has no match, so its regex is never compiled or run.
+/// reported false has no match, so its regex is never compiled or run. (The engine runs
+/// `windows`; this is the tests' oracle for the prefilter.)
+#[cfg(test)]
 pub fn candidates(text: &str) -> Vec<bool> {
     let pack = pack();
     // Unicode case folding lets "K" and "s" match U+212A and U+017F, which the filter cannot see.
@@ -159,9 +201,84 @@ pub fn candidates(text: &str) -> Vec<bool> {
         hit[i] = true;
     }
     for m in pack.filter.find_overlapping_iter(text) {
-        hit[pack.owner[m.pattern().as_usize()]] = true;
+        for &i in &pack.owner[m.pattern().as_usize()] {
+            hit[i] = true;
+        }
     }
     hit
+}
+/// Where each contextual rule needs to run: for a candidate, the byte windows of `text` that hold
+/// its required literal, each widened to the sentence before and the sentence after (joined when
+/// they overlap) and starting at the separator before that first sentence, so `^` with `(?m)`
+/// and the `[.!?]\s+` alternations see what they would see in the whole text. A long passage then
+/// costs each rule only its own neighbourhood instead of the whole text. None: not a candidate.
+/// A rule with no required literal, and every rule when the text holds a character the ASCII
+/// filter cannot fold, gets the whole text.
+pub fn windows(text: &str) -> Vec<Option<Vec<(usize, usize)>>> {
+    let pack = pack();
+    let n = pack.rules.len();
+    let whole = || Some(vec![(0, text.len())]);
+    if text.contains(['\u{212A}', '\u{17F}']) {
+        return vec![whole(); n];
+    }
+    let mut out: Vec<Option<Vec<(usize, usize)>>> = vec![None; n];
+    for &i in &pack.always {
+        out[i] = whole();
+    }
+    // Sentence starts, and for each the byte where its separator (the space after the mark, or
+    // the line break) begins; the first sentence starts at 0 with no separator.
+    let bytes = text.as_bytes();
+    let (mut starts, mut seps) = (vec![0usize], vec![0usize]);
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'\n' {
+            let mut j = i + 1;
+            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n') {
+                j += 1;
+            }
+            if j < bytes.len() && j > *starts.last().unwrap() {
+                seps.push(i);
+                starts.push(j);
+            }
+            i = j.max(i + 1);
+            continue;
+        }
+        if matches!(b, b'.' | b'!' | b'?') {
+            let mut j = i + 1;
+            while j < bytes.len() && matches!(bytes[j], b'.' | b'!' | b'?' | b')' | b'"' | b'\'') {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                let mark_end = j;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if j < bytes.len() && j > *starts.last().unwrap() {
+                    seps.push(mark_end);
+                    starts.push(j);
+                }
+                i = j.max(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    let sentence_of = |pos: usize| starts.partition_point(|&s| s <= pos).saturating_sub(1);
+    let end_of = |k: usize| starts.get(k + 1).copied().unwrap_or(text.len());
+    for m in pack.filter.find_overlapping_iter(text) {
+        let k = sentence_of(m.start());
+        let from = seps[k.saturating_sub(1)];
+        let to = end_of((k + 1).min(starts.len() - 1));
+        for &rule in &pack.owner[m.pattern().as_usize()] {
+            let list = out[rule].get_or_insert_with(Vec::new);
+            match list.last_mut() {
+                Some(last) if from <= last.1 => last.1 = last.1.max(to),
+                _ => list.push((from, to)),
+            }
+        }
+    }
+    out
 }
 /// The reviewed list of common misspellings: (misspelling, correction) pairs.
 pub fn misspellings() -> impl Iterator<Item = (&'static str, &'static str)> {
@@ -280,7 +397,39 @@ mod tests {
             serde_json::from_str(include_str!("../rules/grammar.json")).unwrap();
         let tone: Vec<Rule> = serde_json::from_str(include_str!("../rules/tone.json")).unwrap();
         let usage: Vec<Rule> = serde_json::from_str(include_str!("../rules/usage.json")).unwrap();
-        assert_eq!(grammar.len() + tone.len() + usage.len(), contextual().len());
+        let packs: Vec<Rule> =
+            serde_json::from_str(include_str!(concat!(env!("OUT_DIR"), "/rule-packs.json")))
+                .unwrap();
+        assert_eq!(
+            grammar.len() + tone.len() + usage.len() + packs.len(),
+            contextual().len()
+        );
+        // The tables file carries the same pack rules, in order, without the test-only fields.
+        let shipped: Vec<serde_json::Value> =
+            serde_json::from_slice(crate::tables::get().rule_packs).unwrap();
+        assert_eq!(shipped.len(), packs.len());
+        for (shipped, full) in shipped.iter().zip(&packs) {
+            assert_eq!(shipped["id"].as_str(), Some(full.id.as_str()));
+            assert_eq!(shipped["pattern"].as_str(), Some(full.pattern.as_str()));
+            assert!(shipped.get("positive").is_none() && shipped.get("negative").is_none());
+        }
+        let mut ids = std::collections::HashSet::new();
+        for c in contextual() {
+            assert!(
+                ids.insert(c.rule.id.as_str()),
+                "duplicate rule id {}",
+                c.rule.id
+            );
+        }
+        // A pack rule without a required literal would run on every check: packs must carry one.
+        for rule in &packs {
+            assert!(
+                literals::required(&rule.pattern).is_some(),
+                "{} ({}): no required literal for the prefilter",
+                rule.id,
+                rule.pack.as_deref().unwrap_or("?")
+            );
+        }
         for c in contextual() {
             assert!(!c.rule.provenance.is_empty());
             assert!(
@@ -346,6 +495,82 @@ mod tests {
             assert!(wrong.bytes().all(|b| b.is_ascii_lowercase()), "{wrong}");
         }
         assert!(seen.len() > 300);
+    }
+    /// Development probe: `PARZR_PROBE_FILE=path cargo test --release profile_rule_matching -- --ignored --nocapture`
+    /// prints how many rules are candidates for the text, the window coverage, and the slowest rules.
+    #[test]
+    #[ignore = "needs PARZR_PROBE_FILE"]
+    fn profile_rule_matching() {
+        let text = std::fs::read_to_string(std::env::var("PARZR_PROBE_FILE").unwrap()).unwrap();
+        let t_init = std::time::Instant::now();
+        let _ = windows(&text);
+        println!(
+            "pack init (parse + literals + filter): {:?}",
+            t_init.elapsed()
+        );
+        let t_lits = std::time::Instant::now();
+        let n: usize = contextual()
+            .iter()
+            .filter(|c| literals::required(&c.rule.pattern).is_some())
+            .count();
+        println!(
+            "literal extraction alone for {n} rules: {:?}",
+            t_lits.elapsed()
+        );
+        let t0 = std::time::Instant::now();
+        let windows = windows(&text);
+        let t_windows = t0.elapsed();
+        let hits = pack().filter.find_overlapping_iter(&text).count();
+        println!("prefilter literal hits: {hits}");
+        let mut rows: Vec<(u128, usize, usize, String)> = vec![];
+        let mut candidates = 0;
+        for (c, w) in contextual().iter().zip(&windows) {
+            let Some(w) = w else { continue };
+            candidates += 1;
+            let covered: usize = w.iter().map(|(a, b)| b - a).sum();
+            let regex = c.regex();
+            let t = std::time::Instant::now();
+            let mut n = 0;
+            for &(a, b) in w {
+                // The DFA answers "no match" fast; captures (the slow engines) only run on a hit.
+                if regex.is_match(&text[a..b]) {
+                    n += regex.captures_iter(&text[a..b]).count();
+                }
+            }
+            rows.push((t.elapsed().as_micros(), covered, n, c.rule.id.clone()));
+        }
+        rows.sort_by(|a, b| b.0.cmp(&a.0));
+        let total: u128 = rows.iter().map(|r| r.0).sum();
+        println!(
+            "text {} bytes; {} rules, {candidates} candidates; windows {:?}; matching total {} ms",
+            text.len(),
+            contextual().len(),
+            t_windows,
+            total / 1000
+        );
+        for (us, covered, n, id) in rows.iter().take(25) {
+            let lits = contextual()
+                .iter()
+                .find(|c| c.rule.id == *id)
+                .and_then(|c| literals::required(&c.rule.pattern))
+                .map(|l| {
+                    let mut l = l;
+                    l.sort_by_key(|x| x.len());
+                    format!("{} literals, shortest {:?}", l.len(), &l[..l.len().min(4)])
+                })
+                .unwrap_or_default();
+            println!("{us:8} us  covered {covered:6}  matches {n:3}  {id}  [{lits}]");
+        }
+        let by_prefix: std::collections::BTreeMap<&str, (u128, usize)> =
+            rows.iter().fold(Default::default(), |mut m, r| {
+                let e = m.entry(r.3.split('.').next().unwrap()).or_insert((0, 0));
+                e.0 += r.0;
+                e.1 += 1;
+                m
+            });
+        for (p, (us, n)) in by_prefix {
+            println!("prefix {p:10} {n:5} candidates {:6} ms", us / 1000);
+        }
     }
     #[test]
     fn the_prefilter_never_hides_a_match() {
