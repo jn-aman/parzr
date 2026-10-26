@@ -33,7 +33,8 @@ def flush():
 def add(rid, pattern, repl, conf, reason, pos, exp, neg):
     rid = 'clarity.' + rid
     assert rid not in EXPECTED, rid
-    RULES.append({'id': rid, 'pattern': pattern, 'replacement': repl, 'category': 'Style',
+    # Concise mode only: these rewrite correct, wordy sentences, which Fix (corrections) must leave alone.
+    RULES.append({'id': rid, 'pattern': pattern, 'replacement': repl, 'modes': ['concise'], 'category': 'Style',
                   'confidence': conf, 'reason': reason, 'provenance': PROV, 'positive': pos, 'negative': neg})
     EXPECTED[rid] = exp
     _cur['ids'].append(rid)

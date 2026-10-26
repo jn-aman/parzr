@@ -19,8 +19,8 @@ env['PARZR_MODELS_DIR'] = os.environ.get('PARZR_MODELS_DIR', '')
 proc = subprocess.Popen([engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 
 
-def run(text):
-    proc.stdin.write(json.dumps({'text': text, 'mode': 'fix'}) + '\n'); proc.stdin.flush()
+def run(text, mode='fix'):
+    proc.stdin.write(json.dumps({'text': text, 'mode': mode}) + '\n'); proc.stdin.flush()
     return json.loads(proc.stdout.readline())
 
 
@@ -35,7 +35,8 @@ bad = notes = 0
 for rid, rule in rules.items():
     if args and not any(a in rid for a in args):
         continue
-    r = run(rule['positive'])
+    mode = (rule.get('modes') or ['fix'])[0]
+    r = run(rule['positive'], mode)
     fired = ids_of(r)
     if rid not in fired:
         print(f'MISS  {rid}: {rule["positive"]!r} -> {r.get("text")!r} fired={fired}'); bad += 1
@@ -45,7 +46,7 @@ for rid, rule in rules.items():
     if others and rid in fired:
         notes += 1
         print(f'MULTI {rid}: also {others} on {rule["positive"]!r}')
-    n = run(rule['negative'])
+    n = run(rule['negative'], mode)
     mine = [i for i in ids_of(n) if i.startswith('clarity.')]
     if mine:
         print(f'FALSE {rid}: negative fires {mine}: {rule["negative"]!r} -> {n.get("text")!r}'); bad += 1

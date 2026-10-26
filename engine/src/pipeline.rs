@@ -898,6 +898,15 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // out chat shorthand. Names and protected text are left as they are.
     let mut fenced = protected.clone();
     fenced.extend(name_guard_ranges(req));
+    // The mode's own wording rules (tone.json and the packs scoped to the mode, such as the
+    // clarity pack in Concise) say plainly what the model kept padded ("due to the fact that",
+    // "on a daily basis"): the same deterministic pass the rules-only build runs.
+    let current = document.request(req, &fenced, req.mode);
+    let wording = rewrite_once(&current, true)?;
+    if !wording.edits.is_empty() {
+        document.apply(&wording.edits)?;
+        grammar(&mut document, req, &mut protected, &mut judge)?;
+    }
     if req.mode == Mode::Professional {
         let current = document.request(req, &fenced, Mode::Fix);
         document.apply(&crate::tone_format::professional_forms(
