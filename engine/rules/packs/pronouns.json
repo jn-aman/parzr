@@ -3543,7 +3543,7 @@
   },
   {
     "id": "pron.which_for_people_pron",
-    "pattern": "(?i)\\b(?:someone|somebody|anyone|anybody|everyone|everybody|nobody|people) (?P<target>which) (?:is|was|are|were|has|have|had|will|would|can|could|should|may|might|did|does|lives|live|works|work|helped|helps|asked|asks|told|tells|came|comes|went|goes|called|calls|wrote|writes|said|says|knows|knew|wants|wanted|needs|needed|loves|loved|likes|liked|saw|sees|took|takes|gave|gives|made|makes|joined|joins|left|leaves|won|wins|lost|loses|owns|owned|runs|ran|teaches|taught|sat|stood|plays|played|lent|sold|bought|found|opened|answered|replied|helped|stayed|arrived|attended|applied|signed|moved)\\b",
+    "pattern": "(?i)\\b(?:someone|somebody|anyone|anybody|everyone|everybody|nobody) (?P<target>which) (?:is|was|are|were|has|have|had|will|would|can|could|should|may|might|did|does|lives|live|works|work|helped|helps|asked|asks|told|tells|came|comes|went|goes|called|calls|wrote|writes|said|says|knows|knew|wants|wanted|needs|needed|loves|loved|likes|liked|saw|sees|took|takes|gave|gives|made|makes|joined|joins|left|leaves|won|wins|lost|loses|owns|owned|runs|ran|teaches|taught|sat|stood|plays|played|lent|sold|bought|found|opened|answered|replied|helped|stayed|arrived|attended|applied|signed|moved)\\b",
     "replacement": "who",
     "category": "Grammar",
     "confidence": 0.9,
@@ -3551,6 +3551,17 @@
     "provenance": "parzr original rule (pronouns pack)",
     "positive": "Anybody which wants a ticket should apply today.",
     "negative": "Anybody who wants a ticket should apply today. Choose anyone, which is fine."
+  },
+  {
+    "id": "pron.which_for_people_plural",
+    "pattern": "(?i)\\bpeople (?P<target>which) (?:are|were|have|had|will|would|can|could|should|may|might|did|live|work|help|ask|tell|come|go|call|write|say|know|want|need|love|like|see|take|give|make|join|leave|win|lose|own|run|teach|play|helped|asked|told|came|went|called|wrote|said|knew|wanted|needed|loved|liked|saw|took|gave|made|joined|left|won|lost|owned|ran|taught|sat|stood|played|lent|sold|bought|found|opened|answered|replied|stayed|arrived|attended|applied|signed|moved)\\b",
+    "replacement": "who",
+    "category": "Grammar",
+    "confidence": 0.9,
+    "reason": "Use “who” for people, not “which”.",
+    "provenance": "parzr original rule (pronouns pack)",
+    "positive": "The people which live next door are friendly.",
+    "negative": "The people who live next door are friendly. It caused prejudice among people which has torn them apart. There are people, which is fine."
   },
   {
     "id": "pron.its_after_prep_parts",
