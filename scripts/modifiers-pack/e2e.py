@@ -14,8 +14,9 @@ if args[:1] == ['--engine']:
 rules = {r['id']: r for r in json.loads((ROOT / 'engine/rules/packs/modifiers.json').read_text())}
 exp = json.loads((HERE / 'expected.json').read_text())
 env = {k: v for k, v in os.environ.items() if not k.startswith('PARZR_')}
-env['PARZR_MODEL_RUNTIME'] = '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib'
-env['PARZR_MODELS_DIR'] = '/Users/aman/Library/Application Support/Parzr/Models'
+# The native runtime and model packs, as the gates take them (see engine/rules/packs/README.md).
+env.setdefault('PARZR_MODEL_RUNTIME', os.environ.get('PARZR_MODEL_RUNTIME', 'dist/model/libparzr_model.dylib'))
+env.setdefault('PARZR_MODELS_DIR', os.environ.get('PARZR_MODELS_DIR', os.path.expanduser('~/Library/Application Support/Parzr/Models')))
 proc = subprocess.Popen([engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 
 def run(text, mode='fix'):

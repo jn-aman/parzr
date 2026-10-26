@@ -33,7 +33,7 @@ def generate():
 
 def run_engine(texts):
     env = {k: v for k, v in os.environ.items() if not k.startswith('PARZR_')}
-    env.setdefault('PARZR_MODEL_RUNTIME', '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib')
+    env.setdefault('PARZR_MODEL_RUNTIME', 'dist/model/libparzr_model.dylib')
     env.setdefault('PARZR_MODELS_DIR', os.path.expanduser('~/Library/Application Support/Parzr/Models'))
     eng = str(ROOT / 'engine/target/release/parzr-engine')
     p = subprocess.Popen([eng], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
