@@ -30,22 +30,22 @@
       }
     },
     "typo-fuzz-test": {
-      "updated": "2026-10-19",
-      "reason": "local release-gate run on quality-gates (CI run 39274643182 logged 81.0% / 85.9% fixed, 1.5% false alarms)",
+      "updated": "2026-10-26",
+      "reason": "CI verify of release/0.5.4 daedab6 (run 40369739926): with the eight rule packs the typo-fuzz test set fixes 81.1% (rules) and 85.9% (gec) at the same three false alarms; the rules layer's peak memory is the 768-pattern compiled cache and 99k-literal prefilter (313 MB, from 78), latency within the old tolerance (p50 1.6 ms, p95 4.4 ms)",
       "layers": {
         "rules": {
           "errors": 10765,
           "clean": 200,
-          "fixed": 8720,
-          "fix_rate": 0.81,
+          "fixed": 8734,
+          "fix_rate": 0.8113,
           "false_alarms": 3,
           "false_alarm_rate": 0.015
         },
         "gec": {
           "errors": 10765,
           "clean": 200,
-          "fixed": 9240,
-          "fix_rate": 0.8583,
+          "fixed": 9244,
+          "fix_rate": 0.8587,
           "false_alarms": 3,
           "false_alarm_rate": 0.015
         }
@@ -144,14 +144,14 @@
         "max_rss_mb": 833.0
       },
       "typo-fuzz-test/rules": {
-        "p50_ms": 1.2,
-        "p95_ms": 2.88,
-        "max_rss_mb": 77.7
+        "p50_ms": 1.6,
+        "p95_ms": 4.44,
+        "max_rss_mb": 312.8
       },
       "typo-fuzz-test/gec": {
-        "p50_ms": 55.6,
-        "p95_ms": 93.58,
-        "max_rss_mb": 562.5
+        "p50_ms": 56.61,
+        "p95_ms": 100.53,
+        "max_rss_mb": 755.2
       }
     }
   }
