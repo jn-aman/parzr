@@ -9,7 +9,7 @@ import lib
 import f_coord, f_subj, f_wh, f_poss, f_misc, f_more  # noqa
 expected = {r['id']: r.get('_fixes') for r in lib.RULES}
 env = dict(os.environ)
-env['PARZR_MODEL_RUNTIME'] = '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib'
+env['PARZR_MODEL_RUNTIME'] = os.environ.get('PARZR_MODEL_RUNTIME', 'dist/model/libparzr_model.dylib')
 env['PARZR_MODELS_DIR'] = os.path.expanduser('~/Library/Application Support/Parzr/Models')
 p = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, text=True)
 

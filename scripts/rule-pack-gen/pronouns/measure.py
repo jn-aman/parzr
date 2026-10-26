@@ -6,7 +6,7 @@ sys.path.insert(0, str(HERE))
 import lib
 import f_coord, f_subj, f_wh, f_poss, f_misc, f_more  # noqa
 env = dict(os.environ)
-env['PARZR_MODEL_RUNTIME'] = '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib'
+env['PARZR_MODEL_RUNTIME'] = os.environ.get('PARZR_MODEL_RUNTIME', 'dist/model/libparzr_model.dylib')
 env['PARZR_MODELS_DIR'] = os.path.expanduser('~/Library/Application Support/Parzr/Models')
 engine = sys.argv[1]
 p = subprocess.Popen([engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env, text=True)

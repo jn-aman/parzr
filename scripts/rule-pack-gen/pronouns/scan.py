@@ -2,7 +2,7 @@
 TEMPLATE has {w}; the engine must change the text for the word to count as covered."""
 import json, os, subprocess, sys
 env = dict(os.environ)
-env['PARZR_MODEL_RUNTIME'] = '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib'
+env['PARZR_MODEL_RUNTIME'] = os.environ.get('PARZR_MODEL_RUNTIME', 'dist/model/libparzr_model.dylib')
 env['PARZR_MODELS_DIR'] = os.path.expanduser('~/Library/Application Support/Parzr/Models')
 engine, template = sys.argv[1], sys.argv[2]
 words = []
