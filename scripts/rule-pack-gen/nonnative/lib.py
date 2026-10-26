@@ -89,7 +89,12 @@ def held(rid, prefixes):
 
 
 def dump(path, expect_path=None, held_path=None, held_prefixes=()):
-    active = [r for r in RULES if not held(r['id'], held_prefixes)]
+    # The Indian-English register families run in the Professional rewrite only (modes), where
+    # the owner asks for business English; Fix leaves them as typed.
+    for r in RULES:
+        if held(r['id'], held_prefixes):
+            r['modes'] = ['professional']
+    active = list(RULES)
     parked = [r for r in RULES if held(r['id'], held_prefixes)]
     for target, rules in ((path, active), (held_path, parked)):
         if not target:

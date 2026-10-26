@@ -1,6 +1,6 @@
 # Non-native transfer pack (`l1.`)
 
-`engine/rules/packs/nonnative.json` holds the transfer errors of Hindi and other L1 writers of English in work chat and email that no other pack owns: 301 rules, loaded. A further 37 verified rules (the Indian-English forms the owner's own regression set expects unchanged) are written to `scripts/rule-pack-gen/nonnative/held-back.json` and are not loaded, see "Held back".
+`engine/rules/packs/nonnative.json` holds the transfer errors of Hindi and other L1 writers of English in work chat and email that no other pack owns: 338 rules. 37 of them (the Indian-English forms the owner's own regression set expects unchanged in Fix) carry `"modes": ["professional"]` and run only in the Professional rewrite, see "Professional mode only"; `scripts/rule-pack-gen/nonnative/held-back.json` lists them.
 
 The rules are generated and self-checked by `scripts/rule-pack-gen/nonnative/gen.py` (modules `register`, `phrasing`, `complements`, `timewords`, `tags`, `emphasis`, `uncountable`, `extras` to `extras5`): each rule's positive must become exactly the stated correction (the generator emulates the engine's edit, including its case matching and the linked `moved` pair) and its negative, a few correct sentences with the near misses, must not match at all. Run the generator, then `python3 scripts/check-rule-packs.py engine/rules/packs/nonnative.json` and `cargo test --release rules::`.
 
@@ -37,11 +37,11 @@ How to read the map: *rules* are the ids without the `l1.` prefix; *base* names 
 | mass nouns with an "s": feedbacks (after "your", "give", "share" and the like), luggages, baggages, knowledges, hardwares, jewelleries, machineries, stationeries, cutleries, sceneries, garbages, applauses, pollutions, poetries, lightnings, staffs, datas, musics | `mass.*` |
 | "younger to me", "lesser than ten", "paining" for aches, "hanged" for a frozen device, "in meeting", "in bus / in cab", "by walk", "belong from" | `younger.to`, `lesser.than`, `paining.*`, `hanged.device`, `in.meeting`, `in.bus`, `in.cab`, `by.walk`, `belong.*` |
 
-## Held back (verified, not loaded)
+## Professional mode only
 
-The forms below are standard Indian English and the owner's everyday regression set (`benchmarks/everyday/items.jsonl`, frozen) lists them as correct text that a Fix check must leave unchanged: b002-0135, 0160, 0314, 0408, 0533, 0549, 0563, 0673, 0712, 0826, 0904, 0915, 0953, 0954, 0978 and b003-0870 ("I have a doubt regarding the invoice.", "Kindly find the attached document.", "The call is preponed to Monday.", "Please revert at the earliest.", "Kindly do the needful.", "Please do the needful.", "I have completed the task, please check the same.", "I am out of station till Monday.", "Request you to share the status by EOD.", "My good name is Rahul.", "Can we prepone the meeting to 3pm?"). A Fix-path rule for any of them would turn a correct item wrong, and the engine applies every edit it returns, Register and Style included. (`modes: ["professional"]` does not help: with the model build, tone modes never run the rule list.) Each family is held back whole, so a Fix check treats "do the needful" and "did the needful" alike.
+The forms below are standard Indian English and the owner's everyday regression set (`benchmarks/everyday/items.jsonl`, frozen) lists them as correct text that a Fix check must leave unchanged: b002-0135, 0160, 0314, 0408, 0533, 0549, 0563, 0673, 0712, 0826, 0904, 0915, 0953, 0954, 0978 and b003-0870 ("I have a doubt regarding the invoice.", "Kindly find the attached document.", "The call is preponed to Monday.", "Please revert at the earliest.", "Kindly do the needful.", "Please do the needful.", "I have completed the task, please check the same.", "I am out of station till Monday.", "Request you to share the status by EOD.", "My good name is Rahul.", "Can we prepone the meeting to 3pm?"). A Fix-path rule for any of them would turn a correct item wrong, and the engine applies every edit it returns, Register and Style included, so these rules carry `modes: ["professional"]`: a Professional rewrite (which runs the mode's wording rules after the model since the clarity pack landed) asks for business English and says "do what is needed". Each family is held back whole, so a Fix check treats "do the needful" and "did the needful" alike.
 
-| Construction | Held-back rules |
+| Construction | Professional-mode rules |
 |---|---|
 | "do the needful" in all tenses, "needful action" | `needful.*` (5) |
 | "prepone", "preponed", "preponing", "prepones", with and without a pronoun | `prepone.*` (8) |
@@ -54,7 +54,7 @@ The forms below are standard Indian English and the owner's everyday regression 
 | "Please be informed that", "Thanking you" | `informed.please`, `thanking.you`: correct formal English, and the 30k corpus has correct sentences with them |
 | "reply back" | `reply.back`: common in native writing |
 
-To enable a family, move its rules from `held-back.json` into `nonnative.json` (or delete the id prefix from `HELD_BACK` in `gen.py`) and relabel the items above.
+To move a family into Fix, delete its id prefix from `HELD_BACK` in `gen.py` and relabel the items above.
 
 ## Already covered by a base or other rule (not repeated)
 

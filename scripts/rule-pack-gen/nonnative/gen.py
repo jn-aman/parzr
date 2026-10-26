@@ -26,13 +26,11 @@ def main():
     print(f'{active} rules written to the pack, {parked} held back in {os.path.basename(held)}')
 
 
-# Rule families held out of the loaded pack. Each form below is standard Indian English, and the owner's own everyday
-# regression set (benchmarks/everyday/items.jsonl) lists it as correct text that must stay unchanged in a Fix check
-# (b002-0135, -0160, -0314, -0408, -0533, -0549, -0563, -0673, -0712, -0826, -0904, -0915, -0953, -0954, -0978,
-# b003-0870 and others), so a Fix-path rule for the family would turn a correct item into a wrong one. The family
-# stays whole so that a plain Fix check treats "do the needful" and "did the needful" alike. The rules are verified
-# like the others; to enable them, move them from held-back.json into nonnative.json after relabelling those items.
-# Two more are held out because the clean mining corpus has correct sentences with them.
+# Rule families that run only in the Professional rewrite (modes: ["professional"]). Each form below is standard
+# Indian English, and the owner's own everyday regression set (benchmarks/everyday/items.jsonl) lists it as correct
+# text that must stay unchanged in a Fix check (b002-0135, -0160, -0314, -0408, -0533, -0549, -0563, -0673, -0712,
+# -0826, -0904, -0915, -0953, -0954, -0978, b003-0870 and others). A Professional rewrite asks for business English,
+# so there "do the needful" becomes "do what is needed". The family stays whole. held-back.json lists them for review.
 HELD_BACK = [
     'l1.needful', 'l1.prepone', 'l1.revert.reply', 'l1.revert.reply_past', 'l1.revert.reply_ing', 'l1.revert.noun',
     'l1.kindly.imperative', 'l1.request.start', 'l1.request.kindly_start', 'l1.request.kindly', 'l1.same', 'l1.outofstation',
