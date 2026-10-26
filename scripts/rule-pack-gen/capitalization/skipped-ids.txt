@@ -1,0 +1,61 @@
+# Rules the generator leaves out. Each was written, then dropped because the engine never produces its fix.
+# The name tagger marks these capitalized school subjects as names, and a name is never lowercased.
+caps.subject.maths
+caps.subject.philosophy
+caps.subject.anthropology
+caps.subject.algebra
+caps.subject.calculus
+# Phrases whose first word the engine already capitalizes (gazetteer, or another rule of this pack): with only the
+# lowercase spelling counting as an error, nothing is left for the phrase rule to fix.
+caps.region.indian_ocean
+caps.region.baltic_sea
+caps.region.irish_sea
+caps.region.persian_gulf
+caps.region.english_channel
+caps.region.mississippi_river
+caps.region.indian_subcontinent
+caps.region.tamil_nadu
+caps.region.hawaiian_islands
+caps.region.british_isles
+caps.region.scottish_highlands
+caps.world.american_civil_war
+caps.world.vietnam_war
+caps.world.korean_war
+caps.world.iraq_war
+caps.world.french_revolution
+caps.world.american_revolution
+caps.world.russian_revolution
+caps.world.british_empire
+caps.world.berlin_wall
+caps.world.boston_tea_party
+caps.world.arab_spring
+caps.world.manhattan_project
+caps.world.european_commission
+caps.world.european_parliament
+caps.world.olympic_games
+caps.world.scotland_yard
+caps.world.cambridge_university
+caps.world.georgia_tech
+caps.world.london_school_of_economics
+caps.world.delhi_university
+caps.world.mumbai_university
+# After the 25k reference-text gate: "a google search" is an ordinary noun phrase; "zanzibar" is a software name in dev text.
+caps.brand.google_search
+caps.city.zanzibar
+# Typo-fuzz DEV: these lowercase acronyms are one typo from a very frequent word (iit/it, wwe/we, wto/two, usd/used, uae/use...), so
+# the spelling pass must keep them. (typo_collisions.py lists the candidates.)
+caps.acr.gpt
+caps.acr.gpts
+caps.acr.gst
+caps.acr.iit
+caps.acr.iot
+caps.acr.ngo
+caps.acr.ngos
+caps.acr.okr
+caps.acr.okrs
+caps.acr.oled
+caps.acr.uae
+caps.acr.usd
+caps.acr.wto
+caps.acr.wwe
+caps.city.bern

@@ -1,0 +1,137 @@
+# Correct sentences written for this pack. No caps.* rule may change any of them.
+We roasted a turkey for dinner and made turkey sandwiches the next day.
+She collects fine china and bone china from the antique market.
+Please polish the silver before the guests arrive tonight.
+He needed some Dutch courage before the speech, and we agreed to go Dutch on the bill.
+She ate an apple at the orchard and baked an apple pie later.
+Cut me some slack, I only joined last week.
+We go skiing in winter and hiking in summer, and the fall colors arrive in October.
+Drive north for two miles and then turn left at the lights.
+The wind blows from the west in the afternoon, and the lake lies east of the town.
+He lives in the south of France, but she grew up in the South.
+She teaches Physics 101 and Chemistry 202 at the college.
+He studied physics and economics before he moved into history.
+The president spoke for an hour, and the vice president left early.
+He was elected president Tuesday and thanked the former president for her advice.
+Our CEO and the CTO signed the NDA this morning.
+The API returns JSON, and the URLs are listed in the PDF.
+Beware the ides of March, said the soothsayer.
+Hi John, how are you doing this week?
+Hello, I hope you had a good weekend.
+She said "yes" and left the room before dinner.
+The sign said, "Please close the door," so we closed it.
+"I think," she said, "we should go home now."
+Zoom in on the map to see the street names.
+I want to excel at math this year.
+The economic outlook for sales is positive this quarter.
+We cleaned the windows 10 times this month, and the windows still look dirty.
+The python swallowed a rabbit at the zoo.
+She sipped a cup of java and wrote the report.
+The rust on the bike was bad, so we sanded it.
+Her ruby ring caught the light at dinner.
+The notion that plans fail is wrong.
+He wore a swift grin and made a swift reply.
+They send a telegram to the king in the old film.
+The zebra has a black stripe on its back.
+The car had a bumper of bright chrome.
+The safari park was full, so we booked a safari lodge in Kenya.
+Candles kindle hope, and dry twigs kindle fast.
+The dry tinder caught fire at once.
+The azure sky stretched above the hills.
+The oracle at Delphi spoke in riddles.
+The agency gathered intel on the plan.
+We walked down the dell to the stream.
+The ID and the ego clash in his theory.
+Add 5 ml of water to the mix and stir.
+It took 2 hr to finish, about 3 hr in all.
+A vat of wine sat in the cellar.
+Busy atm, call you later?
+I ran 4k steps this morning.
+We ran an ad 300 times last week.
+The temple was built in 450 BC by the river.
+The trip starts in AD 800 in the legend.
+Please reply bc I am away.
+The cat sat on the mat, and we sat in March.
+The abbey was founded in AD 800 by monks.
+Mon 5 Jan is a holiday, and Fri 9 Feb is not.
+I met the mayor yesterday; the mayor was kind.
+The hanging chad was recounted twice.
+Jordan Lee scored first, and Chad Smith ran the lab.
+He laced up his old jordans before the game.
+Blue whales and sperm whales were seen near the bay.
+The seed oil came from the niger plant.
+The old book was bound in morocco leather.
+The mecca for collectors is on the next street.
+He splashed on some cologne and sprayed the bottle.
+A buffalo herd crossed the road, and buffalo wings arrived.
+The boat found a safe anchorage in the bay.
+Put the form in a manila envelope inside a manila folder.
+The pirates tried to shanghai him onto the ship.
+A phoenix rose from the ashes in the legend.
+The muscat grapes made a sweet wine.
+She pulled the cork from the bottle and set it on a cork mat.
+He bought black oxford shoes and a white oxford shirt.
+The hamburg steak and the hamburger were both on the menu.
+He ate a bologna sandwich on the train.
+We give up sweets for Lent every year, and she lent me a book.
+The advent of cheap sensors changed the field.
+The episcopal authority of the bishop was limited.
+She spoke with evangelical zeal about the new tool.
+He holds some orthodox views on grammar.
+Her tastes are catholic and broad.
+John the baptist was a fine saint in the story.
+The style guide is the bible of the newsroom.
+They keep the Sabbath every week and rest.
+The Gospel of Mark is short, and he preached the gospel of hard work.
+He peeled a mandarin and wore a mandarin collar.
+The dress had a lace basque top.
+She knitted an afghan blanket for the baby.
+Please polish the table and add a coat of polish.
+They welsh on bets sometimes, and we ate welsh rarebit.
+He had a cheese danish with coffee.
+The Dutch government sent a delegation, and the Polish team arrived.
+She learned to speak Polish and Danish at home.
+We moved to Turkey last year, and Turkey's economy grew.
+My brother is a doctor and my sister is a professor.
+Ask the senator, and the governor will reply.
+Tell the judge about the case, and the coach about the game.
+She will coach the juniors, and he will judge the entries.
+Do not doctor the figures or captain the wrong team.
+I spoke with Professor Okafor about the trip and with Dr Patel after lunch.
+Mr Smith and Mrs Jones met Ms Brown at the station.
+The King of Spain and the Queen of England met the Pope at the summit.
+Dear Sir or Madam, please find the form attached.
+We saw Jupiter and Saturn from the hill last night.
+My sign is Gemini, but she is a Virgo.
+We studied the Cold War and the Industrial Revolution in class.
+The Nobel Prize ceremony starts at noon.
+The Big Bang theory and the big bang of fireworks were both loud.
+Meet me on Friday at 5 pm EST for the call.
+Call at 9:30 IST and again at 4 pm PST tomorrow.
+He is going to Washington, DC next week.
+Her PhD and MSc were in physics, and his BSc was in math.
+Use the Wi-Fi in the lobby, or the wifi-less room upstairs.
+I read the news on Twitter and then in Slack with a friend.
+We use Zoom for calls, Notion for notes and Excel for the budget.
+The app runs on Windows 11, macOS and Linux.
+It is available on iOS and Android.
+Open Chrome, then Safari, and compare the pages in Firefox.
+She works at Apple and he works at Google in London.
+Buy it on Amazon or order from eBay.
+The Amazon rainforest is huge, and the Amazon river floods each year.
+The amazon warriors of myth fought bravely in the old play.
+Click the file called poland.csv and the folder named #paris.
+Open london.csv in the editor and the new_york_data table.
+See https://example.com/paris and www.example.org/rome for details.
+The user_id column and the order_id field are required.
+Send it to paris@example.com or @london on the chat.
+The north pole of the magnet attracts the south pole of the other magnet.
+The boulder-rich band is harder rock and resists erosion.
+In Switzerland we have been to Saas Fee and Zermatt.
+The 17.7 cms display area is bright and sharp.
+Udah lama nda ketemu, kata dia.
+We joined a bible study group on Tuesday evening.
+She grew up in the cold war age and loved the stone age exhibit.
+The northern hemisphere has long summer days in June.
+Eu te amo, he wrote in his letter to her.
+A white house stood on the hill above the village.
