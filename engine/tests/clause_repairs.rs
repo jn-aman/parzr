@@ -351,13 +351,13 @@ fn verb_forms_after_be_modals_and_to() {
             "We need to calculated the size.",
             "We need to calculate the size.",
         ),
+        ("He was play with the dog.", "He was playing with the dog."),
     ]);
     unchanged(&[
         "All we need to do is build a wall.",
         "There is need for reform.",
         "Is use of force allowed?",
         "Should smoking be banned?",
-        "He was play with the dog.",
         "There might be attributes in both files.",
         "We also know as much.",
         "They switched to paid plans.",
