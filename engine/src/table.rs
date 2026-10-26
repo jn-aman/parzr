@@ -14,8 +14,9 @@ pub(crate) const MAGIC: u32 = u32::from_le_bytes(*b"PZT2");
 /// The file holding all four tables: `BUNDLE_MAGIC, count` then `count × (offset, len)` as u64,
 /// then the tables, each starting on an 8-byte boundary.
 pub(crate) const BUNDLE_MAGIC: u32 = u32::from_le_bytes(*b"PZTS");
-/// The tables in a bundle, in order: lexicon, deletes, frequency, word pairs.
-pub(crate) const BUNDLE_TABLES: usize = 4;
+/// The tables in a bundle, in order: lexicon, deletes, frequency, word pairs, the rule packs
+/// (JSON, without test-only fields) and the rules' prefilter literals (JSON).
+pub(crate) const BUNDLE_TABLES: usize = 6;
 
 /// Writes a bundle (build.rs).
 #[allow(dead_code)]

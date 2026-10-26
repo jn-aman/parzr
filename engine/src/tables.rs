@@ -21,15 +21,28 @@ pub(crate) struct Tables {
     pub(crate) deletes: &'static [u8],
     pub(crate) frequency: &'static [u8],
     pub(crate) bigrams: &'static [u8],
+    /// The rule packs (`rules/packs/*.json` joined by build.rs) as JSON, without test-only fields.
+    pub(crate) rule_packs: &'static [u8],
+    /// Every contextual rule's prefilter literal set, as JSON (`rules::literals`).
+    pub(crate) rule_literals: &'static [u8],
 }
 
 fn split(data: &'static [u8]) -> Result<Tables, String> {
-    let [lexicon, deletes, frequency, bigrams]: [&'static [u8]; BUNDLE_TABLES] = unbundle(data)?;
+    let [
+        lexicon,
+        deletes,
+        frequency,
+        bigrams,
+        rule_packs,
+        rule_literals,
+    ]: [&'static [u8]; BUNDLE_TABLES] = unbundle(data)?;
     Ok(Tables {
         lexicon,
         deletes,
         frequency,
         bigrams,
+        rule_packs,
+        rule_literals,
     })
 }
 

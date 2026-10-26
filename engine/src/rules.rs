@@ -127,22 +127,21 @@ fn pack() -> &'static Pack {
             serde_json::from_str::<Vec<Rule>>(include_str!("../rules/usage.json"))
                 .expect("valid embedded rule pack"),
         );
-        // One file per category under rules/packs/, joined by build.rs (rules/packs/README.md).
-        grammar.extend(
-            serde_json::from_str::<Vec<Rule>>(include_str!(concat!(
-                env!("OUT_DIR"),
-                "/rule-packs.json"
-            )))
-            .expect("valid embedded rule packs"),
-        );
-        // Computed by build.rs from the same patterns (`rule-literals.json`); a rule it does not
-        // know (never, unless the build is stale) is computed here.
+        // One file per category under rules/packs/, joined by build.rs (rules/packs/README.md)
+        // into the tables file, which the app ships once (`tables`); the tests read the full
+        // array with each rule's positive and negative.
+        #[cfg(test)]
+        let packs: &str = include_str!(concat!(env!("OUT_DIR"), "/rule-packs.json"));
+        #[cfg(not(test))]
+        let packs: &str =
+            std::str::from_utf8(crate::tables::get().rule_packs).expect("rule packs are UTF-8");
+        grammar
+            .extend(serde_json::from_str::<Vec<Rule>>(packs).expect("valid embedded rule packs"));
+        // Computed by build.rs from the same patterns; a rule it does not know (never, unless the
+        // build is stale) is computed here.
         let precomputed: std::collections::HashMap<String, Option<Vec<String>>> =
-            serde_json::from_str(include_str!(concat!(
-                env!("OUT_DIR"),
-                "/rule-literals.json"
-            )))
-            .expect("valid rule literals");
+            serde_json::from_slice(crate::tables::get().rule_literals)
+                .expect("valid rule literals");
         let (mut words, mut owner, mut always) = (vec![], vec![], vec![]);
         let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         for (i, rule) in grammar.iter().enumerate() {
@@ -405,6 +404,15 @@ mod tests {
             grammar.len() + tone.len() + usage.len() + packs.len(),
             contextual().len()
         );
+        // The tables file carries the same pack rules, in order, without the test-only fields.
+        let shipped: Vec<serde_json::Value> =
+            serde_json::from_slice(crate::tables::get().rule_packs).unwrap();
+        assert_eq!(shipped.len(), packs.len());
+        for (shipped, full) in shipped.iter().zip(&packs) {
+            assert_eq!(shipped["id"].as_str(), Some(full.id.as_str()));
+            assert_eq!(shipped["pattern"].as_str(), Some(full.pattern.as_str()));
+            assert!(shipped.get("positive").is_none() && shipped.get("negative").is_none());
+        }
         let mut ids = std::collections::HashSet::new();
         for c in contextual() {
             assert!(
