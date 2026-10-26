@@ -3,8 +3,10 @@
 //! parser does not understand gives up, and a rule without a literal always runs.
 use std::cmp::Reverse;
 
-/// Longest cross product kept as one exact set; beyond it the run is cut and restarted.
-const LIMIT: usize = 256;
+/// Longest cross product kept as one exact set; beyond it the run is cut and restarted. Each
+/// literal costs the prefilter memory (about 1 KB with its owner list), so a set of 64 long
+/// literals is kept but "Yesterday, I write" times every pronoun (252) is cut to its first part.
+const LIMIT: usize = 64;
 
 enum Lits {
     /// The node matches exactly one of these strings (possibly empty).
