@@ -1,0 +1,2364 @@
+[
+  {
+    "id": "register.wordy.so_as_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>so as to)\\b",
+    "replacement": "to",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“So as to” can usually be just “to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We left early so as to avoid the traffic.",
+    "negative": "He tiptoed so as not to wake her. We left early to avoid the traffic."
+  },
+  {
+    "id": "register.wordy.in_order_for",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in order for)\\s+(?:[\\w'’-]+\\s+){1,4}to\\b",
+    "replacement": "for",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“For” does the job of “in order for”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "In order for this to work, the team must agree.",
+    "negative": "For this to work, the team must agree. Put the forms in order. For the audit, keep them in order."
+  },
+  {
+    "id": "register.wordy.in_order_that",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in order that)\\b",
+    "replacement": "so that",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“So that” is plainer than “in order that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please send the file in order that we can review it.",
+    "negative": "Please send the file so that we can review it."
+  },
+  {
+    "id": "register.wordy.now_phrases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at this point in time|at this point of time|at the present point in time|at the present time|at the current time|at this moment in time|at the present moment in time|at the present moment|at the current moment|at this juncture)\\b",
+    "replacement": "now",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Now” says the same thing in one word.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are not accepting orders at this moment in time.",
+    "negative": "At this point, the road bends left. The idea came at that time. We are not accepting orders now."
+  },
+  {
+    "id": "register.wordy.at_this_time_start",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?P<target>at this time)\\s*,",
+    "replacement": "now",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Now” is shorter than “at this time”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "At this time, we cannot offer refunds.",
+    "negative": "At this time of year the lake freezes. Each year at this time, I send a card. Now, we cannot offer refunds."
+  },
+  {
+    "id": "register.wordy.at_this_time_end",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:comment|respond|answer|share|provide|disclose|confirm|discuss|say|offer|accept|release|announce|decide|determine|available|unavailable|closed|open|appropriate|inappropriate|necessary|unnecessary|possible|impossible|needed|required|planned|scheduled|interest|class|content|teaching|working)\\b[^.!?;,\\n]{0,30}\\s(?P<target>at this time)\\s*(?:[.,;!?]|$)",
+    "replacement": "now",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Now” is shorter than “at this time”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We cannot comment at this time.",
+    "negative": "Each year at this time, I send a card. We spoke at this time yesterday. We cannot comment now."
+  },
+  {
+    "id": "register.wordy.at_that_time",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at that point in time|at that moment in time)\\b",
+    "replacement": "then",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Then” is shorter than “at that point in time”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "He was unaware of the problem at that point in time.",
+    "negative": "At that point the road ends. He was unaware of the problem then."
+  },
+  {
+    "id": "register.wordy.later_date",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at (?:a later|some later|a future|some future) (?:date|time))\\b\\s*(?:[.,;!?]|$)",
+    "replacement": "later",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Later” replaces “at a later date”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We can revisit the budget at some future date.",
+    "negative": "We left at a later hour. Revisit it on a later date. We can revisit the budget later."
+  },
+  {
+    "id": "register.wordy.until_such_time",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>until such time as)\\b",
+    "replacement": "until",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Until” does the work of “until such time as”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Hold the funds until such time as the audit ends.",
+    "negative": "Until then, hold the funds. Hold the funds until the audit ends."
+  },
+  {
+    "id": "register.wordy.at_such_time",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at such time as)\\b",
+    "replacement": "when",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“When” is plainer than “at such time as”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We will reopen at such time as the repairs are finished.",
+    "negative": "We will reopen when the repairs are finished. He arrived at such a time as to see it."
+  },
+  {
+    "id": "register.wordy.during_the_time_that",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>during the time (?:that|when))\\b",
+    "replacement": "while",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“While” is shorter than “during the time that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We lost data during the time that the server was down.",
+    "negative": "During the time we had, we finished. We lost data while the server was down."
+  },
+  {
+    "id": "register.wordy.at_the_time_that",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at the time (?:that|when))\\b",
+    "replacement": "when",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“When” is shorter than “at the time that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "At the time that the report was filed, nobody objected.",
+    "negative": "At the time, nobody objected. The time when we met was good. When the report was filed, nobody objected."
+  },
+  {
+    "id": "register.wordy.basis_period",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on an? (?P<w>daily|weekly|monthly|yearly|hourly|nightly|quarterly) basis)\\b",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "The adverb says it in one word: “monthly”, not “on a monthly basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We review the budget on a monthly basis.",
+    "negative": "The monthly basis for the fee is stated. She works on a daily schedule. We review the budget monthly."
+  },
+  {
+    "id": "register.wordy.basis_adjective",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on an? (?P<w>regular|consistent|continuous|individual|permanent|frequent|occasional|immediate|urgent|separate|random) basis)\\b",
+    "replacement": "${w}ly",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "Use the adverb instead of “on a … basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Files are backed up on a regular basis.",
+    "negative": "A regular basis of comparison is needed. They sell it on a first-come basis. Files are backed up regularly."
+  },
+  {
+    "id": "register.wordy.basis_annual",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on an annual basis)\\b",
+    "replacement": "annually",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Annually” is shorter than “on an annual basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The fee is reviewed on an annual basis.",
+    "negative": "The annual basis of the fee is public. The fee is reviewed annually."
+  },
+  {
+    "id": "register.wordy.basis_temporary",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on a temporary basis)\\b",
+    "replacement": "temporarily",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Temporarily” is shorter than “on a temporary basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She is covering the desk on a temporary basis.",
+    "negative": "A temporary basis was agreed. She is covering the desk temporarily."
+  },
+  {
+    "id": "register.wordy.basis_voluntary",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on a voluntary basis)\\b",
+    "replacement": "voluntarily",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Voluntarily” is shorter than “on a voluntary basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Staff attend the sessions on a voluntary basis.",
+    "negative": "A voluntary basis was proposed. Staff attend the sessions voluntarily."
+  },
+  {
+    "id": "register.wordy.basis_as_needed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on an as[- ](?P<w>needed|required) basis)\\b",
+    "replacement": "as ${w}",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“As needed” is shorter than “on an as-needed basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Contractors are hired on an as needed basis.",
+    "negative": "An as-needed basis is fine. Contractors are hired as needed."
+  },
+  {
+    "id": "register.wordy.basis_case_by_case",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>on an? case[- ]by[- ]case basis)\\b",
+    "replacement": "case by case",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Case by case” is shorter than “on a case-by-case basis”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Refunds are decided on a case-by-case basis.",
+    "negative": "A case-by-case basis was agreed. Refunds are decided case by case."
+  },
+  {
+    "id": "register.wordy.timely_manner",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in a timely (?:manner|fashion))\\b",
+    "replacement": "promptly",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Promptly” is shorter than “in a timely manner”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please respond in a timely manner.",
+    "negative": "A timely response matters. Please respond promptly."
+  },
+  {
+    "id": "register.wordy.manner_adverb",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in an? (?P<w>efficient|effective|professional|appropriate|careful|consistent|transparent|accurate|thorough|prompt|courteous|respectful|constructive|collaborative|proactive|diligent|secure|safe|proper|logical|polite|cautious) (?:manner|fashion))\\b",
+    "replacement": "${w}ly",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "An adverb is shorter than “in a … manner”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The team handled the claim in an efficient manner.",
+    "negative": "She spoke in a manner of speaking. He answered in a friendly manner. The team handled the claim efficiently."
+  },
+  {
+    "id": "register.wordy.because_phrases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>due to the fact that|owing to the fact that|on account of the fact that|by virtue of the fact that|for the reason that)\\b",
+    "replacement": "because",
+    "category": "Style",
+    "confidence": 0.78,
+    "reason": "“Because” replaces this long phrase.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We moved the launch owing to the fact that the vendor was late.",
+    "negative": "The fact that she resigned surprised us. We moved it due to the delay. We moved the launch because the vendor was late."
+  },
+  {
+    "id": "register.wordy.given_that_phrases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in view of the fact that|in light of the fact that|considering the fact that|given the fact that|taking into account the fact that)\\b",
+    "replacement": "given that",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Given that” is shorter than this phrase.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "In view of the fact that costs rose, we paused hiring.",
+    "negative": "Given that costs rose, we paused hiring. In view of the costs, we paused hiring."
+  },
+  {
+    "id": "register.wordy.though_phrases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>despite the fact that|in spite of the fact that|regardless of the fact that|notwithstanding the fact that)\\b",
+    "replacement": "though",
+    "category": "Style",
+    "confidence": 0.76,
+    "reason": "“Though” replaces this long phrase.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We shipped on time despite the fact that the weather was bad.",
+    "negative": "Despite the delay, we shipped. They ignored the fact that she was ill. We shipped on time though the weather was bad."
+  },
+  {
+    "id": "register.wordy.if_event_phrases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in the event that|in the case that|in the instance that|in the eventuality that)\\b",
+    "replacement": "if",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“If” is plainer than “in the event that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Call us in the case that the system fails.",
+    "negative": "In the event of rain, the picnic moves indoors. The event that I attended was long. Call us if the system fails."
+  },
+  {
+    "id": "register.wordy.regarding",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:with|in) regards? to)\\b",
+    "replacement": "regarding",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Regarding” is shorter than “with regard to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am writing in regard to your invoice.",
+    "negative": "She has high regard for him. Please give my regards to your team. I am writing regarding your invoice."
+  },
+  {
+    "id": "register.wordy.with_reference_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:with|in) reference to)\\s+(?:your|our|my|the|this|that|these|those|his|her|their|its)\\b",
+    "replacement": "regarding",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“Regarding” is shorter than “with reference to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "With reference to your letter of 5 May, we confirm the order.",
+    "negative": "He made reference to the report. Regarding your letter of 5 May, we confirm the order."
+  },
+  {
+    "id": "register.wordy.pertaining_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>pertaining to)\\b",
+    "replacement": "about",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“About” is plainer than “pertaining to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Questions pertaining to billing go to finance.",
+    "negative": "This is a question about billing. Pertinent facts were shared."
+  },
+  {
+    "id": "register.wordy.as_to_whether",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>as to whether)\\b",
+    "replacement": "whether",
+    "category": "Redundancy",
+    "confidence": 0.75,
+    "reason": "“As to” adds nothing before “whether”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "There was doubt as to whether the test would pass.",
+    "negative": "As to the schedule, we agree. Decide whether to go. There was doubt whether the test would pass."
+  },
+  {
+    "id": "register.wordy.in_lieu_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in lieu of)\\b",
+    "replacement": "instead of",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Instead of” is plainer than “in lieu of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We offered a voucher in lieu of a refund.",
+    "negative": "We offered a voucher instead of a refund."
+  },
+  {
+    "id": "register.wordy.in_conjunction_with",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in conjunction with)\\b",
+    "replacement": "with",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“With” does the job of “in conjunction with”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Use this form in conjunction with the manual.",
+    "negative": "It was a conjunction of events. Use this form with the manual."
+  },
+  {
+    "id": "register.wordy.with_the_exception_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>with the exception of)\\b",
+    "replacement": "except for",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Except for” is shorter than “with the exception of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "With the exception of Tom, everyone attended.",
+    "negative": "Tom was the exception. Everyone except Tom attended."
+  },
+  {
+    "id": "register.wordy.in_excess_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in excess of)\\s+(?:[$£€¥]\\s?)?\\d",
+    "replacement": "more than",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“More than” is plainer than “in excess of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Costs in excess of $5,000 need approval.",
+    "negative": "He spent in excess of his budget. Costs above $5,000 need approval. Costs more than $5,000 need approval."
+  },
+  {
+    "id": "register.wordy.in_the_vicinity_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in the vicinity of)\\b",
+    "replacement": "near",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Near” is shorter than “in the vicinity of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The warehouse is in the vicinity of the station.",
+    "negative": "Vicinity maps are posted. The warehouse is near the station."
+  },
+  {
+    "id": "register.wordy.in_proximity_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in (?:close )?proximity to)\\b",
+    "replacement": "near",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Near” is shorter than “in close proximity to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The hotel is in close proximity to the airport.",
+    "negative": "A proximity sensor detects hands. The hotel is near the airport."
+  },
+  {
+    "id": "register.wordy.sufficient_number",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>an? (?:sufficient|adequate) (?:number|amount|quantity) of)\\b",
+    "replacement": "enough",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Enough” replaces “a sufficient number of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We need a sufficient number of volunteers.",
+    "negative": "A sufficient reason was given. We need enough volunteers."
+  },
+  {
+    "id": "register.wordy.large_number_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>a (?:large|great|considerable) number of)\\s+(?:(?:people|children|men|women|staff|data)\\b|[a-z]{3,}s\\b)",
+    "replacement": "many",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Many” is shorter than “a large number of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "A great number of users reported the bug.",
+    "negative": "A large number was printed. The number of users grew. Many users reported the bug."
+  },
+  {
+    "id": "register.wordy.large_number_of_the",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>a (?:large|great|considerable) number of)\\s+(?:the|my|our|your|his|her|their|its|these|those)\\b",
+    "replacement": "many of",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Many of” is shorter than “a large number of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "A great number of the users reported the bug.",
+    "negative": "A large number was expected. Many of the users reported the bug."
+  },
+  {
+    "id": "register.wordy.majority_of_the",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>the majority of)\\s+(?:the|my|our|your|his|her|their|its|these|those|this|that)\\b",
+    "replacement": "most of",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Most of” is shorter than “the majority of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The majority of the staff agreed.",
+    "negative": "The majority opinion won. A majority of 40 votes carried it. Most of the staff agreed."
+  },
+  {
+    "id": "register.wordy.majority_of_noun",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>the majority of)\\s+(?:people|users|customers|clients|employees|members|respondents|participants|students|patients|teachers|parents|companies|businesses|countries|states|developers|voters|residents|workers|owners|players|readers|buyers|guests|visitors|families|children|women|men)\\b",
+    "replacement": "most",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Most” is shorter than “the majority of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The majority of customers renewed.",
+    "negative": "The majority opinion won. Most customers renewed."
+  },
+  {
+    "id": "register.wordy.majority_of_cases",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in (?:the|a) majority of cases)\\b",
+    "replacement": "in most cases",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“In most cases” is shorter than “in the majority of cases”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "In the majority of cases, the fix works.",
+    "negative": "In most cases, the fix works. In a majority of 12 votes, it passed."
+  },
+  {
+    "id": "register.wordy.previous_to",
+    "pattern": "(?i)\\b(?P<target>previous to)\\b",
+    "replacement": "before",
+    "category": "Style",
+    "confidence": 0.78,
+    "reason": "“Before” is the usual word; “previous to” is nonstandard.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Check the lock previous to departure.",
+    "negative": "The previous owner left. Check the lock before departure."
+  },
+  {
+    "id": "register.wordy.during_the_course_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>during the course of)\\b",
+    "replacement": "during",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“During” is shorter than “during the course of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Questions arose during the course of the audit.",
+    "negative": "During the course, we practiced. The course of events was clear. Questions arose during the audit."
+  },
+  {
+    "id": "register.wordy.throughout_the_course_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>throughout the course of)\\b",
+    "replacement": "throughout",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Throughout” is shorter than “throughout the course of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She improved throughout the course of the year.",
+    "negative": "The course of the year was kind. She improved throughout the year."
+  },
+  {
+    "id": "register.wordy.for_a_period_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?P<w>for|over|within|after) a period of)\\s+(?:\\d|(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|twenty|several|many|about|approximately|at least|up to|roughly|around|nearly)\\b)",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "Drop “a period of”: “for 30 days” says it directly.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The offer runs for a period of 30 days.",
+    "negative": "He rested for a period of time. It improved over a period of years. The offer runs for 30 days."
+  },
+  {
+    "id": "register.verb.utilize.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>utilise)\\b",
+    "replacement": "use",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Use” is plainer than “utilize”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We utilise cookies to remember your choices.",
+    "negative": "The utilization rate is 80 percent. We use cookies to remember your choices."
+  },
+  {
+    "id": "register.verb.utilize.s",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>utili[sz]es)\\b",
+    "replacement": "uses",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Use” is plainer than “utilize”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The app utilizes your location.",
+    "negative": "The app uses your location."
+  },
+  {
+    "id": "register.verb.utilize.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>utilised)\\b",
+    "replacement": "used",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Use” is plainer than “utilize”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The team utilised a spreadsheet.",
+    "negative": "The team used a spreadsheet."
+  },
+  {
+    "id": "register.verb.utilize.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>utili[sz]ing)\\b",
+    "replacement": "using",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Use” is plainer than “utilize”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We saved time by utilizing templates.",
+    "negative": "We saved time by using templates."
+  },
+  {
+    "id": "register.verb.commence.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>commence)\\b",
+    "replacement": "start",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“Start” or “begin” is plainer than “commence”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The meeting will commence at noon.",
+    "negative": "The commencement speech was short. The meeting will start at noon."
+  },
+  {
+    "id": "register.verb.commence.s",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>commences)\\b",
+    "replacement": "starts",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“Start” or “begin” is plainer than “commence”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The course commences on Monday.",
+    "negative": "The course starts on Monday."
+  },
+  {
+    "id": "register.verb.commence.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>commenced)\\b",
+    "replacement": "started",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“Start” or “begin” is plainer than “commence”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Work commenced in May.",
+    "negative": "Work started in May."
+  },
+  {
+    "id": "register.verb.commence.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>commencing)\\b",
+    "replacement": "starting",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "“Start” or “begin” is plainer than “commence”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Commencing next week, the shop opens at nine.",
+    "negative": "Starting next week, the shop opens at nine."
+  },
+  {
+    "id": "register.verb.endeavor.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:we|I|you|they|will|shall|would|can|could|must|should|always|to)\\s+(?P<target>endeavou?r) to\\b",
+    "replacement": "try",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is plainer than “endeavor”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We endeavor to reply within a day.",
+    "negative": "His endeavor to win failed. We try to reply within a day."
+  },
+  {
+    "id": "register.verb.endeavor.s",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:he|she|it|who|which|that|team|company|firm)\\s+(?P<target>endeavou?rs) to\\b",
+    "replacement": "tries",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is plainer than “endeavor”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The firm endeavours to reply within a day.",
+    "negative": "The firm tries to reply within a day."
+  },
+  {
+    "id": "register.verb.endeavor.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:we|I|you|they|he|she|it|who|that)\\s+(?P<target>endeavou?red) to\\b",
+    "replacement": "tried",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is plainer than “endeavor”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We endeavored to reply within a day.",
+    "negative": "We tried to reply within a day."
+  },
+  {
+    "id": "register.verb.ascertain.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:to|will|shall|would|can|could|must|should|we|I|you|they)\\s+(?P<target>ascertain)\\b",
+    "replacement": "find out",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Find out” is plainer than “ascertain”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We need to ascertain whether the file is safe.",
+    "negative": "The ascertained facts agree. We need to find out whether the file is safe."
+  },
+  {
+    "id": "register.verb.ascertain.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:we|I|you|they|he|she|it|has|have|had|was|were|been)\\s+(?P<target>ascertained)\\b",
+    "replacement": "found out",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Find out” is plainer than “ascertain”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We ascertained that the file was safe.",
+    "negative": "The ascertained facts agree. We found out that the file was safe."
+  },
+  {
+    "id": "register.verb.ascertain.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>ascertaining)\\b",
+    "replacement": "finding out",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Find out” is plainer than “ascertain”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She is ascertaining whether the file is safe.",
+    "negative": "She is finding out whether the file is safe."
+  },
+  {
+    "id": "register.verb.leverage.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:to|will|would|can|could|should|must|may|might|shall|we|you|they|I|let['’]s|please)\\s+(?P<target>leverage)\\s+(?:our|your|the|their|my|his|her|its|these|those|this|that|a|an|existing|new|all|data|AI|cloud|technology|expertise|experience|insights|strengths)\\b",
+    "replacement": "use",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Leverage” as a verb is jargon; “use” is plainer.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We can leverage our existing data.",
+    "negative": "She has leverage over the vendor. We can use our existing data."
+  },
+  {
+    "id": "register.verb.leverage.s",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>leverages)\\s+(?:our|your|the|their|my|his|her|its|these|those|this|that|a|an|existing|new|all|data|AI|cloud|technology|expertise|experience|insights|strengths)\\b",
+    "replacement": "uses",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Leverage” as a verb is jargon; “use” is plainer.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The tool leverages your calendar.",
+    "negative": "The tool uses your calendar."
+  },
+  {
+    "id": "register.verb.leverage.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:we|they|I|you|he|she|it|who|that|has|have|had|was|were)\\s+(?P<target>leveraged)\\s+(?:our|your|the|their|my|his|her|its|these|those|this|that|a|an|existing|new|all|data|AI|cloud|technology|expertise|experience|insights|strengths)\\b",
+    "replacement": "used",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Leverage” as a verb is jargon; “use” is plainer.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We leveraged our network to find staff.",
+    "negative": "It is a highly leveraged firm. We used our network to find staff."
+  },
+  {
+    "id": "register.verb.leverage.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>leveraging)\\s+(?:our|your|the|their|my|his|her|its|these|those|this|that|a|an|existing|new|all|data|AI|cloud|technology|expertise|experience|insights|strengths)\\b",
+    "replacement": "using",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Leverage” as a verb is jargon; “use” is plainer.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We cut costs by leveraging the cloud.",
+    "negative": "We cut costs by using the cloud."
+  },
+  {
+    "id": "register.verb.touch_base.base",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>touch base)(?:\\s+(?:with|on|about|again|soon|later|briefly|offline|regularly|tomorrow|today|next|this|after|every|each|quickly|once|when|and)\\b|\\s*[.,;!?]|\\s*$)",
+    "replacement": "check in",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Check in” is plainer than “touch base”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Let us touch base with the vendor tomorrow.",
+    "negative": "The runner must touch the base. A touch-base meeting is set. Let us check in with the vendor tomorrow."
+  },
+  {
+    "id": "register.verb.touch_base.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>touched base)(?:\\s+(?:with|on|about|again|soon|later|briefly|offline|regularly|tomorrow|today|next|this|after|every|each|quickly|once|when|and)\\b|\\s*[.,;!?]|\\s*$)",
+    "replacement": "checked in",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Check in” is plainer than “touch base”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I touched base with the vendor yesterday.",
+    "negative": "I checked in with the vendor yesterday."
+  },
+  {
+    "id": "register.verb.touch_base.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>touching base)(?:\\s+(?:with|on|about|again|soon|later|briefly|offline|regularly|tomorrow|today|next|this|after|every|each|quickly|once|when|and)\\b|\\s*[.,;!?]|\\s*$)",
+    "replacement": "checking in",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Check in” is plainer than “touch base”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am touching base with the vendor today.",
+    "negative": "I am checking in with the vendor today."
+  },
+  {
+    "id": "register.verb.circle_back.to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circle back) to (?:you|this|that|it|them|your|our|my|these|those|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract))\\b",
+    "replacement": "return",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I will circle back to this after lunch.",
+    "negative": "The plane will circle back to the airport. I will return to this after lunch."
+  },
+  {
+    "id": "register.verb.circle_back.on",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circle back) (?:with (?:you|him|her|them|the team|everyone|everybody)|on (?:this|that|these|those|your|our|my|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract|invoice|thread))|later|tomorrow|next (?:week|month|quarter|year|time)|soon|shortly)\\b",
+    "replacement": "follow up",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I will circle back with you tomorrow.",
+    "negative": "The plane will circle back toward the airport. I will follow up with you tomorrow."
+  },
+  {
+    "id": "register.verb.circle_back.ed_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circled back) to (?:you|this|that|it|them|your|our|my|these|those|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract))\\b",
+    "replacement": "returned",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We circled back to this after lunch.",
+    "negative": "The plane circled back to the airport. We returned to this after lunch."
+  },
+  {
+    "id": "register.verb.circle_back.ed",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circled back) (?:with (?:you|him|her|them|the team|everyone|everybody)|on (?:this|that|these|those|your|our|my|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract|invoice|thread))|later|tomorrow|next (?:week|month|quarter|year|time)|soon|shortly)\\b",
+    "replacement": "followed up",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She circled back with the team on Friday.",
+    "negative": "The drone circled back toward us. She followed up with the team on Friday."
+  },
+  {
+    "id": "register.verb.circle_back.ing_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circling back) to (?:you|this|that|it|them|your|our|my|these|those|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract))\\b",
+    "replacement": "returning",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am circling back to this thread.",
+    "negative": "The plane is circling back to the airport. I am returning to this thread."
+  },
+  {
+    "id": "register.verb.circle_back.ing",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>circling back) (?:with (?:you|him|her|them|the team|everyone|everybody)|on (?:this|that|these|those|your|our|my|the (?:topic|issue|question|proposal|discussion|plan|agenda|budget|contract|invoice|thread))|later|tomorrow|next (?:week|month|quarter|year|time)|soon|shortly)\\b",
+    "replacement": "following up",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Circle back” is jargon; say what you will do.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am circling back on the invoice.",
+    "negative": "The plane is circling back toward the field. I am following up on the invoice."
+  },
+  {
+    "id": "register.verb.make_use_of.make",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>make use of)\\b",
+    "replacement": "use",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "One verb says it: “use”, not “make use of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "You can make use of the free trial.",
+    "negative": "You can make good use of the trial. You can use the free trial."
+  },
+  {
+    "id": "register.verb.make_use_of.makes",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>makes use of)\\b",
+    "replacement": "uses",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "One verb says it: “use”, not “make use of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She makes use of the free trial.",
+    "negative": "She uses the free trial."
+  },
+  {
+    "id": "register.verb.make_use_of.made",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>made use of)\\b",
+    "replacement": "used",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "One verb says it: “use”, not “make use of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "They made use of the free trial.",
+    "negative": "They used the free trial."
+  },
+  {
+    "id": "register.verb.make_use_of.making",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>making use of)\\b",
+    "replacement": "using",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "One verb says it: “use”, not “make use of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "By making use of the free trial, you save money.",
+    "negative": "By using the free trial, you save money."
+  },
+  {
+    "id": "register.verb.take_into_consideration.take",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>take into consideration)\\b",
+    "replacement": "consider",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Consider” is shorter than “take into consideration”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please take into consideration the risks.",
+    "negative": "Please take the risks into consideration. Please consider the risks."
+  },
+  {
+    "id": "register.verb.take_into_consideration.takes",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>takes into consideration)\\b",
+    "replacement": "considers",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Consider” is shorter than “take into consideration”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The model takes into consideration your age.",
+    "negative": "The model considers your age."
+  },
+  {
+    "id": "register.verb.take_into_consideration.took_taken",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>took into consideration|taken into consideration)\\b",
+    "replacement": "considered",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Consider” is shorter than “take into consideration”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "All factors were taken into consideration.",
+    "negative": "All factors were considered."
+  },
+  {
+    "id": "register.verb.take_into_consideration.taking",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>taking into consideration)\\b",
+    "replacement": "considering",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Consider” is shorter than “take into consideration”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Taking into consideration the cost, we agreed.",
+    "negative": "Considering the cost, we agreed."
+  },
+  {
+    "id": "register.verb.tendency.have",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>have (?:a|the) tendency to)\\b",
+    "replacement": "tend to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Tend to” is shorter than “have a tendency to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Large teams have a tendency to split into groups.",
+    "negative": "A tendency to overspend is common. Large teams tend to split into groups."
+  },
+  {
+    "id": "register.verb.tendency.has",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>has (?:a|the) tendency to)\\b",
+    "replacement": "tends to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Tend to” is shorter than “have a tendency to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The system has a tendency to stall.",
+    "negative": "The system tends to stall."
+  },
+  {
+    "id": "register.verb.tendency.had",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>had (?:a|the) tendency to)\\b",
+    "replacement": "tended to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Tend to” is shorter than “have a tendency to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "He had a tendency to interrupt.",
+    "negative": "He tended to interrupt."
+  },
+  {
+    "id": "register.verb.tendency.having",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>having (?:a|the) tendency to)\\b",
+    "replacement": "tending to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Tend to” is shorter than “have a tendency to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Having a tendency to stall, the system needs care.",
+    "negative": "Tending to stall, the system needs care."
+  },
+  {
+    "id": "register.verb.ability.has",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>has the (?:ability|capability|capacity) to)\\b",
+    "replacement": "can",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Can” is shorter than “has the ability to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The app has the capability to sync files.",
+    "negative": "Gaining the ability to sync files matters. The app can sync files."
+  },
+  {
+    "id": "register.verb.ability.have",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)(?:^|[.!?,;:]\\s+|\\b(?:and|but|that|if|because|as|when|since|so|then|while|although|though|whereas)\\s+)(?:I|we|you|they)\\s+(?P<target>have the (?:ability|capability|capacity) to)\\b",
+    "replacement": "can",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Can” is shorter than “has the ability to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We have the ability to sync files.",
+    "negative": "Do you have the ability to sync files? We can sync files."
+  },
+  {
+    "id": "register.verb.ability.had",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)(?:^|[.!?,;:]\\s+|\\b(?:and|but|that|if|because|as|when|since|so|then|while|although|though|whereas|wish)\\s+)(?:I|we|you|they|he|she)\\s+(?P<target>had the (?:ability|capability|capacity) to)\\b",
+    "replacement": "could",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Can” is shorter than “has the ability to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "If we had the ability to sync files, we would.",
+    "negative": "Did you have the ability to sync? If we could sync files, we would."
+  },
+  {
+    "id": "register.verb.position.present",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:am|are|is) in a position to)\\s+(?:help|offer|provide|give|assist|support|confirm|share|advise|accept|take|make|meet|deliver|ship|send|commit|answer|respond|supply|approve|process|handle|discuss|comment|say|promise|guarantee|pay|fund|cover|release|announce|finalize|finalise|proceed|start|begin|speak|reply|issue|grant|extend)\\b",
+    "replacement": "can",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Can” is shorter than “is in a position to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are in a position to offer a discount.",
+    "negative": "The chair is in a position to the left of the desk. We can offer a discount."
+  },
+  {
+    "id": "register.verb.position.past",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:was|were) in a position to)\\s+(?:help|offer|provide|give|assist|support|confirm|share|advise|accept|take|make|meet|deliver|ship|send|commit|answer|respond|supply|approve|process|handle|discuss|comment|say|promise|guarantee|pay|fund|cover|release|announce|finalize|finalise|proceed|start|begin|speak|reply|issue|grant|extend)\\b",
+    "replacement": "could",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Can” is shorter than “is in a position to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She was in a position to help.",
+    "negative": "She could help."
+  },
+  {
+    "id": "register.verb.receipt.in_receipt",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?P<s>I|we) (?:am|are) in receipt of)\\b",
+    "replacement": "${s} have received",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I have received” is plainer than “I am in receipt of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are in receipt of your letter.",
+    "negative": "Anyone in receipt of the letter should reply. We have received your letter."
+  },
+  {
+    "id": "register.verb.receipt.acknowledge",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:I|we)\\s+(?P<target>acknowledge receipt of)\\b",
+    "replacement": "have received",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I have received” is plainer than “I am in receipt of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We acknowledge receipt of your payment.",
+    "negative": "Please acknowledge receipt of this form. We have received your payment."
+  },
+  {
+    "id": "register.verb.opinion.are",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:am|are) of the (?:opinion|view) that)\\b",
+    "replacement": "think that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Think” is shorter than “be of the opinion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are of the opinion that the plan is sound.",
+    "negative": "Are you of the opinion that it works? We think that the plan is sound."
+  },
+  {
+    "id": "register.verb.opinion.is",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>is of the (?:opinion|view) that)\\b",
+    "replacement": "thinks that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Think” is shorter than “be of the opinion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The board is of the opinion that the plan is sound.",
+    "negative": "The board thinks that the plan is sound."
+  },
+  {
+    "id": "register.verb.opinion.was",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:was|were) of the (?:opinion|view) that)\\b",
+    "replacement": "thought that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Think” is shorter than “be of the opinion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She was of the opinion that the plan was sound.",
+    "negative": "She thought that the plan was sound."
+  },
+  {
+    "id": "register.verb.it_is_my_understanding",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is my understanding that)\\b",
+    "replacement": "I understand that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I understand that” is shorter than “it is my understanding that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is my understanding that the order shipped.",
+    "negative": "The understanding is that the order shipped. I understand that the order shipped."
+  },
+  {
+    "id": "register.verb.it_is_my_belief",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is my belief that)\\b",
+    "replacement": "I believe that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I believe that” is shorter than “it is my belief that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is my belief that the order shipped.",
+    "negative": "The belief is that the order shipped. I believe that the order shipped."
+  },
+  {
+    "id": "register.verb.it_is_my_hope",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is my hope that)\\b",
+    "replacement": "I hope that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I hope that” is shorter than “it is my hope that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is my hope that the order ships soon.",
+    "negative": "The hope is that the order ships soon. I hope that the order ships soon."
+  },
+  {
+    "id": "register.verb.it_is_my_intention",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is my intention to)\\b",
+    "replacement": "I intend to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I intend to” is shorter than “it is my intention to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is my intention to reply by Friday.",
+    "negative": "I intend to reply by Friday. His intention to leave was clear."
+  },
+  {
+    "id": "register.verb.it_is_our_understanding",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is our understanding that)\\b",
+    "replacement": "we understand that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“we understand that” is shorter than “it is our understanding that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is our understanding that the order shipped.",
+    "negative": "The understanding is that the order shipped. we understand that the order shipped."
+  },
+  {
+    "id": "register.verb.it_is_our_belief",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is our belief that)\\b",
+    "replacement": "we believe that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“we believe that” is shorter than “it is our belief that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is our belief that the order shipped.",
+    "negative": "The belief is that the order shipped. we believe that the order shipped."
+  },
+  {
+    "id": "register.verb.it_is_our_hope",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is our hope that)\\b",
+    "replacement": "we hope that",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“we hope that” is shorter than “it is our hope that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is our hope that the order ships soon.",
+    "negative": "The hope is that the order ships soon. we hope that the order ships soon."
+  },
+  {
+    "id": "register.verb.it_is_our_intention",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it is our intention to)\\b",
+    "replacement": "we intend to",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“we intend to” is shorter than “it is our intention to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It is our intention to reply by Friday.",
+    "negative": "we intend to reply by Friday. His intention to leave was clear."
+  },
+  {
+    "id": "register.verb.would_be_appreciated",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>it would be (?P<adv>greatly |really |truly |highly |deeply |very much )?appreciated if)\\b",
+    "replacement": "I would ${adv}appreciate it if",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“I would appreciate it if” is direct and personal.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It would be greatly appreciated if you could reply today.",
+    "negative": "I would greatly appreciate it if you could reply today. Your help is appreciated."
+  },
+  {
+    "id": "register.verb.agreement.are",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:am|are) in agreement with)\\b",
+    "replacement": "agree with",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Agree” is shorter than “be in agreement”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are in agreement with the proposal.",
+    "negative": "Are you in agreement with the proposal? We agree with the proposal."
+  },
+  {
+    "id": "register.verb.agreement.is",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>is in agreement with)\\b",
+    "replacement": "agrees with",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Agree” is shorter than “be in agreement”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The board is in agreement with the proposal.",
+    "negative": "The board agrees with the proposal."
+  },
+  {
+    "id": "register.verb.agreement.was",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:was|were) in agreement with)\\b",
+    "replacement": "agreed with",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Agree” is shorter than “be in agreement”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "They were in agreement with the proposal.",
+    "negative": "They agreed with the proposal."
+  },
+  {
+    "id": "register.verb.need_of.are",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:am|are) in need of)\\b",
+    "replacement": "need",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Need” is shorter than “be in need of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are in need of a new printer.",
+    "negative": "Teams in need of help should call. We need a new printer."
+  },
+  {
+    "id": "register.verb.need_of.is",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>is in need of)\\b",
+    "replacement": "needs",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Need” is shorter than “be in need of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The office is in need of a new printer.",
+    "negative": "The office needs a new printer."
+  },
+  {
+    "id": "register.verb.need_of.was",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:was|were) in need of)\\b",
+    "replacement": "needed",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Need” is shorter than “be in need of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The office was in need of a new printer.",
+    "negative": "The office needed a new printer."
+  },
+  {
+    "id": "register.verb.possession.are",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:am|are) in possession of)\\b",
+    "replacement": "have",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Have” is shorter than “be in possession of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We are in possession of the signed contract.",
+    "negative": "The man in possession of the key left. We have the signed contract."
+  },
+  {
+    "id": "register.verb.possession.is",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>is in possession of)\\b",
+    "replacement": "has",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Have” is shorter than “be in possession of”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The bank is in possession of the signed contract.",
+    "negative": "The bank has the signed contract."
+  },
+  {
+    "id": "register.verb.attempt.make",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>make an attempt to)\\b",
+    "replacement": "try to",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is shorter than “make an attempt”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please make an attempt to reply today.",
+    "negative": "An attempt to reply failed. Please try to reply today."
+  },
+  {
+    "id": "register.verb.attempt.makes",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>makes an attempt to)\\b",
+    "replacement": "tries to",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is shorter than “make an attempt”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She makes an attempt to reply daily.",
+    "negative": "She tries to reply daily."
+  },
+  {
+    "id": "register.verb.attempt.made",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>made an attempt to)\\b",
+    "replacement": "tried to",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is shorter than “make an attempt”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "He made an attempt to reply.",
+    "negative": "He tried to reply."
+  },
+  {
+    "id": "register.verb.attempt.making",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>making an attempt to)\\b",
+    "replacement": "trying to",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Try” is shorter than “make an attempt”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "She is making an attempt to reply.",
+    "negative": "She is trying to reply."
+  },
+  {
+    "id": "register.verb.conclusion.come",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>come to the conclusion that)\\b",
+    "replacement": "conclude that",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Conclude” is shorter than “come to the conclusion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We may come to the conclusion that the plan failed.",
+    "negative": "We may conclude that the plan failed."
+  },
+  {
+    "id": "register.verb.conclusion.came",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>came to the conclusion that)\\b",
+    "replacement": "concluded that",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Conclude” is shorter than “come to the conclusion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The panel came to the conclusion that the plan failed.",
+    "negative": "The panel concluded that the plan failed."
+  },
+  {
+    "id": "register.verb.conclusion.comes",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>comes to the conclusion that)\\b",
+    "replacement": "concludes that",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Conclude” is shorter than “come to the conclusion”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The panel comes to the conclusion that the plan failed.",
+    "negative": "The panel concludes that the plan failed."
+  },
+  {
+    "id": "register.email.be_advised_start",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?:]\\s+|\\n\\s*)(?P<target>(?:(?:please|kindly)\\s+)?be (?:advised|informed) that\\s+(?P<w>[A-Za-z][\\w'’-]*))",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "Skip the wrapper and start with the news itself.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please be advised that the office will close early on Friday.",
+    "negative": "You should be advised that fees apply. She was advised that the office closes early. The office will close early on Friday."
+  },
+  {
+    "id": "register.email.be_advised_mid",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)[,;]\\s+(?:(?:and|but)\\s+)?(?P<target>(?:please|kindly)\\s+be (?:advised|informed) that\\s+(?P<w>[A-Za-z][\\w'’-]*))",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.68,
+    "reason": "Skip the wrapper and start with the news itself.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks for the update, but please be advised that the office closes early.",
+    "negative": "You should be advised that fees apply. Thanks for the update, but the office closes early."
+  },
+  {
+    "id": "register.email.this_is_to_inform",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?:]\\s+|\\n\\s*)(?P<target>(?:this is to inform you that|(?:I|we) (?:am|are) writing to inform you that|(?:I|we) (?:would like|wish|want|need) to inform you that)\\s+(?P<w>[A-Za-z][\\w'’-]*))",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "Start with the news itself; the reader knows it is a message to them.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am writing to inform you that your order has shipped.",
+    "negative": "We regret to inform you that the post is filled. I am pleased to inform you that you passed. Your order has shipped."
+  },
+  {
+    "id": "register.email.bring_to_attention",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\bto\\s+(?P<target>bring to your (?:kind )?(?:notice|attention) that)\\b",
+    "replacement": "tell you that",
+    "category": "Style",
+    "confidence": 0.65,
+    "reason": "“Tell you that” is plainer than “bring to your attention that”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I would like to bring to your attention that the invoice is overdue.",
+    "negative": "Thank you for bringing this to my attention. I would like to tell you that the invoice is overdue."
+  },
+  {
+    "id": "register.email.it_should_be_noted",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?:]\\s+|\\n\\s*)(?P<target>it (?:should be noted|is important to note) that\\s+(?P<w>[A-Za-z][\\w'’-]*))",
+    "replacement": "${w}",
+    "category": "Style",
+    "confidence": 0.6,
+    "reason": "Say the point directly; “it should be noted that” adds nothing.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "It should be noted that the fee is not refundable.",
+    "negative": "Please note that the fee is not refundable. The fee is not refundable."
+  },
+  {
+    "id": "register.email.take_this_opportunity",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:to|will|would|can|could|shall|must|should|may|let me|let us|let['’]s|also|just|and)\\s+(?P<target>take (?:this|the) opportunity to\\s+)(?:thank|express|welcome|congratulate|introduce|wish|remind|apologi[sz]e|inform|extend|say|reiterate|acknowledge|appreciate|invite|update|share|announce|highlight|mention|clarify|recognize|recognise|reaffirm|confirm|offer|let)\\b",
+    "replacement": "",
+    "category": "Style",
+    "confidence": 0.65,
+    "reason": "Just say it: “I would like to thank you”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I would like to take this opportunity to thank the whole team.",
+    "negative": "Take this opportunity to learn Spanish. I would like to thank the whole team."
+  },
+  {
+    "id": "register.email.as_per",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>as per)\\s+(?:your|our|my|the|their|his|her|its|attached|company|standard|previous|prior|above|below|last|this|that|these|those|\\d)",
+    "replacement": "per",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Per” or “according to” does the job of “as per”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The invoice was prepared as per your request.",
+    "negative": "Everything went as per usual. The invoice was prepared per your request."
+  },
+  {
+    "id": "register.email.per_our_conversation",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>(?:as )?per our (?:conversation|discussion|talk|chat))(?:\\s*[,.;:!?)]|\\s*$|\\s+(?:yesterday|today|earlier|last|this|on|in|at|just)\\b)",
+    "replacement": "as we discussed",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“As we discussed” is friendlier than “per our conversation”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I have updated the file per our conversation on Monday.",
+    "negative": "Our conversation went well. I have updated the file as we discussed on Monday."
+  },
+  {
+    "id": "register.email.attached_please_find",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>attached please find)\\s+(?:the|a|an|my|our|your|this|these|\\d)",
+    "replacement": "I have attached",
+    "category": "Style",
+    "confidence": 0.65,
+    "reason": "“I have attached” is plainer than “attached please find”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Attached please find the signed contract.",
+    "negative": "Please find the attached contract. I have attached the signed contract."
+  },
+  {
+    "id": "register.email.enclosed_please_find",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>enclosed please find)\\s+(?:the|a|an|my|our|your|this|these|\\d)",
+    "replacement": "I have enclosed",
+    "category": "Style",
+    "confidence": 0.65,
+    "reason": "“I have enclosed” is plainer than “enclosed please find”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Enclosed please find the signed contract.",
+    "negative": "Please find the enclosed contract. I have enclosed the signed contract."
+  },
+  {
+    "id": "register.email.attached_herewith",
+    "pattern": "(?i)\\b(?P<target>(?P<w>attached|enclosed)\\s+herewith)\\b",
+    "replacement": "${w}",
+    "category": "Redundancy",
+    "confidence": 0.78,
+    "reason": "“Herewith” adds nothing after “attached”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The signed contract is attached herewith.",
+    "negative": "The signed contract is attached. The herewith clause is void."
+  },
+  {
+    "id": "register.email.herewith_attached",
+    "pattern": "(?i)\\b(?P<target>herewith\\s+(?P<w>attached|enclosed))\\b",
+    "replacement": "${w}",
+    "category": "Redundancy",
+    "confidence": 0.78,
+    "reason": "“Herewith” adds nothing before “attached”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please see the contract herewith attached.",
+    "negative": "Please see the contract attached."
+  },
+  {
+    "id": "register.email.verb_herewith",
+    "pattern": "(?i)\\b(?P<target>(?P<w>find|sending|sent|attaching|enclosing|forwarding|submitting)\\s+herewith)\\b",
+    "replacement": "${w}",
+    "category": "Redundancy",
+    "confidence": 0.72,
+    "reason": "“Herewith” adds nothing here.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am sending herewith the signed contract.",
+    "negative": "I am sending the signed contract."
+  },
+  {
+    "id": "register.email.aforementioned",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>aforementioned|aforesaid|above[- ]mentioned)\\b",
+    "replacement": "previously mentioned",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Previously mentioned” is plainer than “aforementioned”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The aforementioned report is attached.",
+    "negative": "The report mentioned above is attached. The previously mentioned report is attached."
+  },
+  {
+    "id": "register.email.heretofore",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>heretofore)\\b",
+    "replacement": "until now",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Until now” is plainer than “heretofore”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The policy was heretofore unwritten.",
+    "negative": "The policy was until now unwritten."
+  },
+  {
+    "id": "register.email.henceforth",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>henceforth)\\b",
+    "replacement": "from now on",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“From now on” is plainer than “henceforth”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Henceforth, all invoices go to finance.",
+    "negative": "From now on, all invoices go to finance."
+  },
+  {
+    "id": "register.email.forthwith",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>forthwith)\\b",
+    "replacement": "immediately",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“Immediately” is plainer than “forthwith”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Return the badge forthwith.",
+    "negative": "Return the badge immediately."
+  },
+  {
+    "id": "register.email.going_forward",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?]\\s+|,\\s*)(?P<target>going forward)\\s*(?:,|[.;!?]|$)",
+    "replacement": "from now on",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Going forward” is business filler; “from now on” says it plainly.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Going forward, all invoices go to finance.",
+    "negative": "We are going forward with the plan. The car is going forward slowly. From now on, all invoices go to finance."
+  },
+  {
+    "id": "register.email.moving_forward",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?]\\s+|,\\s*)(?P<target>moving forward)\\s*(?:,|[.;!?]|$)",
+    "replacement": "from now on",
+    "category": "Style",
+    "confidence": 0.62,
+    "reason": "“Moving forward” is business filler; “from now on” says it plainly.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Moving forward, all invoices go to finance.",
+    "negative": "We are moving forward with the plan. The car is moving forward slowly. From now on, all invoices go to finance."
+  },
+  {
+    "id": "register.email.kindly_imperative",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)(?:^|[.!?]\\s+|\\n\\s*|,\\s+(?:and\\s+|but\\s+|then\\s+)?|\\b(?:and|then|also|but)\\s+)(?P<target>kindly)\\s+(?:send|share|confirm|provide|let|find|review|check|forward|note|reply|respond|update|ensure|make|do|see|refer|treat|consider|acknowledge|approve|arrange|attend|inform|give|submit|return|call|contact|get|help|take|read|look|add|include|accept|allow|excuse|accommodate|clarify|resend|advise|tell|bring|keep|join|visit|complete|fill|sign|process|proceed|remit|pay|cooperate|co-operate|oblige|adjust|bear|extend|grant|issue|mail|email|schedule|book|set|attach|wait|hold|be)\\b",
+    "replacement": "please",
+    "category": "Style",
+    "confidence": 0.66,
+    "reason": "“Please” is the usual way to ask; “kindly” reads as stiff or curt.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Kindly send me the signed contract.",
+    "negative": "She spoke kindly to everyone. Kindly old Mr Lee waved. He kindly offered us a seat. Could you kindly help? Please send me the signed contract."
+  },
+  {
+    "id": "register.email.please_kindly",
+    "pattern": "(?i)\\b(?P<target>please kindly)\\b",
+    "replacement": "please",
+    "category": "Redundancy",
+    "confidence": 0.88,
+    "reason": "“Please” and “kindly” say the same thing; use one.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please kindly send me the signed contract.",
+    "negative": "Please send me the signed contract. He spoke kindly, please note."
+  },
+  {
+    "id": "register.email.kindly_please",
+    "pattern": "(?i)\\b(?P<target>kindly please)\\b",
+    "replacement": "please",
+    "category": "Redundancy",
+    "confidence": 0.88,
+    "reason": "“Please” and “kindly” say the same thing; use one.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Kindly please send me the signed contract.",
+    "negative": "Please send me the signed contract. He spoke kindly. Please wait."
+  },
+  {
+    "id": "register.email.thanking_you",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?im)(?:^|[.!?]\\s+)(?P<target>thanking you)\\b",
+    "replacement": "Thank you",
+    "category": "Register",
+    "confidence": 0.76,
+    "reason": "“Thank you” is the standard closing; “thanking you” is an old-fashioned form.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanking you in advance for your help.",
+    "negative": "I am thanking you for the gift. Thank you in advance for your help."
+  },
+  {
+    "id": "register.email.thanks_in_advanced",
+    "pattern": "(?i)\\b(?:thanks|thank you) in (?P<target>advanced)\\b",
+    "replacement": "advance",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "The fixed phrase is “in advance”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks in advanced for your help.",
+    "negative": "Thanks in advance for your help. She chose the advanced course."
+  },
+  {
+    "id": "register.email.should_you",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>should you)\\s+(?:need|require|wish|want|encounter|experience|prefer|have\\s+(?:any|a|an|some|more|further|other|additional|questions?|problems?|issues?|concerns?|queries|trouble|difficult(?:y|ies)|doubts?))\\b[^?.!;\\n]{0,70},",
+    "replacement": "if you",
+    "category": "Style",
+    "confidence": 0.7,
+    "reason": "“If you” is plainer than the inverted “should you”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Should you have any questions, call me.",
+    "negative": "Should you need a visa? If you have any questions, call me."
+  },
+  {
+    "id": "register.email.do_not_hesitate",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\bplease\\s+(?P<target>(?:do not|don['’]t) hesitate to\\s+)(?:contact|call|email|write|ask|reach|get|let|message|text|phone|visit|speak|talk)\\b",
+    "replacement": "",
+    "category": "Style",
+    "confidence": 0.66,
+    "reason": "“Please contact me” is more direct than “please do not hesitate to contact me”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please do not hesitate to contact me with questions.",
+    "negative": "Please contact me with questions. Do not hesitate to ask. They did not hesitate to act."
+  },
+  {
+    "id": "register.email.earliest_convenience",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>at your earliest (?:possible )?convenience)\\s*(?:[.!?]|$)",
+    "replacement": "when you can",
+    "category": "Style",
+    "confidence": 0.6,
+    "reason": "“When you can” is friendlier than “at your earliest convenience”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Please reply at your earliest convenience.",
+    "negative": "Please reply at your convenience, whether today or later. Please reply when you can."
+  },
+  {
+    "id": "register.email.under_separate_cover",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>under separate cover)\\b",
+    "replacement": "separately",
+    "category": "Style",
+    "confidence": 0.75,
+    "reason": "“Separately” is plainer than “under separate cover”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The invoice was sent under separate cover.",
+    "negative": "The invoice was sent separately. The cover was separate."
+  },
+  {
+    "id": "register.email.you_are_requested_to",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>you are (?:kindly |hereby )?requested to)\\b",
+    "replacement": "please",
+    "category": "Style",
+    "confidence": 0.65,
+    "reason": "“Please” is plainer than “you are requested to”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "You are requested to confirm your attendance.",
+    "negative": "Please confirm your attendance. Who requested you to confirm?"
+  },
+  {
+    "id": "register.email.writing_this_email",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\bwriting\\s+(?P<target>this (?:e-?mail|mail|letter|message)\\s+)to\\b",
+    "replacement": "",
+    "category": "Redundancy",
+    "confidence": 0.75,
+    "reason": "“I am writing to” already says it is this message.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I am writing this email to ask about the invoice.",
+    "negative": "I am writing to ask about the invoice. I wrote this email yesterday."
+  },
+  {
+    "id": "register.email.as_and_when",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>as and when)\\b",
+    "replacement": "when",
+    "category": "Redundancy",
+    "confidence": 0.7,
+    "reason": "“When” does the work of “as and when”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We will update the page as and when new data arrives.",
+    "negative": "We will update the page when new data arrives. As soon as data arrives, we update."
+  },
+  {
+    "id": "register.email.as_of_yet",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?:n['’]t|not|no|never|nothing|none|nobody)\\b[^.!?;\\n]{0,50}\\s(?P<target>as of yet)\\b",
+    "replacement": "yet",
+    "category": "Redundancy",
+    "confidence": 0.75,
+    "reason": "“Yet” does the work of “as of yet”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We have not heard back as of yet.",
+    "negative": "As of yet, we are waiting. We have not heard back yet."
+  },
+  {
+    "id": "register.email.day_and_age",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>in (?:this|today['’]s) day and age)\\b",
+    "replacement": "today",
+    "category": "Style",
+    "confidence": 0.72,
+    "reason": "“Today” is shorter than “in this day and age”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "In this day and age, email is everywhere.",
+    "negative": "Today, email is everywhere. This age and day differ."
+  },
+  {
+    "id": "register.email.month_of",
+    "modes": [
+      "concise",
+      "direct"
+    ],
+    "pattern": "(?i)\\b(?P<target>the month of (?P<m>January|February|March|April|May|June|July|August|September|October|November|December))\\b",
+    "replacement": "${m}",
+    "category": "Redundancy",
+    "confidence": 0.75,
+    "reason": "The month name already says it is a month.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "We launch in the month of March.",
+    "negative": "The month of Ramadan begins soon. We launch in March."
+  },
+  {
+    "id": "register.email.am_in_the_morning",
+    "pattern": "(?i)\\b\\d{1,2}(?::\\d{2})?\\s?(?:a\\.m\\.|am)(?P<target>\\s+in the morning)\\b",
+    "replacement": "",
+    "category": "Redundancy",
+    "confidence": 0.85,
+    "reason": "“AM” already means morning.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The call starts at 9 AM in the morning.",
+    "negative": "The call starts at 9 AM in Chicago. The call starts at 9 in the morning. The call starts at 9 AM."
+  },
+  {
+    "id": "register.email.pm_in_the_evening",
+    "pattern": "(?i)\\b\\d{1,2}(?::\\d{2})?\\s?(?:p\\.m\\.|pm)(?P<target>\\s+in the (?:afternoon|evening)|\\s+at night)\\b",
+    "replacement": "",
+    "category": "Redundancy",
+    "confidence": 0.85,
+    "reason": "“PM” already means afternoon or evening.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "The call starts at 6 PM in the evening.",
+    "negative": "The call starts at 6 PM in Chicago. The call starts at 6 in the evening. The call starts at 6 PM."
+  },
+  {
+    "id": "register.signoff.regards_comma",
+    "pattern": "(?im)^(?P<target>(?:(?:best|kind|warm|many|with)\\s+)?regards|(?:best|warm|kind) wishes|(?:thanks|thank you)\\s+(?:and|&)\\s+(?:(?:best|kind|warm)\\s+)?regards)[ \\t]*\\x0d?\\n[ \\t]*(?-i:[A-Z][a-z.'’-]+)(?:[ \\t]+(?-i:[A-Z][a-z.'’-]+)){0,2}[ \\t]*(?:\\x0d?\\n|$)",
+    "replacement": "${target},",
+    "category": "Style",
+    "confidence": 0.8,
+    "reason": "A closing such as “Best regards” takes a comma before the name.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks for the update.\nBest regards\nAman Jain",
+    "negative": "Thanks for the update.\nBest regards,\nAman Jain"
+  },
+  {
+    "id": "register.signoff.closing_comma",
+    "pattern": "(?im)(?:\\A|[.!?)”\\\"]\\s*\\n[ \\t]*|\\n[ \\t]*\\n[ \\t]*)(?P<target>thanks|thank you|many thanks|thanks again|cheers|best|sincerely|sincerely yours|yours sincerely|yours faithfully|yours truly|respectfully|cordially)[ \\t]*\\x0d?\\n[ \\t]*(?-i:[A-Z][a-z.'’-]+)(?:[ \\t]+(?-i:[A-Z][a-z.'’-]+)){0,2}[ \\t]*(?:\\x0d?\\n|$)",
+    "replacement": "${target},",
+    "category": "Style",
+    "confidence": 0.74,
+    "reason": "A closing such as “Thanks” takes a comma before the name.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "I will send the file today.\nThanks\nAman",
+    "negative": "I will send the file today.\nThanks,\nAman\nThanks for the quick reply\nI will send it today."
+  },
+  {
+    "id": "register.signoff.regards_name_same_line",
+    "pattern": "(?im)^(?P<target>(?:(?:best|kind|warm|many|with)\\s+)?regards)[ \\t]+(?-i:[A-Z][a-z.'’-]+)(?:[ \\t]+(?-i:[A-Z][a-z.'’-]+)){0,2}[ \\t]*$",
+    "replacement": "${target},",
+    "category": "Style",
+    "confidence": 0.8,
+    "reason": "Put a comma after the closing: “Kind regards, Aman”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Kind regards Aman Jain",
+    "negative": "Kind regards, Aman Jain\nRegards the matter, we cannot proceed."
+  },
+  {
+    "id": "register.signoff.dear_comma",
+    "pattern": "(?im)^dear\\s+(?:(?:mr|mrs|ms|miss|dr|prof)\\.?\\s+)?(?:(?-i:[A-Z][a-z'’-]+)\\s+){0,2}(?:sir or madam|madam or sir|(?-i:[A-Z][a-z'’-]+))(?P<target>)[ \\t]*\\x0d?\\n[ \\t]*\\S",
+    "replacement": ",",
+    "category": "Style",
+    "confidence": 0.8,
+    "reason": "A salutation takes a comma (or a colon) after the name.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Dear Mr Patel\nI am writing about the invoice.",
+    "negative": "Dear Mr Patel,\nI am writing about the invoice.\nDear Mr Patel:\nPlease see below."
+  },
+  {
+    "id": "register.signoff.hi_comma_name",
+    "pattern": "(?im)^(?:hi|hello|hey)(?P<target>,)[ \\t]+(?-i:[A-Z][a-z.'’-]+)(?:[ \\t]+(?-i:[A-Z][a-z.'’-]+)){0,2},[ \\t]*(?:\\x0d?\\n|$)",
+    "replacement": "",
+    "category": "Style",
+    "confidence": 0.66,
+    "reason": "In a greeting the comma goes after the name: “Hi Aman,”.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Hi, Aman,\nThe file is ready.",
+    "negative": "Hi Aman,\nThe file is ready.\nHi, Mom! How was school?"
+  },
+  {
+    "id": "register.signoff.regards_misspelled",
+    "pattern": "(?im)^(?:(?:best|kind|warm|many|with|thanks (?:and|&))\\s+)?(?P<target>regads|regardz|regrds|regrads|rgards|regars)\\b",
+    "replacement": "regards",
+    "category": "Spelling",
+    "confidence": 0.92,
+    "reason": "“Regards” is misspelled here.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks for the update.\nWarm regardz,\nAman",
+    "negative": "Thanks for the update.\nWarm regards,\nAman"
+  },
+  {
+    "id": "register.signoff.regard_singular",
+    "pattern": "(?im)^(?:(?:best|kind|warm|many|with|thanks (?:and|&))\\s+)(?P<target>regard)[ \\t]*(?:[,.]|\\x0d?\\n|$)",
+    "replacement": "regards",
+    "category": "Word choice",
+    "confidence": 0.9,
+    "reason": "A closing is “regards”, in the plural.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks for the update.\nKind regard,\nAman",
+    "negative": "Thanks for the update.\nKind regards,\nAman"
+  },
+  {
+    "id": "register.signoff.wishes_misspelled",
+    "pattern": "(?im)^(?:best|warm|kind|good|with)\\s+(?P<target>wishs|wishis|wihses|wishees)\\b",
+    "replacement": "wishes",
+    "category": "Spelling",
+    "confidence": 0.92,
+    "reason": "“Wishes” is misspelled here.",
+    "provenance": "parzr original rule (business and email register)",
+    "positive": "Thanks for the update.\nKind wishs,\nAman",
+    "negative": "Thanks for the update.\nKind wishes,\nAman"
+  }
+]
