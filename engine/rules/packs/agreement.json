@@ -56,14 +56,14 @@
   },
   {
     "id": "agree.we_they_wasnt",
-    "pattern": "(?im)\\b(?:we|they) (?P<target>wasn(?P<a>['’])t)\\b",
+    "pattern": "(?im)(?:^|[.!?][\\\"”’)]*\\s+|[:;]\\s+|,\\s+(?:(?:and|but|so|or|yet|then)\\s+)?|\\b(?:and|or|but|so|because|since|when|while|although|though|if|whereas|then|until|before|after|once|unless|whenever|yet|that|what|where|why|how|whether|say|says|said|saying|tell|tells|told|think|thinks|thought|believe|believes|know|knows|knew|guess|hope|hopes|doubt|reckon|realize|realise|understand|wonder|means|mean|expect|expects|sure|glad|maybe|perhaps|now|today|yesterday|tomorrow)\\s+)(?:we|they) (?P<target>wasn(?P<a>['’])t)\\b",
     "replacement": "weren${a}t",
     "category": "Agreement",
     "confidence": 0.96,
     "reason": "Use “weren’t” after “we” or “they”.",
     "provenance": "parzr original rule (agreement pack)",
     "positive": "We said we wasn't ready.",
-    "negative": "We weren't ready. They weren't ready. She wasn't ready. I wasn't there. It wasn't them."
+    "negative": "We weren't ready. They weren't ready. She wasn't ready. I wasn't there. It wasn't them. The word they wasn't used."
   },
   {
     "id": "agree.i_were_clause",
@@ -122,14 +122,14 @@
   },
   {
     "id": "agree.we_they_has",
-    "pattern": "(?im)\\b(?:we|they) (?P<target>has)\\b",
+    "pattern": "(?im)(?:^|[.!?][\\\"”’)]*\\s+|[:;]\\s+|,\\s+(?:(?:and|but|so|or|yet|then)\\s+)?|\\b(?:and|or|but|so|because|since|when|while|although|though|if|whereas|then|until|before|after|once|unless|whenever|yet|that|what|where|why|how|whether|say|says|said|saying|tell|tells|told|think|thinks|thought|believe|believes|know|knows|knew|guess|hope|hopes|doubt|reckon|realize|realise|understand|wonder|means|mean|expect|expects|sure|glad|maybe|perhaps|now|today|yesterday|tomorrow)\\s+)(?:we|they) (?P<target>has)\\b",
     "replacement": "have",
     "category": "Agreement",
     "confidence": 0.96,
     "reason": "Use “have” after “we” or “they”.",
     "provenance": "parzr original rule (agreement pack)",
     "positive": "The guests say they has already left.",
-    "negative": "They have left. We have left. He has left. The team has left. Everyone has left. Where it has gone, nobody knows."
+    "negative": "They have left. We have left. He has left. The team has left. Everyone has left. Where it has gone, nobody knows. The word they has four letters."
   },
   {
     "id": "agree.he_she_it_havent",
@@ -144,14 +144,14 @@
   },
   {
     "id": "agree.i_you_we_they_hasnt",
-    "pattern": "(?im)(?:\\b(?:we|they)|(?:^|[.!?][\"”’)]*\\s+|[:;]\\s+|,\\s+(?:(?:and|but|so|or|yet|then)\\s+)?|\\b(?:and|or|but|so|because|since|when|while|although|though|if|whereas|then|until|before|after|once|unless|whenever|yet|think|thinks|believe|believes|know|knows|guess|hope|hopes|doubt|reckon|realize|realise|understand|wonder|means|mean|expect|expects)\\s+)(?:(?-i:I)|you)) (?P<target>hasn(?P<a>['’])t)\\b",
+    "pattern": "(?im)(?:^|[.!?][\\\"”’)]*\\s+|[:;]\\s+|,\\s+(?:(?:and|but|so|or|yet|then)\\s+)?|\\b(?:and|or|but|so|because|since|when|while|although|though|if|whereas|then|until|before|after|once|unless|whenever|yet|that|what|where|why|how|whether|say|says|said|saying|tell|tells|told|think|thinks|thought|believe|believes|know|knows|knew|guess|hope|hopes|doubt|reckon|realize|realise|understand|wonder|means|mean|expect|expects|sure|glad|maybe|perhaps|now|today|yesterday|tomorrow)\\s+)(?:we|they|(?-i:I)|you) (?P<target>hasn(?P<a>['’])t)\\b",
     "replacement": "haven${a}t",
     "category": "Agreement",
     "confidence": 0.96,
     "reason": "Use “haven’t” after “I”, “you”, “we” or “they”.",
     "provenance": "parzr original rule (agreement pack)",
     "positive": "I hope they hasn't forgotten us.",
-    "negative": "They haven't forgotten. He hasn't forgotten. Part I hasn't changed. The team hasn't changed."
+    "negative": "They haven't forgotten. He hasn't forgotten. Part I hasn't changed. The team hasn't changed. The word they hasn't changed."
   },
   {
     "id": "agree.he_she_it_dont_clause",
