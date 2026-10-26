@@ -64,7 +64,7 @@ Only `positive`/`negative` are read by tests. The replacement must differ from t
 3. `python3 scripts/check-rule-packs.py engine/rules/packs/<file>.json` — structural checks, fast.
 4. `cargo test --release rules::` in `engine/` — positives, negatives, prefilter literal, unique ids.
 5. False alarms, the gate that matters most (never ship a rule that fires on correct text):
-   `PARZR_MODEL_RUNTIME=<runtime> PARZR_MODELS_DIR=<models> python3 scripts/false-alarm-gate.py --engine engine/target/release/parzr-engine --corpus /Users/aman/Desktop/parzr/dist/mining/corpus/mining.jsonl --baseline <baseline.json> --only-rules <your id prefix>`
+   `PARZR_MODEL_RUNTIME=<runtime> PARZR_MODELS_DIR=<models> python3 scripts/false-alarm-gate.py --engine engine/target/release/parzr-engine --corpus dist/mining/corpus/mining.jsonl --baseline <baseline.json> --only-rules <your id prefix>`
    Inspect every hit of your rules: a hit on a genuinely correct sentence means the rule is tightened or dropped. The
    corpus is not perfectly clean (learner text, lowercase chat), so a hit can be a true positive; say which in your
    report. Also `benchmarks/english-100-clean.jsonl`, `english-200-clean.jsonl` and the everyday set's `clean` items
