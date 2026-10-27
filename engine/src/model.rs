@@ -754,6 +754,14 @@ fn generate_with(
         } else {
             drop_new_greeting(&masked, &output)
         };
+        // Friendly, Concise and Direct keep the writer's contractions ("isn't" stays "isn't"):
+        // the model spells them out, which makes a Concise rewrite longer. Professional spells
+        // them out on purpose (rules/tone.json).
+        let output = if matches!(req.mode, Mode::Friendly | Mode::Concise | Mode::Direct) {
+            keep_contractions(&masked, &output)
+        } else {
+            output
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -767,6 +775,91 @@ fn generate_with(
     let suffix = &passage[passage.trim_end().len()..];
     let body = continuation(req, result.trim());
     Ok(format!("{prefix}{body}{suffix}"))
+}
+
+/// Contractions and what they stand for. `bare` ones may end a clause ("it is what I am.") as
+/// readily as they may be followed by a word, so they are put back only before a word.
+const CONTRACTIONS: &[(&str, &str, bool)] = &[
+    ("isn't", "is not", false),
+    ("aren't", "are not", false),
+    ("wasn't", "was not", false),
+    ("weren't", "were not", false),
+    ("don't", "do not", false),
+    ("doesn't", "does not", false),
+    ("didn't", "did not", false),
+    ("can't", "cannot", false),
+    ("can't", "can not", false),
+    ("couldn't", "could not", false),
+    ("wouldn't", "would not", false),
+    ("shouldn't", "should not", false),
+    ("won't", "will not", false),
+    ("haven't", "have not", false),
+    ("hasn't", "has not", false),
+    ("hadn't", "had not", false),
+    ("mustn't", "must not", false),
+    ("I'm", "I am", true),
+    ("you're", "you are", true),
+    ("we're", "we are", true),
+    ("they're", "they are", true),
+    ("I'll", "I will", true),
+    ("you'll", "you will", true),
+    ("we'll", "we will", true),
+    ("they'll", "they will", true),
+];
+/// A rewrite of `source` that keeps the contractions the writer used: where the source wrote
+/// "isn't" and never "is not", an "is not" the model wrote in its place goes back to "isn't"
+/// (as many times as the model dropped the contraction).
+fn keep_contractions(source: &str, output: &str) -> String {
+    static EXPANDED: std::sync::OnceLock<Vec<regex::Regex>> = std::sync::OnceLock::new();
+    let plain = |t: &str| t.replace('\u{2019}', "'").to_lowercase();
+    let (said, wrote) = (plain(source), plain(output));
+    let curly = source.contains('\u{2019}');
+    let patterns = EXPANDED.get_or_init(|| {
+        CONTRACTIONS
+            .iter()
+            .map(|(_, expanded, _)| {
+                regex::Regex::new(&format!(r"(?i)\b{}\b", regex::escape(expanded)))
+                    .expect("constant contraction pattern")
+            })
+            .collect()
+    });
+    let mut result = output.to_owned();
+    for ((contracted, expanded, before_word), pattern) in CONTRACTIONS.iter().zip(patterns) {
+        let contracted_lower = contracted.to_lowercase();
+        let dropped = said
+            .matches(&contracted_lower)
+            .count()
+            .saturating_sub(wrote.matches(&contracted_lower).count());
+        if dropped == 0 || said.contains(&expanded.to_lowercase()) {
+            continue;
+        }
+        let mut left = dropped;
+        let mut text = String::with_capacity(result.len());
+        let mut at = 0;
+        for m in pattern.find_iter(&result) {
+            let follows_word = result[m.end()..]
+                .strip_prefix(' ')
+                .is_some_and(|rest| rest.starts_with(char::is_alphanumeric));
+            if left == 0 || *before_word && !follows_word {
+                continue;
+            }
+            left -= 1;
+            let mut word = contracted.to_string();
+            if curly {
+                word = word.replace('\'', "\u{2019}");
+            }
+            // "Is not" opens a sentence: "Isn't".
+            if m.as_str().starts_with(char::is_uppercase) && !contracted.starts_with('I') {
+                word = crate::upper_first(&word);
+            }
+            text.push_str(&result[at..m.start()]);
+            text.push_str(&word);
+            at = m.end();
+        }
+        text.push_str(&result[at..]);
+        result = text;
+    }
+    result
 }
 
 /// Greetings a rewrite may open with.
@@ -2796,6 +2889,51 @@ mod tests {
             println!("RAW {mode:?}: {raw:?}");
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
+        }
+    }
+
+    #[test]
+    fn a_rewrite_keeps_the_contractions_the_writer_used() {
+        for (source, output, expected) in [
+            (
+                "The printer isn't working again.",
+                "The printer is not working again.",
+                "The printer isn't working again.",
+            ),
+            (
+                "If the test fails, don't deploy.",
+                "If the test fails, do not deploy.",
+                "If the test fails, don't deploy.",
+            ),
+            (
+                "Don't open the attachment unless you know the sender.",
+                "Do not open the attachment unless you know the sender.",
+                "Don't open the attachment unless you know the sender.",
+            ),
+            (
+                "The update isn\u{2019}t ready, so please do not announce it yet.",
+                "The update is not ready, so please do not announce it yet.",
+                "The update isn\u{2019}t ready, so please do not announce it yet.",
+            ),
+            (
+                "I can't make it and I'm sorry.",
+                "I cannot make it, and I am sorry.",
+                "I can't make it, and I'm sorry.",
+            ),
+        ] {
+            assert_eq!(keep_contractions(source, output), expected, "{source}");
+        }
+        // Spelled out by the writer, or a contraction that ends its clause, or not theirs: unchanged.
+        for (source, output) in [
+            ("The printer is not working.", "The printer is not working."),
+            (
+                "The printer isn't working. It is not new.",
+                "The printer is not working. It is not new.",
+            ),
+            ("Who is it? I'm.", "Who is it? I am."),
+            ("It works.", "It does not work."),
+        ] {
+            assert_eq!(keep_contractions(source, output), output, "{source}");
         }
     }
 
