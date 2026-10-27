@@ -2086,6 +2086,10 @@ pub(crate) fn keeps_meaning(
     {
         return Err(format!("adds “{}”, which is rude", w.surface));
     }
+    // The details a change of tone leaves as written (Fix mode answers to its own checks).
+    if mode != Mode::Fix {
+        crate::tone_guard::kept_details(source, output)?;
+    }
     // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
     // an instruction), and it never answers the message ("Sure, I'd love to take a look!").
     // An emoji after the question mark ("Free for lunch? ☕") still ends a question.

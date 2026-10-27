@@ -246,14 +246,14 @@
   },
   {
     "id": "concise.request",
-    "pattern": "(?im)^(?P<target>(?:can|could|would) you (?:please )?)(?P<action>(?:check|review|send|share|confirm|update|read|write|reply|help|provide|look|let))\\b",
-    "replacement": "Please ",
+    "pattern": "(?im)^(?:can|could|would) you (?P<target>please )",
+    "replacement": "",
     "modes": [
       "concise"
     ],
-    "reason": "Make a concise request.",
-    "positive": "Could you check this?",
-    "negative": "Could you not send this?",
+    "reason": "Leave the filler out of a request; a question stays a question.",
+    "positive": "Could you please check this?",
+    "negative": "Could you check this?",
     "provenance": "parzr original rule"
   },
   {

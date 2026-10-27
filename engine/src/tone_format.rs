@@ -191,7 +191,7 @@ const SHORTHAND: &[(&str, &str)] = &[
     ("thx", "thanks"),
     // Said of a doubt, not a negation: "I am unsure" keeps the writer's "idk" free of a "not".
     ("idk", "I am unsure"),
-    ("brb", "I will be right back"),
+    ("brb", "I am stepping away briefly"),
     ("omg", "wow"),
     ("tmrw", "tomorrow"),
     ("tmr", "tomorrow"),
@@ -968,9 +968,9 @@ mod tests {
             ("IDK if he is coming", "I am unsure if he is coming"),
             (
                 "brb, grabbing my charger",
-                "I will be right back, grabbing my charger",
+                "I am stepping away briefly, grabbing my charger",
             ),
-            ("Brb", "I will be right back"),
+            ("Brb", "I am stepping away briefly"),
             // ya is yes at the start of a reply, you elsewhere.
             ("ya i can cover thursday", "yes i can cover thursday"),
             ("Ya, I can cover Thursday", "Yes, I can cover Thursday"),
