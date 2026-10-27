@@ -468,6 +468,10 @@ fn slipped(word: &str) -> Option<&'static str> {
         .iter()
         .filter(|c| one_edit(word, c))
         .map(|c| (spelling::slip_cost(word, c), *c))
+        // "thao's idea" is a person's possessive, not "that's": a word that ends in "'s" is a
+        // contraction only by a slip on a neighbouring key or a dropped, doubled or swapped
+        // letter ("Elt's", "Xhe's"), never by a far key.
+        .filter(|(cost, _)| !word.ends_with("'s") || *cost <= 1.0)
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
     match near[..] {

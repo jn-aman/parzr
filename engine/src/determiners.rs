@@ -20,21 +20,27 @@ pub fn an_fits(word: &str) -> Option<bool> {
         return None;
     }
     let letters: Vec<char> = w.chars().take_while(|c| c.is_alphabetic()).collect();
-    // An abbreviation or a letter said by its name ("an MBA", "a URL", "an A").
-    if letters.iter().all(|c| c.is_uppercase()) && (letters.len() >= 2 || w.len() == 1) {
-        return Some("AEFHILMNORSX".contains(first));
-    }
     let l = w.to_lowercase();
+    // An abbreviation or a letter said by its name ("an MBA", "a URL", "an A"); a long ordinary
+    // word in capitals ("A FANTASTIC FUTURE") is just shouted and follows its sound.
+    if letters.iter().all(|c| c.is_uppercase())
+        && (letters.len() >= 2 || w.len() == 1)
+        && !(letters.len() >= 5 && spelling::ordinary(&l))
+    {
+        return acronym_an(&letters);
+    }
     let starts = |list: &[&str]| list.iter().any(|p| l.starts_with(p));
     match first.to_ascii_lowercase() {
         'a' | 'i' => Some(true),
         'e' => Some(!starts(&["eu", "ewe"])),
         'o' => Some(!starts(&["one", "once"])),
+        // "an unintentional", "an unidentified" are "un-" words; "a union", "a unit" say "yoo".
         'u' => Some(
             l.len() > 1
                 && !starts(&[
-                    "uni", "use", "usu", "uti", "ura", "ure", "uri", "uro", "ubiq", "uku", "unan",
-                    "uk", "ute",
+                    "unif", "unio", "uniq", "unit", "univ", "unic", "unil", "unip", "unis", "unix",
+                    "use", "usu", "uti", "ura", "ure", "uri", "uro", "ubiq", "uku", "unanim", "uk",
+                    "ute",
                 ]),
         ),
         // American English says "an herb".
@@ -44,6 +50,63 @@ pub fn an_fits(word: &str) -> Option<bool> {
         'x' | 'y' => None,
         _ => Some(false),
     }
+}
+/// Acronyms said as one word whose first letter is named with a vowel ("en", "ef", "el", "em",
+/// "ar", "ess", "eks"): "a RAM upgrade", not "an RAM". The longer ones are found by shape
+/// (`said_as_word`); the three-letter ones are too short for a shape, so they are listed.
+const SPOKEN_SHORT: [&str; 8] = ["RAM", "ROM", "LAN", "SIM", "MAC", "SAN", "NAS", "FAT"];
+/// Acronyms people say both ways ("a FAQ" as "fack", "an FAQ" as "eff-ay-cue"; "sequel" or "ess-cue-el"): either
+/// article is right, so neither is corrected.
+const EITHER_SOUND: [&str; 6] = ["FAQ", "SQL", "SAT", "SAP", "SOC", "NOC"];
+/// Letters that start a consonant cluster of an English word ("SC-uba", "SM-art", "ST-em").
+const ONSETS: [&str; 24] = [
+    "BL", "BR", "CH", "CL", "CR", "DR", "FL", "FR", "GL", "GR", "PL", "PR", "SC", "SH", "SK", "SL",
+    "SM", "SN", "SP", "ST", "SW", "TH", "TR", "TW",
+];
+/// Two consonants an English word can end in ("SMA-RT", "LA-MP", "FAA-NG").
+const CODAS: [&str; 24] = [
+    "ST", "SK", "SP", "LT", "LD", "ND", "NT", "NK", "RT", "RD", "RK", "RM", "RN", "LF", "LK", "LM",
+    "LP", "MP", "FT", "PT", "CT", "NS", "RS", "NG",
+];
+/// Whether an all-capital acronym of four to eight letters reads as a word ("NASA", "NATO",
+/// "FIFA", "SCUBA") rather than letter by letter ("NCAA", "HTML", "MSNBC", "NAACP"): a vowel
+/// opens it or follows its first consonant (or an English cluster), and it ends in a vowel, one
+/// consonant or a pair English words end in.
+fn said_as_word(letters: &[char]) -> bool {
+    if !(4..=8).contains(&letters.len()) || !letters.iter().all(char::is_ascii_uppercase) {
+        return false;
+    }
+    let vowel = |c: char| "AEIOU".contains(c);
+    let at = |i: usize| letters[i];
+    let cluster: String = [at(0), at(1)].iter().collect();
+    let onset = vowel(at(0)) || vowel(at(1)) || ONSETS.contains(&cluster.as_str()) && vowel(at(2));
+    // "Y" ends a word as a vowel does ("NIMBY").
+    let open = |c: char| vowel(c) || c == 'Y';
+    let end = letters.len() - 1;
+    let coda: String = [letters[end - 1], letters[end]].iter().collect();
+    let ends = open(letters[end]) || open(letters[end - 1]) || CODAS.contains(&coda.as_str());
+    onset && ends && letters.iter().any(|c| vowel(*c))
+}
+/// "an" or "a" before an acronym or a letter said by its name: None where people say it both ways.
+fn acronym_an(letters: &[char]) -> Option<bool> {
+    let word: String = letters.iter().collect();
+    if EITHER_SOUND.contains(&word.as_str()) {
+        return None;
+    }
+    let first = *letters.first()?;
+    // The letters of "NBA", "FBI" and "HR" begin with a vowel sound if their first letter is named so.
+    let named = "AEFHILMNORSX".contains(first);
+    if !named {
+        return Some(false);
+    }
+    // "A NASA mission", "a Europol unit": said as a word, the first sound is the word's, a
+    // consonant for the names of F, H, L, M, N, R, S and X and for "EU" said "yoo".
+    if SPOKEN_SHORT.contains(&word.as_str())
+        || said_as_word(letters) && (!"AEIO".contains(first) || word.starts_with("EU"))
+    {
+        return Some(false);
+    }
+    Some(true)
 }
 /// "a engineer", "an huge": the article's form follows the sound of the next word. Only an ordinary
 /// word that can follow an article counts, never a letter or code ("the letter a is").
@@ -128,9 +191,27 @@ fn article_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if i > 0 && s[i - 1].end_byte == s[i].start_byte {
             continue;
         }
+        // "influenza A viruses": a capital A in mid-sentence is a label, not the article.
+        if s[i].surface == "A" && i > 0 {
+            continue;
+        }
         let w = s[i + 1].normalized.as_str();
         let after = &s[i + 2];
-        if s[i + 1].proper_name
+        // "a boys' football team", "a waiters' strike": the plural is a possessive.
+        let possessive =
+            ["'", "’"].contains(&after.surface) && after.start_byte == s[i + 1].end_byte;
+        // "a Worlds Ahead student": a capitalized plural in mid-sentence is a title or a name.
+        let title = s[i + 1].surface.starts_with(char::is_uppercase) && i > 0;
+        // "a hands-on experience", "a sales-driven team", "a needs-based grant": a plural that is
+        // the first part of a hyphenated modifier is part of the compound, not a noun of its own.
+        let compound = ["-", "‐"].contains(&after.surface)
+            && after.start_byte == s[i + 1].end_byte
+            && s.get(i + 3)
+                .is_some_and(|n| n.is_word && n.start_byte == after.end_byte);
+        if compound
+            || possessive
+            || title
+            || s[i + 1].proper_name
             || w.len() < 4
             || [
                 "news",
@@ -156,6 +237,10 @@ fn article_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 "sports",
                 "series",
                 "lots",
+                "masters",
+                "bachelors",
+                "mens",
+                "womens",
             ]
             .contains(&w)
             || after.is_word
@@ -982,4 +1067,116 @@ pub fn check(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>, question: bo
     quantifiers(req, s, edits);
     there_be(req, s, edits);
     opening_auxiliary(req, s, edits, question);
+}
+#[cfg(test)]
+mod tests {
+    use crate::Request;
+    fn fix(text: &str) -> String {
+        crate::pipeline::rewrite(&Request {
+            text: text.into(),
+            ..Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn acronyms_said_as_words_take_a_and_letters_take_an() {
+        // Said as a word, the first sound is the word's: "a NASA", "a RAM", "a LAN", "a SIM".
+        for noun in [
+            "NASA", "NATO", "FIFA", "NAFTA", "UNICEF", "UNESCO", "SCUBA", "SWAT", "NASDAQ",
+            "FAANG", "HIPAA", "LIDAR", "RAM", "ROM", "LAN", "SIM", "JSON", "PIN",
+        ] {
+            let right = format!("It was a {noun} decision.");
+            assert_eq!(fix(&right), right, "{right}");
+            let wrong = format!("It was an {noun} decision.");
+            assert_eq!(fix(&wrong), right, "{wrong}");
+        }
+        // Said letter by letter, a first letter named with a vowel sound takes "an".
+        for noun in [
+            "NBA", "NFL", "FBI", "MBA", "HR", "SMS", "MRI", "LLM", "HTML", "NCAA", "NHS", "SUV",
+            "RSVP", "NAACP", "MSNBC", "SMTP", "OPEC", "ASAP", "EU", "FDA", "XML",
+        ] {
+            let right = format!("It was an {noun} decision.");
+            assert_eq!(fix(&right), right, "{right}");
+            let wrong = format!("It was a {noun} decision.");
+            assert_eq!(fix(&wrong), right, "{wrong}");
+        }
+        // A letter or a word that begins with a "yoo" sound takes "a"; "URL" and "UFO" are such.
+        for (wrong, right) in [
+            ("Open an URL in a tab.", "Open a URL in a tab."),
+            ("We saw an UFO last night.", "We saw a UFO last night."),
+            ("He is an UN envoy.", "He is a UN envoy."),
+        ] {
+            assert_eq!(fix(wrong), right, "{wrong}");
+        }
+        // Said both ways ("fack" and "eff-ay-cue", "sequel" and "ess-cue-el"): neither is wrong.
+        for text in [
+            "Read a FAQ page first.",
+            "Read an FAQ page first.",
+            "Write a SQL query.",
+            "Write an SQL query.",
+            "Take a SAT prep class.",
+            "Take an SAT prep class.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // A long word in capitals is a shouted word, not an acronym.
+        assert_eq!(fix("A FANTASTIC FUTURE"), "A FANTASTIC FUTURE");
+        assert_eq!(fix("A EXCELLENT PLAN"), "An EXCELLENT PLAN");
+        // Ordinary words keep following the sound of the word.
+        assert_eq!(fix("She is a engineer."), "She is an engineer.");
+        assert_eq!(fix("It was an huge win."), "It was a huge win.");
+        assert_eq!(fix("He took an X-ray."), "He took an X-ray.");
+    }
+    #[test]
+    fn words_that_begin_with_un_take_an_and_those_that_begin_with_yoo_take_a() {
+        for text in [
+            "It was an unintentional slip.",
+            "That is an unanswerable question.",
+            "We work in an unincorporated area.",
+            "She wore an unidentified badge.",
+            "He gave an uninformed answer.",
+            "We joined a union.",
+            "It is a unique case.",
+            "Use a unit test.",
+            "Visit a university.",
+            "It was a unanimous vote.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        assert_eq!(
+            fix("It was a unintentional slip."),
+            "It was an unintentional slip."
+        );
+        assert_eq!(fix("We joined an union."), "We joined a union.");
+    }
+    #[test]
+    fn a_possessive_plural_a_label_or_a_title_after_a_is_no_plural_noun() {
+        for text in [
+            "Every school has a boys' football team.",
+            "I heard about a waiters' strike.",
+            "It is a Worlds Ahead student programme.",
+            "Specimens of influenza A viruses were tested.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn a_plural_that_starts_a_hyphenated_modifier_is_not_a_noun_of_its_own() {
+        for text in [
+            "It was a hands-on experience for the whole class.",
+            "We want a sales-driven culture.",
+            "She needs a systems-level view of the project.",
+            "It is a needs-based grant.",
+            "They kept it at an arms-length distance.",
+            "He wrote a thank-you note and a rules-based filter.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // One article, one noun: a plural noun after it is still made singular.
+        assert_eq!(
+            fix("We asked an experts in the field."),
+            "We asked an expert in the field."
+        );
+    }
 }

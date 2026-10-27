@@ -930,7 +930,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // A capital inside a sentence may be a name ("Siller", "Princip"): only a misspelt proper noun
     // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
     // throughout only on longer words ("INITALIZED").
-    for t in tokens.iter().filter(|_| !tone_only) {
+    for (ti, t) in tokens.iter().enumerate().filter(|_| !tone_only) {
         // The writer's names and dictionary words (and links, code, file names) are never respelled.
         if protected
             .iter()
@@ -948,6 +948,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         else {
             continue;
         };
+        // "two childrens" is "two children": the possessive of an irregular plural is right only
+        // before the thing possessed ("my childrens school") or with its own apostrophe.
+        let correction = correction
+            .strip_suffix("'s")
+            .filter(|base| ["children", "women", "men", "people"].contains(base))
+            .filter(|_| !spelling::possessed_noun_follows(t, tokens.get(ti + 1)))
+            .unwrap_or(correction);
         let original = t.surface;
         let mut letters = original.chars();
         let capital = letters.next().is_some_and(|c| c.is_ascii_uppercase());
@@ -974,10 +981,29 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         {
             replacement = upper_first(&replacement);
         }
+        // "childrens' toys": the token already carries the apostrophe a possessive correction would
+        // add ("children's"), so the correction takes the typed one with it. Any other correction
+        // with an apostrophe would leave a stray mark ("children's'") and is dropped; a word in
+        // single quotes ('recieve') is no such case.
+        let mark = req.text[t.end_byte..]
+            .chars()
+            .next()
+            .filter(|c| ['\'', '’'].contains(c) && correction.contains('\''));
+        let mut end_utf16 = t.end_utf16;
+        if let Some(mark) = mark {
+            let after = req.text[t.end_byte + mark.len_utf8()..].chars().next();
+            if !correction.ends_with("'s") || after.is_some_and(char::is_alphanumeric) {
+                continue;
+            }
+            end_utf16 += 1;
+            if mark == '’' {
+                replacement = replacement.replace('\'', "’");
+            }
+        }
         if let Some(e) = make_edit(
             &req.text,
             t.start_utf16,
-            t.end_utf16,
+            end_utf16,
             replacement,
             "Spelling",
             "spelling.common_misspelling",
@@ -2427,6 +2453,125 @@ mod tests {
                 && names::never_a_name("u")
         );
         assert!(!names::never_a_name("Li") && !names::never_a_name("aman"));
+    }
+    /// The pipeline's first pass on `text` with the tagger calling each of `words` a name, as the
+    /// system tagger does for a capitalized word it does not know.
+    fn tagged(text: &str, words: &[&str]) -> String {
+        let tokens = words
+            .iter()
+            .map(|w| {
+                let start = text.find(w).unwrap();
+                TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + w.len(),
+                    pos: "Noun".into(),
+                    lemma: String::new(),
+                    name: true,
+                    ..TokenHint::default()
+                }
+            })
+            .collect();
+        pipeline::rewrite(&Request {
+            text: text.into(),
+            tokens,
+            ..Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn a_closing_line_is_no_name_even_when_the_tagger_says_so() {
+        // "Sincerley" is capitalized and unknown, so the tagger calls it a name and a name takes
+        // no edit; before a signature it is a closing, and its misspelling is fixed.
+        assert_eq!(
+            tagged(
+                "Thanks for the update.\n\nSincerley,\nAman",
+                &["Sincerley", "Aman"]
+            ),
+            "Thanks for the update.\n\nSincerely,\nAman"
+        );
+        assert_eq!(
+            tagged("Sincerley,\nAman", &["Sincerley", "Aman"]),
+            "Sincerely,\nAman"
+        );
+        assert_eq!(
+            fix("Thanks for the update.\n\nBest regads,\nAman"),
+            "Thanks for the update.\n\nBest regards,\nAman"
+        );
+        assert_eq!(
+            fix("Thanks for the update.\n\nKind regads,\nPriya"),
+            "Thanks for the update.\n\nKind regards,\nPriya"
+        );
+        // The signature stays as typed, and a greeting line is a person, not a closing.
+        for (text, names) in [
+            ("Hi Sarha,\nSee you soon.\nAman", ["Sarha", "Aman"]),
+            (
+                "Thanks for the update.\n\nBest regards,\naman",
+                ["aman", "aman"],
+            ),
+            ("Dear Sarha,\nAman", ["Sarha", "Aman"]),
+        ] {
+            assert_eq!(tagged(text, &names).to_lowercase(), text.to_lowercase());
+        }
+    }
+    #[test]
+    fn two_to_four_capitals_are_an_acronym_unless_the_list_has_the_name() {
+        for acronym in ["PC", "CD", "DVD", "CEO", "API", "FBI", "NASA"] {
+            assert!(names::never_a_name(acronym), "{acronym}");
+        }
+        for name in ["Ali", "ALI", "AMAN", "Sam", "I", "Aman's"] {
+            assert!(!names::never_a_name(name), "{name}");
+        }
+        // The tagger's name guess on "PC" or "API" is dropped at the tokenizer.
+        let text = "The PC and the API are old.";
+        let hints: Vec<TokenHint> = ["PC", "API"]
+            .iter()
+            .map(|w| {
+                let start = text.find(w).unwrap();
+                TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + w.len(),
+                    pos: "Noun".into(),
+                    name: true,
+                    ..TokenHint::default()
+                }
+            })
+            .collect();
+        assert!(
+            tokenizer::tokenize(text, &hints)
+                .iter()
+                .all(|t| !t.proper_name)
+        );
+    }
+    #[test]
+    fn a_possessive_correction_takes_the_apostrophe_the_word_already_has() {
+        // "childrens'" is "children's": the correction took the typed mark with it once, and left
+        // "children's'", then fought another rule about "those children's" until the check gave up.
+        for (input, expected) in [
+            (
+                "The childrens' toys are here.",
+                "The children's toys are here.",
+            ),
+            (
+                "Those childrens' books are old.",
+                "Those children's books are old.",
+            ),
+            (
+                "Those children's books are old.",
+                "Those children's books are old.",
+            ),
+            ("He said 'recieve' is wrong.", "He said 'receive' is wrong."),
+            // No noun follows: the plural. A noun follows: the possessive.
+            ("I have two childrens.", "I have two children."),
+            ("Both womens left early.", "Both women left early."),
+            (
+                "My childrens school is near.",
+                "My children's school is near.",
+            ),
+            ("The womens room is open.", "The women's room is open."),
+        ] {
+            assert_eq!(pipe(input), expected, "{input}");
+        }
     }
     #[test]
     fn surname_particles_join_name_parts() {

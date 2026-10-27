@@ -153,6 +153,13 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
             tokens[i].proper_name = false;
         }
     }
+    // "Sincerley,\nAman": a closing line is no name, whatever the tagger says of its first word.
+    let closing: Vec<usize> = (0..tokens.len())
+        .filter(|&i| tokens[i].proper_name && crate::spelling::closing_line(&tokens, i))
+        .collect();
+    for i in closing {
+        tokens[i].proper_name = false;
+    }
     tokens
 }
 
