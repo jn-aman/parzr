@@ -1,0 +1,15 @@
+pron.coord_obj_i_across_from
+pron.vobj_let_i
+pron.whos_possessive_family
+pron.whos_possessive_things
+pron.whos_possessive_abstract
+pron.its_apostrophe
+pron.its_own_contraction
+pron.your_going_to
+pron.hisself
+pron.herselfs
+pron.myselfs
+pron.ourself
+pron.youself
+pron.itselfs
+pron.each_others

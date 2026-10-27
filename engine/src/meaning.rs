@@ -339,6 +339,10 @@ const FILLER: &[&str] = &[
 ];
 /// Rude or crude words ("stupid", "hell"): softening them is what a tone rewrite is for, so every tone may drop
 /// them, and a softened sentence may say "not" ("a dumb idea" is "not the best idea").
+/// The words a question asks with; a rewrite keeps the one the writer used.
+const QUESTION_WORDS: &[&str] = &[
+    "who", "whose", "what", "which", "where", "when", "why", "how",
+];
 const RUDE: &[&str] = &[
     "stupid",
     "dumb",
@@ -2092,6 +2096,31 @@ pub(crate) fn keeps_meaning(
     if mode != Mode::Direct && ends(source) && !ends(output) {
         return Err("turns a question into a statement".into());
     }
+    // A question keeps what it asks. "Who did you reach out to?" asks for a person; "Did you reach
+    // out to anyone?" asks for a yes or a no. The question word stays in every mode (whom may
+    // become who), and a rewrite asks nothing the writer did not ("When can you send it?").
+    if ends(source) {
+        let asks = |text: &str| -> Vec<&'static str> {
+            let mut found: Vec<&'static str> = content_tokens(text, &[])
+                .iter()
+                .filter_map(|t| {
+                    QUESTION_WORDS.iter().copied().find(|&q| {
+                        q == t.normalized.as_str() || (q == "who" && t.normalized == "whom")
+                    })
+                })
+                .collect();
+            found.sort_unstable();
+            found.dedup();
+            found
+        };
+        let (source_asks, output_asks) = (asks(source), asks(output));
+        if let Some(q) = source_asks.iter().find(|q| !output_asks.contains(q)) {
+            return Err(format!("drops “{q}”, which the question asks"));
+        }
+        if let Some(q) = output_asks.iter().find(|q| !source_asks.contains(q)) {
+            return Err(format!("asks “{q}”, which the writer did not"));
+        }
+    }
     // A softening tone never turns a complaint up ("This is definitely wrong again!"); good
     // news may stay excited ("the client absolutely loved it"), and warmth ("so sorry") is fine.
     // Nor does it claim a quality the text did not ("it perfectly supports the queries").
@@ -3225,6 +3254,45 @@ mod tests {
             "Please review this."
         ));
         assert!(!ok(Mode::Fix, "This is a dumb idea.", "This is an idea."));
+    }
+    #[test]
+    fn a_question_keeps_its_question_word() {
+        for mode in TONES {
+            // A who-question is not a yes-or-no question.
+            assert!(!ok(
+                mode,
+                "Who did you reach out to?",
+                "Did you reach out to anyone?"
+            ));
+            assert!(ok(
+                mode,
+                "Who did you reach out to?",
+                "Who have you reached out to?"
+            ));
+            assert!(ok(
+                mode,
+                "Whom did you reach out to?",
+                "Who did you reach out to?"
+            ));
+            assert!(!ok(mode, "When can you send it?", "Can you send it?"));
+            assert!(!ok(mode, "Can you send it?", "When can you send it?"));
+            assert!(ok(
+                mode,
+                "Do you know when the meeting is?",
+                "When is the meeting?"
+            ));
+        }
+        // Direct may ask the same thing as an instruction, with the question word kept.
+        assert!(ok(
+            Mode::Direct,
+            "Who did you reach out to?",
+            "Who you reached out to."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "Who did you reach out to?",
+            "Reach out to anyone."
+        ));
     }
     #[test]
     fn tones_may_swap_synonyms_but_not_the_point() {

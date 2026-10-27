@@ -316,6 +316,10 @@
     [
       "They van meet us there.",
       "They can meet us there."
+    ],
+    [
+      "The red ball is round in shape.",
+      "The red ball is round."
     ]
   ],
   "negatives": [
@@ -389,7 +393,6 @@
     "We ate in the garden after sunset.",
     "Most or all of the money went to charity.",
     "Is driving by car cheaper than taking the train?",
-    "The red ball is round in shape.",
     "She gave a rest to her sore feet.",
     "There is just one way out of the valley.",
     "The loss of the old library was a blow to the town.",
@@ -430,6 +433,7 @@
     "I hope you had a good weekend.",
     "I wonder if they ever fixed it.",
     "We talked to Jen and I think she agrees.",
-    "I spoke with Raj and I am glad we did."
+    "I spoke with Raj and I am glad we did.",
+    "The red ball is perfectly round."
   ]
 }
