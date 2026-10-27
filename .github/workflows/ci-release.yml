@@ -272,11 +272,11 @@ jobs:
         run: cargo build --release --locked --manifest-path engine/Cargo.toml --bin parzr-engine
       - name: Tone regression set
         # Every item in the four tone modes against its expectation and the universal invariants (numbers, question words,
-        # negation, names, Concise length, chat-speak in Professional ...). CI scores every 3rd item (104 of 310, 416
+        # negation, names, Concise length, chat-speak in Professional ...). CI scores every 6th item (52 of 310, 208
         # requests) against its own sample baseline; the full set runs locally (benchmarks/README.md).
         run: |
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
-            python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --every 3 --output dist/qa/tone-regression \
+            python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --every 6 --output dist/qa/tone-regression \
             --min-pass-rate professional=0.90 --min-pass-rate friendly=0.93 --min-pass-rate concise=0.91 --min-pass-rate direct=0.90 --baseline tone-regression
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

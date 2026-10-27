@@ -120,29 +120,29 @@
         }
       },
       "samples": {
-        "3": {
+        "6": {
           "updated": "2026-10-28",
-          "reason": "Local sample of the tone regression set (every 3rd item, 104 of 310), what CI's tone job scores because a tone request takes seconds on a runner; the CI run may differ (CPU instead of GPU inference), re-record from its tone-summaries artifact if so",
-          "items": 104,
+          "reason": "CI scores every 6th item (52 of 310): the every-3rd sample reached 100 of 104 items in 50 minutes on the runner and hit the job timeout; local run on the engine at base-rule-audit 9a2d09b",
+          "items": 52,
           "modes": {
             "professional": {
-              "items": 104,
-              "passed": 96,
-              "pass_rate": 0.9231
+              "items": 52,
+              "passed": 50,
+              "pass_rate": 0.9615
             },
             "friendly": {
-              "items": 104,
-              "passed": 99,
-              "pass_rate": 0.9519
+              "items": 52,
+              "passed": 52,
+              "pass_rate": 1.0
             },
             "concise": {
-              "items": 104,
-              "passed": 97,
-              "pass_rate": 0.9327
+              "items": 52,
+              "passed": 48,
+              "pass_rate": 0.9231
             },
             "direct": {
-              "items": 104,
-              "passed": 96,
+              "items": 52,
+              "passed": 48,
               "pass_rate": 0.9231
             }
           }
