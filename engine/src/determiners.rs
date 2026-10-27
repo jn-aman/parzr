@@ -374,6 +374,39 @@ fn ends_clause(next: Option<&Token<'_>>) -> bool {
             || spelling::flags(&a.normalized) & 4 != 0 && spelling::flags(&a.normalized) & 2 != 0
     })
 }
+/// Adjectives common enough to stand before a noun that the word may not be a head.
+const COMMON_ADJECTIVES: [&str; 30] = [
+    "new",
+    "old",
+    "big",
+    "small",
+    "good",
+    "bad",
+    "other",
+    "same",
+    "few",
+    "last",
+    "next",
+    "first",
+    "free",
+    "full",
+    "high",
+    "low",
+    "great",
+    "little",
+    "long",
+    "short",
+    "young",
+    "main",
+    "own",
+    "real",
+    "whole",
+    "different",
+    "popular",
+    "public",
+    "private",
+    "special",
+];
 /// Verbs and adjectives whose clause complement opens with "that" ("insist that", "clear that").
 const COMPLEMENT_WORDS: &[&str] = &[
     "reveal",
@@ -637,6 +670,10 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             !run.is_empty()
                 && head.is_some_and(|h| {
                     singular_noun(h)
+                        // "these new and dangerous threats": a word that can be an adjective is no
+                        // head while another word may follow; the noun is further on.
+                        && !spelling::adjective(h)
+                        && !COMMON_ADJECTIVES.contains(&h.normalized.as_str())
                         // "those outside the movement", "those in your family": a place word or
                         // preposition is no noun to count.
                         && ![

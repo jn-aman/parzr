@@ -1125,6 +1125,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let Some(mut is_plural) = relative_subject(&tokens, i).or_else(|| plural(p)) else {
             continue;
         };
+        // "These news are good", "These entry were": a singular-looking noun after a plural
+        // demonstrative is a mismatch the demonstrative rule owns; the verb is no evidence.
+        if !is_plural && i >= 2 && ["these", "those"].contains(&tokens[i - 2].normalized.as_str()) {
+            continue;
+        }
         // British English lets a group noun take a plural verb ("The team are working on it").
         if req.dialect == "british" && !is_plural && COLLECTIVE.contains(&p.normalized.as_str()) {
             continue;

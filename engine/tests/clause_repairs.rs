@@ -542,6 +542,9 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
         "Any of this requires work and attention.",
         "These thin irregular electron density layers are old.",
         "These four studies show it.",
+        "I like these new books.",
+        "These news are good.",
+        "We plan to deal with these new and dangerous threats.",
         "In addition, these children receive less attention.",
     ]);
     check(&[
@@ -563,6 +566,8 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
         ("He found those book.", "He found those books."),
         ("Check these file.", "Check these files."),
         ("Those guy is late.", "That guy is late."),
+        ("I like these new book.", "I like these new books."),
+        ("I saw those big house.", "I saw those big houses."),
         (
             "Those library on Main is closed.",
             "That library on Main is closed.",
