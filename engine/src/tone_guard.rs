@@ -27,6 +27,35 @@ pub(crate) fn kept_details(source: &str, output: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Who or what a negative opener asks about ("can't you", "isn't it").
+const ASKED_ABOUT: &[&str] = &[
+    "you",
+    "u",
+    "we",
+    "i",
+    "he",
+    "she",
+    "they",
+    "it",
+    "this",
+    "that",
+    "there",
+    "someone",
+    "anyone",
+    "somebody",
+    "anybody",
+    "everyone",
+    "everybody",
+    "these",
+    "those",
+    "the",
+    "my",
+    "your",
+    "our",
+    "his",
+    "her",
+    "their",
+];
 /// Words that open a question when they start a clause.
 const QUESTION_OPENERS: &[&str] = &[
     "can", "could", "would", "will", "do", "does", "did", "is", "are", "am", "was", "were", "have",
@@ -43,25 +72,81 @@ fn ends_question(text: &str) -> bool {
     text.trim_end_matches(|c: char| c.is_whitespace() || !c.is_ascii() && !c.is_alphanumeric())
         .ends_with('?')
 }
+/// Words a statement starts with. An instruction starts with a verb and may become a polite
+/// question ("Fix it today." is "Could you please fix it today?"); a statement does not.
+const STATEMENT_STARTS: &[&str] = &[
+    "i",
+    "we",
+    "they",
+    "he",
+    "she",
+    "it",
+    "this",
+    "that",
+    "these",
+    "those",
+    "there",
+    "the",
+    "a",
+    "an",
+    "my",
+    "our",
+    "your",
+    "his",
+    "her",
+    "their",
+    "its",
+    "everyone",
+    "everybody",
+    "nobody",
+    "nothing",
+    "cant",
+    "cannot",
+    "dont",
+    "wont",
+    "couldnt",
+    "wouldnt",
+    "shouldnt",
+    "isnt",
+    "arent",
+    "didnt",
+    "doesnt",
+    "wasnt",
+    "werent",
+    "havent",
+    "hasnt",
+];
 /// A statement stays one: "cant open the file, it says its corrupted" does not end in "?".
 fn statement_stays(source: &str, output: &str, src: &[String]) -> Result<(), String> {
     if !ends_question(output) || source.contains('?') {
         return Ok(());
     }
-    // A chat message that asks without its mark ("can u send it", "the build is down, is anyone on it").
-    let asks = source
-        .split([',', ';', ':', '.', '!', '\n'])
+    // The output ends in a question; what matters is the sentence of the source that it ends.
+    let last_sentence = source
+        .split(['.', '!', '\n'])
+        .rfind(|s| s.chars().any(char::is_alphanumeric))
+        .unwrap_or(source);
+    let clauses: Vec<Vec<String>> = last_sentence
+        .split([',', ';', ':'])
         .map(words)
-        .any(|clause| {
-            clause
+        .map(|c| {
+            let lead = c
                 .iter()
-                .find(|w| !LEAD_INS.contains(&w.as_str()))
-                .is_some_and(|w| {
-                    QUESTION_OPENERS.contains(&w.as_str())
-                        || w.ends_with("n't")
-                        || w.as_str() == "u"
-                })
-        });
+                .take_while(|w| LEAD_INS.contains(&w.as_str()))
+                .count();
+            c[lead..].to_vec()
+        })
+        .filter(|c| !c.is_empty())
+        .collect();
+    // A chat message that asks without its mark ("can u send it", "the build is down, is anyone on it").
+    let asks = clauses.iter().any(|clause| {
+        let first = clause[0].as_str();
+        QUESTION_OPENERS.contains(&first)
+            || first.ends_with("n't")
+                && clause
+                    .get(1)
+                    .is_some_and(|w| ASKED_ABOUT.contains(&w.as_str()))
+    });
     // "I was wondering if you could send it" and "do you know" ask someone, with or without a mark.
     let addresses = src.iter().any(|w| {
         matches!(
@@ -79,10 +164,18 @@ fn statement_stays(source: &str, output: &str, src: &[String]) -> Result<(), Str
                 | "whether"
         )
     });
-    if asks || addresses || src.is_empty() {
-        Ok(())
-    } else {
+    // The first clause is a statement when it opens like one (a subject, or a negated verb: "can't
+    // open the file").
+    let statement = clauses.first().is_some_and(|c| {
+        let first = c[0].as_str();
+        STATEMENT_STARTS.contains(&first)
+            || first.ends_with("n't")
+                && !c.get(1).is_some_and(|w| ASKED_ABOUT.contains(&w.as_str()))
+    });
+    if statement && !asks && !addresses {
         Err("turns a statement into a question".into())
+    } else {
+        Ok(())
     }
 }
 
@@ -231,9 +324,23 @@ fn conditional_if(w: &[String], i: usize) -> bool {
         "decides",
     ];
     let before = i.checked_sub(1).map(|k| w[k].as_str());
-    let request = w.get(i + 1).is_some_and(|n| n == "you" || n == "u")
-        && w.get(i + 2)
-            .is_some_and(|m| ["could", "would", "can", "might", "may"].contains(&m.as_str()));
+    // "if possible", "if convenient": a courtesy, which a plain request does without.
+    let courtesy = w.get(i + 1).is_some_and(|n| {
+        [
+            "possible",
+            "convenient",
+            "needed",
+            "necessary",
+            "applicable",
+            "feasible",
+            "appropriate",
+        ]
+        .contains(&n.as_str())
+    });
+    let request = courtesy
+        || w.get(i + 1).is_some_and(|n| n == "you" || n == "u")
+            && w.get(i + 2)
+                .is_some_and(|m| ["could", "would", "can", "might", "may"].contains(&m.as_str()));
     !before.is_some_and(|b| NOT_BEFORE.contains(&b)) && !request
 }
 fn has_any(w: &[String], set: &[&str]) -> bool {
@@ -306,7 +413,14 @@ fn me(w: &[String]) -> bool {
 /// The people in the sentence stay: a rewrite does not add "we" or "our" to a writer who did
 /// not say it, swap "my" and "your", or turn "we" into "I".
 fn people(src: &[String], out: &[String]) -> Result<(), String> {
-    if us(out) && !us(src) {
+    // "As discussed" may become "As we discussed": the idiom has its "we" in either form.
+    let added: Vec<String> = out
+        .iter()
+        .enumerate()
+        .filter(|&(i, x)| (i == 0 || out[i - 1] != "as") || !matches!(head(x), "we" | "us"))
+        .map(|(_, x)| x.clone())
+        .collect();
+    if us(&added) && !us(src) {
         return Err("adds “we” or “our”, which the writer did not say".into());
     }
     if us(src) && !us(out) && me(out) && !me(src) {
@@ -431,6 +545,15 @@ mod tests {
         for (source, output) in [
             // A chat question without its mark may get one.
             ("can u send it", "Could you send it?"),
+            ("Fix it today.", "Could you please fix it today?"),
+            (
+                "Send me the slides by noon.",
+                "Could you send me the slides by noon? Thanks!",
+            ),
+            (
+                "As discused, I attached the file.",
+                "As we discussed, I have attached the file.",
+            ),
             ("hey, can you look at this", "Could you look at this?"),
             (
                 "the build is down, is anyone on it",

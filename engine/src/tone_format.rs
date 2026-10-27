@@ -489,6 +489,56 @@ pub(crate) fn direct_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
     edits
 }
 
+/// Sign-off phrases a letter or message closes with ("Thanks,", "Best regards,", "See you Monday,").
+const SIGN_OFF: &str = r"(?:thanks(?:\s+(?:a\s+lot|again|so\s+much))?|thank\s+you(?:\s+(?:again|so\s+much))?|many\s+thanks|with\s+thanks|(?:(?:best|kind|warm|warmest|with\s+best|with\s+kind|with\s+warm)\s+)?regards|best(?:\s+wishes)?|cheers|(?:yours\s+)?(?:sincerely|faithfully|truly)|respectfully|cordially|warmly|enjoy|talk\s+soon|see\s+you(?:\s+\w+)?|take\s+care)";
+/// The opening words of a greeting ("Hi", "Dear", "Good morning").
+const GREETING: &str = r"(?:hi|hello|hey|dear|greetings|good\s+(?:morning|afternoon|evening))";
+
+/// The greeting and the sign-off of a letter or message: byte ranges a tone rewrite leaves as
+/// the writer wrote them, as it leaves the line breaks between them and the body. "Hi Dana,"
+/// and "Cheers,\nLee" are not content to reword, and the model drops or merges them.
+pub(crate) fn letter_frame(text: &str) -> Vec<(usize, usize)> {
+    static GREETING_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static SIGN_OFF_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let greeting = GREETING_RE.get_or_init(|| {
+        // "Hi Dana,", "Good morning Ms. Alvarez," or "Hello," on a line of their own, or "Hey Sam,"
+        // opening a message.
+        regex::Regex::new(&format!(r"(?i)^\s*{GREETING}\b[^,\n!]{{0,32}}[,!]"))
+            .expect("constant greeting pattern")
+    });
+    let sign_off = SIGN_OFF_RE.get_or_init(|| {
+        // "Thanks,\nOmar" and "…last night. Best, Maya": the phrase, a comma, and a name of up to
+        // three words that ends the message.
+        regex::Regex::new(&format!(
+            r"(?i)(?:^|\n|[.!?][ \t]+){SIGN_OFF}[ \t]*,[ \t]*\n?[ \t]*[\p{{L}}][\p{{L}}.'’-]*(?:[ \t]+[\p{{L}}][\p{{L}}.'’-]*){{0,2}}[ \t]*$"
+        ))
+        .expect("constant sign-off pattern")
+    });
+    let mut spans = vec![];
+    if let Some(m) = greeting.find(text) {
+        // The greeting is the first line's words up to its comma; leading space and the line break
+        // after it are not part of it.
+        let found = m.as_str();
+        let end = m.end();
+        let start = m.start() + (found.len() - found.trim_start().len());
+        if start < end && end - start <= 40 {
+            spans.push((start, end));
+        }
+    }
+    if let Some(m) = sign_off.find(text) {
+        let found = m.as_str();
+        let lead = found.len()
+            - found
+                .trim_start_matches(['\n', '.', '!', '?', ' ', '\t'])
+                .len();
+        let (start, end) = (m.start() + lead, m.end());
+        if spans.last().is_none_or(|&(_, e)| start >= e) {
+            spans.push((start, end));
+        }
+    }
+    spans
+}
+
 fn opener_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
@@ -669,6 +719,13 @@ fn final_mark(
                     })
                 })
     }) {
+        return None;
+    }
+    // A sign-off at the end ("Thanks, remy", "Cheers,\nLee") is a name, not a sentence.
+    if letter_frame(text)
+        .iter()
+        .any(|&(from, to)| to == body.len() && from > 0)
+    {
         return None;
     }
     let line = body.rsplit('\n').next().unwrap_or(body);
@@ -947,6 +1004,53 @@ mod tests {
         );
         assert_eq!(professional("haha, see u at 7 lol"), "see you at 7");
         assert_eq!(professional("lol"), "lol");
+    }
+
+    #[test]
+    fn a_letter_frame_is_its_greeting_and_its_sign_off() {
+        let frame = |text: &str| -> Vec<String> {
+            letter_frame(text)
+                .into_iter()
+                .map(|(a, b)| text[a..b].to_owned())
+                .collect()
+        };
+        assert_eq!(
+            frame("Hi Dana,\n\nThe files are attached.\n\nThanks,\nOmar"),
+            ["Hi Dana,", "Thanks,\nOmar"]
+        );
+        assert_eq!(
+            frame("Good morning Ms. Alvarez,\n\nSee you at ten."),
+            ["Good morning Ms. Alvarez,"]
+        );
+        assert_eq!(
+            frame("Hello,\n\nI would like to cancel.\n\nRegards,\nM. Okonkwo"),
+            ["Hello,", "Regards,\nM. Okonkwo"]
+        );
+        assert_eq!(
+            frame("Hi team, the build is green again. Cheers, Jo"),
+            ["Hi team,", "Cheers, Jo"]
+        );
+        assert_eq!(
+            frame("hey jules, did the package come? thanks, remy"),
+            ["hey jules,", "thanks, remy"]
+        );
+        assert_eq!(
+            frame("Hey Rhea, the meeting is at 4. Talk soon, Dev"),
+            ["Hey Rhea,", "Talk soon, Dev"]
+        );
+        assert_eq!(
+            frame("Hello Ines,\n\nWe have received your payment.\n\nWith thanks,\nBilling"),
+            ["Hello Ines,", "With thanks,\nBilling"]
+        );
+        assert_eq!(
+            frame("Hi Noor,\n\nWelcome to the team.\n\nSee you Monday,\nAlex"),
+            ["Hi Noor,", "See you Monday,\nAlex"]
+        );
+        // Not a frame: a body that merely starts like one or ends with thanks.
+        assert!(frame("Hello world is a program.").is_empty());
+        assert!(frame("I said hi to everyone.").is_empty());
+        assert!(frame("Thanks, I will send the report tomorrow morning.").is_empty());
+        assert!(frame("Send it today.").is_empty());
     }
 
     #[test]

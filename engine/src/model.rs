@@ -1760,6 +1760,41 @@ fn plausible(original: &str, replacement: &str) -> bool {
 /// letters in every mode: an edit that changes more than case there is dropped, together with
 /// the other half of a move. "aman" to "Am" passes the closeness test in Fix mode, so this runs
 /// before it.
+/// A tone rewrite leaves the frame of a letter as the writer wrote it: its greeting and sign-off
+/// ("Hi Dana,", "Cheers,\nLee") and its line breaks (a paragraph break stays two line breaks). The
+/// model merges paragraphs into one line and drops a sign-off as if it were padding; an edit that
+/// touches either is left out, with any edit linked to it.
+fn keep_structure(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    if req.mode == Mode::Fix {
+        return all;
+    }
+    let frame = crate::tone_format::letter_frame(&req.text);
+    let touches = |e: &Edit| {
+        let (Some(a), Some(b)) = (
+            byte_at(&req.text, e.start_utf16),
+            byte_at(&req.text, e.end_utf16),
+        ) else {
+            return true;
+        };
+        let breaks = |t: &str| t.matches('\n').count();
+        breaks(&e.original) != breaks(&e.replacement)
+            || frame.iter().any(|&(from, to)| {
+                if a == b {
+                    a > from && a < to
+                } else {
+                    a < to && b > from
+                }
+            })
+    };
+    let dropped: Vec<_> = all
+        .iter()
+        .filter(|e| touches(e))
+        .filter_map(|e| e.group_id.clone())
+        .collect();
+    all.into_iter()
+        .filter(|e| !touches(e) && !e.group_id.as_ref().is_some_and(|g| dropped.contains(g)))
+        .collect()
+}
 fn keep_names(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
     let tokens = crate::tokenizer::tokenize(&req.text, &req.tokens);
     let fixed: Vec<_> = fixed_words(req, &tokens)
@@ -2791,7 +2826,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         Mode::Fix => Err(error),
         _ => attempt(Some("")),
     })?;
-    let all = keep_names(req, all);
+    let all = keep_structure(req, keep_names(req, all));
     let (changes, withheld) = if req.mode == Mode::Fix {
         let mut kept = guard(&req.text, all);
         // "The team are working": British English lets a group noun take a plural verb.
@@ -2823,7 +2858,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
             .then(|| attempt_with(None, true).ok())
             .flatten()
-            .map(|(_, e)| drop_added_emphasis(req, keep_names(req, e)))
+            .map(|(_, e)| drop_added_emphasis(req, keep_structure(req, keep_names(req, e))))
             .filter(|e| {
                 let (failed2, gain2) = candidate_score(req, e, true);
                 // Never more failed segments than the first; better on tone, or as good with fewer
