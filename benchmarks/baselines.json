@@ -120,30 +120,30 @@
         }
       },
       "samples": {
-        "5": {
+        "3": {
           "updated": "2026-10-28",
-          "reason": "Local sample of the tone regression set (every 5th item, 62 of 310), what CI scores because a tone request takes seconds on a runner; the CI run may differ (CPU instead of GPU inference), re-record from its quality-summaries artifact if so",
-          "items": 62,
+          "reason": "Local sample of the tone regression set (every 3rd item, 104 of 310), what CI's tone job scores because a tone request takes seconds on a runner; the CI run may differ (CPU instead of GPU inference), re-record from its tone-summaries artifact if so",
+          "items": 104,
           "modes": {
             "professional": {
-              "items": 62,
-              "passed": 56,
-              "pass_rate": 0.9032
+              "items": 104,
+              "passed": 96,
+              "pass_rate": 0.9231
             },
             "friendly": {
-              "items": 62,
-              "passed": 58,
-              "pass_rate": 0.9355
+              "items": 104,
+              "passed": 99,
+              "pass_rate": 0.9519
             },
             "concise": {
-              "items": 62,
-              "passed": 60,
-              "pass_rate": 0.9677
+              "items": 104,
+              "passed": 97,
+              "pass_rate": 0.9327
             },
             "direct": {
-              "items": 62,
-              "passed": 59,
-              "pass_rate": 0.9516
+              "items": 104,
+              "passed": 96,
+              "pass_rate": 0.9231
             }
           }
         }

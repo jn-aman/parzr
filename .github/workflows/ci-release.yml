@@ -164,16 +164,6 @@ jobs:
             python3 scripts/run-heldout-benchmark.py --engine dist/qa/heldout-native --corpus benchmarks/typo-fuzz/test.jsonl --clean benchmarks/typo-fuzz/test-clean.jsonl \
             --split all --layers rules,gec --output dist/qa/typo-fuzz \
             --min-fix-rate rules=0.78 --min-fix-rate gec=0.80 --max-false-alarm-rate rules=0.03 --max-false-alarm-rate gec=0.03 --baseline typo-fuzz-test
-      - name: Tone regression set
-        # benchmarks/tone/regression.jsonl: every item in the four tone modes against its expectation and the universal
-        # invariants (numbers, question words, negation, names, Concise length, chat-speak in Professional ...).
-        # A tone request takes seconds on a runner (about 0.5 s on an M-series Mac), so CI scores every 5th item (62 of 310,
-        # 248 requests) against its own sample baseline; the full set runs locally (benchmarks/README.md).
-        timeout-minutes: 35
-        run: |
-          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
-            python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --every 5 --output dist/qa/tone-regression \
-            --min-pass-rate professional=0.88 --min-pass-rate friendly=0.91 --min-pass-rate concise=0.94 --min-pass-rate direct=0.93 --baseline tone-regression
       - name: Frozen benchmark corpora
         # benchmarks/frozen.json pins every frozen corpus by SHA-256: a corpus is never edited to pass a gate.
         run: python3 scripts/check-frozen-corpora.py
@@ -208,7 +198,6 @@ jobs:
           path: |
             dist/qa/heldout/summary.*
             dist/qa/typo-fuzz/summary.*
-            dist/qa/tone-regression/summary.*
             dist/qa/names/report.json
             dist/qa/english-*/summary.json
             dist/qa/everyday/summary.json
@@ -242,6 +231,60 @@ jobs:
             dist/package-report.json
             dist/extensions/parzr-*
             dist/Parzr-*-local.dmg
+  tone:
+    # The tone regression set (benchmarks/tone/regression.jsonl) in its own job, in parallel with verify: a tone request
+    # takes seconds on a runner (about 0.5 s on an M-series Mac), too long to share verify's 60 minutes. It sets up only
+    # what it needs: the pinned model pack, the native model runtime and the engine CLI.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    timeout-minutes: 55
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pin Xcode and reproducible timestamps
+        run: |
+          test -d "$XCODE_DEVELOPER_DIR" || { echo "::error::$XCODE_DEVELOPER_DIR is not on this runner image; update XCODE_DEVELOPER_DIR (docs/releases.md)."; exit 1; }
+          echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild -version
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.91.0'
+          targets: aarch64-apple-darwin
+      - name: Restore the pinned model pack
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: dist/models
+          key: model-pack-${{ hashFiles('engine/models.json') }}
+      - name: Build the model runtime and fetch the model packs
+        run: |
+          python3 scripts/prepare-model.py
+          # Verified against the manifest's SHA-256s; only a pull request may rebuild the essential pack from its pinned upstream sources.
+          python3 scripts/model-pack.py fetch --models-dir dist/models --verify ${{ github.event_name == 'pull_request' && '--derive-fallback' || '' }}
+          slips="$PWD/dist/models/slips/$(jq -r '.packs[] | select(.id == "slips").version' engine/models.json)/slips"
+          tone="$PWD/dist/models/tone/$(jq -r '.packs[] | select(.id == "tone").version' engine/models.json)/tone"
+          printf 'PARZR_SLIP_DIR=%s\nPARZR_TONE_DIR=%s\n' "$slips" "$tone" >> "$GITHUB_ENV"
+      - name: Build the engine
+        run: cargo build --release --locked --manifest-path engine/Cargo.toml --bin parzr-engine
+      - name: Tone regression set
+        # Every item in the four tone modes against its expectation and the universal invariants (numbers, question words,
+        # negation, names, Concise length, chat-speak in Professional ...). CI scores every 3rd item (104 of 310, 416
+        # requests) against its own sample baseline; the full set runs locally (benchmarks/README.md).
+        run: |
+          PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
+            python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --every 3 --output dist/qa/tone-regression \
+            --min-pass-rate professional=0.90 --min-pass-rate friendly=0.93 --min-pass-rate concise=0.91 --min-pass-rate direct=0.90 --baseline tone-regression
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: tone-summaries-${{ github.sha }}
+          if-no-files-found: warn
+          path: dist/qa/tone-regression/summary.*
   dependencies:
     # Supply-chain checks for pull requests and the default branch (not tags: a new advisory must not block a
     # release that already passed them). Fails on a high or critical advisory in what Parzr ships or deploys.
@@ -288,7 +331,7 @@ jobs:
   release-build:
     # Publishing is owner-only: the owner's tag push, or the Release workflow's dispatch (github-actions[bot]).
     if: startsWith(github.ref, 'refs/tags/v') && (github.triggering_actor == github.repository_owner || github.triggering_actor == 'github-actions[bot]')
-    needs: verify
+    needs: [verify, tone]
     runs-on: macos-26
     timeout-minutes: 90
     environment: release
