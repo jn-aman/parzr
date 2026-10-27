@@ -40,9 +40,9 @@ def build():
     a('vin_number', 'VIN', 'number', 'Check the VIN number before you buy the car.',
       'Check the VIN before you buy the car, and note the phone number of the seller.',
       spelled='vehicle identification number')
-    a('gps_system', 'GPS', 'system', 'The GPS system lost the signal in the tunnel.',
-      'The GPS lost the signal in the tunnel, and the alarm system kept working.',
-      spelled='Global Positioning System', conf=0.72)
+    # "GPS system" and "SMS messages" are the everyday names of the things (a car's GPS system, sending
+    # SMS messages): both fired on correct sentences in the 30k-sentence false-alarm corpus, so neither
+    # is a rule.
     a('ram_memory', 'RAM', 'memory', 'The laptop has eight gigabytes of RAM memory.',
       'The laptop has eight gigabytes of RAM, and good memory management.',
       spelled='random access memory', plural=False)
@@ -88,7 +88,4 @@ def build():
     a('ocr_recognition', 'OCR', 'recognition', 'The OCR recognition step failed on the scan.',
       'The OCR step failed on the scan, and speech recognition was fine.',
       spelled='optical character recognition', plural=False)
-    a('sms_message', 'SMS', 'message', 'You will get an SMS message with the code.',
-      'You will get an SMS with the code, and an email message later.',
-      spelled='short message service', conf=0.72)
     return ids

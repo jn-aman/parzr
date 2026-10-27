@@ -1419,17 +1419,6 @@
     "negative": "Check the VIN before you buy the car, and note the phone number of the seller."
   },
   {
-    "id": "redund.acro.gps_system",
-    "pattern": "(?im)(?:^|[^\\w'’-])(?P<target>(?P<k>(?-i:GPS)) system(?P<s>s)?)(?:[^\\w'’-]|$)",
-    "replacement": "${k}${s}",
-    "category": "Style",
-    "confidence": 0.72,
-    "reason": "“GPS” already ends in “system” (Global Positioning System): “GPS” alone is enough.",
-    "provenance": "parzr original rule",
-    "positive": "The GPS system lost the signal in the tunnel.",
-    "negative": "The GPS lost the signal in the tunnel, and the alarm system kept working."
-  },
-  {
     "id": "redund.acro.ram_memory",
     "pattern": "(?im)(?:^|[^\\w'’-])(?P<target>(?P<k>(?-i:RAM)) memory)(?:[^\\w'’-]|$)",
     "replacement": "${k}",
@@ -1593,17 +1582,6 @@
     "provenance": "parzr original rule",
     "positive": "The OCR recognition step failed on the scan.",
     "negative": "The OCR step failed on the scan, and speech recognition was fine."
-  },
-  {
-    "id": "redund.acro.sms_message",
-    "pattern": "(?im)(?:^|[^\\w'’-])(?P<target>(?P<k>(?-i:SMS)) message(?P<s>s)?)(?:[^\\w'’-]|$)",
-    "replacement": "${k}${s}",
-    "category": "Style",
-    "confidence": 0.72,
-    "reason": "“SMS” already ends in “message” (short message service): “SMS” alone is enough.",
-    "provenance": "parzr original rule",
-    "positive": "You will get an SMS message with the code.",
-    "negative": "You will get an SMS with the code, and an email message later."
   },
   {
     "id": "redund.misc.each_and_every",

@@ -31,9 +31,10 @@ MAP = [
      '"shallow in depth", "old in age", "few in number", "cold in temperature", "cheap in price", "fast in speed", "loud in volume", '
      '"salty in taste", "smooth in texture", "brief in duration", "strong in strength"', ('redund.dim.',)),
     ('Acronym followed by the word it ends in',
-     'ATM machine, PIN number, HIV virus, AIDS syndrome, LCD display, LED diode, ISBN number, VIN number, GPS system, RAM / ROM memory, '
+     'ATM machine, PIN number, HIV virus, AIDS syndrome, LCD display, LED diode, ISBN number, VIN number, RAM / ROM memory, '
      'LAN / WAN / VPN network, DNS system, UPC code, ISP provider, FAQ questions, GUI / CLI / API interface, CPU processor, OCR recognition, '
-     'SMS message, RIP in peace. Acronyms are matched in capitals only, so "pin number 3" and "ram memory" in a lowercase sense stay',
+     'RIP in peace. Acronyms are matched in capitals only, so "pin number 3" and "ram memory" in a lowercase sense stay. "GPS system" and '
+     '"SMS messages" are the everyday names of the things and are not rules (both fired on correct sentences)',
      ('redund.acro.',)),
     ('Fixed phrases',
      'each and every, in spite of the fact that, "7 am in the morning" / "6 p.m. in the evening", consecutive ... in a row, both of the two, "about 50 or so", minimum of at least, knots per hour (after a number), both ... as well as (mid-sentence), postponed until a '
