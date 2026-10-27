@@ -731,6 +731,11 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "It is clear that genes play a part", "I am glad that birds came back": after an
+        // adjective "that" opens a clause, it is no demonstrative.
+        if d == "that" && i > 0 && !prep && spelling::flags(word(s, i - 1)) & 8 != 0 {
+            continue;
+        }
         // "see that final agreements are forwarded": a "that" with a clause after it is the
         // conjunction.
         if d == "that"

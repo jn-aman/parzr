@@ -337,6 +337,44 @@ fn byte_at(text: &str, offset: usize) -> Option<usize> {
     }
     (n == offset).then_some(text.len())
 }
+/// The part of an edit's original range that really changes: the whole words its replacement
+/// repeats at the start or the end stay out of it ("ROM memory" to "ROM" changes " memory"). The
+/// edit's own range when it is an insertion, or when trimming would cut inside a word.
+fn changed_words(e: &Edit) -> (usize, usize) {
+    let (old, new): (Vec<char>, Vec<char>) = (
+        e.original.chars().collect(),
+        e.replacement.chars().collect(),
+    );
+    let word = |c: char| c.is_alphanumeric() || c == '\'' || c == '’';
+    let mut head = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    // The shared start counts only up to a word boundary.
+    while head > 0 && old.get(head).is_some_and(|c| word(*c)) && word(old[head - 1]) {
+        head -= 1;
+    }
+    let room = old.len().min(new.len()) - head;
+    let mut tail = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(room);
+    while tail > 0
+        && tail < old.len()
+        && word(old[old.len() - tail])
+        && word(old[old.len() - tail - 1])
+    {
+        tail -= 1;
+    }
+    if head + tail >= old.len() || old.is_empty() {
+        return (e.start_utf16, e.end_utf16);
+    }
+    let units = |chars: &[char]| chars.iter().map(|c| c.len_utf16()).sum::<usize>();
+    (
+        e.start_utf16 + units(&old[..head]),
+        e.end_utf16 - units(&old[old.len() - tail..]),
+    )
+}
 fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
     if start == end {
         start >= r.start_utf16 && start < r.end_utf16
@@ -1538,15 +1576,18 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             || tagger_piece(e, r)
     };
     let blocked = |e: &Edit| {
+        // Whole words the edit leaves as they are do not count as touched: "ROM memory" to "ROM"
+        // changes only " memory", and "please RSVP" to "RSVP" only "please ".
+        let (from, to) = changed_words(e);
         protected
             .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !exempt(e, r))
+            .any(|r| overlaps(from, to, r) && !exempt(e, r))
             || !case_only(e)
                 && !contraction(e)
                 && !apostrophe_only(e)
                 && if e.start_utf16 != e.end_utf16 {
                     guard.iter().any(|r| {
-                        overlaps(e.start_utf16, e.end_utf16, r)
+                        overlaps(from, to, r)
                             && !(slip(e) && first_word_guess(r))
                             && !tagger_piece(e, r)
                     })
@@ -2361,6 +2402,67 @@ mod tests {
             ..Request::default()
         };
         assert_eq!(fix_request(req.clone()), req.text);
+    }
+    #[test]
+    fn a_tagged_acronym_keeps_its_letters_and_loses_only_the_redundant_word() {
+        // The tagger calls an all-caps acronym a name; a rule that deletes the word beside it
+        // changes nothing of the name, so the edit stands. Changing the name itself still does not.
+        let tagged = |text: &str, word: &str| -> Request {
+            let start = text.find(word).unwrap();
+            Request {
+                text: text.into(),
+                tokens: vec![TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + word.len(),
+                    pos: "Noun".into(),
+                    lemma: String::new(),
+                    name: true,
+                    ..TokenHint::default()
+                }],
+                ..Request::default()
+            }
+        };
+        for (text, word, expected) in [
+            (
+                "Check the ROM memory before the update.",
+                "ROM",
+                "Check the ROM before the update.",
+            ),
+            (
+                "We use OCR recognition to read the scans.",
+                "OCR",
+                "We use OCR to read the scans.",
+            ),
+            ("Please RSVP by Friday.", "RSVP", "RSVP by Friday."),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), expected, "{text}");
+        }
+        // A name that a rule would respell is still left alone.
+        let text = "I met Jonh yesterday and we talked.";
+        assert_eq!(fix_request(tagged(text, "Jonh")), text);
+    }
+    #[test]
+    fn changed_words_leaves_out_the_words_an_edit_repeats() {
+        let edit = |original: &str, replacement: &str| Edit {
+            start_utf16: 10,
+            end_utf16: 10 + original.encode_utf16().count(),
+            replacement: replacement.into(),
+            original: original.into(),
+            category: "Style".into(),
+            rule_id: "test".into(),
+            explanation: String::new(),
+            confidence: 0.9,
+            group_id: None,
+        };
+        // "ROM memory" to "ROM": only " memory" (10 + 3 ..) changes.
+        assert_eq!(changed_words(&edit("ROM memory", "ROM")), (13, 20));
+        // "please RSVP" to "RSVP": only "please ".
+        assert_eq!(changed_words(&edit("please RSVP", "RSVP")), (10, 17));
+        // Letters inside a word are never trimmed: "Amans" to "Aman" changes the name.
+        assert_eq!(changed_words(&edit("Amans", "Aman")), (10, 15));
+        // An insertion, and a replacement that keeps nothing, keep their own range.
+        assert_eq!(changed_words(&edit("ROM", "ROMs")), (10, 13));
+        assert_eq!(changed_words(&edit("ROM", "RAM")), (10, 13));
     }
     #[test]
     fn tagged_and_dictionary_proper_nouns_get_capitals() {

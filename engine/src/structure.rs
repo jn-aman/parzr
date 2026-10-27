@@ -922,7 +922,8 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             // "Did you saw it?" is "see": only the homographs a writer rarely means as a base
             // ("did she lay the carpet", "did it wound him") stay.
             let keeps = morphology::also_base(w) && !["saw", "found"].contains(&w);
-            if w != v.base && !keeps {
+            // "How the team did it is unclear": "did" is the main verb and "is" the sentence's own.
+            if w != v.base && !keeps && !["is", "are", "was", "were", "am"].contains(&w) {
                 emit(
                     req,
                     t,

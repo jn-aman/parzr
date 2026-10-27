@@ -530,8 +530,8 @@
       "concise",
       "direct"
     ],
-    "pattern": "(?i)\\b(?P<target>an? (?:sufficient|adequate) (?:number|amount|quantity) of)\\b",
-    "replacement": "enough",
+    "pattern": "(?i)\\b(?P<target>an? (?:sufficient|adequate) (?:number|amount|quantity)(?:(?P<p> of (?:the|these|those|our|my|your|their|his|her|its|them|us|whom|which))|\\s+of))\\b",
+    "replacement": "enough${p}",
     "category": "Style",
     "confidence": 0.72,
     "reason": "“Enough” replaces “a sufficient number of”.",

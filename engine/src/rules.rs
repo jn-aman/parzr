@@ -391,6 +391,95 @@ mod tests {
             "only {fixed} confusions fixed"
         );
     }
+    /// The wording rules of one tone mode, applied once.
+    fn tone(text: &str, mode: crate::Mode) -> String {
+        let req = crate::Request {
+            text: text.into(),
+            mode,
+            ..crate::Request::default()
+        };
+        crate::rewrite_once(&req, true).unwrap().text
+    }
+    #[test]
+    fn a_person_after_the_verb_moves_behind_what_is_explained() {
+        for (input, expected) in [
+            (
+                "Please suggest me a laptop for the trip.",
+                "Please suggest a laptop to me for the trip.",
+            ),
+            ("Can you explain me this?", "Can you explain this to me?"),
+            (
+                "Could you explain me the process in detail?",
+                "Could you explain the process to me in detail?",
+            ),
+            (
+                "She explained them the whole plan, and we agreed.",
+                "She explained the whole plan to them, and we agreed.",
+            ),
+            (
+                "Please explain me how the export works.",
+                "Please explain to me how the export works.",
+            ),
+            (
+                "He described me the problem.",
+                "He described the problem to me.",
+            ),
+            (
+                "She mentioned them the price yesterday.",
+                "She mentioned the price to them yesterday.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+        for text in [
+            "Please suggest a laptop to me.",
+            "Can you explain this to me?",
+            "Could you explain the process to us in detail?",
+            "Mention me in the post.",
+            "Describe me in three words.",
+            "He suggested me for the role.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
+    fn a_large_number_of_keeps_its_of_before_a_determiner() {
+        use crate::Mode::{Concise, Direct};
+        for (input, expected) in [
+            (
+                "A large number of users reported the bug.",
+                "Many users reported the bug.",
+            ),
+            (
+                "A large number of the users reported the bug.",
+                "Many of the users reported the bug.",
+            ),
+            (
+                "We heard from a great number of our customers.",
+                "We heard from many of our customers.",
+            ),
+            (
+                "We need a sufficient number of the volunteers.",
+                "We need enough of the volunteers.",
+            ),
+            (
+                "We need a sufficient amount of time.",
+                "We need enough time.",
+            ),
+        ] {
+            assert_eq!(tone(input, Concise), expected, "{input}");
+        }
+        assert_eq!(
+            tone("A large number of them replied.", Direct),
+            "Many of them replied."
+        );
+        for text in [
+            "The large number of users surprised us.",
+            "Many of the users reported the bug.",
+        ] {
+            assert_eq!(tone(text, Concise), text);
+        }
+    }
     #[test]
     fn every_rule_has_provenance_and_fixtures() {
         let grammar: Vec<Rule> =

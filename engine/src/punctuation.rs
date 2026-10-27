@@ -100,6 +100,19 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "left early so that we could park": a purpose clause takes no comma. ("so that is why"
+        // has "that" for its subject: a verb follows it.)
+        if token.normalized == "so"
+            && tokens.get(i + 1).is_some_and(|t| t.normalized == "that")
+            && tokens.get(i + 2).is_some_and(|t| {
+                t.is_word
+                    && (!finite(t) || crate::clauses::subject_contraction(&t.normalized))
+                    && !AUX.contains(&t.normalized.as_str())
+                    && !t.normalized.ends_with("n't")
+            })
+        {
+            continue;
+        }
         if token.normalized == "so"
             && !tokens.get(i + 1).is_some_and(|t| {
                 [
@@ -128,9 +141,9 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
             .contains(&tokens[i - 1].normalized.as_str())
                 || ["be", "is", "are", "was", "were", "been", "being"]
                     .contains(&tokens[i - 1].normalized.as_str())
-                || tokens
-                    .get(i + 1)
-                    .is_none_or(|t| !t.is_word || ["for", "one"].contains(&t.normalized.as_str())))
+                || tokens.get(i + 1).is_none_or(|t| {
+                    !t.is_word || ["for", "one", "to"].contains(&t.normalized.as_str())
+                }))
         {
             continue;
         }
@@ -159,10 +172,35 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
             })
             .map(|n| n + 1)
             .unwrap_or(0);
+        // "Although it was cold but he came", "Because it rained so we left": the opening word
+        // already links the clauses and the doubled conjunction is dropped, so no comma goes
+        // before it.
+        if start == 0 || tokens[start - 1].sentence != token.sentence {
+            let first = tokens[start].normalized.as_str();
+            let second = tokens.get(start + 1).map_or("", |t| t.normalized.as_str());
+            if token.normalized == "but"
+                && (["although", "though"].contains(&first)
+                    || first == "even" && ["though", "if"].contains(&second))
+                || token.normalized == "so" && ["because", "since"].contains(&first)
+            {
+                continue;
+            }
+        }
+        // "not just a threat to our environment but to our values": a correlative, not two clauses.
+        if token.normalized == "but"
+            && tokens[start..i]
+                .iter()
+                .any(|t| ["just", "only", "merely", "simply"].contains(&t.normalized.as_str()))
+            && tokens[start..i].iter().any(|t| t.normalized == "not")
+        {
+            continue;
+        }
+        // The second clause ends at its first comma ("is new but evolving fast, and I would…").
         let end = (i + 1..tokens.len())
             .find(|&n| {
                 tokens[n].sentence != token.sentence
                     || ["but", "so"].contains(&tokens[n].normalized.as_str())
+                    || tokens[n].surface == ","
             })
             .unwrap_or(tokens.len());
         // A contracted subject ("so I'm") or a clause the plain check misses ("I'd love to")

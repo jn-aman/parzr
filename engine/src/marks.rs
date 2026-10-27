@@ -1723,6 +1723,14 @@ fn colons(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         let right_clause = crate::clauses::clause_at(tokens, i + 1, sentence_end).is_some();
         let (replacement, reason) =
             if ["because", "since", "although", "though"].contains(&n.normalized.as_str()) {
+                // "…the setup; because it was late, the site had no servers": the subordinate
+                // clause opens a sentence of its own, with its main clause after the comma.
+                if (i + 1..sentence_end).any(|c| {
+                    tokens[c].surface == ","
+                        && crate::clauses::clause_at(tokens, c + 1, sentence_end).is_some()
+                }) {
+                    continue;
+                }
                 (
                     "",
                     "A subordinate clause joins its sentence without a semicolon.",
