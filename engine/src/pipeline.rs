@@ -943,7 +943,9 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // A withheld rewrite is reported to the writer only when the mode did nothing at all ("No safe
     // version"): when its own rules already said it in the tone (chat shorthand spelled out, a
     // padded phrase cut, a request made direct), that text is the version offered.
-    if document.text() != corrected {
+    // (Friendly's own rules only contract "thank you" to "thanks" or "you are" to "you're": that is
+    // no rewrite.)
+    if req.mode != Mode::Friendly && document.text() != corrected {
         warnings.retain(|w| w != crate::model::TONE_WITHHELD);
     }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);

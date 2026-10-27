@@ -377,7 +377,12 @@ fn conditions(src: &[String], out: &[String]) -> Result<(), String> {
     }
     // "the only option" is no limit; "only call if" and "we only need" are.
     let limits = src.iter().enumerate().any(|(i, w)| {
+        // "and only if you are free" hedges a request; "Only call if …" limits it.
+        let hedge = i > 0
+            && ["and", "but", "or"].contains(&src[i - 1].as_str())
+            && src.get(i + 1).is_some_and(|n| n == "if" || n == "when");
         w == "only"
+            && !hedge
             && !(i > 0
                 && [
                     "the", "a", "an", "our", "my", "your", "his", "her", "their", "one", "its",
@@ -420,7 +425,10 @@ fn people(src: &[String], out: &[String]) -> Result<(), String> {
         .filter(|&(i, x)| (i == 0 || out[i - 1] != "as") || !matches!(head(x), "we" | "us"))
         .map(|(_, x)| x.clone())
         .collect();
-    if us(&added) && !us(src) {
+    // Someone told what to do may be told "let's": the set of people changes only for a writer who
+    // spoke of themselves ("I would like to ask") or of no one ("back at 2:30").
+    let you = |w: &[String]| has_any(w, &["you", "your", "yours", "u", "ur", "ya", "yourself"]);
+    if us(&added) && !us(src) && (me(src) || !you(src)) {
         return Err("adds “we” or “our”, which the writer did not say".into());
     }
     if us(src) && !us(out) && me(out) && !me(src) {
@@ -596,6 +604,14 @@ mod tests {
             ("We will buy the cake.", "We'll buy the cake."),
             ("I'll send it.", "I will send it."),
             ("Let's meet at noon.", "Let's meet at noon."),
+            (
+                "Your slides are a mess, redo them.",
+                "Your slides need work, so let's redo them together.",
+            ),
+            (
+                "If you get a chance, and only if you are free, could you look?",
+                "If you get a chance and are free, could you look?",
+            ),
             (
                 "We'll send it, thanks for your help.",
                 "We will send it, thank you for your help.",

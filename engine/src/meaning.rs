@@ -592,13 +592,16 @@ const PADDING: &[&str] = &[
     "dont hesitate to",
     // Courtesy that a plain request does without ("Would you be so kind as to let me know" is
     // "Would you let me know", "I hope this message finds you well" is "I hope you're well").
+    "hate to ask",
+    "sorry to ask",
+    "sorry to bother you again",
+    "sorry i may be wrong but",
     "at your convenience",
     "be so kind as to",
     "this message finds you",
     "this email finds you",
     "this note finds you",
     "this finds you",
-    "whether or not",
 ];
 /// Words that turn a statement into its opposite. A rewrite must keep the same polarity.
 const NEGATION: &[&str] = &[
@@ -3163,11 +3166,6 @@ mod tests {
                 "In order to move forward with the migration, we need to make a decision regarding the database vendor.",
                 "To proceed with the migration, we need to decide on the database vendor.",
                 Mode::Direct,
-            ),
-            (
-                "I just wanted to check in to see whether or not you had a chance to look at it. No pressure at all.",
-                "I wanted to check in to see if you had a chance to look at it. No pressure at all.",
-                Mode::Concise,
             ),
             (
                 "I hope this message finds you well.",

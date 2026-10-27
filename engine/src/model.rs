@@ -686,6 +686,10 @@ fn worked_examples(mode: Mode) -> &'static [(&'static str, &'static str)] {
                 "Is the staging server down again?",
                 "Is the staging server down again?",
             ),
+            (
+                "Sorry to bother you, but could you maybe forward the contract this week?",
+                "Please forward the contract this week.",
+            ),
         ],
         Mode::Fix => &[],
     }
@@ -1002,6 +1006,32 @@ fn kept_spans(req: &Request) -> Vec<crate::TextRange> {
                     .chars()
                     .all(|c| c.is_ascii_digit() || ".,:/-".contains(c));
             !number && !calendar(text)
+        })
+        .map(|mut r| {
+            // "https://example.org/start," is the link and a comma: the comma is the sentence's
+            // and the model may move it, so only the link itself is kept.
+            if let (Some(a), Some(b)) = (
+                byte_at(&req.text, r.start_utf16),
+                byte_at(&req.text, r.end_utf16),
+            ) {
+                let text = &req.text[a..b];
+                let lower = text.to_ascii_lowercase();
+                if lower.starts_with("http://")
+                    || lower.starts_with("https://")
+                    || lower.starts_with("www.")
+                {
+                    const MARKS: [char; 8] = [',', '.', ';', ':', '!', '?', '\'', '"'];
+                    let mut link = text.trim_end_matches(MARKS);
+                    // A ")" with no "(" before it closes the sentence's bracket, not the link.
+                    while link.ends_with(')') && !link.contains('(') {
+                        link = link[..link.len() - 1].trim_end_matches(MARKS);
+                    }
+                    if link.len() < text.len() && link.len() > "http://".len() {
+                        r.end_utf16 -= text[link.len()..].encode_utf16().count();
+                    }
+                }
+            }
+            r
         })
         .collect()
 }
@@ -1492,7 +1522,7 @@ fn restore(
         } else {
             l.text.clone()
         };
-        result = result.replace(&l.marker, &text);
+        result = collapse_marks_after(&result, &l.marker, &text, masked);
     }
     // Any piece of a placeholder left over ("… by 5pm. ZXQPARZRKEEP", a marker the model cut short or made up)
     // must never reach the writer's text.
@@ -1500,6 +1530,38 @@ fn restore(
         return Err(LOST.into());
     }
     Ok(result)
+}
+
+/// `result` with each `marker` replaced by `text`. A link or a name stands where the model
+/// wrote its placeholder, with the writer's own comma behind it, and the model may add a mark
+/// of its own ("start,," or "widgets,."): of two marks that follow the text together, the second
+/// ends the clause and the first goes, unless the writer wrote the pair.
+fn collapse_marks_after(result: &str, marker: &str, text: &str, masked: &str) -> String {
+    let wrote_pair = |marks: &str| masked.contains(&format!("{marker}{marks}"));
+    let mut out = String::with_capacity(result.len());
+    let mut rest = result;
+    while let Some(at) = rest.find(marker) {
+        out.push_str(&rest[..at]);
+        out.push_str(text);
+        rest = &rest[at + marker.len()..];
+        let mut chars = rest.chars();
+        if let (Some(first), Some(second)) = (chars.next(), chars.next())
+            && matches!(first, ',' | ';' | ':')
+            && matches!(second, ',' | ';' | ':' | '.' | '!' | '?')
+            && !text.ends_with([',', ';', ':', '.', '!', '?'])
+            && !wrote_pair(&rest[..first.len_utf8() + second.len_utf8()])
+        {
+            // ",," keeps one comma; ",." keeps the full stop.
+            out.push(if matches!(second, '.' | '!' | '?') {
+                second
+            } else {
+                first
+            });
+            rest = &rest[first.len_utf8() + second.len_utf8()..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 fn continuation<'a>(req: &Request, output: &'a str) -> &'a str {
@@ -2924,6 +2986,82 @@ mod tests {
             println!("RAW {mode:?}: {raw:?}");
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_is_kept_without_the_mark_that_ends_its_clause() {
+        let kept = |text: &str, mode: Mode| -> Vec<String> {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            kept_spans(&req)
+                .into_iter()
+                .map(|r| {
+                    let (a, b) = (
+                        byte_at(text, r.start_utf16).unwrap(),
+                        byte_at(text, r.end_utf16).unwrap(),
+                    );
+                    text[a..b].to_owned()
+                })
+                .collect()
+        };
+        assert_eq!(
+            kept(
+                "The docs live at https://docs.example.org/guide/start, in case.",
+                Mode::Friendly
+            ),
+            ["https://docs.example.org/guide/start"]
+        );
+        assert_eq!(
+            kept(
+                "See (https://example.org/a_b) now. Or www.example.org/x.",
+                Mode::Concise
+            ),
+            ["https://example.org/a_b", "www.example.org/x"]
+        );
+        assert_eq!(
+            kept(
+                "See https://en.wikipedia.org/wiki/Rust_(language).",
+                Mode::Concise
+            ),
+            ["https://en.wikipedia.org/wiki/Rust_(language)"]
+        );
+        // Fix mode keeps the span as it always did.
+        assert_eq!(
+            kept(
+                "The docs live at https://docs.example.org/guide/start, in case.",
+                Mode::Fix
+            ),
+            ["https://docs.example.org/guide/start,"]
+        );
+    }
+
+    #[test]
+    fn a_mark_the_model_adds_behind_a_restored_link_is_not_doubled() {
+        let marker = "ZXQPARZRKEEP0QXZ";
+        let link = "https://docs.example.org/guide/start";
+        for (masked, output, expected) in [
+            (
+                "The docs live at ZXQPARZRKEEP0QXZ, in case you need them.",
+                "The documents are at ZXQPARZRKEEP0QXZ,, just in case you need them.",
+                "The documents are at https://docs.example.org/guide/start, just in case you need them.",
+            ),
+            (
+                "the repo is at ZXQPARZRKEEP0QXZ, feel free to open an issue",
+                "The repo is at ZXQPARZRKEEP0QXZ,. Feel free to open an issue.",
+                "The repo is at https://docs.example.org/guide/start. Feel free to open an issue.",
+            ),
+            // The writer's own marks stay.
+            (
+                "See ZXQPARZRKEEP0QXZ, then ZXQPARZRKEEP0QXZ.",
+                "See ZXQPARZRKEEP0QXZ, then ZXQPARZRKEEP0QXZ.",
+                "See https://docs.example.org/guide/start, then https://docs.example.org/guide/start.",
+            ),
+        ] {
+            assert_eq!(collapse_marks_after(output, marker, link, masked), expected);
         }
     }
 
