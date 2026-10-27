@@ -628,6 +628,26 @@ const CLOSING_WORDS: [&str; 16] = [
     "truly",
     "gratefully",
 ];
+/// Whether `next` is what a possessive before it possesses: the apostrophe of "childrens'", or a
+/// lowercase noun or adjective of the same sentence that is no function word, auxiliary or past
+/// verb ("my childrens school", not "two childrens are" or "the womens left").
+pub(crate) fn possessed_noun_follows(token: &Token<'_>, next: Option<&Token<'_>>) -> bool {
+    let Some(n) = next else { return false };
+    if ["'", "\u{2019}"].contains(&n.surface) && n.start_byte == token.end_byte {
+        return true;
+    }
+    n.is_word
+        && n.sentence == token.sentence
+        && n.paragraph == token.paragraph
+        && n.surface.starts_with(char::is_lowercase)
+        && ordinary(&n.normalized)
+        && flags(&n.normalized) & (2 | 8) != 0
+        && !function(&n.normalized)
+        && !FINITE.contains(&n.normalized.as_str())
+        && !COPULAS.contains(&n.normalized.as_str())
+        && !morphology::verb(&n.normalized)
+            .is_some_and(|v| v.past == n.normalized && v.past != v.base)
+}
 /// Whether `word` is a closing word or a slip of a long one ("regads", "sincerley").
 fn closing_word(word: &str) -> bool {
     CLOSING_WORDS.contains(&word) || CLOSING_WORDS.iter().any(|c| closing_word_near(word, c))

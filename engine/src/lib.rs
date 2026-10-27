@@ -924,7 +924,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // A capital inside a sentence may be a name ("Siller", "Princip"): only a misspelt proper noun
     // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
     // throughout only on longer words ("INITALIZED").
-    for t in tokens.iter().filter(|_| !tone_only) {
+    for (ti, t) in tokens.iter().enumerate().filter(|_| !tone_only) {
         // The writer's names and dictionary words (and links, code, file names) are never respelled.
         if protected
             .iter()
@@ -942,6 +942,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         else {
             continue;
         };
+        // "two childrens" is "two children": the possessive of an irregular plural is right only
+        // before the thing possessed ("my childrens school") or with its own apostrophe.
+        let correction = correction
+            .strip_suffix("'s")
+            .filter(|base| ["children", "women", "men", "people"].contains(base))
+            .filter(|_| !spelling::possessed_noun_follows(t, tokens.get(ti + 1)))
+            .unwrap_or(correction);
         let original = t.surface;
         let mut letters = original.chars();
         let capital = letters.next().is_some_and(|c| c.is_ascii_uppercase());
@@ -2527,6 +2534,14 @@ mod tests {
                 "Those children's books are old.",
             ),
             ("He said 'recieve' is wrong.", "He said 'receive' is wrong."),
+            // No noun follows: the plural. A noun follows: the possessive.
+            ("I have two childrens.", "I have two children."),
+            ("Both womens left early.", "Both women left early."),
+            (
+                "My childrens school is near.",
+                "My children's school is near.",
+            ),
+            ("The womens room is open.", "The women's room is open."),
         ] {
             assert_eq!(pipe(input), expected, "{input}");
         }
