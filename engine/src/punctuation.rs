@@ -147,15 +147,16 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
-        // "but also have": the adverb does not stand in for a subject.
-        let subject_at = if tokens
-            .get(i + 1)
-            .is_some_and(|t| ["also", "then"].contains(&t.normalized.as_str()))
-        {
-            i + 2
-        } else {
-            i + 1
-        };
+        // "but also have", "but still went down", "but also slightly hurt": adverbs do not stand
+        // in for a subject.
+        let mut subject_at = i + 1;
+        while tokens.get(subject_at).is_some_and(|t| {
+            t.is_word
+                && (["also", "then", "soon"].contains(&t.normalized.as_str())
+                    || crate::clauses::mid_adverb(&t.normalized))
+        }) {
+            subject_at += 1;
+        }
         if tokens.get(subject_at).is_none_or(shares_subject)
             || [
                 "and", "or", "but", "yet", "nor", "not", "even", "just", "do", "does", "did",
@@ -384,11 +385,15 @@ fn dates_and_adverbs(req: &Request, edits: &mut Vec<Edit>) {
 
 /// A verb right after "but" means the clause shares its subject with the first ("He came but
 /// left early"), so there are no two independent clauses to separate.
+/// A verb form right after the conjunction: the clause goes on with the same subject ("but left
+/// early", "but slightly hurt that", "but also have").
 fn shares_subject(t: &Token<'_>) -> bool {
     !crate::clauses::subject_contraction(&t.normalized)
         && (finite(t)
-            || morphology::verb(&t.normalized).is_some_and(|v| v.base == t.normalized)
-                && crate::spelling::flags(&t.normalized) & 2 == 0)
+            || morphology::verb(&t.normalized).is_some_and(|v| {
+                v.base == t.normalized && crate::spelling::flags(&t.normalized) & 2 == 0
+                    || v.past == t.normalized
+            }))
 }
 pub fn finite(t: &Token<'_>) -> bool {
     [
@@ -400,25 +405,34 @@ pub fn finite(t: &Token<'_>) -> bool {
     .contains(&t.normalized.as_str())
         || morphology::verb(&t.normalized).is_some_and(|v| {
             // The past of a verb that is also a plain word ("a bit hard", "a straight bet", "a shot")
-            // does not make a clause, for the verbs added to the table later, unless the app's
-            // tagger read it as the verb ("it cost us a day", "we split the bill").
+            // does not make a clause, for the verbs added to the table later. (With a subject
+            // before it and the tagger's word, it does: `clauses::tagged_past`.)
             t.normalized == v.third
                 || t.normalized == v.past
                     && !(morphology::extra(&v.base)
-                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0
-                        && t.pos != "Verb")
+                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0)
         })
 }
 fn clause(tokens: &[Token<'_>]) -> bool {
-    let words: Vec<_> = tokens.iter().filter(|t| t.is_word).collect();
+    let words: Vec<(usize, &Token<'_>)> = tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.is_word)
+        .collect();
     words.len() >= 3
-        && words.iter().enumerate().skip(1).take(10).any(|(i, t)| {
-            finite(t)
-                || (morphology::verb(&t.normalized)
-                    .is_some_and(|v| v.base == t.normalized && morphology::predicate(&v.base))
-                    && ["we", "you", "they", "people", "colleagues", "friends"]
-                        .contains(&words[i - 1].normalized.as_str()))
-        })
+        && words
+            .iter()
+            .enumerate()
+            .skip(1)
+            .take(10)
+            .any(|(i, (k, t))| {
+                finite(t)
+                    || crate::clauses::tagged_past(tokens, *k)
+                    || (morphology::verb(&t.normalized)
+                        .is_some_and(|v| v.base == t.normalized && morphology::predicate(&v.base))
+                        && ["we", "you", "they", "people", "colleagues", "friends"]
+                            .contains(&words[i - 1].1.normalized.as_str()))
+            })
 }
 /// Words that open a subordinate clause or a question, so a clause beginning with one is not a
 /// finished sentence.

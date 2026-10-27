@@ -2446,6 +2446,23 @@ mod tests {
             }),
             text
         );
+        // The tagger calls a participle a verb too; without a subject before it, no clause.
+        for (text, word) in [
+            (
+                "It often includes home movies and photographs shot by a couple for their own fun.",
+                "shot",
+            ),
+            (
+                "The car can be set up comfortably for street use and be set up for superb handling.",
+                "set",
+            ),
+            (
+                "Reading beat Derby County at Pride Park but still went down on goal difference.",
+                "beat",
+            ),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), text, "{text}");
+        }
     }
     #[test]
     fn a_tagged_acronym_keeps_its_letters_and_loses_only_the_redundant_word() {

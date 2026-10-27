@@ -223,10 +223,54 @@ pub(crate) fn finite_at(tokens: &[Token<'_>], k: usize) -> bool {
     }
     NEGATED.contains(&t.normalized.as_str())
         || finite(t)
+        || tagged_past(tokens, k)
         // "She quit", "it hit": verbs whose past is their base, right after a subject.
         || SAME_PAST.contains(&t.normalized.as_str())
             && k > 0
             && SUBJECTS[..7].contains(&tokens[k - 1].normalized.as_str())
+}
+/// A word the tagger read as a verb whose past form is also a plain word ("hit", "set", "cost",
+/// "shot"), standing where a finite verb goes: after a subject pronoun, a name or a determined
+/// noun, with adverbs between ("it ultimately cost"). The tagger calls a participle a verb too,
+/// so "photographs shot by a couple", "an epic set against", "be set up" and "bait cast fishing"
+/// stay out.
+pub(crate) fn tagged_past(tokens: &[Token<'_>], k: usize) -> bool {
+    let t = &tokens[k];
+    if t.pos != "Verb"
+        || !morphology::verb(&t.normalized).is_some_and(|v| {
+            t.normalized == v.past
+                && t.normalized != v.third
+                && morphology::extra(&v.base)
+                && spelling::flags(&t.normalized) & (2 | 8) != 0
+        })
+        || word(tokens, k + 1) == "by"
+    {
+        return false;
+    }
+    let mut p = k;
+    while p > 0 && tokens[p - 1].is_word && mid_adverb(word(tokens, p - 1)) {
+        p -= 1;
+    }
+    if p == 0 || !tokens[p - 1].is_word {
+        return false;
+    }
+    let prev = &tokens[p - 1];
+    let pw = prev.normalized.as_str();
+    SUBJECTS[..7].contains(&pw)
+        || prev.proper_name
+        || prev.surface.starts_with(char::is_uppercase)
+            && !DETERMINERS.contains(&pw)
+            && !SUBORDINATORS.contains(&pw)
+            && !preposition(pw)
+        || p >= 2 && DETERMINERS.contains(&word(tokens, p - 2)) && spelling::flags(pw) & 2 != 0
+}
+/// A sentence adverb that may sit between a subject and its verb ("still", "ultimately").
+pub(crate) fn mid_adverb(w: &str) -> bool {
+    MID_ADVERBS.contains(&w)
+        || w.len() > 4
+            && w.ends_with("ly")
+            && spelling::known(w)
+            && spelling::flags(w) & (2 | 8 | 16 | 32) == 0
 }
 const SAME_PAST: [&str; 12] = [
     "quit", "set", "hit", "shut", "hurt", "cost", "split", "upset", "spread", "fit", "bet", "burst",
