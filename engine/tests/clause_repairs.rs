@@ -621,3 +621,171 @@ fn agreement_and_apostrophe_fixes_do_not_undo_each_other() {
         ("Two cat's are here.", "Two cats are here."),
     ]);
 }
+
+#[test]
+fn an_adverb_after_a_modal_or_auxiliary_is_already_in_place() {
+    unchanged(&[
+        // Modals.
+        "I will never miss a day.",
+        "I would never give up.",
+        "She could always call me.",
+        "They should usually ask first.",
+        "We can sometimes help.",
+        "He might never know.",
+        // Perfect, progressive and be.
+        "I have never been there.",
+        "She has always known.",
+        "We had rarely seen it.",
+        "I am always late.",
+        "He is often wrong.",
+        "They were seldom home.",
+        // Negated auxiliaries, with "still" or "ever".
+        "I haven't ever been there.",
+        "The pot isn't still boiling.",
+        "They aren't still waiting.",
+        "I don't still live there.",
+        "She doesn't always agree.",
+        "I won't still be there.",
+        // The adverb belongs to what follows the verb.
+        "I promise never to lie.",
+        "I decided never to go back.",
+        "I want always to be kind.",
+        "He said never mind.",
+        "I hate always being late.",
+        "She vowed never again to quit.",
+        "I wonder sometimes what happens next.",
+    ]);
+    check(&[
+        ("I go always to the gym.", "I always go to the gym."),
+        ("They watch rarely films.", "They rarely watch films."),
+        ("I couldn't still reach him.", "I still couldn't reach him."),
+        (
+            "They go often swimming in the lake.",
+            "They often go swimming in the lake.",
+        ),
+    ]);
+}
+
+#[test]
+fn a_perfect_keeps_its_tense_when_the_past_time_is_in_a_later_clause() {
+    unchanged(&[
+        "I have read the email you sent yesterday.",
+        "She has found the file that Priya sent last week.",
+        "We have reviewed the plan my manager wrote yesterday.",
+        "I have met the man who called you last week.",
+        "They have finished what we started in 2019.",
+    ]);
+    check(&[
+        (
+            "I have read the email yesterday.",
+            "I read the email yesterday.",
+        ),
+        ("She has met him last week.", "She met him last week."),
+        ("I have seen you yesterday.", "I saw you yesterday."),
+    ]);
+}
+
+#[test]
+fn a_past_time_governs_irregular_verbs_but_not_modals_or_reported_clauses() {
+    check(&[
+        ("I wake up late yesterday.", "I woke up late yesterday."),
+        (
+            "We plan the trip yesterday.",
+            "We planned the trip yesterday.",
+        ),
+        ("They sting him last week.", "They stung him last week."),
+        (
+            "He slay the dragon last night.",
+            "He slew the dragon last night.",
+        ),
+        ("We drive home yesterday.", "We drove home yesterday."),
+        ("I buy it yesterday.", "I bought it yesterday."),
+    ]);
+    unchanged(&[
+        "We will start tomorrow.",
+        "I can swim in the sea.",
+        "I think yesterday we lost.",
+        "I know yesterday was hard.",
+        "I mean yesterday was a mistake.",
+        "I lose the book that you gave me yesterday.",
+    ]);
+}
+
+#[test]
+fn a_time_word_in_another_clause_or_phrase_does_not_change_the_verb() {
+    unchanged(&[
+        "I am writing about a concert last month.",
+        "I am in my last year of college.",
+        "He called me yesterday and told me that he loves me.",
+        "I received your letter last week in which you say that you want to help.",
+        "I agree that five years ago this might have been true.",
+        "The storm last night has damaged the roof.",
+        "What are HID lights?",
+    ]);
+    check(&[
+        ("I go to the gym last week.", "I went to the gym last week."),
+        (
+            "She told me that I go there yesterday.",
+            "She told me that I went there yesterday.",
+        ),
+        // "from yesterday" runs up to now: the perfect stays, and "since" replaces "from".
+        (
+            "Ravi has been absent from yesterday.",
+            "Ravi has been absent since yesterday.",
+        ),
+    ]);
+}
+
+#[test]
+fn a_modal_before_its_subject_or_a_noun_will_is_not_a_modal_with_a_form_error() {
+    unchanged(&[
+        "Should hackers be denied access?",
+        "Given the risk, should hackers be denied access?",
+        "Courses must be approved, as must exams.",
+        "Adding hay will help, as will adding oats.",
+        "In this story, strength of will is important.",
+        "She had like a mohawk on her head.",
+    ]);
+    check(&[
+        ("She doesn't realized it.", "She doesn't realize it."),
+        ("They will went home.", "They will go home."),
+    ]);
+}
+
+#[test]
+fn rules_that_undid_each_other_now_settle() {
+    // Each of these used to end in "Corrections did not stabilize".
+    unchanged(&[
+        "These phenomena are rare.",
+        "The phenomena are rare.",
+        "I like these phenomena a lot.",
+        "I told each of the boys they were late.",
+        "One of the books they were reading was good.",
+        "One of the issues we were late.",
+        "She has seasonal affective disorder.",
+        // A name or an irregular plural with "'s" after a quantifier is a possessive.
+        "They were all Kelly's fans.",
+        "We saw other people's stuff.",
+        "Many Alzheimer's drugs are in trials.",
+        // ", including ..." is no second sentence (a comma splice rule and the fragment rule
+        // used to take turns on it).
+        "McCoy finished the season with 1,309 yards, including 6 games of over 100 yards.",
+        "The bill bans digital locks, including locks on the Internet.",
+    ]);
+    check(&[
+        ("So many photo's were lost.", "So many photos were lost."),
+        (
+            "The Patel's are coming over.",
+            "The Patels are coming over.",
+        ),
+        (
+            "I like this phenomena a lot.",
+            "I like these phenomena a lot.",
+        ),
+        ("Each of the boys were late.", "Each of the boys was late."),
+        (
+            "One of the children were late.",
+            "One of the children was late.",
+        ),
+    ]);
+}

@@ -28,10 +28,12 @@ const FREQUENCY: [&str; 9] = [
     "normally",
 ];
 /// Words that end a clause for the purpose of finding its time words.
-const CLAUSE_BREAKS: [&str; 20] = [
+const CLAUSE_BREAKS: [&str; 21] = [
     ",", ";", ":", ".", "!", "?", "and", "but", "because", "so", "while", "when", "although",
-    "though", "if", "after", "before", "until", "since", "whereas",
+    "though", "if", "after", "before", "until", "since", "whereas", "that",
 ];
+/// The first 20 words of `CLAUSE_BREAKS`: the ones that also end a "since" phrase ("that" does not).
+const SINCE_BREAKS: usize = 20;
 
 pub(crate) struct Sentence<'t, 'a> {
     pub tokens: &'t [Token<'a>],
@@ -108,6 +110,83 @@ pub(crate) fn push(
 pub(crate) fn span(s: &[Token<'_>], a: usize, b: usize) -> (usize, usize) {
     (s[a].start_utf16, s[b].end_utf16)
 }
+/// A word that opens a clause of its own after the verb: a relative ("the email that you sent",
+/// "the file my manager sent", "the man who called") or a reported clause ("said she left"). A
+/// time word behind it belongs to that clause's verb, not to the main one.
+fn embedded_clause_at(s: &[Token<'_>], k: usize) -> bool {
+    let w = word(s, k);
+    let next = word(s, k + 1);
+    // A finite verb form after the subject: an auxiliary, a modal, a past or a third-person form.
+    let finite = |x: &str| {
+        x.ends_with("n't")
+            || [
+                "am", "is", "are", "was", "were", "have", "has", "had", "do", "does", "did",
+            ]
+            .contains(&x)
+            || morphology::modal(x)
+            || morphology::verb(x).is_some_and(|m| m.past == x || m.third == x)
+    };
+    if ["who", "whom", "whose", "which"].contains(&w) {
+        return true;
+    }
+    if w == "that" {
+        return SUBJECTS.contains(&next) || DETERMINERS.contains(&next) || finite(next);
+    }
+    // "the email you sent yesterday": a subject pronoun, a name or a short noun phrase, then its verb.
+    (SUBJECTS.contains(&w) && finite(next))
+        || s.get(k).is_some_and(|t| {
+            t.is_word && t.surface.starts_with(char::is_uppercase) && k > 0 && finite(next)
+        })
+        || DETERMINERS.contains(&w) && finite(word(s, k + 2)) && !finite(next)
+}
+/// "I have read the email you sent yesterday": the time word is the relative clause's, so the
+/// verb it follows keeps its tense. And "I think yesterday we lost": the time word opens the
+/// clause that the verb reports, not the verb's own.
+fn marker_opens_clause(s: &[Token<'_>], verb: usize, marker: usize) -> bool {
+    if marker != verb + 1 && word(s, marker - 1) != "that" {
+        return false;
+    }
+    let after = marker + 1 + usize::from(word(s, marker) == "last");
+    let next = word(s, after);
+    SUBJECTS.contains(&next)
+        || DETERMINERS.contains(&next)
+        || [
+            "is", "was", "were", "are", "had", "has", "did", "will", "would", "went",
+        ]
+        .contains(&next)
+        || morphology::verb(next).is_some_and(|m| m.past == next)
+}
+/// "last week", "last night": a finished past time. After a determiner or a possessive it is an
+/// adjective ("my last year", "the last month").
+fn last_marker(s: &[Token<'_>], k: usize) -> bool {
+    word(s, k) == "last"
+        && [
+            "night",
+            "week",
+            "weekend",
+            "month",
+            "year",
+            "summer",
+            "winter",
+            "spring",
+            "fall",
+            "autumn",
+            "semester",
+            "quarter",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ]
+        .contains(&word(s, k + 1))
+        && !(k > 0
+            && (word(s, k - 1) == "from"
+                || DETERMINERS.contains(&word(s, k - 1))
+                || ["a", "an", "every", "each", "one"].contains(&word(s, k - 1))))
+}
 /// A finished past time inside the clause that runs through `from..=to`: "yesterday", "ago",
 /// "last week", "in 2019".
 fn past_time(s: &[Token<'_>], from: usize, to: usize) -> bool {
@@ -116,7 +195,10 @@ fn past_time(s: &[Token<'_>], from: usize, to: usize) -> bool {
         a -= 1;
     }
     let mut b = to;
-    while b + 1 < s.len() && !CLAUSE_BREAKS.contains(&s[b + 1].normalized.as_str()) {
+    while b + 1 < s.len()
+        && !CLAUSE_BREAKS.contains(&s[b + 1].normalized.as_str())
+        && !embedded_clause_at(s, b + 1)
+    {
         b += 1;
     }
     let clause = &s[a..=b];
@@ -132,31 +214,10 @@ fn past_time(s: &[Token<'_>], from: usize, to: usize) -> bool {
     }
     clause.iter().enumerate().any(|(k, t)| {
         let next = clause.get(k + 1).map_or("", |n| n.normalized.as_str());
-        t.normalized == "yesterday"
+        // "absent from yesterday" runs up to now, as "since yesterday" does.
+        t.normalized == "yesterday" && !(a + k > 0 && word(s, a + k - 1) == "from")
             || t.normalized == "ago"
-            || t.normalized == "last"
-                && [
-                    "night",
-                    "week",
-                    "weekend",
-                    "month",
-                    "year",
-                    "summer",
-                    "winter",
-                    "spring",
-                    "fall",
-                    "autumn",
-                    "semester",
-                    "quarter",
-                    "monday",
-                    "tuesday",
-                    "wednesday",
-                    "thursday",
-                    "friday",
-                    "saturday",
-                    "sunday",
-                ]
-                .contains(&next)
+            || last_marker(s, a + k)
             || t.normalized == "in"
                 && next.len() == 4
                 && (next.starts_with("19") || next.starts_with("20"))
@@ -182,6 +243,15 @@ fn perfect_with_past_time(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>)
             continue;
         }
         if !past_time(s, i, j) {
+            continue;
+        }
+        // "my dream last night has finalised": the time word ends the subject, it does not
+        // modify the perfect. "Yesterday has been busy" is a perfect with its own subject.
+        if i > 0
+            && (word(s, i - 1) == "yesterday"
+                || i > 1 && last_marker(s, i - 2)
+                || word(s, i - 1) == "ago")
+        {
             continue;
         }
         let subject = if contracted {
@@ -359,6 +429,7 @@ fn inverted_base(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>, question
             continue;
         };
         if w == v.base
+            || morphology::also_base(w) && !["saw", "found"].contains(&w)
             || ![&v.third, &v.past, &v.participle].contains(&&w.to_owned())
             || spelling::flags(&v.base) & 4 == 0
         {
@@ -540,8 +611,38 @@ fn embedded_order(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         );
     }
 }
+/// Verbs that take a gerund as their object ("I hate always being late"): an adverb before the
+/// gerund belongs to it. "go hiking" is no such verb, so "go often hiking" still moves.
+const GERUND_TAKERS: [&str; 24] = [
+    "love",
+    "like",
+    "hate",
+    "enjoy",
+    "prefer",
+    "dislike",
+    "miss",
+    "mind",
+    "avoid",
+    "consider",
+    "recall",
+    "remember",
+    "regret",
+    "resent",
+    "fancy",
+    "imagine",
+    "suggest",
+    "risk",
+    "appreciate",
+    "keep",
+    "start",
+    "begin",
+    "stop",
+    "finish",
+];
 /// "I go always to the gym", "I have finished already the report", "I can't still believe it":
-/// the adverb goes before the verb.
+/// the adverb goes before the verb. Only a lexical verb moves it: after an auxiliary or a modal
+/// ("I will never miss", "I haven't never been") the adverb already sits where it belongs, and
+/// so does one that belongs to what follows ("I decided never to go", "He said never mind").
 fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(3) {
         if !SUBJECTS.contains(&word(s, i)) || word(s, i) == "it" || !clause_start(s, i) {
@@ -550,6 +651,7 @@ fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         let (v, a) = (i + 1, i + 2);
         let verb = word(s, v);
         let adverb = word(s, a);
+        let after = word(s, a + 1);
         let follows = s.get(a + 1).is_some_and(|t| t.is_word);
         let swap = |edits: &mut Vec<Edit>, x: usize, y: usize| {
             push(
@@ -567,8 +669,29 @@ fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 continue;
             };
             if ["be", "have", "do"].contains(&m.base.as_str())
+                || morphology::modal(verb)
+                || verb.contains(['\'', '’'])
                 || ![&m.base, &m.third, &m.past].contains(&&verb.to_owned())
                 || spelling::flags(verb) & 4 == 0
+            {
+                continue;
+            }
+            // The adverb goes with what comes next: an infinitive ("decided never to go", unless
+            // "to" opens a place: "to the gym"), a gerund ("hate always being late"), or a set
+            // phrase ("said never mind", "never again").
+            let place = DETERMINERS.contains(&word(s, a + 2))
+                || ["me", "him", "her", "us", "them"].contains(&word(s, a + 2))
+                || s.get(a + 2)
+                    .is_some_and(|t| t.surface.starts_with(char::is_uppercase));
+            if after == "to" && !place
+                || after.ends_with("ing")
+                    && morphology::verb(after).is_some_and(|g| g.gerund == after)
+                    && GERUND_TAKERS.contains(&m.base.as_str())
+                || [
+                    "mind", "again", "ever", "before", "more", "less", "once", "one", "what", "if",
+                    "whether", "that", "how", "why", "where", "when", "who",
+                ]
+                .contains(&after)
             {
                 continue;
             }
@@ -579,12 +702,13 @@ fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             && s.get(a + 2).is_some_and(|t| t.is_word)
         {
             swap(edits, a, a + 1);
-        } else if [
-            "can't", "don't", "doesn't", "didn't", "won't", "couldn't", "isn't", "aren't",
-        ]
-        .contains(&verb)
+        } else if ["can't", "couldn't"].contains(&verb)
             && adverb == "still"
+            && base_verb(after)
+            && !["be", "have", "do"].contains(&after)
         {
+            // Only these two: "isn't still boiling", "don't still live here" and "won't still be
+            // there" are right as written, and moving "still" before them changes the meaning.
             swap(edits, v, a);
         }
     }
@@ -694,6 +818,8 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             // A verb with no object has no passive ("is rose" is a name, "was went" a slip of tense).
             && !["rise", "fall", "go", "come", "become", "lie", "sit", "stand", "swim", "fly", "sleep", "arise"].contains(&v.base.as_str())
             && !s[i + 1].proper_name
+            // "What are HID lights?": an acronym, not a verb.
+            && !(s[i + 1].surface.len() > 1 && s[i + 1].surface.chars().all(char::is_uppercase))
             // "are saw blades": a noun after it makes the word a noun modifier.
             && !s.get(i + 2).is_some_and(|t| {
                 let f = spelling::flags(&t.normalized);
@@ -735,7 +861,7 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             // noun, not one that is also a simple past: in "The school board met yesterday", "met"
             // is the clause's verb and "board" is a noun.
             let bare = morphology::verb(w).is_some_and(|v| v.base == w);
-            let marker_after = (i + 1..n)
+            let marker_at = (i + 1..n)
                 .take_while(|&k| {
                     !CLAUSE_BREAKS.contains(&s[k].normalized.as_str())
                         && !(crate::punctuation::finite(&s[k])
@@ -744,30 +870,15 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                                     v.participle == word(s, k) && !(bare && v.past == word(s, k))
                                 })))
                 })
-                .any(|k| {
+                .find(|&k| {
                     let t = word(s, k);
-                    t == "yesterday"
-                        || t == "ago"
-                        || t == "last"
-                            && [
-                                "night",
-                                "week",
-                                "weekend",
-                                "month",
-                                "year",
-                                "summer",
-                                "winter",
-                                "monday",
-                                "tuesday",
-                                "wednesday",
-                                "thursday",
-                                "friday",
-                                "saturday",
-                                "sunday",
-                            ]
-                            .contains(&word(s, k + 1))
+                    t == "yesterday" && word(s, k - 1) != "from" || t == "ago" || last_marker(s, k)
                 });
+            let marker_after = marker_at.is_some_and(|k| !marker_opens_clause(s, i, k));
+            // "I am writing about a concert last month": the time word belongs to the noun phrase.
+            let progressive = ["am", "is", "are"].contains(&w) && next.ends_with("ing");
             if let Some(past) = past
+                && !progressive
                 && marker_after
                 && past_time(s, i, i)
                 && !(w == "is" && word(s, i - 1) == "i")
@@ -792,7 +903,7 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if i > 0 && clause_start(s, i - 1) && SUBJECTS.contains(&word(s, i - 1)) {
             let since_point = (i + 1..n)
                 .take_while(|&k| {
-                    !CLAUSE_BREAKS[..20]
+                    !CLAUSE_BREAKS[..SINCE_BREAKS]
                         .iter()
                         .filter(|b| **b != "since")
                         .any(|b| *b == s[k].normalized)

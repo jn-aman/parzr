@@ -1287,6 +1287,15 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 .chars()
                 .next()
                 .map_or(1, char::len_utf8);
+            // "all Kelly's fans", "other people's stuff": a name or an irregular plural with "'s" is
+            // a possessive, never a plural written with an apostrophe.
+            let possessive_only = [
+                "people", "children", "men", "women", "mice", "feet", "teeth",
+            ]
+            .contains(&base)
+                || !acronym
+                    && t.surface.starts_with(char::is_uppercase)
+                    && !crate::starts_sentence(&req.text, t.start_byte, req);
             let noun = acronym
                 || spelling::flags(base) & 2 != 0
                     && !crate::punctuation::finite(t)
@@ -1348,7 +1357,7 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 && t.surface.starts_with(char::is_uppercase)
                 && !crate::starts_sentence(text, t.start_byte, req);
             if noun
-                && (plural_verb || counted)
+                && (plural_verb || counted && !possessive_only)
                 && (!acronym || numbered)
                 && !irregular_plural
                 && !named

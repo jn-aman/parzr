@@ -92,6 +92,25 @@ const EXAMPLES: &[(&str, &str)] = &[
         "Last night, we visit the theater.",
         "Last night, we visited the theater.",
     ),
+    ("He has undid the knot.", "He has undone the knot."),
+    (
+        "We have withdrew the offer.",
+        "We have withdrawn the offer.",
+    ),
+    (
+        "They will overthrew the king.",
+        "They will overthrow the king.",
+    ),
+    (
+        "They have rebuild the bridge.",
+        "They have rebuilt the bridge.",
+    ),
+    ("I have woke up.", "I have woken up."),
+    ("They avoid to be late.", "They avoid being late."),
+    (
+        "She considered to be a doctor.",
+        "She considered being a doctor.",
+    ),
 ];
 
 const VALID: &[&str] = &[
@@ -125,6 +144,37 @@ const VALID: &[&str] = &[
     "My brother thinks I should stay.",
     "The people who work on the station repair need an updated schedule.",
     "We focus on the station repair and finish today.",
+    // A word that is a past form of one verb and the base of another stays after a modal.
+    "They might lay off some workers.",
+    "The company will lay out a plan.",
+    "We should lay down a rule.",
+    "They will found a company.",
+    "It would wound her.",
+    "The mill might ground the grain.",
+    "I will bind the pages.",
+    "Did she lay the carpet?",
+    "She wants to found a company.",
+    "They decided to saw the board.",
+    // Irregular participles, bases and prefixed forms are not respelled.
+    "She has bound the book.",
+    "The mill has ground the grain.",
+    "They have retaken the city.",
+    "He has undone the knot.",
+    "They have overthrown the king.",
+    "We have withdrawn the offer.",
+    "She has forgiven him.",
+    "They have rebuilt the bridge.",
+    "He has strung the lights.",
+    "We have struck a deal.",
+    "I had sunk the ship.",
+    "The bee will sting you.",
+    "The gate will swing open.",
+    "She will wake at six.",
+    // "to be" after a passive "considered" is right.
+    "He is considered to be an expert.",
+    "It was suggested to be careful.",
+    "The plan, considered to be risky, failed.",
+    "People considered to be experts were invited.",
 ];
 
 #[test]

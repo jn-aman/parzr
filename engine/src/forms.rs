@@ -697,6 +697,8 @@ fn be_participle(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             || v.base == "be"
             || form == "third" && be != "been"
             || ["save", "lay", "lie", "found", "wound", "ground"].contains(&w)
+            // "The students were mean": an adjective, not "meant".
+            || crate::spelling::flags(w) & 8 != 0 && morphology::extra(&v.base)
             || !crate::spelling::known(&v.participle)
         {
             continue;
@@ -853,6 +855,11 @@ fn modal_gerund(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if !MODALS.contains(&m) || i == 0 || s[i].surface.starts_with(char::is_uppercase) {
             continue;
         }
+        // "as will adding a little hay", "than can smoking": the modal comes first, so a gerund
+        // after it is the subject.
+        if ["as", "than", "so", "nor", "neither"].contains(&word(s, i - 1)) {
+            continue;
+        }
         // "the will", "a can of", "his free will": a noun, not a modal.
         if i > 0
             && [
@@ -927,7 +934,13 @@ fn infinitive_base(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         let Some(v) = morphology::verb(w) else {
             continue;
         };
-        if w == v.base || w == v.gerund || v.base == "be" || !crate::spelling::known(&v.base) {
+        // "to lay the carpet", "to found a company": a past form that is also another verb's base.
+        if w == v.base
+            || w == v.gerund
+            || v.base == "be"
+            || morphology::also_base(w)
+            || !crate::spelling::known(&v.base)
+        {
             continue;
         }
         // Only a verb with its object: "to paid plans" and "to used cars" are noun phrases.

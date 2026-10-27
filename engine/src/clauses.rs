@@ -608,7 +608,10 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     // "i'm not sure this is right, what do you think": a question after the comma is its own
     // sentence even in chat, and takes its question mark.
     let asks = !question && (wh_question(tokens, r, end) || inverted_question(tokens, r, end));
-    if question && inverted_question(tokens, r, end)
+    // A subordinate opener ("..., including six games", "..., because we left") is not a second
+    // sentence: `fragment` would join it straight back, and the two would alternate.
+    if FRAGMENT_OPENERS.iter().any(|(w, _)| *w == right)
+        || question && inverted_question(tokens, r, end)
         || (unfinished || casual) && !asks
         || ["let's", "lets", "don't", "dont"].contains(&right)
         || ["where", "whereas", "while", "which", "who", "whom", "whose"].contains(&right)
