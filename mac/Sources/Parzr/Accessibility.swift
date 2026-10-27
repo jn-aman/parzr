@@ -94,6 +94,21 @@ enum AX {
         // Only a field that already qualifies is asked about: the rules can take it away (a one-time code box, a sign-in form), never add one.
         return eligibility == .editor ? Compat.applying(hostVerdict(element), to: eligibility) : eligibility
     }
+    /// Explicit checks (Option+Space): whether the selection sits in an editor at all, on the element or an ancestor, by the rules the
+    /// automatic path uses to find one, with search boxes allowed (the shortcut may fix one) and no host verdict (it may read a form field).
+    /// A page's static text reads a settable selection range too (the caret can move in it), so that alone never makes a selection patchable:
+    /// a read-only selection is shown with Copy instead of an apply that cannot land.
+    static func isWritable(_ element: AXUIElement) -> Bool {
+        Compat.editableAncestor(element, eligibility: { element in
+            guard !isSecure(element) else { return .blocked }
+            return Compat.editorEligibility(role: string(element, kAXRoleAttribute), enabled: get(element, kAXEnabledAttribute) as? Bool,
+                                            valueSettable: settable(element, kAXValueAttribute), textSettable: settable(element, kAXSelectedTextAttribute),
+                                            markerEditor: isMarkerEditor(element), search: false)
+        }, parent: { element in
+            guard let parent = get(element, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { return nil }
+            return (parent as! AXUIElement)
+        }) != nil
+    }
     private static var fieldVerdicts: [(element: AXUIElement, verdict: HostRules.Verdict, time: TimeInterval)] = []
     /// What the host rules say about this field. Reads only names (labels, identifiers, DOM classes, the page URL), never the field's text;
     /// remembered for as long as the secure-field verdict, or until focus moves.
@@ -304,7 +319,8 @@ struct SelectionSnapshot {
         return SelectionSnapshot(app: app, element: element, selection: selection, expectedSelection: selectedRange, text: text, fullText: full,
                                  bounds: AX.bounds(element, selection) ?? (Compat.isVSCode(app.bundleIdentifier) ? AX.anchor(element) : nil), richText: docs ? nil : AX.attributed(element, selection), copied: false,
                                  // Docs always patches by select-then-type (the settable-text path is a silent no-op there).
-                                 canPatch: full != nil && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive,
+                                 // Docs patches by select-then-type whatever its hidden field reports; everywhere else the selection must sit in an editor.
+                                 canPatch: full != nil && (docs || AX.isWritable(element)) && ReplacePlan.first(textSettable: AX.settable(element, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(element), docs: docs) != nil, docs: docs, inlineBreaks: inlineBreaks, automatic: passive,
                                  reportable: reportable(app, element))
     }
     /// The same rules for Option+Space and automatic checks: the explicit shortcut may read a field automatic checking skips
@@ -401,7 +417,7 @@ struct SelectionSnapshot {
     func moved(to editor: AXUIElement) -> SelectionSnapshot {
         SelectionSnapshot(app: app, element: editor, selection: selection, expectedSelection: expectedSelection, text: text, fullText: fullText, bounds: bounds,
                           richText: richText, copied: copied,
-                          canPatch: fullText != nil && ReplacePlan.first(textSettable: AX.settable(editor, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(editor), docs: docs) != nil,
+                          canPatch: fullText != nil && (docs || AX.isWritable(editor)) && ReplacePlan.first(textSettable: AX.settable(editor, kAXSelectedTextAttribute), rangeSettable: AX.canSelect(editor), docs: docs) != nil,
                           docs: docs, inlineBreaks: inlineBreaks, automatic: automatic, reportable: reportable && Self.reportable(app, editor))
     }
     /// Run once the card has handed the keyboard back (`AppModel.handOff`), before anything is written. The editor's window needs a moment to

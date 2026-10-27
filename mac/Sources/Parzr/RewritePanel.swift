@@ -89,8 +89,15 @@ struct RewritePanel: View {
         let report: (() -> Void)? = focused.flatMap { edit in model.canReport ? { model.report([edit]); hide(edit) } : nil }
         // Without "more" the row has its own Copy button, so the menu holds only what is left (reporting).
         let moreMenu = CardMore(edit: focused, done: { if let edit = focused { hide(edit) } }, copy: more && showsModes ? { model.copy() } : nil, copied: copied, copyEnabled: !model.busy && model.result != nil, report: report)
+        // A read-only selection (a web page, a message someone else wrote): the fixes are shown, and Copy is the way to use them.
+        let readOnly = model.snapshot.map { !$0.canPatch && !$0.copied && !$0.docs } ?? false
         return HStack(spacing: 6) {
-            if let edit = focused {
+            if let edit = focused, readOnly {
+                Text("This text can’t be edited here. Copy the corrected passage.").font(.system(size: 11)).foregroundStyle(Color.textSecondary).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                moreMenu
+                NativeButton(title: "Ignore", kind: .utility, action: { preferences.noteIgnored(edit); hide(edit) }).fixedSize()
+            } else if let edit = focused {
                 if (model.snapshot?.expectedSelection.length ?? 0) > 0, !model.chosenEdits.isEmpty {
                     NativeButton(title: "Fix all  ⌘⏎", kind: .primary, label: "Fix all corrections", enabled: model.canApply, action: { model.apply() }).fixedSize().help("Fix every correction in this selection · Command+Return")
                     NativeButton(title: edit.actionTitle, kind: .secondary, label: "Apply correction: \(edit.replacementLabel)", enabled: model.canApply, action: { model.applyCurrent() }).help("Apply only this correction")
