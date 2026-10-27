@@ -401,7 +401,14 @@ fn nominal_run(req: &Request, s: &[Token<'_>], start: usize) -> Vec<usize> {
             || morphology::verb(w).is_some_and(|v| v.gerund == w)
             // "these equipment needs servicing": a verb-first "-s" word after a noun is the verb,
             // not a plural head ("these car keys" keeps "keys", a noun first).
-            || !run.is_empty() && verb_third(t)
+            || !run.is_empty()
+                && verb_third(t)
+                // "those higher costs.": after an adjective, or at the end, the "-s" word is the noun.
+                && run.last().is_some_and(|p| {
+                    !spelling::adjective(&s[*p])
+                        && !COMMON_ADJECTIVES.contains(&s[*p].normalized.as_str())
+                })
+                && s.get(k + 1).is_some_and(|n| n.is_word)
             // "those document today", "this file now": a time or place adverb ends the phrase.
             || !run.is_empty() && TIME_AND_PLACE_ADVERBS.contains(&w)
             || run
@@ -712,6 +719,12 @@ const VERB_FIRST: &[&str] = &[
 /// A word read as a verb before a noun: a core irregular or common verb, or one of `VERB_FIRST`.
 fn verb_first(base: &str) -> bool {
     VERB_FIRST.contains(&base)
+        || [
+            "range", "form", "place", "plan", "start", "end", "run", "use", "call", "move",
+            "report", "record", "point", "count", "cover", "deal", "name", "sign", "note", "check",
+            "order", "offer", "test", "step", "visit", "watch", "hope", "wish", "vary", "differ",
+        ]
+        .contains(&base)
         || morphology::predicate(base)
         || morphology::irregular_base(base).is_some()
 }
@@ -928,18 +941,20 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                                     .contains(&a.normalized.as_str())
                                     // "those guy needs help": the "-s" verb after it is the verb.
                                     || verb_third(a)
-                                    // "is these seat taken", "those document signed today": what
-                                    // follows is no object, so the head is the noun, not a verb.
-                                    || participle_form(a)
-                                    || crate::clauses::PREPOSITIONS.contains(&a.normalized.as_str())
-                                    || TIME_AND_PLACE_ADVERBS.contains(&a.normalized.as_str())
-                                    || spelling::flags(&a.normalized) & 8 != 0
-                                        && spelling::flags(&a.normalized) & 2 == 0
-                                    // "those jacket you bought": a reduced relative clause, unless
-                                    // the head is a common verb ("these mean you have to wait").
-                                    || ["i", "we", "you", "they", "he", "she"]
-                                        .contains(&a.normalized.as_str())
-                                        && !verb_first(&h.normalized)
+                                    // "is these seat taken", "those document signed today", "those
+                                    // jacket you bought": what follows is no object, so the head is
+                                    // the noun, unless it is a common verb ("These include informed
+                                    // consent", "These range from", "these mean you have to wait").
+                                    || !verb_first(&h.normalized)
+                                        && (participle_form(a)
+                                            || crate::clauses::PREPOSITIONS
+                                                .contains(&a.normalized.as_str())
+                                            || TIME_AND_PLACE_ADVERBS
+                                                .contains(&a.normalized.as_str())
+                                            || spelling::flags(&a.normalized) & 8 != 0
+                                                && spelling::flags(&a.normalized) & 2 == 0
+                                            || ["i", "we", "you", "they", "he", "she"]
+                                                .contains(&a.normalized.as_str()))
                             }))
                 })
                 && run.iter().all(|k| {

@@ -550,6 +550,9 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
         "These results show it.",
         "These mean you have to wait.",
         "These show you care.",
+        "These include informed consent and anonymity.",
+        "These range from small to large.",
+        "Make sure they keep up with those higher costs.",
     ]);
     check(&[
         ("Print this pages.", "Print these pages."),
