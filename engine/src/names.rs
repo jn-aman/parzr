@@ -369,7 +369,18 @@ pub fn never_a_name(token: &str) -> bool {
     // capitalized form (aquire/Aquire) and the tagger may call a capitalized typo a person ("for
     // Teh meeting"). Names the user taught Parzr are matched separately and still win.
     let typo = is_name_typo(lower) || is_known_misspelling(lower);
-    short || typo || stretched(lower) || SHORTHAND.contains(&lower) || CALENDAR.contains(&lower)
+    // "PC", "CEO", "API", "DVD": two to four capitals are an acronym, unless the bundled list has
+    // the name ("ALI", "AMY"). The tagger calls most of them names, which would protect the word
+    // from every edit; the user's own names and dictionary are matched separately and still win.
+    let acronym = (2..=4).contains(&token.chars().count())
+        && token.chars().all(|c| c.is_ascii_uppercase())
+        && !is_bundled_name(lower);
+    short
+        || typo
+        || acronym
+        || stretched(lower)
+        || SHORTHAND.contains(&lower)
+        || CALENDAR.contains(&lower)
 }
 /// MEDIUM predicate: a bundled name that is not an ordinary word and not a known typo.
 pub fn name_word(lower: &str) -> bool {
@@ -629,6 +640,17 @@ impl NameIndex {
         for i in 0..n {
             if level[i] == 0 && tokens[i].is_word && spelling::lowercase_name(tokens, i) {
                 level[i] = WEAK;
+            }
+        }
+        // "Best regads,\nAman": the words of a closing line are no names, even to a tagger.
+        for i in 0..n {
+            if level[i] != 0
+                && !hits[i]
+                && tokens[i].is_word
+                && !self.names.word(&tokens[i].normalized)
+                && spelling::closing_line(tokens, i)
+            {
+                level[i] = 0;
             }
         }
         level

@@ -609,6 +609,113 @@ const GREETINGS: [&str; 14] = [
     "yours",
     "love",
 ];
+/// Words of a closing line ("Best regards,", "Sincerely yours,", "Kind regards,").
+const CLOSING_WORDS: [&str; 16] = [
+    "regards",
+    "sincerely",
+    "cheers",
+    "thanks",
+    "best",
+    "yours",
+    "faithfully",
+    "respectfully",
+    "cordially",
+    "warmly",
+    "love",
+    "wishes",
+    "kind",
+    "thank",
+    "truly",
+    "gratefully",
+];
+/// Whether `word` is a closing word or a slip of a long one ("regads", "sincerley").
+fn closing_word(word: &str) -> bool {
+    CLOSING_WORDS.contains(&word) || CLOSING_WORDS.iter().any(|c| closing_word_near(word, c))
+}
+/// A slip of a closing word of five letters or more: one swap, drop or extra key (two in a long
+/// one), the same first letter.
+fn closing_word_near(word: &str, closing: &str) -> bool {
+    word.len() >= 5
+        && closing.len() >= 5
+        && word.as_bytes().first() == closing.as_bytes().first()
+        && osa_within(
+            word.as_bytes(),
+            closing.as_bytes(),
+            usize::from(closing.len() >= 8) + 1,
+        )
+}
+/// Words that open a letter ("Hi Sam,"), never close one.
+const OPENERS: [&str; 5] = ["hi", "hello", "hey", "hiya", "dear"];
+/// A line of a closing phrase before a signature: one to four words with a closing word, a comma
+/// ending the line, then the last line of the text with one to three plain words ("Best regads,"
+/// then "Aman"). Its words are never names, so a misspelling in them can be fixed.
+pub(crate) fn closing_line(tokens: &[Token<'_>], index: usize) -> bool {
+    closing_line_in(&tokens[..index], &tokens[index], &tokens[index + 1..])
+}
+fn closing_line_in(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) -> bool {
+    let paragraph = token.paragraph;
+    // Cheap exit first (this runs for every name candidate of a long text): a signature must follow.
+    if following.last().is_none_or(|t| t.paragraph <= paragraph) {
+        return false;
+    }
+    let lead = history
+        .iter()
+        .rev()
+        .take_while(|t| t.paragraph == paragraph)
+        .count();
+    let tail = following
+        .iter()
+        .take_while(|t| t.paragraph == paragraph)
+        .count();
+    let (before, after, rest) = (
+        &history[history.len() - lead..],
+        &following[..tail],
+        &following[tail..],
+    );
+    let line = || before.iter().chain(std::iter::once(token)).chain(after);
+    let (Some(first), Some(last), Some(signature)) = (
+        line().find(|t| t.is_word),
+        line().last(),
+        rest.first().map(|t| t.paragraph),
+    ) else {
+        return false;
+    };
+    (1..=4).contains(&line().filter(|t| t.is_word).count())
+        && last.surface == ","
+        && line().filter(|t| !t.is_word).count() == 1
+        && !OPENERS.contains(&first.normalized.as_str())
+        && line().any(|t| t.is_word && closing_word(&t.normalized))
+        && rest.iter().all(|t| t.paragraph == signature)
+        && (1..=3).contains(&rest.iter().filter(|t| t.is_word).count())
+        && rest.iter().all(|t| t.is_word || t.surface == ".")
+}
+/// The closing word a misspelt one is ("regads" is "regards", "Sincerley" is "Sincerely"), when
+/// the word is on a closing line and no word of its own.
+fn closing_typo(
+    token: &Token<'_>,
+    history: &[Token<'_>],
+    following: &[Token<'_>],
+) -> Option<String> {
+    let word = token.normalized.as_str();
+    if word.len() < 5 || known(word) || CLOSING_WORDS.contains(&word) {
+        return None;
+    }
+    let best = CLOSING_WORDS
+        .iter()
+        .filter(|c| closing_word_near(word, c))
+        .min_by_key(|c| c.len().abs_diff(word.len()))?;
+    closing_line_in(history, token, following).then(|| {
+        if token.surface.starts_with(char::is_uppercase) {
+            let mut chars = best.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default()
+        } else {
+            (*best).to_string()
+        }
+    })
+}
 /// Closing words: a name on the next line is the signature ("Regards,\naman").
 const SIGNOFF: [&str; 13] = [
     "regards",
@@ -1330,6 +1437,33 @@ fn drops_negation(word: &str, result: &str) -> bool {
             && typo_cost(word, bare) <= typo_cost(word, positive)
     })
 }
+/// A regular form of an ordinary word that the lexicon does not list ("affective" is "affect" and
+/// "ive", "clinicals" is "clinical" and "s"): a word in its own right, not a slip of a rarer
+/// neighbour ("effective"). Only endings that never come from a dropped letter count ("-ness" and
+/// "-ive" on a stem ending in "y" or "s" are "happyness" and "possesive"), and a listed
+/// misspelling never does.
+fn derived(word: &str) -> bool {
+    let stem_ok = |stem: &str| {
+        stem.len() >= 5 && ordinary(stem) && frequency(stem) >= 300 && !stem.ends_with(['s', 'y'])
+    };
+    if names::is_known_misspelling(word) {
+        return false;
+    }
+    ["ive", "ness", "less", "ship"]
+        .iter()
+        .any(|suffix| word.strip_suffix(suffix).is_some_and(stem_ok))
+        || word.strip_suffix('s').is_some_and(|stem| {
+            // A noun or adjective in the plural ("clinicals"), not a verb form ("changeds").
+            flags(stem) & (2 | 8) != 0
+                && !morphology::verb(stem).is_some_and(|v| {
+                    [&v.past, &v.participle, &v.gerund].contains(&&stem.to_string())
+                })
+                && stem_ok(stem)
+                && !stem.ends_with(['x', 'z', 'o'])
+                && !stem.ends_with("sh")
+                && !stem.ends_with("ch")
+        })
+}
 /// A common prefix on an ordinary word ("refax", "preschedule", "unshare", "multiuser"): a word
 /// formed on purpose, not a slip.
 fn prefixed(word: &str) -> bool {
@@ -1518,6 +1652,332 @@ fn name_list(history: &[Token<'_>], token: &Token<'_>, following: &[Token<'_>]) 
         && items
             .into_iter()
             .all(|t| uncommon(t) && !(shaped && typo_shaped(&t.normalized)))
+}
+/// Verbs (and a few nouns) that hand something to a person with "to": "send it to hari", "talk to
+/// hari", "thanks to hari". A bare word after their "to" is a person unless a slip says otherwise.
+const TRANSFER: [&str; 56] = [
+    "send",
+    "sent",
+    "sending",
+    "forward",
+    "forwarded",
+    "forwarding",
+    "give",
+    "gave",
+    "given",
+    "giving",
+    "pass",
+    "passed",
+    "passing",
+    "hand",
+    "handed",
+    "assign",
+    "assigned",
+    "assigning",
+    "escalate",
+    "escalated",
+    "delegate",
+    "delegated",
+    "report",
+    "reported",
+    "reply",
+    "replied",
+    "respond",
+    "responded",
+    "write",
+    "wrote",
+    "written",
+    "email",
+    "emailed",
+    "message",
+    "messaged",
+    "text",
+    "texted",
+    "talk",
+    "talked",
+    "speak",
+    "spoke",
+    "mail",
+    "mailed",
+    "refer",
+    "referred",
+    "introduce",
+    "introduced",
+    "deliver",
+    "delivered",
+    "thanks",
+    "owe",
+    "owed",
+    "lend",
+    "belongs",
+    "according",
+    "due",
+];
+/// "send it to X", "forwarded this report to X": the word after "to" is the person it goes to when
+/// a verb of handing over stands a few words before it in the same clause.
+fn transfer_to(history: &[Token<'_>], token: &Token<'_>) -> bool {
+    let Some((to, before)) = history.split_last() else {
+        return false;
+    };
+    to.normalized == "to"
+        && to.paragraph == token.paragraph
+        // "look forward to meeting": "forward" is a place to look, nothing handed over.
+        && before.last().is_none_or(|t| t.normalized != "forward")
+        && before
+            .iter()
+            .rev()
+            .take(4)
+            .take_while(|t| t.is_word && t.paragraph == token.paragraph)
+            .any(|t| TRANSFER.contains(&t.normalized.as_str()))
+}
+/// Whether a lowercase unknown word stands where a person is named, whatever shape the word has:
+/// after a greeting, title or "cc" ("hi X", "thanks X"), after "with" or "from", after a verb of
+/// handing over and "to" ("send it to X"), before a verb of speech ("X said"), as a possessive
+/// ("X's idea"), opening a message before its verb ("X is on leave"), or beside another unknown
+/// word on a line typed without capitals ("harsha reddy"). Such a word is never respelled into
+/// another word or split in two, only fixed by a slip that leaves no doubt (`cheap_result`).
+fn name_frame(
+    token: &Token<'_>,
+    result: &str,
+    history: &[Token<'_>],
+    following: &[Token<'_>],
+) -> bool {
+    let word = names::base(&token.normalized);
+    if !unknown_alphabetic(token) || names::is_name_typo(word) || names::is_known_misspelling(word)
+    {
+        return false;
+    }
+    let previous = history.last();
+    let next = following
+        .first()
+        .filter(|n| n.is_word && n.paragraph == token.paragraph);
+    let next_is = |list: &[&str]| next.is_some_and(|n| list.contains(&n.normalized.as_str()));
+    // A word that follows a determiner, a number or a quantity is a noun, not a name.
+    let bare = previous.is_none_or(|p| {
+        !p.is_word
+            || p.paragraph != token.paragraph
+            || CLAUSE_LEADS.contains(&p.normalized.as_str())
+            || ADDRESSING.contains(&p.normalized.as_str())
+    });
+    let closes_phrase = next.is_none_or(|n| {
+        function(&n.normalized)
+            || FINITE.contains(&n.normalized.as_str())
+            || [
+                "how", "what", "when", "where", "why", "hope", "please", "thanks",
+            ]
+            .contains(&n.normalized.as_str())
+    });
+    let punctuated = previous.is_some_and(|p| !p.is_word);
+    let addressed = addressed_by(history, token) && (!punctuated || closes_phrase);
+    let said = bare
+        && next_is(&[
+            "said",
+            "says",
+            "asked",
+            "asks",
+            "replied",
+            "replies",
+            "wrote",
+            "writes",
+            "mentioned",
+            "mentions",
+            "told",
+            "tells",
+            "texted",
+            "emailed",
+        ]);
+    // "harsha reddy", "noor haddad": a name or an unknown word that is no typo beside it makes a
+    // full name, and on a line typed without capitals so does a plain unknown word.
+    let line_words = || {
+        history
+            .iter()
+            .rev()
+            .take_while(|t| t.paragraph == token.paragraph)
+            .chain(
+                following
+                    .iter()
+                    .take_while(|t| t.paragraph == token.paragraph),
+            )
+            .filter(|t| t.is_word)
+    };
+    let casual = !line_words()
+        .any(|t| typed_capital(t) && t.normalized != "i" && !t.normalized.starts_with("i'"));
+    let surname = [previous, following.first()]
+        .into_iter()
+        .flatten()
+        .any(|n| {
+            n.is_word
+                && n.paragraph == token.paragraph
+                // A name typed with a capital ("Boston", "Monday") is just a word beside it.
+                && n.surface.chars().all(|c| c.is_ascii_lowercase() || c == '\'')
+                && !DETERMINERS_AND_ARTICLES.contains(&n.normalized.as_str())
+                && (namey(&n.normalized) && !name_only_typo(&n.normalized, "")
+                    || casual && unknown_alphabetic(n) && !edit_shaped(&n.normalized))
+        });
+    // "lunch with raj yesterday", "from tejas on Friday": a person between "with" or "from" and a
+    // time or place.
+    let with_person = previous.is_some_and(|p| {
+        ["with", "from"].contains(&p.normalized.as_str())
+            // "from home": a very common word that the phrase is common with is no person.
+            && !(frequency(result) >= 550 && context::count(&p.normalized, result) > 0)
+    }) && next_is(&[
+        "yesterday",
+        "today",
+        "tomorrow",
+        "tonight",
+        "later",
+        "at",
+        "on",
+        "in",
+        "and",
+        "last",
+        "this",
+        "next",
+        "before",
+        "after",
+        "about",
+        "earlier",
+    ]);
+    // "hari is on leave", "tejas will join": an unknown word that opens a message before its verb.
+    // A longer word is a name there only if the respelling would split it ("harshit" and "harsh
+    // it"): "Userws" and "Tomorrkw" are slips of a word.
+    let subject = line_start(history, token)
+        && (word.len() <= 5 || result.contains(' '))
+        && next.is_some_and(|n| {
+            FINITE.contains(&n.normalized.as_str()) || COPULAS.contains(&n.normalized.as_str())
+        });
+    (word != token.normalized && word.len() >= 4)
+        || subject
+        || with_person
+        || addressed
+        || said
+        || surname
+        || transfer_to(history, token)
+}
+/// A respelling that leaves no doubt even where a person may be named: one cheap slip (a doubled,
+/// dropped, swapped or neighbouring key) to a common word, a letter swapped for another only to
+/// one of the most common words ("ayo" is not "ago"), or two cheap slips of a long word.
+fn cheap_result(word: &str, result: &str) -> bool {
+    // "elt's" is "let's": the possessive ending is not part of the slip.
+    let strip = |w: &str| w.strip_suffix("'s").map(str::to_string);
+    if let (Some(w), Some(r)) = (strip(word), strip(result)) {
+        return cheap_result(&w, &r);
+    }
+    let result = result.to_lowercase();
+    let frequent = frequency(&result);
+    if result.contains(' ') {
+        return false;
+    }
+    if distance_one(word, &result) {
+        // Two letters swapped is a slip in a word of five letters or more ("thnak"); in a short
+        // one it is as often a name ("hari" and "hair"), so only a very common word counts.
+        if transposed(word, &result) {
+            return frequent >= if word.len() >= 5 { 400 } else { 550 };
+        }
+        // A letter swapped for a neighbouring key, only into a very common word ("ae" is "we",
+        // "ayo" is not "ago"); a dropped, doubled or extra letter into a common one.
+        let cost = slip_cost(word, &result);
+        let substituted = word.len() == result.len();
+        return cost <= 0.5 && frequent >= if substituted { 600 } else { 500 }
+            || cost <= 1.0 && frequent >= 650;
+    }
+    word.len() >= 7 && frequent >= 500 && typo_cost(word, &result) <= 0.25 * word.len() as f64
+}
+/// Small common words that glue onto the next one by slip ("aswell", "eachother", "upto"), beyond
+/// the function words of `function`.
+const GLUE_WORDS: [&str; 44] = [
+    "as", "each", "other", "up", "out", "off", "over", "into", "than", "like", "just", "very",
+    "too", "also", "when", "while", "what", "how", "why", "where", "there", "here", "these",
+    "those", "he", "she", "am", "about", "again", "against", "around", "because", "between",
+    "down", "either", "else", "even", "ever", "more", "most", "much", "never", "only", "such",
+];
+/// A function word or a small common word that glues onto its neighbour by slip.
+fn is_glue(piece: &str) -> bool {
+    let piece = piece.to_lowercase();
+    function(&piece) || GLUE_WORDS.contains(&piece.as_str())
+}
+/// Prefixes that make one word with what follows ("minifigures", "microcolonies", "metamaterials"):
+/// a piece of this kind is no word of its own, so a word that starts with one is not two words
+/// typed together, however common the rest is.
+const BOUND_PREFIXES: [&str; 36] = [
+    "anti", "bio", "con", "cyber", "eco", "extra", "geo", "hyper", "inter", "intra", "macro",
+    "mega", "meta", "micro", "mini", "mono", "multi", "nano", "neo", "non", "omni", "para", "poly",
+    "post", "pre", "pseudo", "quasi", "retro", "semi", "sub", "super", "tele", "trans", "ultra",
+    "under", "uni",
+];
+/// A respelling that splits off a bound prefix ("mini figures", "micro colonies").
+fn bound_prefix_split(result: &str) -> bool {
+    let mut parts = result.split(' ');
+    matches!((parts.next(), parts.next(), parts.next()),
+        (Some(a), Some(_), None) if BOUND_PREFIXES.contains(&a.to_lowercase().as_str()))
+}
+/// Whether a respelling of a lowercase unknown word is withheld: a split after a prefix that is no
+/// word of its own, or any change but a cheap slip where the word names a person.
+fn withheld(
+    token: &Token<'_>,
+    result: &str,
+    history: &[Token<'_>],
+    following: &[Token<'_>],
+) -> bool {
+    let word = token.normalized.as_str();
+    // Two small common words typed together ("foryour", "youagain") are a slip anywhere; a word
+    // that leaves a content word on its own ("harsh it") is the name it looks like.
+    let all_glue = || result.split(' ').count() == 2 && result.split(' ').all(is_glue);
+    // "me back", "that movie": a determiner, pronoun or preposition first is two words ("had dad"
+    // starts with a verb and could be a name).
+    let opens_with_function = || {
+        result.split(' ').count() == 2
+            && result.split(' ').next().is_some_and(|a| {
+                [
+                    "a",
+                    "an",
+                    "the",
+                    "this",
+                    "that",
+                    "these",
+                    "those",
+                    "me",
+                    "you",
+                    "him",
+                    "her",
+                    "us",
+                    "them",
+                    "it",
+                    "my",
+                    "your",
+                    "our",
+                    "their",
+                    "his",
+                    "its",
+                    "to",
+                    "of",
+                    "in",
+                    "on",
+                    "at",
+                    "by",
+                    "for",
+                    "from",
+                    "with",
+                    "someone",
+                    "anyone",
+                    "everyone",
+                    "somebody",
+                    "anybody",
+                    "everybody",
+                    "nobody",
+                    "something",
+                    "anything",
+                    "everything",
+                    "nothing",
+                ]
+                .contains(&a.to_lowercase().as_str())
+            })
+    };
+    bound_prefix_split(result)
+        || !cheap_result(word, result)
+            && !all_glue()
+            && !opens_with_function()
+            && name_frame(token, result, history, following)
 }
 /// Whether a lowercase unknown word is most likely a person's name typed without capitals.
 /// Turning a name into unrelated common words is worse than leaving a typo alone, so every
@@ -1798,6 +2258,7 @@ pub fn lowercase_name(tokens: &[Token<'_>], index: usize) -> bool {
             && !name_only_typo(word, index.checked_sub(1).map_or("", |i| &tokens[i].normalized))
             || unknown_alphabetic(token)
                 && name_like(token, &tokens[..index], &tokens[index + 1..]))
+        && !closing_line(tokens, index)
 }
 /// Whether splitting an unknown word into "a"/"an" + noun/adjective is safe. Names such as
 /// "aman" or "anoop" split into real words ("a man"), so the phrase must read as a determiner
@@ -2230,6 +2691,9 @@ pub fn suggest_capitalized(
     following_context: &[Token<'_>],
 ) -> Option<String> {
     let word = token.normalized.as_str();
+    if let Some(closing) = closing_typo(token, history, following_context) {
+        return Some(closing);
+    }
     let mut letters = token.surface.chars();
     // "Thi is fine", "Trhe recipe": an opening word that is a cheap slip of a frequent word,
     // unless the tagger or the bundled list calls it a name.
@@ -2311,6 +2775,20 @@ pub fn suggest_capitalized(
         })
 }
 pub fn suggest(
+    token: &Token<'_>,
+    dialect: &str,
+    previous: Option<&Token<'_>>,
+    next: Option<&Token<'_>>,
+    history: &[Token<'_>],
+    following_context: &[Token<'_>],
+) -> Option<String> {
+    if let Some(closing) = closing_typo(token, history, following_context) {
+        return Some(closing);
+    }
+    let result = suggest_core(token, dialect, previous, next, history, following_context)?;
+    (!withheld(token, &result, history, following_context)).then_some(result)
+}
+fn suggest_core(
     token: &Token<'_>,
     dialect: &str,
     previous: Option<&Token<'_>>,
@@ -2481,6 +2959,10 @@ pub fn suggest(
     {
         return None;
     }
+    // "affective" is a word of its own whatever the system speller says; it is never respelled.
+    if derived(word) {
+        return None;
+    }
     // The system spell checker also accepts "statin" and "offie", so what it accepts is respelled
     // only to a very common word, never split.
     let accepted = token.system_known && !names::is_name_typo(word);
@@ -2566,6 +3048,25 @@ pub fn suggest(
         && !accepted
         && lexicon().ordinary(&plural)
     {
+        // "the other partys feelings" and "a familys house" are one party's and one family's: a
+        // singular determiner before the word and a plain noun after it make it a possessive.
+        let possessive = [
+            "the", "a", "an", "this", "that", "each", "every", "another", "other",
+        ]
+        .contains(&prev)
+            && next.is_some_and(|n| {
+                // A noun ("party's feelings"), not a verb that follows its subject ("party won").
+                let verb = morphology::verb(&n.normalized);
+                n.is_word
+                    && n.sentence == token.sentence
+                    && n.surface.starts_with(char::is_lowercase)
+                    && flags(&n.normalized) & 2 != 0
+                    && !FINITE.contains(&n.normalized.as_str())
+                    && !verb.is_some_and(|v| v.past == n.normalized && v.past != v.base)
+            });
+        if possessive {
+            return Some(format!("{}'s", &word[..word.len() - 1]));
+        }
         return Some(plural);
     }
     let split = joined(
@@ -2615,6 +3116,28 @@ pub fn suggest(
         .filter(|candidate| word.starts_with("aa") || word.strip_prefix('a') != Some(candidate))
         // A slip into the neighbouring word would double it ("sai said").
         .filter(|candidate| *candidate != before && *candidate != after)
+        // A different first letter on a key far from the typed one, and not one that sounds alike
+        // ("nite" is no "site", "ukip" no "skip", "yura" no "aura"), is a different word, a name or
+        // slang, not a slip.
+        .filter(|candidate| {
+            let (w, c) = (word.as_bytes(), candidate.as_bytes());
+            // Letters that sound alike ("sertain" is "certain", "kat" is "cat") and vowels are
+            // swapped by ear, so they are slips whatever the keyboard says.
+            let alike = |a: u8, b: u8| {
+                [
+                    b"ck", b"cs", b"sz", b"gj", b"iy", b"td", b"mn", b"fv", b"bp", b"qk", b"xz",
+                    b"wv",
+                ]
+                .iter()
+                .any(|p| **p == [a, b] || **p == [b, a])
+                    || b"aeiou".contains(&a) && b"aeiou".contains(&b)
+            };
+            !(w.len() == c.len()
+                && w.len() >= 3
+                && w[1..] == c[1..]
+                && !adjacent_keys(w[0], c[0])
+                && !alike(w[0], c[0]))
+        })
         .collect();
     // "the eigth floor" is "eighth", "eigth apples" is "eight": a number and its ordinal one slip
     // apart are told apart by the slot.
@@ -3458,6 +3981,128 @@ mod tests {
     fn dictionary_assets() {
         assert!(known("message"));
         assert!(known("configuration"));
+    }
+    /// The whole check on `text`, rules only, as the engine runs it.
+    fn checked(text: &str) -> String {
+        crate::pipeline::rewrite(&crate::Request {
+            text: text.into(),
+            ..crate::Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn a_lowercase_name_where_a_person_is_named_is_never_respelled() {
+        // Each name is one letter from a common word ("tejas" and "teas") or two of them run
+        // together ("harshal" and "harsh al"); none is in a list, and none may change.
+        for name in [
+            "tejas", "tunde", "yemi", "raj", "disha", "bindu", "kemi", "rania", "ritesh", "laksh",
+            "hari", "alka", "jatin", "hao", "funmi", "yun", "minji", "achieng", "haddad",
+        ] {
+            for frame in [
+                "Send it to {} when ready.",
+                "Please forward the notes to {} tomorrow.",
+                "I talked to {} yesterday about it.",
+                "thanks {} for the help.",
+                "{} said the meeting moved.",
+                "{} is on leave this week.",
+                "It was {}'s idea.",
+                "I had lunch with {} yesterday.",
+            ] {
+                let text = frame.replace("{}", name);
+                // A sentence capital may be added; no letter of the name may change.
+                assert_eq!(checked(&text).to_lowercase(), text.to_lowercase(), "{text}");
+            }
+        }
+        // A full name typed in lowercase: the second unknown word shows both are names.
+        for text in [
+            "harsha reddy will join us.",
+            "noor haddad will join us.",
+            "it is rohit pandey here, just checking in.",
+        ] {
+            assert_eq!(checked(text).to_lowercase(), text.to_lowercase(), "{text}");
+        }
+    }
+    #[test]
+    fn a_slip_is_still_fixed_where_a_person_may_be_named() {
+        for (input, expected) in [
+            ("hi, thnak you for the help.", "Hi, thank you for the help."),
+            ("Please send it to teh team.", "Please send it to the team."),
+            ("thanks yyou for the help.", "Thank you for the help."),
+            (
+                "I will talk to them tommorow.",
+                "I will talk to them tomorrow.",
+            ),
+        ] {
+            assert_eq!(checked(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_word_made_with_a_bound_prefix_is_not_split_but_glued_words_are() {
+        // A prefix that is no word of its own makes one word with what follows.
+        for text in [
+            "The minifigures are on the shelf.",
+            "The microcolonies grew overnight.",
+            "She studies metamaterials at the lab.",
+            "A multipath channel was tested.",
+            "We visited the megamall on Sunday.",
+        ] {
+            assert_eq!(checked(text), text, "{text}");
+        }
+        // Typed together among ordinary words, they are a slip, and so are function words.
+        assert_eq!(
+            checked("It was a really goodmovie."),
+            "It was a really good movie."
+        );
+        assert_eq!(checked("Put it inthe box."), "Put it in the box.");
+        assert_eq!(checked("I think thisis fine."), "I think this is fine.");
+        assert_eq!(checked("Can you tellme why?"), "Can you tell me why?");
+    }
+    #[test]
+    fn a_regular_form_of_a_known_word_is_not_a_slip_of_a_rarer_one() {
+        for text in [
+            "Is that affective at all?",
+            "Her affective response was strong.",
+            "The clinicals start in May.",
+        ] {
+            assert_eq!(checked(text), text, "{text}");
+        }
+        // The same endings on a dropped letter stay slips.
+        assert_eq!(
+            checked("The happyness was clear."),
+            "The happiness was clear."
+        );
+        assert_eq!(checked("A possesive pronoun."), "A possessive pronoun.");
+        assert_eq!(checked("An effective plan."), "An effective plan.");
+    }
+    #[test]
+    fn a_singular_determiner_and_a_noun_make_a_possessive_of_a_regular_plural_slip() {
+        assert_eq!(
+            checked("Respect the other partys feelings."),
+            "Respect the other party's feelings."
+        );
+        assert_eq!(
+            checked("Mind the familys house."),
+            "Mind the family's house."
+        );
+        // No noun follows, so it is a plural.
+        assert_eq!(checked("The partys were loud."), "The parties were loud.");
+    }
+    #[test]
+    fn a_far_key_for_the_first_letter_is_another_word_not_a_slip() {
+        // "ukip" is no "skip", "yura" no "aura": a first letter swapped for a far key.
+        for (text, word) in [
+            ("The ukip leader spoke today.", "ukip"),
+            ("We met yura at the cafe.", "yura"),
+        ] {
+            assert_eq!(suggest_at(text, word, false), None, "{word}");
+        }
+        // A vowel for a vowel is still a slip ("aur" is "our").
+        assert_eq!(checked("I like aur house."), "I like our house.");
+        assert_eq!(
+            checked("It was nice to see oyu again."),
+            "It was nice to see you again."
+        );
     }
     #[test]
     fn system_lexicon_names_yield_only_to_clear_typos() {
