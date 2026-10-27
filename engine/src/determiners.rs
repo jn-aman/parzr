@@ -399,6 +399,11 @@ fn nominal_run(req: &Request, s: &[Token<'_>], start: usize) -> Vec<usize> {
             // ("those left", "those dealing", "these differing"), never the counted noun.
             || participle_form(t)
             || morphology::verb(w).is_some_and(|v| v.gerund == w)
+            // "these equipment needs servicing": a verb-first "-s" word after a noun is the verb,
+            // not a plural head ("these car keys" keeps "keys", a noun first).
+            || !run.is_empty() && verb_third(t)
+            // "those document today", "this file now": a time or place adverb ends the phrase.
+            || !run.is_empty() && TIME_AND_PLACE_ADVERBS.contains(&w)
             || run
                 .last()
                 .is_some_and(|p| req.text[s[*p].end_byte..t.start_byte] != *" ")
@@ -436,6 +441,68 @@ fn nominal_run(req: &Request, s: &[Token<'_>], start: usize) -> Vec<usize> {
 }
 /// Whether a noun phrase ends before `next`: the end of the text, a mark, a conjunction, a verb or
 /// an adverb of time: anything but another noun that would run the phrase on.
+/// Whether the clause's own verb after the noun at `head` is singular ("Those guy at the front
+/// desk is so helpful", "Those guy needs help"): the first verb before a mark or a conjunction,
+/// looking past a prepositional phrase. A plural verb or no verb at all says no.
+fn singular_verb_follows(s: &[Token<'_>], head: usize) -> bool {
+    // "Those movie we saw was great": a subject pronoun right after the noun opens a reduced
+    // relative clause; it and its verb are skipped.
+    let mut skip = 0;
+    for (k, t) in s[head + 1..].iter().take(10).enumerate() {
+        let w = t.normalized.as_str();
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        if k == 0 && ["i", "we", "you", "they", "he", "she"].contains(&w) {
+            skip = 1;
+            continue;
+        }
+        // "on 5th", "in 2019": a number is part of the phrase.
+        if !t.is_word && t.surface.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        if !t.is_word || ["and", "or", "but", "that", "who", "which", "because", "so"].contains(&w)
+        {
+            return false;
+        }
+        if [
+            "is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't",
+        ]
+        .contains(&w)
+            || verb_third(t)
+        {
+            return true;
+        }
+        if [
+            "are", "were", "have", "do", "aren't", "weren't", "haven't", "don't", "will", "can",
+            "could", "would", "should", "must", "may", "might",
+        ]
+        .contains(&w)
+            || morphology::verb(w).is_some_and(|v| v.past == w && v.base != w)
+        {
+            return false;
+        }
+    }
+    false
+}
+/// Adverbs of time and place that end a noun phrase ("those files today", "this one here").
+const TIME_AND_PLACE_ADVERBS: [&str; 14] = [
+    "today",
+    "tomorrow",
+    "tonight",
+    "yesterday",
+    "now",
+    "again",
+    "here",
+    "there",
+    "later",
+    "soon",
+    "already",
+    "anymore",
+    "please",
+    "too",
+];
 fn ends_clause(next: Option<&Token<'_>>) -> bool {
     next.is_none_or(|a| {
         !a.is_word
@@ -455,6 +522,10 @@ fn ends_clause(next: Option<&Token<'_>>) -> bool {
                 "please",
             ]
             .contains(&a.normalized.as_str())
+            // "those cat on the fence", "those document signed today": a preposition or a
+            // participle after the noun ends the phrase too.
+            || crate::clauses::PREPOSITIONS.contains(&a.normalized.as_str())
+            || participle_form(a)
             || spelling::flags(&a.normalized) & 2 == 0
             || spelling::flags(&a.normalized) & 4 != 0 && spelling::flags(&a.normalized) & 2 != 0
     })
@@ -558,24 +629,95 @@ const COMPLEMENT_WORDS: &[&str] = &[
 ];
 /// A word that is the "-s" form of a verb ("rings", "leads"): after "this" in subject position it is
 /// the verb.
+/// Words that are a verb first ("requires", "leads"), not a countable noun ("pages"): the
+/// lexicon's noun flag is too loose to tell them apart.
+const VERB_FIRST: &[&str] = &[
+    "require",
+    "lead",
+    "ring",
+    "mean",
+    "help",
+    "work",
+    "need",
+    "cost",
+    "hold",
+    "result",
+    "turn",
+    "feel",
+    "look",
+    "stand",
+    "seem",
+    "make",
+    "take",
+    "give",
+    "keep",
+    "show",
+    "bring",
+    "set",
+    "put",
+    "include",
+    "involve",
+    "contain",
+    "provide",
+    "allow",
+    "cause",
+    "create",
+    "produce",
+    "support",
+    "suggest",
+    "indicate",
+    "reflect",
+    "represent",
+    "reveal",
+    "explain",
+    "describe",
+    "depend",
+    "rely",
+    "appear",
+    "become",
+    "remain",
+    "matter",
+    "change",
+    "prove",
+    "imply",
+    "affect",
+    "add",
+    "apply",
+    "fit",
+    "get",
+    "go",
+    "come",
+    "sound",
+    "taste",
+    "smell",
+    "happen",
+    "occur",
+    "exist",
+    "remind",
+    "prevent",
+    "enable",
+    "encourage",
+    "reduce",
+    "increase",
+    "improve",
+    "hurt",
+    "cut",
+    "sum",
+    "relate",
+    "tend",
+    "belong",
+    "differ",
+    "mention",
+];
+/// A word read as a verb before a noun: a core irregular or common verb, or one of `VERB_FIRST`.
+fn verb_first(base: &str) -> bool {
+    VERB_FIRST.contains(&base)
+        || morphology::predicate(base)
+        || morphology::irregular_base(base).is_some()
+}
 fn verb_third(t: &Token<'_>) -> bool {
     morphology::verb(&t.normalized).is_some_and(|v| {
-        v.third == t.normalized
-            && v.base != t.normalized
-            // A word that is a verb first ("requires", "leads"), not a countable noun ("pages"):
-            // the lexicon's noun flag is too loose to tell them apart.
-            && [
-                "require", "lead", "ring", "mean", "help", "work", "need", "cost", "hold",
-                "result", "turn", "feel", "look", "stand", "seem", "make", "take", "give", "keep",
-                "show", "bring", "set", "put", "include", "involve", "contain", "provide", "allow",
-                "cause", "create", "produce", "support", "suggest", "indicate", "reflect",
-                "represent", "reveal", "explain", "describe", "depend", "rely", "appear",
-                "become", "remain", "matter", "change", "prove", "imply", "affect", "add", "apply",
-                "fit", "get", "go", "come", "sound", "taste", "smell", "happen", "occur", "exist",
-                "remind", "prevent", "enable", "encourage", "reduce", "increase", "improve",
-                "hurt", "cut", "sum", "relate", "tend", "belong", "differ", "mention",
-            ]
-            .contains(&v.base.as_str())
+        v.third == t.normalized && v.base != t.normalized && VERB_FIRST.contains(&v.base.as_str())
     })
 }
 /// A word that is a verb's past or participle form and not its base ("left", "given", "chosen").
@@ -784,6 +926,20 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                                         "would", "should", "has", "had", "does", "did",
                                     ]
                                     .contains(&a.normalized.as_str())
+                                    // "those guy needs help": the "-s" verb after it is the verb.
+                                    || verb_third(a)
+                                    // "is these seat taken", "those document signed today": what
+                                    // follows is no object, so the head is the noun, not a verb.
+                                    || participle_form(a)
+                                    || crate::clauses::PREPOSITIONS.contains(&a.normalized.as_str())
+                                    || TIME_AND_PLACE_ADVERBS.contains(&a.normalized.as_str())
+                                    || spelling::flags(&a.normalized) & 8 != 0
+                                        && spelling::flags(&a.normalized) & 2 == 0
+                                    // "those jacket you bought": a reduced relative clause, unless
+                                    // the head is a common verb ("these mean you have to wait").
+                                    || ["i", "we", "you", "they", "he", "she"]
+                                        .contains(&a.normalized.as_str())
+                                        && !verb_first(&h.normalized)
                             }))
                 })
                 && run.iter().all(|k| {
@@ -799,12 +955,11 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if singular_head
             && ["these", "those"].contains(&d)
             && let Some(&head_k) = nominal_run(req, s, i + 1).last()
-            && !s[head_k + 1..].iter().take(4).any(|t| {
-                [
-                    "is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't",
-                ]
-                .contains(&t.normalized.as_str())
-            })
+            && !singular_verb_follows(s, head_k)
+            // "Is these seat taken?": the singular verb before it points at "these" too.
+            && !(i > 0
+                && ["is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't"]
+                    .contains(&word(s, i - 1)))
             && let Some(plural) = crate::forms::countable_plural(&s[head_k].normalized)
         {
             push(

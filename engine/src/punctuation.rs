@@ -400,11 +400,13 @@ pub fn finite(t: &Token<'_>) -> bool {
     .contains(&t.normalized.as_str())
         || morphology::verb(&t.normalized).is_some_and(|v| {
             // The past of a verb that is also a plain word ("a bit hard", "a straight bet", "a shot")
-            // does not make a clause, for the verbs added to the table later.
+            // does not make a clause, for the verbs added to the table later, unless the app's
+            // tagger read it as the verb ("it cost us a day", "we split the bill").
             t.normalized == v.third
                 || t.normalized == v.past
                     && !(morphology::extra(&v.base)
-                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0)
+                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0
+                        && t.pos != "Verb")
         })
 }
 fn clause(tokens: &[Token<'_>]) -> bool {

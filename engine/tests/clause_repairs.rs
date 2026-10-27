@@ -546,6 +546,10 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
         "These news are good.",
         "We plan to deal with these new and dangerous threats.",
         "In addition, these children receive less attention.",
+        "These costs are high.",
+        "These results show it.",
+        "These mean you have to wait.",
+        "These show you care.",
     ]);
     check(&[
         ("Print this pages.", "Print these pages."),
@@ -575,6 +579,43 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
         (
             "These furniture came with the flat.",
             "This furniture came with the flat.",
+        ),
+        // A verb-first "-s" word after the noun is the verb, not a plural head: with no plural to
+        // give the noun ("equipment"), or a singular verb after it, the demonstrative changes.
+        (
+            "These equipment needs servicing.",
+            "This equipment needs servicing.",
+        ),
+        ("Those guy needs help.", "That guy needs help."),
+        (
+            "Those guy at the front desk is so helpful.",
+            "That guy at the front desk is so helpful.",
+        ),
+        (
+            "Those cat on the fence is mine.",
+            "That cat on the fence is mine.",
+        ),
+        ("Is these seat taken?", "Is this seat taken?"),
+        (
+            "We need those document signed today.",
+            "We need those documents signed today.",
+        ),
+        (
+            "We need those document today.",
+            "We need those documents today.",
+        ),
+        // A reduced relative clause between the noun and its verb.
+        (
+            "Those movie we saw was great.",
+            "That movie we saw was great.",
+        ),
+        (
+            "Those jacket you bought looks warm.",
+            "That jacket you bought looks warm.",
+        ),
+        (
+            "Those book you lent me were great.",
+            "Those books you lent me were great.",
         ),
     ]);
 }

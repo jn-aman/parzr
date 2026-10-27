@@ -2404,6 +2404,50 @@ mod tests {
         assert_eq!(fix_request(req.clone()), req.text);
     }
     #[test]
+    fn a_past_form_the_tagger_calls_a_verb_makes_a_clause() {
+        // "hit", "shut", "cost" are also nouns, so without a hint their past form makes no clause
+        // ("a straight bet"). The app's tagger reads them as verbs in a sentence, and then the two
+        // clauses take their comma.
+        let tagged = |text: &str, word: &str| -> Request {
+            let start = text.find(word).unwrap();
+            Request {
+                text: text.into(),
+                tokens: vec![TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + word.len(),
+                    pos: "Verb".into(),
+                    lemma: String::new(),
+                    name: false,
+                    ..TokenHint::default()
+                }],
+                ..Request::default()
+            }
+        };
+        for (text, word, expected) in [
+            (
+                "The storm hit the coast overnight and it knocked out the power.",
+                "hit",
+                "The storm hit the coast overnight, and it knocked out the power.",
+            ),
+            (
+                "They shut the office early so we all went home.",
+                "shut",
+                "They shut the office early, so we all went home.",
+            ),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), expected, "{text}");
+        }
+        // Without the hint the word may be a noun, and nothing changes.
+        let text = "He placed a straight bet and it paid off.";
+        assert_eq!(
+            fix_request(Request {
+                text: text.into(),
+                ..Request::default()
+            }),
+            text
+        );
+    }
+    #[test]
     fn a_tagged_acronym_keeps_its_letters_and_loses_only_the_redundant_word() {
         // The tagger calls an all-caps acronym a name; a rule that deletes the word beside it
         // changes nothing of the name, so the edit stands. Changing the name itself still does not.

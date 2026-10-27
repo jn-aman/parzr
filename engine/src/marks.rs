@@ -798,6 +798,14 @@ const NOT_NOUNS: &[&str] = &[
     "ago",
     "basis",
     "the",
+    // "the kids who hurt themselves": a relative word opens a clause, it is nobody's possession.
+    "who",
+    "whom",
+    "whose",
+    "which",
+    "that",
+    "where",
+    "when",
     "a",
     "an",
     "it",
@@ -2052,6 +2060,20 @@ mod tests {
         ] {
             assert_eq!(fix(text), text);
         }
+    }
+    #[test]
+    fn a_plural_before_a_relative_clause_is_no_possessive() {
+        // "the kids who hurt themselves": "who" opens a clause and "hurt" is its verb, so "kids"
+        // owns nothing (the rule used to read "who" as the possessed noun once "hurt" counted as
+        // a verb).
+        for text in [
+            "The kids who hurt themselves were fine by lunch.",
+            "The kids that hurt themselves cried.",
+            "My parents who set the table left early.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        assert_eq!(fix("My parents house is big."), "My parents' house is big.");
     }
     #[test]
     fn an_irregular_plural_or_a_single_other_party_keeps_its_possessive() {
