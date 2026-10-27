@@ -1288,6 +1288,12 @@ fn noun_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 || t.surface.starts_with(char::is_uppercase)
                 || NUMBERLESS.contains(&w)
                 || MASS.contains(&w)
+                // "at nine yesterday", "two tomorrow": a clock time before a time adverb is no count.
+                || [
+                    "yesterday", "today", "tomorrow", "tonight", "now", "then", "later", "earlier",
+                    "again", "here", "there", "ago",
+                ]
+                .contains(&w)
                 || UNITS.contains(&w) && (!unit_ends || word(s, k + 1).is_empty() && s.get(k + 1).is_some_and(|n| n.surface == ","))
                 // "a six cylinder, water-cooled engine": a list of modifiers.
                 || numeral && s.get(k + 1).is_some_and(|n| n.surface == ",")

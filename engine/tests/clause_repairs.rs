@@ -491,3 +491,125 @@ fn a_pronoun_subject_is_not_said_twice() {
         "Tell them all of them are welcome.",
     ]);
 }
+
+#[test]
+fn a_compound_subject_keeps_its_plural_helping_verb() {
+    unchanged(&[
+        "Tom and the dog don't agree.",
+        "My brother and the cat don't get along.",
+        "Tom, the dog and my sister don't agree.",
+        "Jerry and that guy don't agree.",
+    ]);
+    check(&[
+        ("The dog don't bark.", "The dog doesn't bark."),
+        ("The dogs doesn't bark.", "The dogs don't bark."),
+        (
+            "Here is a list and the boy don't know.",
+            "Here is a list and the boy doesn't know.",
+        ),
+    ]);
+}
+
+#[test]
+fn there_with_a_quantity_noun_takes_the_number_of_what_follows() {
+    unchanged(&[
+        "There are a large number of reasons.",
+        "There are a good number of reasons.",
+        "There are a wide range of options.",
+        "There are a handful of reasons.",
+        "There are a great many reasons.",
+        "There are a good few reasons.",
+        "There are a few of them left.",
+        "There is a lot of water.",
+    ]);
+    check(&[("There are a problem.", "There is a problem.")]);
+}
+
+#[test]
+fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
+    unchanged(&[
+        "Those left behind were sad.",
+        "Those given a seat were happy.",
+        "These library subject guides are useful.",
+        "These car keys are mine.",
+        "Assist those dealing with stress.",
+        "This is for those outside the movement.",
+        "Cover these in a series of posts.",
+        "Having these non-slip mats keeps people safe.",
+        "Results revealed that participants did better.",
+        "It is clear that genes play a part.",
+        "We recommend that students attend.",
+        "Any of this requires work and attention.",
+        "These thin irregular electron density layers are old.",
+        "These four studies show it.",
+        "In addition, these children receive less attention.",
+    ]);
+    check(&[
+        ("Print this pages.", "Print these pages."),
+        (
+            "Please print this pages for him.",
+            "Please print these pages for him.",
+        ),
+        (
+            "What are this stains on the rug?",
+            "What are these stains on the rug?",
+        ),
+        ("How much are that shoes?", "How much are those shoes?"),
+        (
+            "Did you see this messages from Ben?",
+            "Did you see these messages from Ben?",
+        ),
+        ("I like these guy.", "I like this guy."),
+        (
+            "Those library on Main is closed.",
+            "That library on Main is closed.",
+        ),
+        (
+            "These furniture came with the flat.",
+            "This furniture came with the flat.",
+        ),
+    ]);
+}
+
+#[test]
+fn very_less_takes_few_not_fewer() {
+    check(&[
+        ("There are very less cats.", "There are very few cats."),
+        (
+            "There are very less messages.",
+            "There are very few messages.",
+        ),
+        ("It was too less people.", "It was too few people."),
+        ("We have less people.", "We have fewer people."),
+    ]);
+    unchanged(&[
+        "There is very little information.",
+        "There are far fewer cats.",
+    ]);
+}
+
+#[test]
+fn a_clock_time_before_a_time_adverb_is_not_counted() {
+    unchanged(&["I came at nine yesterday.", "We met at two today."]);
+    check(&[("I have two car.", "I have two cars.")]);
+}
+
+#[test]
+fn agreement_and_apostrophe_fixes_do_not_undo_each_other() {
+    check(&[
+        ("The cats has arrived.", "The cats have arrived."),
+        ("Jeans has arrived.", "Jeans have arrived."),
+        ("My sisters has arrived.", "My sisters have arrived."),
+    ]);
+    unchanged(&[
+        "These phenomena are rare.",
+        "Two people's lives were changed.",
+        "Three children's coats were lost.",
+        "They were all Kelly's fans.",
+        "Many Hawking's papers are online.",
+    ]);
+    check(&[
+        ("The Smith's are coming.", "The Smiths are coming."),
+        ("Two cat's are here.", "Two cats are here."),
+    ]);
+}

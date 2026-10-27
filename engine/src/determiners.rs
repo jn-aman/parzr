@@ -193,6 +193,17 @@ fn subject_agreement(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(2) {
         // A determiner, its noun and a negated do at the start of the clause.
         if DET.contains(&word(s, i)) && clause_start(s, i) {
+            // "Tom and the dog don't agree", "Tom or the dog doesn't": a conjunction that joins two
+            // noun phrases makes a compound subject ("and": plural, "or": the nearer noun), so the
+            // last noun does not decide the helping verb.
+            if i > 0
+                && ["and", "or"].contains(&word(s, i - 1))
+                && !s[..i - 1]
+                    .iter()
+                    .any(|t| t.sentence == s[i].sentence && crate::punctuation::finite(t))
+            {
+                continue;
+            }
             let aux = word(s, i + 2);
             let fix = match (plural(&s[i + 1]), aux) {
                 (Some(false), "don't")
@@ -279,6 +290,181 @@ fn plural_form(t: &Token<'_>) -> bool {
         && singular_known(w)
         // "does" is a verb before it is the plural of "doe".
         && !morphology::verb(w).is_some_and(|v| ["be", "have", "do", "go"].contains(&v.base.as_str()))
+}
+/// The words from `start` that can make one noun phrase, as indexes: up to four nouns and
+/// adjectives with a plain space between them, stopping at anything else (a verb form, a function
+/// word, a mark, a hyphen).
+fn nominal_run(req: &Request, s: &[Token<'_>], start: usize) -> Vec<usize> {
+    let mut run: Vec<usize> = vec![];
+    for k in start..start + 6 {
+        let Some(t) = s.get(k) else { break };
+        let w = t.normalized.as_str();
+        if !t.is_word
+            || SUBJECTS.contains(&w)
+            || spelling::flags(w) & (2 | 8) == 0 && !crate::structure::looks_plural(w)
+            || [
+                "is", "are", "was", "were", "and", "or", "of", "to", "that", "who", "which", "the",
+                "a", "an", "not", "do", "does", "did", "has", "have", "had", "in", "on", "at",
+                "for", "with", "from", "by", "into", "onto", "over", "under", "about", "as",
+                "than", "if", "but", "so", "when", "while", "will", "can", "could", "would",
+                "should", "may", "might", "must",
+            ]
+            .contains(&w)
+            // A past form or an -ing form is the verb or a modifier that runs the phrase on
+            // ("those left", "those dealing", "these differing"), never the counted noun.
+            || participle_form(t)
+            || morphology::verb(w).is_some_and(|v| v.gerund == w)
+            || run
+                .last()
+                .is_some_and(|p| req.text[s[*p].end_byte..t.start_byte] != *" ")
+        {
+            break;
+        }
+        run.push(k);
+        // The head of a plural compound is its first plural word ("library subject guides",
+        // "these children receive"), whether it ends in "-s" or not.
+        if plural(t) == Some(true) {
+            break;
+        }
+        // The head of a plural compound is its first plural word ("library subject guides").
+        if w.len() >= 4
+            && w.ends_with('s')
+            && !w.ends_with("ss")
+            && !w.ends_with("us")
+            && !w.ends_with("is")
+        {
+            break;
+        }
+    }
+    // A run that hit its limit with more words to come is a long compound or a clause: unclear.
+    if run.len() == 6 {
+        run.clear();
+    }
+    // A hyphen glued to the end of the last word makes it part of a longer word ("non-slip").
+    if run
+        .last()
+        .is_some_and(|k| req.text[s[*k].end_byte..].starts_with(['-', '(', '\'', '’']))
+    {
+        run.clear();
+    }
+    run
+}
+/// Whether a noun phrase ends before `next`: the end of the text, a mark, a conjunction, a verb or
+/// an adverb of time: anything but another noun that would run the phrase on.
+fn ends_clause(next: Option<&Token<'_>>) -> bool {
+    next.is_none_or(|a| {
+        !a.is_word
+            || [
+                "and",
+                "or",
+                "but",
+                "so",
+                "who",
+                "today",
+                "tomorrow",
+                "tonight",
+                "yesterday",
+                "again",
+                "now",
+                "first",
+                "please",
+            ]
+            .contains(&a.normalized.as_str())
+            || spelling::flags(&a.normalized) & 2 == 0
+            || spelling::flags(&a.normalized) & 4 != 0 && spelling::flags(&a.normalized) & 2 != 0
+    })
+}
+/// Verbs and adjectives whose clause complement opens with "that" ("insist that", "clear that").
+const COMPLEMENT_WORDS: &[&str] = &[
+    "reveal",
+    "insist",
+    "recommend",
+    "argue",
+    "admit",
+    "ensure",
+    "show",
+    "indicate",
+    "suggest",
+    "note",
+    "claim",
+    "state",
+    "find",
+    "tell",
+    "assume",
+    "conclude",
+    "demonstrate",
+    "prove",
+    "report",
+    "announce",
+    "explain",
+    "notice",
+    "realize",
+    "remember",
+    "discover",
+    "learn",
+    "agree",
+    "decide",
+    "imply",
+    "confirm",
+    "doubt",
+    "deny",
+    "expect",
+    "predict",
+    "require",
+    "demand",
+    "order",
+    "propose",
+    "request",
+    "clear",
+    "true",
+    "possible",
+    "likely",
+    "certain",
+    "sure",
+    "obvious",
+    "evident",
+    "important",
+    "so",
+    "now",
+    "given",
+    "provided",
+    "shown",
+    "known",
+    "determine",
+    "hypothesize",
+    "hypothesise",
+    "observe",
+    "establish",
+    "see",
+    "hear",
+];
+/// A word that is the "-s" form of a verb ("rings", "leads"): after "this" in subject position it is
+/// the verb.
+fn verb_third(t: &Token<'_>) -> bool {
+    morphology::verb(&t.normalized).is_some_and(|v| {
+        v.third == t.normalized
+            && v.base != t.normalized
+            // A word that is a verb first ("requires", "leads"), not a countable noun ("pages"):
+            // the lexicon's noun flag is too loose to tell them apart.
+            && [
+                "require", "lead", "ring", "mean", "help", "work", "need", "cost", "hold",
+                "result", "turn", "feel", "look", "stand", "seem", "make", "take", "give", "keep",
+                "show", "bring", "set", "put", "include", "involve", "contain", "provide", "allow",
+                "cause", "create", "produce", "support", "suggest", "indicate", "reflect",
+                "represent", "reveal", "explain", "describe", "depend", "rely", "appear",
+                "become", "remain", "matter", "change", "prove", "imply", "affect", "add", "apply",
+                "fit", "get", "go", "come", "sound", "taste", "smell", "happen", "occur", "exist",
+                "remind", "prevent", "enable", "encourage", "reduce", "increase", "improve",
+                "hurt", "cut", "sum", "relate", "tend", "belong", "differ", "mention",
+            ]
+            .contains(&v.base.as_str())
+    })
+}
+/// A word that is a verb's past or participle form and not its base ("left", "given", "chosen").
+fn participle_form(t: &Token<'_>) -> bool {
+    morphology::verb(&t.normalized).is_some_and(|v| {
+        t.normalized != v.base && (t.normalized == v.past || t.normalized == v.participle)
+    })
 }
 /// Words before "this" or "that" that make it a determiner: a preposition, or a verb taking an
 /// object ("print this pages"). Verbs of saying and thinking take a clause ("I think this works").
@@ -378,6 +564,37 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 "are", "were",
             ]
             .contains(&word(s, i - 1));
+        // "revealed that participants", "clear that genes", "are that radiologists": "that" opens a
+        // clause here, not a noun phrase.
+        let complement = d == "that"
+            && i > 0
+            && (["are", "were", "is", "was"].contains(&word(s, i - 1))
+                && s.get(n + 1).is_some_and(crate::punctuation::finite)
+                || COMPLEMENT_WORDS.contains(&word(s, i - 1))
+                || morphology::verb(word(s, i - 1))
+                    .is_some_and(|v| COMPLEMENT_WORDS.contains(&v.base.as_str())));
+        if complement {
+            continue;
+        }
+        // "skills that employers want", "the fun that other kids can't": after a noun "that" opens a
+        // relative clause. "I pondered this many times": "this" is an adverb before "many".
+        if d == "that"
+            && i > 0
+            && (crate::structure::looks_plural(word(s, i - 1))
+                || plural_form(&s[i - 1])
+                || spelling::flags(word(s, i - 1)) & 2 != 0
+                    && spelling::flags(word(s, i - 1)) & 4 == 0)
+        {
+            continue;
+        }
+        if ["this", "that"].contains(&d)
+            && [
+                "many", "much", "few", "long", "far", "little", "early", "late", "well",
+            ]
+            .contains(&word(s, i + 1))
+        {
+            continue;
+        }
         let that_ok = prep
             || object && plural_noun(noun)
             || i == 0 && (plural_noun(noun) || ["are", "were"].contains(&word(s, n + 1)));
@@ -409,12 +626,53 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "those left behind", "those outside the movement", "those dealing with", "these non-slip
+        // mats", "these car keys", "these library subject guides": the noun phrase after a plural
+        // demonstrative runs to its last noun, and only a singular last noun that is no verb form
+        // and ends the phrase makes "these" wrong.
+        let singular_head = {
+            let run = nominal_run(req, s, i + 1);
+            let head = run.last().map(|k| &s[*k]);
+            let after = run.last().and_then(|k| s.get(k + 1));
+            !run.is_empty()
+                && head.is_some_and(|h| {
+                    singular_noun(h)
+                        // "those outside the movement", "those in your family": a place word or
+                        // preposition is no noun to count.
+                        && ![
+                            "outside", "inside", "above", "below", "near", "close", "such",
+                            "around", "behind", "beyond", "among", "along", "across", "between",
+                            "within", "through", "over", "under", "up", "down", "out", "off",
+                            "in", "on", "at", "else", "only", "alike",
+                        ]
+                        .contains(&h.normalized.as_str())
+                        && ends_clause(after)
+                        // A word that is also a verb ("These mean", "those guy like it") is the
+                        // noun only when the phrase ends or a helping verb follows.
+                        && (spelling::flags(&h.normalized) & 4 == 0
+                            || after.is_none_or(|a| {
+                                !a.is_word
+                                    || [
+                                        "is", "was", "are", "were", "will", "can", "could",
+                                        "would", "should", "has", "had", "does", "did",
+                                    ]
+                                    .contains(&a.normalized.as_str())
+                            }))
+                })
+                && run.iter().all(|k| {
+                    let t = &s[*k];
+                    t.normalized.chars().all(char::is_alphabetic)
+                })
+                && !SUBJECTS.contains(&word(s, i + 1))
+        };
         let fix = match d {
-            "this" if plural_here && ends => "these",
+            // "any of this requires work", "this leads to": a verb in "-s" after "this" with more
+            // clause to come is the verb, not a plural noun.
+            "this" if plural_here && ends && !verb_third(noun) => "these",
             // "that" also opens a clause ("I know that kids love it"): only as a determiner.
             "that" if plural_here && ends && that_ok => "those",
-            "these" if singular_noun(noun) && ends => "this",
-            "those" if singular_noun(noun) && ends && word(s, n + 1) != "who" => "that",
+            "these" if singular_head => "this",
+            "those" if singular_head && word(s, n + 1) != "who" => "that",
             _ => continue,
         };
         push(
@@ -428,6 +686,8 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         );
     }
 }
+/// Adverbs that go with "few" and "little" and cannot take the comparative "fewer".
+const INTENSIFIERS: [&str; 6] = ["very", "so", "too", "quite", "really", "extremely"];
 /// "less complaints", "too much cooks", "an another": the quantifier follows the noun's number.
 fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(1) {
@@ -446,6 +706,8 @@ fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             continue;
         }
         let fix = match q {
+            // "very less people" is "very few people" ("so few", "too few"), never "very fewer".
+            "less" if plural_form(next) && i > 0 && INTENSIFIERS.contains(&word(s, i - 1)) => "few",
             "less" if plural_form(next) => "fewer",
             "much" if plural_form(next) && !["thanks"].contains(&next.normalized.as_str()) => {
                 "many"
@@ -464,6 +726,50 @@ fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         );
     }
 }
+/// Nouns of quantity and grouping that follow "a" and take the number of what follows "of" ("a
+/// number of reasons are", "a lot of water is"), so "there is" or "there are" can be right.
+const PARTITIVES: [&str; 40] = [
+    "lot",
+    "few",
+    "couple",
+    "number",
+    "bunch",
+    "variety",
+    "total",
+    "lots",
+    "pair",
+    "dozen",
+    "ton",
+    "handful",
+    "range",
+    "host",
+    "majority",
+    "minority",
+    "series",
+    "set",
+    "group",
+    "mix",
+    "mixture",
+    "plethora",
+    "myriad",
+    "array",
+    "selection",
+    "collection",
+    "multitude",
+    "wealth",
+    "load",
+    "heap",
+    "stack",
+    "pile",
+    "batch",
+    "percentage",
+    "proportion",
+    "fraction",
+    "slew",
+    "raft",
+    "barrage",
+    "flood",
+];
 /// "There's three emails", "Is there any snacks", "There are a problem": the verb of "there is"
 /// agrees with the noun after it.
 fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
@@ -497,13 +803,29 @@ fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             }
             return s.get(n).filter(|t| plural_form(t)).map(|_| true);
         }
-        if ["a", "an", "one"].contains(&w)
-            && ![
-                "lot", "few", "couple", "number", "bunch", "variety", "total", "lots", "pair",
-                "dozen",
-            ]
-            .contains(&word(s, k + 1))
-        {
+        if ["a", "an", "one"].contains(&w) {
+            // "a large number of", "a wide range of", "a great many": the adjectives before a
+            // quantity noun do not make it one thing.
+            let mut head = k + 1;
+            while head < k + 3
+                && !PARTITIVES.contains(&word(s, head))
+                && word(s, head) != "many"
+                && s.get(head).is_some_and(|t| {
+                    spelling::adjective(t)
+                        || [
+                            "good", "fair", "great", "large", "small", "big", "wide", "decent",
+                            "huge", "vast", "healthy", "whole", "fine", "tidy", "sizeable",
+                            "quite",
+                        ]
+                        .contains(&t.normalized.as_str())
+                })
+            {
+                head += 1;
+            }
+            let h = word(s, head);
+            if PARTITIVES.contains(&h) || head > k + 1 && h == "many" {
+                return None;
+            }
             return Some(false);
         }
         None

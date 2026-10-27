@@ -769,6 +769,22 @@ const NOT_NOUNS: &[&str] = &[
     "was",
     "were",
     "be",
+    // Helping verbs: after an edit the tagger's verb hint for them is gone ("The cats have
+    // arrived" must not read "have" as a noun and the cats' as a possessive).
+    "has",
+    "have",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
     "today",
     "tomorrow",
     "tonight",
@@ -1321,7 +1337,22 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
                     || NUMBERS.contains(&p.normalized.as_str())
             });
-            if noun && (plural_verb || counted) && (!acronym || numbered) {
+            // "Two people's lives": "people" is already plural, so a count before it does not make
+            // the "'s" a slip for a plural ("peoples" is a word of its own, with its own rule).
+            let irregular_plural = crate::structure::IRREGULAR_PLURALS.contains(&base)
+                || ["people", "children", "men", "women", "feet", "teeth"].contains(&base);
+            // "all Kelly's fans", "Many Alzheimer's drugs": a capitalized name inside a sentence takes
+            // "'s" as a possessive, whatever the word before it counts.
+            let named = !acronym
+                && !plural_verb
+                && t.surface.starts_with(char::is_uppercase)
+                && !crate::starts_sentence(text, t.start_byte, req);
+            if noun
+                && (plural_verb || counted)
+                && (!acronym || numbered)
+                && !irregular_plural
+                && !named
+            {
                 let possessive_next = next.is_some_and(|n| {
                     n.is_word
                         && spelling::flags(&n.normalized) & 2 != 0
