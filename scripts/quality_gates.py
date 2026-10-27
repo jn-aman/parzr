@@ -2,7 +2,7 @@
 
 benchmarks/baselines.json holds the last accepted numbers of every gated suite (scripts/update-baselines.py writes it,
 on purpose, from summaries). A runner given a suite name compares its summary with that entry and fails when
-  - a fix rate drops more than `fix_rate_points` percentage points below the baseline,
+  - a fix rate (the tone regression set: a mode's pass rate) drops more than `fix_rate_points` percentage points below the baseline,
   - false alarms (or damaged names) rise by more than `false_alarm_items` items,
   - p50 or p95 latency, or the engine's peak memory, exceeds the baseline times `performance_factor`
     (latency also gets `latency_slack_ms`), compared only with a performance baseline measured on the same kind

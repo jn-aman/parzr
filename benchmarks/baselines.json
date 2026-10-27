@@ -92,6 +92,62 @@
           "correct_rate": 0.925
         }
       }
+    },
+    "tone-regression": {
+      "updated": "2026-10-28",
+      "reason": "First baseline of the tone regression set (310 items x 4 modes, local run on the engine at base-rule-audit): pass rates professional 285/310, friendly 291, concise 285, direct 292; the failures are the next fix queue (chat-speak left in Professional, rude text Friendly leaves alone, a question turned into a statement by Concise, and others); the ci performance entry follows the first CI run",
+      "items": 310,
+      "modes": {
+        "professional": {
+          "items": 310,
+          "passed": 285,
+          "pass_rate": 0.9194
+        },
+        "friendly": {
+          "items": 310,
+          "passed": 291,
+          "pass_rate": 0.9387
+        },
+        "concise": {
+          "items": 310,
+          "passed": 285,
+          "pass_rate": 0.9194
+        },
+        "direct": {
+          "items": 310,
+          "passed": 292,
+          "pass_rate": 0.9419
+        }
+      },
+      "samples": {
+        "5": {
+          "updated": "2026-10-28",
+          "reason": "Local sample of the tone regression set (every 5th item, 62 of 310), what CI scores because a tone request takes seconds on a runner; the CI run may differ (CPU instead of GPU inference), re-record from its quality-summaries artifact if so",
+          "items": 62,
+          "modes": {
+            "professional": {
+              "items": 62,
+              "passed": 56,
+              "pass_rate": 0.9032
+            },
+            "friendly": {
+              "items": 62,
+              "passed": 58,
+              "pass_rate": 0.9355
+            },
+            "concise": {
+              "items": 62,
+              "passed": 60,
+              "pass_rate": 0.9677
+            },
+            "direct": {
+              "items": 62,
+              "passed": 59,
+              "pass_rate": 0.9516
+            }
+          }
+        }
+      }
     }
   },
   "performance": {
@@ -120,6 +176,26 @@
         "p50_ms": 469.16,
         "p95_ms": 1532.91,
         "max_rss_mb": 1150.8
+      },
+      "tone-regression/professional": {
+        "p50_ms": 470.05,
+        "p95_ms": 1295.51,
+        "max_rss_mb": 1301.5
+      },
+      "tone-regression/friendly": {
+        "p50_ms": 459.95,
+        "p95_ms": 1209.65,
+        "max_rss_mb": 1301.5
+      },
+      "tone-regression/concise": {
+        "p50_ms": 435.85,
+        "p95_ms": 1249.12,
+        "max_rss_mb": 1301.5
+      },
+      "tone-regression/direct": {
+        "p50_ms": 475.7,
+        "p95_ms": 1222.73,
+        "max_rss_mb": 1301.5
       }
     },
     "ci": {
