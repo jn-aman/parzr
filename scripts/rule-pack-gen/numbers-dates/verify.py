@@ -6,7 +6,7 @@ sys.path.insert(0, str(HERE))
 import lib
 import f_ordinals, f_clock, f_quantity, f_money, f_units, f_dates, f_misc  # noqa: F401
 env = dict(os.environ)
-env.setdefault('PARZR_MODEL_RUNTIME', '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib')
+# The model runtime comes from the caller (PARZR_MODEL_RUNTIME); without it the check runs rules only.
 env.setdefault('PARZR_MODELS_DIR', os.path.expanduser('~/Library/Application Support/Parzr/Models'))
 p = subprocess.Popen([sys.argv[1]], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 def run(t):

@@ -18,7 +18,7 @@ ap.add_argument('--skip-correct', action='store_true')
 a = ap.parse_args()
 
 env = {k: v for k, v in os.environ.items() if not k.startswith('PARZR_')}
-env['PARZR_MODEL_RUNTIME'] = '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib'
+env['PARZR_MODEL_RUNTIME'] = os.environ.get('PARZR_MODEL_RUNTIME', '')
 env['PARZR_MODELS_DIR'] = a.models
 p = subprocess.Popen([a.engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=env)
 

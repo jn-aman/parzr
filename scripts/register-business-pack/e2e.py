@@ -16,7 +16,7 @@ def main():
     for m in (fam_wordy, fam_verbs, fam_email, fam_signoff):
         m.build()
     env = dict(os.environ)
-    env.setdefault('PARZR_MODEL_RUNTIME', '/Users/aman/Desktop/parzr/.claude/worktrees/reports-live/dist/model/libparzr_model.dylib')
+    # The model runtime comes from the caller (PARZR_MODEL_RUNTIME); without it the check runs rules only.
     env.setdefault('PARZR_MODELS_DIR', os.path.expanduser('~/Library/Application Support/Parzr/Models'))
     procs = {}
     def proc(path):
