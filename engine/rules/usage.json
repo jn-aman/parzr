@@ -166,14 +166,14 @@
   },
   {
     "id": "usage.lie_down",
-    "pattern": "(?i)\\b(?:to|gonna|will|['’]ll|should|need to|want to|wanna|must|can|could|might|let me|go) (?P<target>lay) (?:down|on (?:the|a|my|his|her|their|our) (?:couch|bed|sofa|floor|beach|grass|ground|lawn|sand|carpet|rug|deck|bench|hammock)|in (?:bed|the sun|the shade|the grass|the hammock|the bath|the dark)|around)(?:[.!?,;]|$| (?:for|on|in|until|after|and|a|all)\\b)",
+    "pattern": "(?i)\\b(?:to|gonna|will|['’]ll|should|need to|want to|wanna|must|can|could|might|let me|go) (?P<target>lay) (?:down|on (?:the|a|my|his|her|their|our) (?:couch|bed|sofa|floor|beach|grass|ground|lawn|sand|carpet|rug|deck|bench|hammock)|in (?:bed|the sun|the shade|the grass|the hammock|the bath|the dark)|around)(?:[.!?,;]|$| (?:for|on|in|until|after|and|a (?:bit|little|while|moment|minute|second|few)|all (?:day|night|afternoon|morning|evening))\\b)",
     "replacement": "lie",
     "category": "Word choice",
     "confidence": 0.95,
     "reason": "To recline is “lie”; “lay” takes an object.",
     "provenance": "Parzr original real-word and usage rule",
     "positive": "I'm going to lay down for a nap.",
-    "negative": "Please lay down your pens. I need to lie down."
+    "negative": "Please lay down your pens. I need to lie down. We should lay down a rule. They will lay down all their arms."
   },
   {
     "id": "usage.lying_down",

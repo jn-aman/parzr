@@ -2553,25 +2553,25 @@
   },
   {
     "id": "grammar.each_of_are",
-    "pattern": "(?i)\\b(?:each|every one|one) of (?:the|these|those|our|your|their) (?:[\\p{L}]+ ){1,3}(?P<target>are)\\b",
+    "pattern": "(?i)\\b(?:each|every one|one) of (?:the|these|those|our|your|their) (?:[\\p{L}]+ ){0,2}(?:[\\p{L}]+s|children|men|women|people|feet|teeth) (?P<target>are)\\b",
     "replacement": "is",
     "category": "Grammar",
     "confidence": 0.96,
     "reason": "The head subject each or one is singular.",
     "provenance": "Parzr original standard-English rule",
     "positive": "Each of our notebooks are ready.",
-    "negative": "All of our notebooks are ready."
+    "negative": "All of our notebooks are ready. One of the books they are reading is good."
   },
   {
     "id": "grammar.each_of_were",
-    "pattern": "(?i)\\b(?:each|every one|one) of (?:the|these|those|our|your|their) (?:[\\p{L}]+ ){1,3}(?P<target>were)\\b",
+    "pattern": "(?i)\\b(?:each|every one|one) of (?:the|these|those|our|your|their) (?:[\\p{L}]+ ){0,2}(?:[\\p{L}]+s|children|men|women|people|feet|teeth) (?P<target>were)\\b",
     "replacement": "was",
     "category": "Grammar",
     "confidence": 0.96,
     "reason": "The head subject each or one is singular.",
     "provenance": "Parzr original standard-English rule",
     "positive": "Each of their tickets were checked.",
-    "negative": "All of their tickets were checked."
+    "negative": "All of their tickets were checked. One of the books they were reading was good."
   },
   {
     "id": "grammar.negative_object_anything",

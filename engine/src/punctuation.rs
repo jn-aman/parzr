@@ -360,8 +360,14 @@ pub fn finite(t: &Token<'_>) -> bool {
         "we've", "they've",
     ]
     .contains(&t.normalized.as_str())
-        || morphology::verb(&t.normalized)
-            .is_some_and(|v| t.normalized == v.third || t.normalized == v.past)
+        || morphology::verb(&t.normalized).is_some_and(|v| {
+            // The past of a verb that is also a plain word ("a bit hard", "a straight bet", "a shot")
+            // does not make a clause, for the verbs added to the table later.
+            t.normalized == v.third
+                || t.normalized == v.past
+                    && !(morphology::extra(&v.base)
+                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0)
+        })
 }
 fn clause(tokens: &[Token<'_>]) -> bool {
     let words: Vec<_> = tokens.iter().filter(|t| t.is_word).collect();

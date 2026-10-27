@@ -467,6 +467,22 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .contains(&governor)
             {
+                // "He is considered to be an expert", "a plan suggested to be safe": a passive or
+                // reduced passive, where "to be" is the right complement. A subject pronoun before
+                // the verb ("she considered to be") makes it active.
+                let before = prev
+                    .checked_sub(2)
+                    .map_or("", |k| tokens[k].normalized.as_str());
+                let passive = [
+                    "is", "are", "was", "were", "am", "be", "been", "being", "get", "gets", "got",
+                ]
+                .contains(&before)
+                    || w == "be"
+                        && ["considered", "suggested"].contains(&governor)
+                        && !["i", "we", "you", "they", "he", "she"].contains(&before);
+                if passive {
+                    continue;
+                }
                 if let Some(edit) = make_edit(
                     &req.text,
                     tokens[prev].start_utf16,
@@ -555,6 +571,30 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let name_subject = auxiliary_base
             && (tokens[prev].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
+        // "strength of will is important", "his own will remains": a noun, not a modal.
+        let noun_modal = auxiliary_base
+            && prev > 0
+            && [
+                "of", "the", "a", "an", "my", "his", "her", "their", "our", "your", "its", "this",
+                "that", "free", "strong", "good", "own",
+            ]
+            .contains(&tokens[prev - 1].normalized.as_str());
+        // "Should hackers be denied access?", "as must courses in the minor": the modal comes
+        // first, so a plural noun after it is the subject.
+        let inverted_modal = auxiliary_base
+            && w == v.third
+            && (spelling::flags(w) | spelling::flags(&v.base)) & 2 != 0
+            && (prev == 0
+                // "..., should hackers be denied": a verb right after the noun makes it the subject.
+                || tokens.get(i + 1).is_some_and(|n| {
+                    ["be", "been", "have", "get", "become"].contains(&n.normalized.as_str())
+                })
+                || tokens[prev - 1].sentence != t.sentence
+                || [
+                    "as", "than", "so", "nor", "neither", "and", "but", "or", "when", "if",
+                ]
+                .contains(&tokens[prev - 1].normalized.as_str())
+                || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
         // "do sports", "need to do is", "can do lots of": do is the main verb with an object or a
         // complement, so what follows is not a verb to de-inflect. After a form of "be" ("I was do
         // tired") it is a slip for "so", and "tired" stays an adjective.
@@ -573,10 +613,12 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     && (spelling::flags(w) & 2 != 0 || looks_plural(w)));
         if auxiliary_base
             && !name_subject
+            && !noun_modal
+            && !inverted_modal
             && !nominal_what
             && !wh_inversion
             && !main_do
-            && w != "saw"
+            && !morphology::also_base(w)
             && w != v.base
             && [v.third.as_str(), &v.past, &v.participle].contains(&w)
         {
@@ -601,7 +643,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 .get(i + 1)
                 .map(|t| t.normalized.as_str())
                 .unwrap_or("");
+            // "had like a mohawk": "like" is a preposition here, not a bare verb.
             if next != "to"
+                && w != "like"
                 && (w != "saw" || ["the", "a", "an", "this", "that", "it", "them"].contains(&next))
                 && (w == v.past
                     || [
@@ -696,7 +740,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
             && !full_name_statement(&tokens, prev - 1)
         {
-            if w != v.base {
+            // "Did you saw it?" is "see": only the homographs a writer rarely means as a base
+            // ("did she lay the carpet", "did it wound him") stay.
+            let keeps = morphology::also_base(w) && !["saw", "found"].contains(&w);
+            if w != v.base && !keeps {
                 emit(
                     req,
                     t,
@@ -748,6 +795,10 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 subject += 1;
             }
             if let Some(s) = tokens.get(subject)
+                // "What are HID lights?": an acronym before its noun is a modifier, not the subject.
+                && !(s.surface.len() > 1
+                    && s.surface.chars().all(char::is_uppercase)
+                    && tokens.get(subject + 1).is_some_and(|x| x.is_word))
                 && let Some(pl) = plural(s)
                 && !tokens
                     .get(subject + 1)
@@ -1132,6 +1183,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
         .max()
         .map_or(frame, |at| &frame[at..]);
+        // A reported or relative clause ("told me that he loves me", "the letter in which you say")
+        // has its own time: the time word before it belongs to the clause outside.
+        let frame = [" that ", " which ", " whom ", " who ", " whose "]
+            .iter()
+            .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
+            .max()
+            .map_or(frame, |at| &frame[at..]);
         let markers = ["yesterday", "last week", "last month", "last night"];
         let present_frame = markers
             .iter()

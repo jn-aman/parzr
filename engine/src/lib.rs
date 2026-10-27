@@ -715,7 +715,13 @@ fn match_case(replacement: &str, original: &str) -> String {
         && original.chars().filter(|c| c.is_alphabetic()).count() > 1
     {
         replacement.to_uppercase()
-    } else if original.chars().next().is_some_and(char::is_uppercase) {
+    } else if original.chars().next().is_some_and(char::is_uppercase)
+        // The capital of "I do" is the pronoun's own: a replacement that moves it ("do I") is not
+        // a sentence start, which the caller adds where one is.
+        && !(original.len() > 1
+            && original.starts_with('I')
+            && !original[1..].starts_with(|c: char| c.is_alphabetic()))
+    {
         upper_first(replacement)
     } else {
         replacement.to_string()
@@ -1809,6 +1815,27 @@ pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_c
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_capital_i_is_the_pronouns_not_a_sentence_start() {
+        // "Neither I do" is moved to "do I": only a sentence start is capitalized, by its caller.
+        assert_eq!(match_case("do I", "I do"), "do I");
+        assert_eq!(match_case("do I", "I"), "Do I");
+        assert_eq!(match_case("are not", "I'm not"), "are not");
+        assert_eq!(match_case("Is it", "It is"), "Is it");
+        assert_eq!(match_case("the", "The"), "The");
+        assert_eq!(match_case("do I", "Is"), "Do I");
+        assert_eq!(match_case("it", "IT'S"), "IT");
+    }
+    #[test]
+    fn affective_and_reins_are_words() {
+        for text in [
+            "She has seasonal affective disorder.",
+            "The affective response was strong.",
+            "He took the reins of the company.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
     #[test]
     fn the_slip_switch_defaults_on_and_requests_without_it_still_parse() {
         // The browser host and the LSP never send it: they keep the slip check.
