@@ -566,7 +566,11 @@ fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             let Some(m) = morphology::verb(verb) else {
                 continue;
             };
-            if ["be", "have", "do"].contains(&m.base.as_str())
+            // "I would never bet", "we will always remember": a helping verb is followed by its
+            // adverb.
+            if ["be", "have", "do", "will", "can", "may", "shall", "must"]
+                .contains(&m.base.as_str())
+                || ["would", "could", "should", "might", "need", "dare", "ought"].contains(&verb)
                 || ![&m.base, &m.third, &m.past].contains(&&verb.to_owned())
                 || spelling::flags(verb) & 4 == 0
             {
@@ -1038,12 +1042,31 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             }
         }
     }
-    // "Because I was sick, so I stayed home": one linking word is enough.
-    if ["because", "since", "although", "though", "as"].contains(&word(s, 0))
+    // "Because I was sick, so I stayed home": one linking word is enough. ("As" is left out:
+    // "As you sow, so shall you reap" is a correlative pair.)
+    if ["because", "since", "although", "though"].contains(&word(s, 0))
         && let Some(c) = s.iter().position(|t| t.surface == ",")
         && ["so", "but"].contains(&word(s, c + 1))
         && (word(s, c + 1) == "so") == (word(s, 0) != "although" && word(s, 0) != "though")
         && s.get(c + 2).is_some_and(|t| t.is_word)
+        // A doubled conjunction links two clauses. Not a correlative or adverbial "so" ("Since
+        // Monday, so far it has worked", "…, so do I", "…, so that we can"): there is a clause
+        // before the comma, and the word after "so" is not one of those.
+        && crate::clauses::clause_at(s, 1, c).is_some_and(|v| {
+            // "Since the kids moved out last year I have free time, so I would love to": a second
+            // subject before the comma means the opening clause was closed already, and this "so"
+            // is the conjunction of the main clause.
+            !(v + 1..c).any(|j| {
+                (SUBJECTS.contains(&word(s, j)) || crate::clauses::subject_contraction(word(s, j)))
+                    && crate::clauses::clause_at(s, j, c).is_some()
+            })
+        })
+        && ![
+            "far", "long", "much", "many", "well", "forth", "on", "that", "be", "do", "does", "did",
+            "is", "are", "was", "were", "will", "would", "can", "could", "shall", "should", "may",
+            "might", "must", "have", "has", "had",
+        ]
+        .contains(&word(s, c + 2))
     {
         push(
             req,
@@ -1055,6 +1078,46 @@ fn verb_groups(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             0.94,
         );
     }
+    doubled_without_comma(req, s, edits);
+}
+/// "Although the office was very cold in the morning but he came": the opening word already
+/// contrasts the clauses, so "but" is dropped and the comma closes the first one ("Because … so"
+/// likewise). A purpose "so" ("so I could park") is not a conjunction of this pair.
+fn doubled_without_comma(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
+    let (open, conj) = match (word(s, 0), word(s, 1)) {
+        ("although" | "though", _) | ("even", "though" | "if") => {
+            (1 + usize::from(word(s, 0) == "even"), "but")
+        }
+        ("because" | "since", _) => (1, "so"),
+        _ => return,
+    };
+    let Some(k) = (open + 1..s.len()).find(|&k| word(s, k) == conj) else {
+        return;
+    };
+    if s[open..k].iter().any(|t| t.surface == ",")
+        || !s[k - 1].is_word
+        || ["that", "far", "long", "much", "many"].contains(&word(s, k + 1))
+        || crate::clauses::clause_at(s, open, k).is_none()
+        || (crate::clauses::clause_at(s, k + 1, s.len()).is_none()
+            && !["let's", "let", "please"].contains(&word(s, k + 1)))
+        || crate::clauses::clause_at(s, k + 1, s.len()).is_some_and(|v| {
+            // "so I could park": a modal in the second clause reads as a purpose.
+            conj == "so"
+                && ["can", "could", "will", "would", "might", "may"].contains(&word(s, v))
+                && word(s, v + 1) != "not"
+        })
+    {
+        return;
+    }
+    push(
+        req,
+        edits,
+        (s[k - 1].end_utf16, s[k].end_utf16),
+        ",".into(),
+        "grammar.double_conjunction",
+        "The clause already has its linking word.",
+        0.9,
+    );
 }
 /// "There a problem", "This the best", "Who going", "What time the meeting?": a missing "is".
 fn missing_copula(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>, question: bool) {

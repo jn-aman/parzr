@@ -696,7 +696,8 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
             && !full_name_statement(&tokens, prev - 1)
         {
-            if w != v.base {
+            // "How the team did it is unclear": "did" is the main verb and "is" the sentence's own.
+            if w != v.base && !["is", "are", "was", "were", "am"].contains(&w) {
                 emit(
                     req,
                     t,

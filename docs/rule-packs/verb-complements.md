@@ -77,7 +77,7 @@ Construction, then the rule ids that cover it.
 | "Let's to go" | `grammar.extra_to` |
 | "ought go" | `grammar.missing_to` |
 | "to" + a past form followed by an object ("need to calculated the size") | `grammar.infinitive_base` (forms.rs); the `topast.*` and `to3sg.*` rules here add the cases with no object word after |
-| "interested about/at/of/on", "discuss about", "reply me", "explain me", "depend of" | `grammar.interested_in`, `grammar.discuss_about`, `usage.reply_to`, `usage.explain_to`, `grammar.depends_on` |
+| "interested about/at/of/on", "discuss about", "reply me", "explain me", "depend of" | `grammar.interested_in`, `grammar.discuss_about`, `usage.reply_to`, `usage.explain_to`, `usage.explain_to_moved`, `grammar.depends_on` |
 | modal + inflected verb ("can goes") | `grammar.modal_*`, `grammar.modal_base` |
 | "didn't went" | `grammar.didnt_base` |
 

@@ -179,13 +179,22 @@ pub(crate) fn coordinated(req: &Request, tokens: &[Token<'_>], i: usize, edits: 
             EMBEDDED.contains(&word(tokens, k)) || takes_clause(tokens, k) && word(tokens, k + 1) != "to"
         })
         || ["and", "or", "but", "nor", "between"].contains(&word(tokens, i - 1))
+        // "new heating and cooling products": parallel modifiers, not two clauses.
+        || word(tokens, i - 1).ends_with("ing") && word(tokens, i + 1).ends_with("ing")
+        // "Oracle and Cisco routers": two names joined, not two clauses.
+        || i >= s + 2
+            && tokens[i - 1].surface.starts_with(char::is_uppercase)
+            && tokens[i + 1].surface.starts_with(char::is_uppercase)
     {
         return;
     }
     let right = clause_at(tokens, i + 1, end).is_some_and(|v| {
         // The second clause has a subject of its own, not a verb after an object ("and sent it").
         let w = word(tokens, i + 1);
-        v > i + 1 || CONTRACTED.contains(&w)
+        (v > i + 1 || CONTRACTED.contains(&w))
+            // "Juniper and Cisco firewalls and are hosted": a plural noun that also reads as a verb
+            // is a verb here only right after a pronoun.
+            && (!noun_or_verb(&tokens[v]) || v > 0 && SUBJECTS[..7].contains(&word(tokens, v - 1)))
     });
     let left = clause_at(tokens, s, i).is_some()
         || conj.normalized == "or" && word(tokens, s) == "please" && base_verb(&tokens[s + 1]);
@@ -378,8 +387,25 @@ fn wh_question(tokens: &[Token<'_>], j: usize, end: usize) -> bool {
     if ["what's", "where's", "who's", "how's", "when's", "why's"].contains(&w) {
         return true;
     }
-    ["what", "when", "where", "why", "how", "who", "which"].contains(&w)
-        && (j + 1..(j + 4).min(end)).any(|k| inverted_question(tokens, k, end))
+    if !["what", "when", "where", "why", "how", "who", "which"].contains(&w) {
+        return false;
+    }
+    // "How the team did it is unclear", "What you need is rest": a subject right after the
+    // question word makes the clause a statement's subject, not an inverted question.
+    for k in j + 1..(j + 4).min(end) {
+        if inverted_question(tokens, k, end) {
+            return true;
+        }
+        if [
+            "i", "you", "we", "they", "he", "she", "it", "the", "a", "an", "my", "your", "our",
+            "their", "his", "her", "its", "this", "that", "these", "those",
+        ]
+        .contains(&word(tokens, k))
+        {
+            return false;
+        }
+    }
+    false
 }
 /// "please send", "let me know", "let's go", "don't wait", "feel free": a command opens a clause.
 fn imperative_at(tokens: &[Token<'_>], j: usize, end: usize) -> bool {
@@ -428,9 +454,17 @@ fn spaced(text: &str, a: &Token<'_>, b: &Token<'_>) -> bool {
     a.end_byte < b.start_byte && text[a.end_byte..b.start_byte].chars().all(|c| c == ' ')
 }
 fn quoted(tokens: &[Token<'_>], s: usize, e: usize) -> bool {
-    tokens[s..e]
-        .iter()
-        .any(|t| ["\"", "“", "”", "—", "–", "(", ")", ";", ":"].contains(&t.surface))
+    (s..e).any(|k| {
+        let t = &tokens[k];
+        ["\"", "“", "”", "—", "–", "(", ")", ";", ":"].contains(&t.surface)
+            // 'Hello, how are you: a single quote that opens a word is a quotation mark (a
+            // contraction's apostrophe sits inside or after a word).
+            || ["'", "‘"].contains(&t.surface)
+                && tokens
+                    .get(k + 1)
+                    .is_some_and(|n| n.start_byte == t.end_byte && n.is_word)
+                && (k == 0 || tokens[k - 1].end_byte < t.start_byte)
+    })
 }
 
 #[expect(
@@ -521,7 +555,15 @@ const SENTENCE_ADVERBS: [&str; 10] = [
     "obviously",
     "maybe",
 ];
-const SPEECH: [&str; 14] = [
+const SPEECH: [&str; 22] = [
+    "thought",
+    "wondered",
+    "muttered",
+    "sighed",
+    "murmured",
+    "exclaimed",
+    "cried",
+    "announced",
     "said",
     "says",
     "asked",
@@ -540,7 +582,7 @@ const SPEECH: [&str; 14] = [
 /// A clause that can stand alone and ends complete: it opens with its subject and does not stop
 /// on a verb, preposition or determiner ("The problem is, we…" is one sentence).
 fn independent(tokens: &[Token<'_>], s: usize, c: usize) -> bool {
-    if words(tokens, s, c) < 3 {
+    if words(tokens, s, c) < 3 || dependent_opening(tokens, s, c) {
         return false;
     }
     let last = &tokens[c - 1];
@@ -561,6 +603,212 @@ fn independent(tokens: &[Token<'_>], s: usize, c: usize) -> bool {
     clause_at(tokens, s, c).is_some()
         || thanks_for(tokens, s, c)
         || word(tokens, s) == "please" && base_verb(&tokens[s + 1])
+}
+/// Openers that begin a subordinate clause or a participial or absolute phrase, with its own
+/// subject and verb inside, that a comma then closes ("No matter how hard they trained,
+/// Whoever wrote it, Having finished the report, All things considered,").
+const DEPENDENT_OPENERS: [&str; 21] = [
+    "whatever",
+    "whoever",
+    "whomever",
+    "whichever",
+    "wherever",
+    "however",
+    "regardless",
+    "notwithstanding",
+    "having",
+    "being",
+    "given",
+    "considering",
+    "assuming",
+    "provided",
+    "providing",
+    "supposing",
+    "granted",
+    "judging",
+    "barring",
+    "excepting",
+    "seeing",
+];
+/// Participles that end an absolute phrase ("All things considered,", "The meeting over,").
+const ABSOLUTE_ENDS: [&str; 9] = [
+    "considered",
+    "made",
+    "said",
+    "done",
+    "finished",
+    "completed",
+    "settled",
+    "signed",
+    "concluded",
+];
+/// Nouns that open a clause of their own right after a determiner ("every day the build passes").
+const TIME_NOUNS: [&str; 15] = [
+    "time",
+    "day",
+    "week",
+    "month",
+    "year",
+    "night",
+    "morning",
+    "evening",
+    "moment",
+    "minute",
+    "instant",
+    "hour",
+    "way",
+    "reason",
+    "afternoon",
+];
+/// Comparatives of the paired "the sooner…, the better" construction.
+const COMPARATIVES: [&str; 22] = [
+    "more", "less", "fewer", "better", "worse", "sooner", "later", "faster", "slower", "harder",
+    "longer", "higher", "lower", "bigger", "smaller", "greater", "closer", "easier", "larger",
+    "further", "older", "earlier",
+];
+/// The words `s..c` open a clause that depends on the one after the comma: "no matter how…",
+/// a wh-ever clause, a participle or absolute phrase, "the sooner we start,", and a time noun used
+/// as a conjunction ("Each time the build failed,").
+fn dependent_opening(tokens: &[Token<'_>], s: usize, c: usize) -> bool {
+    let first = word(tokens, s);
+    // "Originally located in Madison,": an adverb and a participle open a participial phrase.
+    if first.ends_with("ly")
+        && spelling::flags(first) & 2 == 0
+        && morphology::verb(word(tokens, s + 1))
+            .is_some_and(|v| v.participle == word(tokens, s + 1))
+    {
+        return true;
+    }
+    // "Unlike carpet mats,", "Despite the rain,": a fronted prepositional phrase.
+    if preposition(first)
+        || [
+            "unlike",
+            "regarding",
+            "concerning",
+            "following",
+            "including",
+            "according",
+            "beyond",
+            "behind",
+            "beside",
+            "besides",
+            "except",
+            "outside",
+            "inside",
+            "below",
+            "above",
+            "along",
+            "beneath",
+            "amid",
+            "plus",
+            "minus",
+        ]
+        .contains(&first)
+    {
+        return true;
+    }
+    // "I know that if I want to keep fit,", "I think that in 50 years' time,", "…and even though
+    // she tried,": the words before the comma end a fronted adverbial of a clause that goes on.
+    if fronted_adjunct(tokens, s, c) {
+        return true;
+    }
+    if DEPENDENT_OPENERS.contains(&first)
+        || first == "no" && word(tokens, s + 1) == "matter"
+        || first == "the" && COMPARATIVES.contains(&word(tokens, s + 1))
+    {
+        return true;
+    }
+    // "Each time the build failed", "Every day the build passes", "The first time they called",
+    // "The moment it loads", "Any way the team looks at it": a time or manner noun with a clause
+    // of its own right after it. A verb right after the noun ("The week ended") is a plain clause.
+    if (s + 1..c.min(s + 4)).any(|k| {
+        TIME_NOUNS.contains(&word(tokens, k))
+            && (["each", "every", "any", "next", "first", "the"].contains(&word(tokens, k - 1))
+                // "Last time they called", but "Last week the team shipped" is its own clause.
+                || ["last", "this", "that"].contains(&word(tokens, k - 1))
+                    && word(tokens, k) == "time")
+            && k + 1 < c
+            && !finite_at(tokens, k + 1)
+            && !AUXILIARIES.contains(&word(tokens, k + 1))
+    }) {
+        return true;
+    }
+    // "All things considered", "The meeting over", "The contract signed": a noun phrase and a
+    // participle that ends the clause, with nothing after it ("Her mind made up").
+    // A clause with an auxiliary ("The contract was signed,") is a full clause.
+    let c = if ["up", "out", "over", "off", "down"].contains(&word(tokens, c - 1)) && c > s + 1 {
+        c - 1
+    } else {
+        c
+    };
+    ABSOLUTE_ENDS.contains(&word(tokens, c - 1))
+        && words(tokens, s, c) <= 5
+        && (DETERMINERS.contains(&first) || first == "everything")
+        && !(s..c)
+            .any(|k| AUXILIARIES.contains(&word(tokens, k)) || NEGATED.contains(&word(tokens, k)))
+}
+/// Subordinators that open an adverbial clause, which then needs its main clause.
+const ADVERBIAL: [&str; 11] = [
+    "if", "when", "because", "although", "though", "since", "while", "unless", "until", "once",
+    "whenever",
+];
+/// An adverbial clause or prepositional phrase right after "that", "and", "but", "or" or a verb
+/// that takes a clause, running up to the comma: the comma closes it and the clause continues.
+fn fronted_adjunct(tokens: &[Token<'_>], s: usize, c: usize) -> bool {
+    // After a verb like these "if" and "when" mean whether: "I'm not sure if this works, what…".
+    const WHETHER: [&str; 19] = [
+        "sure",
+        "unsure",
+        "wonder",
+        "wondered",
+        "wondering",
+        "ask",
+        "asked",
+        "see",
+        "check",
+        "tell",
+        "curious",
+        "doubt",
+        "idea",
+        "know",
+        "mind",
+        "decide",
+        "remember",
+        "understand",
+        "figure",
+    ];
+    (s + 1..c).any(|k| {
+        let opens = ADVERBIAL.contains(&word(tokens, k))
+            || word(tokens, k) == "even"
+                && (["though", "if"].contains(&word(tokens, k + 1))
+                    || ADVERBIAL.contains(&word(tokens, k + 1)));
+        // The word before the phrase, past a degree adverb ("and almost from birth,").
+        let link = if k >= 2
+            && (MID_ADVERBS.contains(&word(tokens, k - 1)) || word(tokens, k - 1) == "almost")
+        {
+            k - 2
+        } else {
+            k - 1
+        };
+        let after_that = ["that", "and", "but", "or"].contains(&word(tokens, link));
+        let after_link = after_that
+            || word(tokens, link) == "whether"
+            || takes_clause(tokens, link)
+                && !(["if", "when"].contains(&word(tokens, k))
+                    && WHETHER.contains(&word(tokens, link)));
+        (opens && after_link || preposition(word(tokens, k)) && after_that)
+            // Nothing before the comma is a finite clause of its own after the opener's own.
+            && k + 1 < c
+            || {
+                // "…and sometimes,", "…but today,": an adverb after the link word closes on the comma.
+                k + 1 == c
+                    && ["and", "but", "or"].contains(&word(tokens, k - 1))
+                    && (MID_ADVERBS.contains(&word(tokens, k))
+                        || TIME_ENDS.contains(&word(tokens, k))
+                        || ["sometimes", "often", "usually", "occasionally", "then"]
+                            .contains(&word(tokens, k)))
+            }
+    })
 }
 /// "The invoice is attached, let me know…": two sentences joined by a bare comma.
 fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut Vec<Edit>) {
@@ -586,6 +834,39 @@ fn comma_splice(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: 
     };
     let linked = r != c + 1;
     if !independent(tokens, s, c) || words(tokens, c + 1, end) < 3 {
+        return;
+    }
+    // "…, wagon rides and music", "…, TV programmes and clothes": a list item with a plural noun
+    // that reads as a verb, then "and" or the end.
+    if let Some(v) = clause_at(tokens, r, end)
+        && noun_or_verb(&tokens[v])
+        && !SUBJECTS[..7].contains(&word(tokens, v - 1))
+        && (v + 1 >= end || ["and", "or"].contains(&word(tokens, v + 1)))
+    {
+        return;
+    }
+    // "…, that can also be found": "that" opens a relative clause before a modal.
+    if word(tokens, c + 1) == "that"
+        && AUXILIARIES.contains(&word(tokens, c + 2))
+        && !["is", "was", "are", "were"].contains(&word(tokens, c + 2))
+    {
+        return;
+    }
+    // "…, two sports that are perfect", "…, more flexible models", "…, using vehicles", "…, being
+    // considered": a number, a comparative, a participle or an absolute phrase is no new clause.
+    let first_right = word(tokens, c + 1);
+    if [
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "more",
+        "most", "less", "fewer", "being", "having",
+    ]
+    .contains(&first_right)
+        || tokens[c + 1].surface.chars().all(|ch| ch.is_ascii_digit())
+        || first_right.ends_with("ing")
+            && !SUBJECTS.contains(&first_right)
+            && morphology::verb(first_right).is_some_and(|v| v.gerund == first_right)
+        || (c + 2..end.min(c + 7)).any(|k| word(tokens, k) == "being")
+            && DETERMINERS.contains(&first_right)
+    {
         return;
     }
     // Chat and everyday writing join these with a comma, and the comma reads as intended: a
@@ -684,6 +965,8 @@ const NO_SPLIT: &[&str] = &[
     "and",
     "or",
     "but",
+    "whereas",
+    "whilst",
     "think",
     "thought",
     "know",
@@ -857,7 +1140,7 @@ fn takes_clause(tokens: &[Token<'_>], k: usize) -> bool {
             && spelling::flags(before) & (4 | 8) != 8
 }
 /// Where the verbs and adjectives of `NO_SPLIT` begin, after its linking words.
-const COMPLEMENT_TAKERS: usize = 29;
+const COMPLEMENT_TAKERS: usize = 31;
 const TIME_ENDS: [&str; 21] = [
     "today",
     "tonight",
@@ -902,6 +1185,28 @@ const MONTHS: [&str; 19] = [
     "saturday",
     "sunday",
 ];
+/// The word at `k` is the noun of a noun phrase: a determiner opens it, with at most two
+/// adjectives between ("the night", "a great night", "the very worst night").
+fn head_noun(tokens: &[Token<'_>], k: usize) -> bool {
+    (1..=3).any(|back| {
+        let Some(at) = k.checked_sub(back) else {
+            return false;
+        };
+        let x = word(tokens, at);
+        [
+            "the", "a", "an", "my", "our", "your", "his", "her", "their", "its",
+        ]
+        .contains(&x)
+            && (1..back).all(|mid| {
+                let y = word(tokens, k - mid);
+                spelling::flags(y) & 8 != 0
+                    || [
+                        "worst", "best", "very", "most", "last", "next", "same", "only",
+                    ]
+                    .contains(&y)
+            })
+    })
+}
 /// The clause before `i` plainly ends: on a time word or -ly adverb, a predicate adjective or
 /// participle ("is broken", "has shipped"), a month or weekday after a preposition, or a number.
 fn plain_end(tokens: &[Token<'_>], s: usize, i: usize, pronoun: bool) -> bool {
@@ -909,6 +1214,25 @@ fn plain_end(tokens: &[Token<'_>], s: usize, i: usize, pronoun: bool) -> bool {
     let w = prev.normalized.as_str();
     let before = word(tokens, i.wrapping_sub(2));
     if MID_ADVERBS.contains(&w) || PREPOSITIONS.contains(&w) || DETERMINERS.contains(&w) {
+        return false;
+    }
+    // "This was something we were doing", "the worst night we had ever had": a noun phrase that
+    // a relative clause without "that" can follow does not end the sentence.
+    if [
+        "something",
+        "anything",
+        "everything",
+        "nothing",
+        "someone",
+        "anyone",
+        "everyone",
+        "somebody",
+        "anybody",
+        "everybody",
+    ]
+    .contains(&w)
+        || TIME_ENDS.contains(&w) && head_noun(tokens, i - 1)
+    {
         return false;
     }
     // A participle after "has" ends its clause only when a pronoun opens the next one ("has
@@ -926,7 +1250,11 @@ fn plain_end(tokens: &[Token<'_>], s: usize, i: usize, pronoun: bool) -> bool {
             || ["'s", "'m", "'re", "'ve"].iter().any(|c| x.ends_with(c))
     };
     TIME_ENDS.contains(&w) && (w != "here" || i - s >= 3)
-        || w.ends_with("ly") && spelling::flags(w) & 2 == 0 && w.len() > 4
+        // "hardly any time", "nearly every user": a degree adverb belongs to the words after it.
+        || w.ends_with("ly")
+            && spelling::flags(w) & 2 == 0
+            && w.len() > 4
+            && !DEGREE_ADVERBS.contains(&w)
         || MONTHS.contains(&w) && PREPOSITIONS.contains(&before)
         || prev.surface.chars().all(|c| c.is_ascii_digit()) && PREPOSITIONS.contains(&before)
         || i >= s + 2
@@ -939,8 +1267,37 @@ fn plain_end(tokens: &[Token<'_>], s: usize, i: usize, pronoun: bool) -> bool {
         ]
         .contains(&w)
             && words(tokens, s, i) <= 4
-        || NEGATED.contains(&before) && base_verb(prev) && words(tokens, s, i) <= 4
+        // "It doesn't work the team is confused": only a verb that takes no object ends the clause
+        // ("doesn't have the files uploaded" goes on to its object).
+        || NEGATED.contains(&before)
+            && base_verb(prev)
+            && INTRANSITIVE.contains(&w)
+            && words(tokens, s, i) <= 4
 }
+/// Adverbs that modify the quantifier or noun phrase after them, so the clause is still open.
+const DEGREE_ADVERBS: [&str; 17] = [
+    "hardly",
+    "scarcely",
+    "barely",
+    "nearly",
+    "merely",
+    "mostly",
+    "mainly",
+    "largely",
+    "partly",
+    "roughly",
+    "approximately",
+    "virtually",
+    "practically",
+    "essentially",
+    "especially",
+    "particularly",
+    "exactly",
+];
+/// Verbs that rarely take an object: after "doesn't" they end their clause.
+const INTRANSITIVE: [&str; 9] = [
+    "work", "matter", "apply", "exist", "happen", "sync", "scale", "connect", "load",
+];
 /// "I sent the report this morning it should be in your inbox": two clauses with nothing between.
 fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut Vec<Edit>) {
     let Some(end) = last_word(tokens, s, e) else {
@@ -953,15 +1310,27 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
     let thanks = thanks_for(tokens, s, end);
     for i in s + 2..end.saturating_sub(1) {
         let (prev, t) = (&tokens[i - 1], &tokens[i]);
-        if !t.is_word || !spaced(&req.text, prev, t) || takes_clause(tokens, i - 1) {
+        // A dash or other mark before the word already separates it ("your letter - it was").
+        if !t.is_word
+            || !(prev.is_word || prev.surface.chars().all(|c| c.is_ascii_digit()))
+            || !spaced(&req.text, prev, t)
+            || takes_clause(tokens, i - 1)
+        {
             continue;
         }
         if (s..i).any(|k| takes_clause(tokens, k)) {
             break;
         }
         let w = t.normalized.as_str();
-        // "Thanks for you're quick response": no sentence ends on a preposition's object.
-        if PREPOSITIONS.contains(&word(tokens, i - 1)) {
+        let before = word(tokens, i - 1);
+        // "Thanks for you're quick response": no sentence ends on a preposition's object, an
+        // infinitive "to", or a helping verb ("My friend had let me down").
+        if preposition(before)
+            || (AUXILIARIES.contains(&before) || NEGATED.contains(&before))
+                && !(["am", "pm"].contains(&before)
+                    && i >= 2
+                    && tokens[i - 2].end_byte == prev.start_byte)
+        {
             continue;
         }
         let pronoun = SUBJECTS[..7].contains(&w) || CONTRACTED[..29].contains(&w);
@@ -971,6 +1340,16 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
         let strong = question && inverted_question(tokens, i, end)
             || imperative_at(tokens, i, end)
             || w == "maybe" && clause_at(tokens, i + 1, end).is_some();
+        // "They are great I tell you", "It works I think": a short tag is part of the sentence.
+        if ["i", "you", "we"].contains(&w)
+            && words(tokens, i, end) <= 4
+            && clause.is_some_and(|v| {
+                morphology::verb(word(tokens, v))
+                    .is_some_and(|b| CLAUSE_VERBS.contains(&b.base.as_str()))
+            })
+        {
+            continue;
+        }
         let ok = if strong {
             (left && left_words >= 2) && words(tokens, i, end) >= 3
         } else if pronoun && clause.is_some() {
@@ -979,22 +1358,42 @@ fn run_on(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &mut V
                 left_words == 2 && CONTRACTED.contains(&w) && CONTRACTED.contains(&word(tokens, s));
             (left && (left_words >= 3 || short) && plain_end(tokens, s, i, true)
                 || thanks
+                    // "Thank you for the letter you have sent": a person after the noun is a
+                    // relative clause.
+                    && w != "you"
                     && (CONTRACTED.contains(&w)
                         || clause.is_some_and(|v| AUXILIARIES.contains(&word(tokens, v)))))
                 && words(tokens, i, end) >= 3
         } else if DETERMINERS.contains(&w)
-            // "a guide that should help": "that" after a noun opens its relative clause.
-            && !(w == "that" && spelling::flags(word(tokens, i - 1)) & 2 != 0)
+            // "any time left": "any" follows a negative or a degree word, it rarely starts a sentence.
+            && w != "any"
+            // "a guide that should help", "It is clear that genes play": "that" opens a relative
+            // or complement clause, and "far more people" is a degree phrase.
+            && ![
+                "that", "more", "most", "less", "fewer", "few", "many", "much",
+            ]
+            .contains(&w)
             && let Some(v) = clause
+            // The second clause must carry an unmistakable finite verb: a helping verb. A past
+            // form could be the participle of "the steps outlined in the guide".
+            && (AUXILIARIES.contains(&word(tokens, v)) || NEGATED.contains(&word(tokens, v)))
         {
             // "will be changing the payment method": a progressive verb runs on to its object.
             left && left_words >= 3
                 && !word(tokens, i - 1).ends_with("ing")
                 && (plain_end(tokens, s, i, false)
-                    || ["is", "are", "was", "were", "will", "must", "should", "can"]
-                        .contains(&word(tokens, v))
+                    // "I love this place the coffee is amazing": a short noun phrase and a
+                    // copula after a noun, with a complement. Not "a factor all countries must
+                    // consider", nor a long phrase with a stranded preposition.
+                    || ["is", "are", "was", "were"].contains(&word(tokens, v))
+                        && v <= i + 3
+                        && [
+                            "the", "a", "an", "this", "my", "our", "your", "his", "her", "their",
+                        ]
+                        .contains(&w)
                         && !finite_at(tokens, i - 1)
-                        && spelling::flags(word(tokens, i - 1)) & 2 != 0)
+                        && spelling::flags(word(tokens, i - 1)) & 2 != 0
+                        && !preposition(word(tokens, end - 1)))
                 && words(tokens, i, end) >= 3
         } else {
             false
@@ -1173,8 +1572,16 @@ fn introductory_comma(
     };
     let fw = first.normalized.as_str();
     let next = tokens.get(s + 1);
-    // "Yes that works", "Hopefully the new process will".
+    // "Yes that works", "Hopefully the new process will". ("However the vote goes, the team…" is a
+    // clause closed by its comma, not an introductory word.)
     if INTRO_WORDS.contains(&fw)
+        && !(fw == "however"
+            && tokens[s..end]
+                .iter()
+                .position(|t| t.surface == ",")
+                .is_some_and(|c| {
+                    clause_at(tokens, s + 1, c).is_some() && clause_at(tokens, c + 1, end).is_some()
+                }))
         && next.is_some_and(|n| spaced(&req.text, first, n))
         && clause_at(tokens, s + 1, end).is_some()
         && !(fw == "no"
@@ -1273,7 +1680,13 @@ fn introductory_comma(
             continue;
         }
         let prev = &tokens[j - 1];
-        if PREPOSITIONS.contains(&word(tokens, j - 1))
+        // "Although it was cold but he came": a conjunction here is doubled, not a clause end.
+        // "Because it's just the way he is", "the traits of those two": a comma never follows
+        // an adverb that modifies the next word, or a preposition.
+        if ["but", "so", "and", "or", "yet", "then"].contains(&word(tokens, j - 1))
+            || MID_ADVERBS.contains(&word(tokens, j - 1))
+            || preposition(word(tokens, j - 1)) && !["out", "off"].contains(&word(tokens, j - 1))
+            || PREPOSITIONS.contains(&word(tokens, j - 1))
             || DETERMINERS.contains(&word(tokens, j - 1))
             || AUXILIARIES.contains(&word(tokens, j - 1))
             || !prev.is_word && !prev.surface.chars().all(|c| c.is_ascii_digit())
@@ -1281,7 +1694,17 @@ fn introductory_comma(
             continue;
         }
         let verb_before = prev.pos == "Verb" || prev.pos.is_empty() && finite_at(tokens, j - 1);
-        let main = if question && inverted_question(tokens, j, end) || imperative_at(tokens, j, end)
+        // "Before coming to the office, what challenges were you facing?": the comma goes before
+        // the question word, not inside the question.
+        let inside_wh = (s + 1..j).rev().take(3).any(|k| {
+            [
+                "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
+            ]
+            .contains(&word(tokens, k))
+        });
+        let main = if question
+            && (inverted_question(tokens, j, end) && !inside_wh || wh_question(tokens, j, end))
+            || imperative_at(tokens, j, end)
         {
             true
         } else if let Some(v) = clause_at(tokens, j, end) {
@@ -1673,6 +2096,258 @@ mod tests {
             "She finished the report and sent it to the client.",
         ] {
             assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
+    fn a_run_on_needs_a_finished_first_clause_and_a_real_second_one() {
+        // A transitive verb after "doesn't" goes on to its object; "hardly any time left" is one
+        // noun phrase with a participle, not a second clause.
+        for text in [
+            "She doesn't have the permission set configured.",
+            "He doesn't have the files uploaded yet.",
+            "It doesn't need the server restarted.",
+            "There was hardly any time left.",
+            "There is barely any space left.",
+            "We don't have any budget left.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        for (input, expected) in [
+            (
+                "It doesn't work the team is confused.",
+                "It doesn't work. The team is confused.",
+            ),
+            (
+                "The printer is jammed the team is confused.",
+                "The printer is jammed. The team is confused.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_frequency_adverb_stays_after_a_helping_verb() {
+        for text in [
+            "I would never bet against that team.",
+            "We will always remember the trip.",
+            "He can never win this alone.",
+            "She would often visit us on Sundays.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        assert_eq!(
+            fix("I drink always tea at noon."),
+            "I always drink tea at noon."
+        );
+    }
+    #[test]
+    fn commas_and_splits_leave_fronted_phrases_and_correlatives_alone() {
+        for text in [
+            "I think that in ten years time we will all work from home.",
+            "It is true that because of the new tools, we ship faster.",
+            "I know that if I want to stay fit, I must exercise.",
+            "I was nervous because I knew if I missed the bus, I would be late.",
+            "Unlike paper maps, this app updates itself.",
+            "I play chess and tennis, two games that are simply perfect.",
+            "Local teams should focus on safety, using tools which do not break.",
+            "The plan is cheap, being easy to build.",
+            "The new heating and cooling units also help to trim the bills.",
+            "We are facing not just a threat to the land but to the people.",
+            "Before coming to the office, what challenges were you facing?",
+            "If the plan works then that is fine and we can move on.",
+            "The first issue was the setup; because the setup was late, the site had no servers.",
+            "Originally founded in Leeds, the firm moved to York in 1990.",
+            "The fair offers a range of games, pony rides and music.",
+            "The route is long, that can also be a problem on foot.",
+            "Time was running short, she thought to herself.",
+            "Our files are kept behind Oracle and Cisco routers and are backed up nightly.",
+            "Then we may have no choice but to stay home tonight.",
+            "We can check the map so that it's easy for you to find the cafe.",
+            "Because it's just the way Sam is, he never changes his mind.",
+            "We looked at the differences in the habits of those two groups.",
+            "It will remind you that even when the days are long, there is plenty to enjoy.",
+            "Cats sleep a lot and almost from birth, kittens learn to hunt.",
+            "I also like to bake and sometimes, my mom asks me to cook dinner.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        for (input, expected) in [
+            (
+                "Before coming to the office what challenges were you facing?",
+                "Before coming to the office, what challenges were you facing?",
+            ),
+            (
+                "I know my way around town, I have lived here for years.",
+                "I know my way around town. I have lived here for years.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_relative_clause_without_that_and_a_dash_are_no_run_on() {
+        // "something we were doing", "the worst night we had ever had", "the letter you sent":
+        // the noun is still waiting for its relative clause.
+        for text in [
+            "This was something we were doing on the weekend.",
+            "It was the worst night we had ever had.",
+            "It was a great night we had in the old town.",
+            "Thank you for the letter you have sent recently.",
+            "Migration is a factor all countries must consider in the plan.",
+            "I don't have anything I would like to ask you.",
+            "It is clear that genes play a very important part in the plan.",
+            "Some of them are natural whereas the others are not.",
+            "They are great I tell you!",
+            "My best friend had let me down.",
+            "It's very nice of you to let me choose the activities.",
+            "Thanks for your letter - it was great to hear from you.",
+            "There are surely a lot of job offers suitable for you!",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        // Two finished clauses in a row still get their period.
+        for (input, expected) in [
+            (
+                "I love this cafe the coffee is amazing.",
+                "I love this cafe. The coffee is amazing.",
+            ),
+            (
+                "We love this beach the water is so clear.",
+                "We love this beach. The water is so clear.",
+            ),
+            (
+                "While you were out a courier dropped off a package.",
+                "While you were out, a courier dropped off a package.",
+            ),
+            (
+                "It rained last night we stayed home.",
+                "It rained last night. We stayed home.",
+            ),
+            (
+                "I sent the report this morning it should be in your inbox.",
+                "I sent the report this morning. It should be in your inbox.",
+            ),
+            (
+                "The printer is jammed the team is confused.",
+                "The printer is jammed. The team is confused.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn an_opening_phrase_or_clause_before_the_comma_is_not_a_sentence() {
+        for text in [
+            "All things considered, the team shipped the update.",
+            "Everything considered, the launch went well.",
+            "No matter how hard the team trained, they could not catch the leaders.",
+            "Whoever wrote the draft, the editor will check it.",
+            "Whatever the team decides, the client will approve it.",
+            "Having finished the report, the analyst left early.",
+            "The contract signed, the team celebrated.",
+            "The sooner the vendor replies, the faster the team can start.",
+            "Each time the team shipped, the users complained.",
+            "Every time the build failed, the team fixed it.",
+            "Given the short notice, the team delivered a solid draft.",
+            "Her mind made up, she signed the form.",
+            "Every day the build passes, the team gains confidence.",
+            "The day the server crashed, the team stayed late.",
+            "Any way the team looks at it, the plan works.",
+            "However the vote goes, the team will ship on Friday.",
+            "However you read the numbers, the plan is sound.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        // Two independent clauses, even with an auxiliary and a participle, are still split.
+        for (input, expected) in [
+            (
+                "The contract was signed, the team celebrated.",
+                "The contract was signed. The team celebrated.",
+            ),
+            (
+                "The deadline moved, the team celebrated.",
+                "The deadline moved. The team celebrated.",
+            ),
+            (
+                "The week ended, the team celebrated.",
+                "The week ended. The team celebrated.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_purpose_so_that_takes_no_comma_and_a_doubled_conjunction_loses_one_word() {
+        for text in [
+            "We left early so that we could park.",
+            "The team stayed late so that the release could ship on time and nobody would worry.",
+            "As you sow, so shall you reap.",
+            "As the sun rises, so does the mood of the whole village.",
+            "Since Monday, so far it has worked.",
+            "Since the update shipped, so far no one has complained.",
+            "Since my cousin moved out last year I have a lot of free time, so I would love to travel.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        for (input, expected) in [
+            (
+                "It was late so that is why we left early and missed the end of the film.",
+                "It was late, so that is why we left early and missed the end of the film.",
+            ),
+            (
+                "However they think that the plan is late, friends and family still came.",
+                "However, they think that the plan is late, friends and family still came.",
+            ),
+            (
+                "The manager saw me as I was leaving early so that wasn't going to end well.",
+                "The manager saw me as I was leaving early, so that wasn't going to end well.",
+            ),
+            (
+                "Because I was sick, so I stayed home.",
+                "Because I was sick, I stayed home.",
+            ),
+            (
+                "Since the shop was closed, so let's order in.",
+                "Since the shop was closed, let's order in.",
+            ),
+            (
+                "Although the new office was very cold in the morning but he came to work on time and stayed late.",
+                "Although the new office was very cold in the morning, he came to work on time and stayed late.",
+            ),
+            (
+                "Because the vendor was late with the shipment so we could not open the shop on time.",
+                "Because the vendor was late with the shipment, we could not open the shop on time.",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
+        }
+    }
+    #[test]
+    fn a_question_word_clause_that_is_the_subject_makes_no_question() {
+        // The wh-clause is the subject of "is unclear": no question mark, no inverted verb.
+        for text in [
+            "How the team did it is unclear.",
+            "How the team did it is unclear",
+            "Why the build failed is unclear",
+            "What you need is a little rest",
+            "How you did it matters more than when",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+        // A typo in the question word reaches the same text; a typed question mark still counts.
+        for (input, expected) in [
+            (
+                "hwo the team did it is unclear",
+                "How the team did it is unclear",
+            ),
+            ("whereh the key is?", "Where is the key?"),
+            ("whereh is the key", "Where is the key?"),
+            (
+                "What time does the game start",
+                "What time does the game start?",
+            ),
+        ] {
+            assert_eq!(fix(input), expected, "{input}");
         }
     }
     #[test]

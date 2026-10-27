@@ -506,8 +506,8 @@
   },
   {
     "id": "concise.phrase.a_large_number_of",
-    "pattern": "(?i)\\ba large number of\\b",
-    "replacement": "many",
+    "pattern": "(?i)\\ba large number(?:(?P<p> of (?:the|these|those|our|my|your|their|his|her|its|them|us|whom|which))|\\s+of)\\b",
+    "replacement": "many${p}",
     "modes": [
       "concise",
       "direct"
