@@ -87,10 +87,21 @@ pub fn ordinary(word: &str) -> bool {
 pub fn canonical_case(lower: &str) -> Option<&'static str> {
     lexicon().canonical(lower)
 }
-/// A name from the lexicon or the bundled list, whether or not the user capitalized it.
+/// A name from the lexicon or the bundled list, whether or not the user capitalized it. An
+/// acronym the lexicon spells in capitals ("pdf", "nda") is a word, not a name.
 fn namey(word: &str) -> bool {
     let word = names::base(word);
-    name_only(word) && !names::is_name_typo(word) || names::name_word(word)
+    (name_only(word) && !names::is_name_typo(word) || names::name_word(word))
+        && !capitalized_acronym(word)
+}
+/// A word the lexicon spells in capitals ("PDF", "NASA", "MP3"), or a listed acronym.
+fn capitalized_acronym(word: &str) -> bool {
+    acronym(word)
+        || canonical_case(word).is_some_and(|c| {
+            c.chars().count() >= 2
+                && c.chars()
+                    .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
+        })
 }
 pub fn possessive_boundary(token: &Token<'_>) -> Option<usize> {
     if !token.surface.chars().next().is_some_and(char::is_uppercase) {
@@ -1807,7 +1818,15 @@ fn name_frame(
             "emailed",
         ]);
     // "harsha reddy", "noor haddad": a name or an unknown word that is no typo beside it makes a
-    // full name, and on a line typed without capitals so does a plain unknown word.
+    // full name, and on a line typed without capitals so does a plain unknown word. The "pdf" of
+    // "resume.pdf" is no surname.
+    let extension = |n: &Token<'_>| {
+        history
+            .iter()
+            .rev()
+            .chain(following.iter())
+            .any(|d| d.surface == "." && d.end_byte == n.start_byte)
+    };
     let line_words = || {
         history
             .iter()
@@ -1831,6 +1850,7 @@ fn name_frame(
                 // A name typed with a capital ("Boston", "Monday") is just a word beside it.
                 && n.surface.chars().all(|c| c.is_ascii_lowercase() || c == '\'')
                 && !DETERMINERS_AND_ARTICLES.contains(&n.normalized.as_str())
+                && !extension(n)
                 && (namey(&n.normalized) && !name_only_typo(&n.normalized, "")
                     || casual && unknown_alphabetic(n) && !edit_shaped(&n.normalized))
         });
@@ -4056,6 +4076,30 @@ mod tests {
         ] {
             assert_eq!(checked(input), expected, "{input}");
         }
+    }
+    #[test]
+    fn a_file_extension_or_a_lowercase_acronym_beside_a_slip_names_nobody() {
+        // "pdf" is spelled in capitals by the lexicon and is glued to "resume": no surname frame
+        // around "lools", so the slip is fixed as anywhere else.
+        for (input, expected) in [
+            (
+                "Your resume.pdf lools great.",
+                "Your resume.pdf looks great.",
+            ),
+            (
+                "Please attach the signed NDA.pdf befode Friday.",
+                "Please attach the signed NDA.pdf before Friday.",
+            ),
+            (
+                "See resume.pdf and lools at it.",
+                "See resume.pdf and looks at it.",
+            ),
+        ] {
+            assert_eq!(checked(input), expected, "{input}");
+        }
+        // A real pair of names beside each other still stands.
+        let text = "I had lunch with harsha reddy today.";
+        assert_eq!(checked(text), text);
     }
     #[test]
     fn a_word_made_with_a_bound_prefix_is_not_split_but_glued_words_are() {
