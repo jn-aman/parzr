@@ -665,6 +665,32 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 })
                 && !SUBJECTS.contains(&word(s, i + 1))
         };
+        // "He found those book": a plural demonstrative before a countable singular noun is almost
+        // always a dropped plural ending, so the noun changes. Only a singular verb after the phrase
+        // ("Those guy is late") or a noun with no plural ("those furniture") points at the
+        // demonstrative instead.
+        if singular_head
+            && ["these", "those"].contains(&d)
+            && let Some(&head_k) = nominal_run(req, s, i + 1).last()
+            && !s[head_k + 1..].iter().take(4).any(|t| {
+                [
+                    "is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't",
+                ]
+                .contains(&t.normalized.as_str())
+            })
+            && let Some(plural) = crate::forms::countable_plural(&s[head_k].normalized)
+        {
+            push(
+                req,
+                edits,
+                span(s, head_k, head_k),
+                crate::match_case(&plural, s[head_k].surface),
+                "grammar.demonstrative_number",
+                "“These” and “those” go with a plural noun.",
+                0.9,
+            );
+            continue;
+        }
         let fix = match d {
             // "any of this requires work", "this leads to": a verb in "-s" after "this" with more
             // clause to come is the verb, not a plural noun.

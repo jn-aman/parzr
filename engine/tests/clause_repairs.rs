@@ -559,7 +559,10 @@ fn a_demonstrative_pronoun_or_compound_head_is_not_a_number_error() {
             "Did you see this messages from Ben?",
             "Did you see these messages from Ben?",
         ),
-        ("I like these guy.", "I like this guy."),
+        ("I like these guy.", "I like these guys."),
+        ("He found those book.", "He found those books."),
+        ("Check these file.", "Check these files."),
+        ("Those guy is late.", "That guy is late."),
         (
             "Those library on Main is closed.",
             "That library on Main is closed.",

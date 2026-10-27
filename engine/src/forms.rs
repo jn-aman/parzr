@@ -1060,6 +1060,14 @@ fn plural_of(w: &str) -> Option<String> {
     }
     forms.into_iter().find(|f| plural(f))
 }
+/// The regular plural of a countable noun ("book" to "books"); None for a mass noun, a group word or
+/// a noun the dictionary has no plural for.
+pub(crate) fn countable_plural(w: &str) -> Option<String> {
+    if MASS.contains(&w) || NUMBERLESS.contains(&w) {
+        return None;
+    }
+    plural_of(w)
+}
 /// The singular of a plural noun the dictionary knows ("students" to "student").
 fn singular_of(w: &str) -> Option<String> {
     if let Some((s, _)) = IRREGULAR_PLURALS.iter().find(|(_, p)| *p == w) {
