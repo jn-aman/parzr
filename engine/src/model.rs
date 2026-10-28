@@ -715,6 +715,22 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     }
     Ok(result)
 }
+/// `PARZR_TONE_TRACE=1` prints, to stderr, what each tone rewrite decided: the model's answer per
+/// attempt, the score that chose between attempts, and every sentence's meaning verdict. Read once;
+/// unset it costs one cached flag test per call. A development override: the shipped engine
+/// (built without the `dev-overrides` feature) never reads it.
+pub(crate) fn tone_trace() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| crate::overrides::var("PARZR_TONE_TRACE").is_some_and(|v| v != "0"))
+}
+macro_rules! trace {
+    ($($arg:tt)*) => {
+        if $crate::model::tone_trace() {
+            eprintln!("TRACE {}", format_args!($($arg)*));
+        }
+    };
+}
+pub(crate) use trace;
 fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
     generate_with(req, passage, careful, false)
 }
@@ -731,6 +747,12 @@ fn generate_with(
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
         let output = infer(&r, &prompt(req, &masked, &literals, strict, careful, shots))?;
+        trace!(
+            "  model said ({}{}{}): {output:?}",
+            if shots { "examples" } else { "plain" },
+            if careful.is_some() { ", careful" } else { "" },
+            if strict { ", strict" } else { "" }
+        );
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -763,6 +785,13 @@ fn generate_with(
         // them out on purpose (rules/tone.json).
         let output = if matches!(req.mode, Mode::Friendly | Mode::Concise | Mode::Direct) {
             keep_contractions(&masked, &output)
+        } else {
+            output
+        };
+        // Concise and Direct also keep the writer's digits and add no "there" ("3 times" stays
+        // "3 times"; "I've been 3 times" is not "I've been there three times").
+        let output = if matches!(req.mode, Mode::Concise | Mode::Direct) {
+            drop_new_place(&masked, &keep_digits(&masked, &output))
         } else {
             output
         };
@@ -864,6 +893,103 @@ fn keep_contractions(source: &str, output: &str) -> String {
         result = text;
     }
     result
+}
+
+/// Number words and the digits they stand for.
+const NUMBER_WORDS: &[(&str, &str)] = &[
+    ("two", "2"),
+    ("three", "3"),
+    ("four", "4"),
+    ("five", "5"),
+    ("six", "6"),
+    ("seven", "7"),
+    ("eight", "8"),
+    ("nine", "9"),
+    ("ten", "10"),
+    ("eleven", "11"),
+    ("twelve", "12"),
+    ("thirteen", "13"),
+    ("fourteen", "14"),
+    ("fifteen", "15"),
+    ("sixteen", "16"),
+    ("seventeen", "17"),
+    ("eighteen", "18"),
+    ("nineteen", "19"),
+    ("twenty", "20"),
+    ("thirty", "30"),
+    ("forty", "40"),
+    ("fifty", "50"),
+];
+/// A Concise or Direct rewrite keeps the digits the writer typed: where the source wrote "3" and
+/// the model wrote "three" in its place, the digit comes back (the word is longer, and Concise
+/// may not grow).
+fn keep_digits(source: &str, output: &str) -> String {
+    let digits = |text: &str, digit: &str| {
+        text.split_whitespace()
+            .filter(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == digit)
+            .count()
+    };
+    let mut result = output.to_owned();
+    for (word, digit) in NUMBER_WORDS {
+        let mut missing = digits(source, digit).saturating_sub(digits(&result, digit));
+        if missing == 0 {
+            continue;
+        }
+        let pattern = regex::Regex::new(&format!(r"(?i)\b{word}\b")).expect("constant number word");
+        // A number the writer spelled out is theirs to spell.
+        if pattern.is_match(source) {
+            continue;
+        }
+        let mut text = String::with_capacity(result.len());
+        let mut at = 0;
+        for m in pattern.find_iter(&result) {
+            if missing == 0 {
+                break;
+            }
+            missing -= 1;
+            text.push_str(&result[at..m.start()]);
+            text.push_str(digit);
+            at = m.end();
+        }
+        text.push_str(&result[at..]);
+        result = text;
+    }
+    result
+}
+/// A "there" or "here" the model put behind a verb of going that the writer did not say ("I've been
+/// 3 times" is "I've been there three times") goes: Concise and Direct do not add words.
+fn drop_new_place(source: &str, output: &str) -> String {
+    const GOING: &[&str] = &[
+        "been", "gone", "went", "go", "going", "goes", "visited", "stayed", "ate", "eaten", "eat",
+        "lived", "live",
+    ];
+    let words = |text: &str| -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    if words(source).iter().any(|w| w == "there" || w == "here") {
+        return output.to_owned();
+    }
+    let mut kept: Vec<String> = vec![];
+    let mut previous = String::new();
+    for token in output.split(' ') {
+        let bare = token
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase();
+        if (bare == "there" || bare == "here") && GOING.contains(&previous.as_str()) {
+            // A mark that followed it stays on the word before ("been there." is "been.").
+            let marks: String = token.chars().filter(|c| !c.is_alphanumeric()).collect();
+            if let Some(last) = kept.last_mut() {
+                last.push_str(&marks);
+            }
+            continue;
+        }
+        previous = bare;
+        kept.push(token.to_owned());
+    }
+    kept.join(" ")
 }
 
 /// Greetings a rewrite may open with.
@@ -2532,6 +2658,20 @@ fn segment_keeps(
     output: &str,
     elsewhere: &str,
 ) -> Result<(), String> {
+    let verdict = segment_verdict(req, shots, source, output, elsewhere);
+    trace!(
+        "  keeps_meaning {source:?} -> {output:?} ({}): {verdict:?}",
+        if shots { "examples" } else { "plain" }
+    );
+    verdict
+}
+fn segment_verdict(
+    req: &Request,
+    shots: bool,
+    source: &str,
+    output: &str,
+    elsewhere: &str,
+) -> Result<(), String> {
     crate::meaning::keeps_meaning(
         req.mode,
         source,
@@ -2596,7 +2736,7 @@ fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
     let words = s.words.max(1) as i32;
     let changed = i32::from(wording(source) != wording(output));
     // A complaint turned up ("I really hate it", "Are you really that stupid?") is no softening.
-    let harsher = if s.negative + s.rude > 0 {
+    let harsher = if s.negative + s.insulted() > 0 {
         2 * more(s.boosters, o.boosters)
     } else {
         0
@@ -2604,14 +2744,14 @@ fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
     match mode {
         Mode::Professional | Mode::Friendly => {
             // Rewording that leaves the insult in place has not reached the tone.
-            let reworded = if o.rude > 0 { 0 } else { changed };
+            let reworded = if o.insulted() > 0 { 0 } else { changed };
             let shorthand = if mode == Mode::Professional {
                 2 * less(s.chat, o.chat) - more(s.exclaims, o.exclaims)
             } else {
                 // Friendly: padding said plainly ("Just a quick note: …").
                 less(s.padding, o.padding) / 2
             };
-            3 * less(s.rude, o.rude) + reworded + shorthand
+            3 * less(s.insulted(), o.insulted()) + reworded + shorthand
                 - 2 * more(s.emphasis, o.emphasis)
                 - harsher
         }
@@ -2644,17 +2784,17 @@ fn weak(mode: Mode, source: &str, output: &str) -> bool {
         crate::meaning::tone_marks(output),
     );
     let unchanged = wording(source) == wording(output);
-    let complaint = s.rude + s.negative > 0;
+    let complaint = s.insulted() + s.negative > 0;
     match mode {
         Mode::Professional => {
-            unchanged && complaint || o.rude > 0 || o.chat > 0 || o.emphasis > s.emphasis
+            unchanged && complaint || o.insulted() > 0 || o.chat > 0 || o.emphasis > s.emphasis
         }
         // A padded message whose padding all stayed ("I wanted to take a moment to let you know…")
         // can be said more warmly and plainly.
         Mode::Friendly => {
             unchanged && complaint
                 || s.padding >= 3 && o.padding >= s.padding
-                || o.rude > 0
+                || o.insulted() > 0
                 || o.emphasis > s.emphasis
         }
         Mode::Concise | Mode::Direct => unchanged && s.words >= 8,
@@ -2675,10 +2815,13 @@ fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
             .collect()
     };
     let marks = crate::meaning::tone_marks(&req.text);
-    let negative = marks.negative + marks.rude > 0;
-    // On a complaint "really" and "so" turn it up too ("I really hate it").
+    let negative = marks.negative + marks.insulted() > 0;
+    // On a complaint "really" and "so" turn it up too ("I really hate it"); so do they on a Friendly
+    // text that already reads friendly ("The whole team enjoyed the visit" is not "really enjoyed").
+    let turned_up =
+        negative || req.mode == Mode::Friendly && crate::meaning::reads_friendly(&req.text);
     let emphatic = |w: &str| {
-        crate::meaning::EMPHASIS.contains(&w) || negative && crate::meaning::BOOSTERS.contains(&w)
+        crate::meaning::EMPHASIS.contains(&w) || turned_up && crate::meaning::BOOSTERS.contains(&w)
     };
     all.into_iter()
         .filter(|e| {
@@ -2806,6 +2949,7 @@ fn careful(req: &Request, segment: &crate::meaning::Segment) -> Option<Vec<Edit>
         context
     };
     let text = generate(&sub, &sub.text, Some(context)).ok()?;
+    trace!("  careful retry of {:?}: {text:?}", sub.text);
     let protected = kept_spans(&sub);
     let all = edits(&sub.text, &text, sub.mode, &protected);
     let touches = |e: &Edit| {
@@ -2823,15 +2967,16 @@ fn careful(req: &Request, segment: &crate::meaning::Segment) -> Option<Vec<Edit>
     let all = keep_names(&sub, all);
     let output = apply_edits(&sub.text, &all).ok()?.0;
     let elsewhere = outside(&req.text, segment.start, segment.end);
-    crate::meaning::keeps_meaning(
+    let verdict = crate::meaning::keeps_meaning(
         sub.mode,
         &sub.text,
         &output,
         &elsewhere,
         &hints(&sub.text),
         &hints(&output),
-    )
-    .ok()?;
+    );
+    trace!("  careful verdict: {output:?}: {verdict:?}");
+    verdict.ok()?;
     Some(
         all.into_iter()
             .map(|mut e| {
@@ -2882,11 +3027,15 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         Ok((text, all))
     };
     let attempt = |careful: Option<&str>| attempt_with(careful, false);
+    trace!("rewrite {:?} {:?}", req.mode, req.text);
     // A tone rewrite that loses or moves a protected element (a number, a link, a name) or runs
     // away is asked once more as a light edit before the request fails.
-    let (_, all) = attempt(None).or_else(|error| match req.mode {
-        Mode::Fix => Err(error),
-        _ => attempt(Some("")),
+    let (_, all) = attempt(None).or_else(|error| {
+        trace!("  attempt 1 failed: {error}");
+        match req.mode {
+            Mode::Fix => Err(error),
+            _ => attempt(Some("")),
+        }
     })?;
     let all = keep_structure(req, keep_names(req, all));
     let (changes, withheld) = if req.mode == Mode::Fix {
@@ -2904,12 +3053,13 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let all = drop_added_emphasis(req, all);
         let (failed, gain) = candidate_score(req, &all, false);
         let first_output = apply_edits(&req.text, &all)?.0;
+        trace!("  attempt 1 (plain): {first_output:?} failed={failed} gain={gain}");
         // A Professional or Friendly second answer can only earn its place by removing an
         // insult, chat shorthand (Professional) or padding (Friendly), gain 2 or more: without
         // one in the text, it is not asked.
         let marks = crate::meaning::tone_marks(&req.text);
         let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
-            || 3 * marks.rude
+            || 3 * marks.insulted()
                 + 1
                 + if req.mode == Mode::Professional {
                     2 * marks.chat
@@ -2917,10 +3067,22 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                     marks.padding / 2
                 }
                 >= 2;
-        let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
+        let is_weak = weak(req.mode, &req.text, &first_output);
+        trace!(
+            "  marks {marks:?}; reachable={reachable} weak={is_weak} failed={failed}: attempt 2 {}",
+            if reachable && (failed > 0 || is_weak) {
+                "asked"
+            } else {
+                "not asked"
+            }
+        );
+        let second = (reachable && (failed > 0 || is_weak))
             .then(|| attempt_with(None, true).ok())
             .flatten()
-            .map(|(_, e)| drop_added_emphasis(req, keep_structure(req, keep_names(req, e))))
+            .map(|(t, e)| {
+                trace!("  attempt 2 (examples): {t:?}");
+                drop_added_emphasis(req, keep_structure(req, keep_names(req, e)))
+            })
             .filter(|e| {
                 let (failed2, gain2) = candidate_score(req, e, true);
                 // Never more failed segments than the first; better on tone, or as good with fewer
@@ -2928,7 +3090,14 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                 // removes (an insult, chat shorthand, padding): rewording alone ("known for its delicious
                 // food") is how examples-led answers embellish neutral text.
                 let earned = !matches!(req.mode, Mode::Professional | Mode::Friendly) || gain2 >= 2;
-                earned && failed2 <= failed && (gain2 > gain || gain2 == gain && failed2 < failed)
+                let taken = earned
+                    && failed2 <= failed
+                    && (gain2 > gain || gain2 == gain && failed2 < failed);
+                trace!(
+                    "  attempt 2 score: failed={failed2} gain={gain2} earned={earned}: {}",
+                    if taken { "taken" } else { "discarded" }
+                );
+                taken
             });
         match second {
             Some(e) => meaning_guard(req, e, true),
@@ -3062,6 +3231,67 @@ mod tests {
             ),
         ] {
             assert_eq!(collapse_marks_after(output, marker, link, masked), expected);
+        }
+    }
+
+    #[test]
+    fn concise_and_direct_keep_the_digits_the_writer_typed() {
+        for (source, output, expected) in [
+            (
+                "I've been 3 times this month.",
+                "I've been three times this month.",
+                "I've been 3 times this month.",
+            ),
+            (
+                "Order 12 boxes and 2 pallets.",
+                "Order twelve boxes and two pallets.",
+                "Order 12 boxes and 2 pallets.",
+            ),
+            (
+                "Three people came, 3 stayed.",
+                "Three people came, three stayed.",
+                "Three people came, three stayed.",
+            ),
+            // The writer's own words, a digit the model kept, and numbers the source lacks stay.
+            (
+                "We ate three slices.",
+                "We ate three slices.",
+                "We ate three slices.",
+            ),
+            (
+                "Order 3 boxes.",
+                "Order 3 boxes and three pallets.",
+                "Order 3 boxes and three pallets.",
+            ),
+            ("Order 3 boxes.", "Order boxes.", "Order boxes."),
+        ] {
+            assert_eq!(keep_digits(source, output), expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_there_the_model_added_behind_a_verb_of_going_is_dropped() {
+        for (source, output, expected) in [
+            (
+                "I've been 3 times this month.",
+                "I've been there 3 times this month.",
+                "I've been 3 times this month.",
+            ),
+            ("We went twice.", "We went there twice.", "We went twice."),
+            ("I've been.", "I've been there.", "I've been."),
+            // The writer's own "there", and a "there" that is not behind a verb of going, stay.
+            (
+                "I've been there twice.",
+                "I've been there twice.",
+                "I've been there twice.",
+            ),
+            (
+                "Is a printer free?",
+                "Is there a printer free?",
+                "Is there a printer free?",
+            ),
+        ] {
+            assert_eq!(drop_new_place(source, output), expected, "{source}");
         }
     }
 
@@ -4677,5 +4907,21 @@ mod tests {
         };
         let kept = drop_added_emphasis(&req, edits(text, output, Mode::Friendly, &[]));
         assert_eq!(apply_edits(text, &kept).unwrap().0, output);
+    }
+
+    #[test]
+    fn friendly_adds_no_booster_to_a_text_that_already_reads_friendly() {
+        let text = "Thank you again for the warm welcome. The whole team enjoyed the visit.";
+        let output =
+            "Thank you again for the warm welcome. The whole team really enjoyed the visit.";
+        for (mode, expected) in [(Mode::Friendly, text), (Mode::Concise, output)] {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            let kept = drop_added_emphasis(&req, edits(text, output, mode, &[]));
+            assert_eq!(apply_edits(text, &kept).unwrap().0, expected, "{mode:?}");
+        }
     }
 }

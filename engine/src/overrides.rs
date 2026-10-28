@@ -44,6 +44,7 @@ mod tests {
                 "PARZR_MODEL_RUNTIME",
                 "PARZR_GEC_RUNTIME",
                 "PARZR_TABLES_PATH",
+                "PARZR_TONE_TRACE",
             ] {
                 assert_eq!(lookup(name, set), None, "{name}");
             }

@@ -878,15 +878,58 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
         document.apply(&floor)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
     }
+    // A common insult is said kindly before the model sees it (Friendly): the small model replies
+    // to "Shut up and send me the file." or keeps it. Then the model rewrites the kinder text.
+    let before_frames = document.text();
+    if req.mode == Mode::Friendly {
+        let mut fenced = protected.clone();
+        fenced.extend(name_guard_ranges(req));
+        let current = document.request(req, &fenced, Mode::Friendly);
+        let kind = crate::tone_format::friendly_forms(&current, &current.protected_ranges);
+        if !kind.is_empty() {
+            document.apply(&kind)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+        }
+    }
+    let framed = document.text() != before_frames;
     // What the writer is shown if the model's rewrite is withheld: this corrected text, and
     // whatever the mode's own rules do to it below.
     let corrected = document.text();
+    crate::model::trace!("pipeline: corrected {corrected:?}");
     // The model gets no instructions about names, so every name candidate is masked.
     let mut masked = protected.clone();
     masked.extend(name_guard_ranges(req));
+    crate::model::trace!(
+        "pipeline: masked from the model {:?}",
+        masked
+            .iter()
+            .filter_map(|r| {
+                let (a, b) = (
+                    crate::byte_at(&req.text, r.start_utf16)?,
+                    crate::byte_at(&req.text, r.end_utf16)?,
+                );
+                req.text.get(a..b)
+            })
+            .collect::<Vec<_>>()
+    );
     // A rewrite the model cannot write safely (it changed protected text, a name or the meaning)
     // leaves the corrected text, with a warning, instead of failing the whole check.
     match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
+        // Text that is already formal (no chat shorthand, insult, contraction, lowercase start,
+        // "!!" or missing final mark in what the writer typed) is not reworded for its own sake: the
+        // small model swaps "help" for "assist you" and "received" for "have received", which is
+        // no gain (a rewrite that adds a courtesy or cuts a hedge is one), and a rewrite of such text
+        // that was withheld left nothing to report.
+        Ok(contextual)
+            if req.mode == Mode::Professional
+                && !crate::meaning::informal(&req.text)
+                && !crate::meaning::earns_rewrite(&document.text(), &contextual.text) =>
+        {
+            crate::model::trace!(
+                "pipeline: formal text, rewrite {:?} not kept",
+                contextual.text
+            );
+        }
         Ok(mut contextual) => {
             // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
             judge.screen(&document, &mut contextual.edits, &mut protected);
@@ -896,6 +939,10 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
         }
         Err(error) => warnings.push(format!("Kept the corrected text. {error}")),
     }
+    crate::model::trace!(
+        "pipeline: after the model {:?} warnings={warnings:?}",
+        document.text()
+    );
     // The rewrite is finished writing, whatever the model managed: never formatted worse than
     // Fix (sentence capitals and a final mark, chat included), and a Professional one spells
     // out chat shorthand. Names and protected text are left as they are.
@@ -905,7 +952,18 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // clarity pack in Concise) say plainly what the model kept padded ("due to the fact that",
     // "on a daily basis"): the same deterministic pass the rules-only build runs.
     let current = document.request(req, &fenced, req.mode);
-    let wording = rewrite_once(&current, true)?;
+    let mut wording = rewrite_once(&current, true)?;
+    // Friendly's contractions ("you are" to "you're", "Thank you" to "Thanks") are for text that
+    // does not read friendly yet: a message that already thanks, cheers or praises, and that the
+    // model left alone, is not respelled.
+    if req.mode == Mode::Friendly
+        && document.text() == corrected
+        && crate::meaning::reads_friendly(&corrected)
+    {
+        wording.edits.retain(|e| {
+            !["friendly.thanks", "friendly.you_are", "friendly.i_am"].contains(&e.rule_id.as_str())
+        });
+    }
     if !wording.edits.is_empty() {
         document.apply(&wording.edits)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
@@ -921,6 +979,13 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // said plainly (Friendly, Concise, Direct).
     let current = document.request(req, &fenced, req.mode);
     document.apply(&crate::tone_format::opener_forms(
+        &current,
+        &current.protected_ranges,
+    ))?;
+    // A hedge clause before a request or a claim ("I hate to ask, but could you possibly…",
+    // "I'm not sure, but…") goes in Concise and Direct, whatever the meaning guard made of it.
+    let current = document.request(req, &fenced, req.mode);
+    document.apply(&crate::tone_format::hedge_forms(
         &current,
         &current.protected_ranges,
     ))?;
@@ -945,7 +1010,17 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // padded phrase cut, a request made direct), that text is the version offered.
     // (Friendly's own rules only contract "thank you" to "thanks" or "you are" to "you're": that is
     // no rewrite.)
-    if req.mode != Mode::Friendly && document.text() != corrected {
+    crate::model::trace!(
+        "pipeline: after the mode's rules {:?} (corrected text {})",
+        document.text(),
+        if document.text() == corrected {
+            "unchanged"
+        } else {
+            "changed"
+        }
+    );
+    // (A Friendly insult already said kindly above is a rewrite.)
+    if framed || req.mode != Mode::Friendly && document.text() != corrected {
         warnings.retain(|w| w != crate::model::TONE_WITHHELD);
     }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);

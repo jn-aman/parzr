@@ -602,6 +602,444 @@ pub(crate) fn opener_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
     edits
 }
 
+/// A clause that only hedges or apologizes before a request or a claim, to be followed by
+/// "but" or a comma: "I'm not sure, but", "I may be wrong, but", "I hope you don't mind me
+/// asking, but", "Sorry to bother you again, but", "I hate to ask, but". Padding in Concise and
+/// Direct, words, negations and modals included (`meaning::hedge_opener_regex` is the same list).
+fn hedge_lead_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)",
+        )
+        .expect("constant hedge lead regex")
+    })
+}
+/// "I was hoping you might be able to help me with …": a request said as a hope.
+fn hoping_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^i(?:\s+was|\s+am|['’]m)\s+hoping\s+(?:that\s+)?you\s+(?:could|can|might\s+be\s+able\s+to|would\s+be\s+able\s+to|might|would)\s+(?:possibly\s+|maybe\s+|perhaps\s+)?(?P<verb>[a-z]+)\b",
+        )
+        .expect("constant hoping regex")
+    })
+}
+/// "could you possibly …": the adverb goes with the hedge.
+fn possibly_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(?P<modal>could|can|would|will)\s+you\s+(?:possibly|maybe|perhaps|kindly)\s+",
+        )
+        .expect("constant possibly regex")
+    })
+}
+/// "Would you mind terribly if I borrowed …": a request for permission.
+fn would_mind_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^would\s+you\s+mind\s+(?:(?:terribly|very\s+much|too\s+much|at\s+all)\s+)?if\s+i\s+(?P<verb>[a-z]+)\b",
+        )
+        .expect("constant would mind regex")
+    })
+}
+/// "Maybe it would be a good idea to …": a suggestion put as a question.
+fn good_idea_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)^maybe\s+it\s+would\s+be\s+a\s+good\s+idea\s+to\s+")
+            .expect("constant good idea regex")
+    })
+}
+
+/// How one sentence changes: the bytes before `cut` become `head`, and a final "." may become
+/// "?". The rest of the sentence stays as written.
+struct HedgePlan {
+    cut: usize,
+    head: String,
+    mark: Option<&'static str>,
+}
+fn hedge_plan(mode: crate::Mode, sentence: &str) -> Option<HedgePlan> {
+    let words = |s: &str| s.split_whitespace().count();
+    let concise = mode == crate::Mode::Concise;
+    let lead = hedge_lead_regex().find(sentence).map_or(0, |m| m.end());
+    let rest = &sentence[lead..];
+    if lead > 0 {
+        // A clause must follow the hedge ("I'm not sure, but." alone stays).
+        if words(rest) < 3 || !rest.starts_with(char::is_alphanumeric) {
+            return None;
+        }
+        // "I was hoping you might be able to help me with …" asks for the help.
+        if let Some(c) = hoping_regex().captures(rest) {
+            let verb = c.name("verb")?;
+            if REQUEST_VERBS.contains(&verb.as_str().to_lowercase().as_str())
+                && sentence.ends_with('.')
+            {
+                return Some(HedgePlan {
+                    cut: lead + verb.start(),
+                    head: if concise { "Could you " } else { "Please " }.into(),
+                    mark: concise.then_some("?"),
+                });
+            }
+        }
+        // "could you possibly cover …" is "Could you cover …".
+        if let Some(c) = possibly_regex().captures(rest) {
+            let modal = c.name("modal")?.as_str();
+            let cap = format!(
+                "{}{} you ",
+                modal[..1].to_uppercase(),
+                &modal[1..].to_lowercase()
+            );
+            return Some(HedgePlan {
+                cut: lead + c.get(0)?.end(),
+                head: cap,
+                mark: None,
+            });
+        }
+        let first = rest.chars().next()?.len_utf8();
+        return Some(HedgePlan {
+            cut: lead + first,
+            head: rest[..first].to_uppercase(),
+            mark: None,
+        });
+    }
+    // "Would you mind terribly if I borrowed my notes?" is "Could I borrow my notes?".
+    if let Some(c) = would_mind_regex().captures(sentence) {
+        let verb = c.name("verb")?;
+        let past = verb.as_str().to_lowercase();
+        let base = crate::morphology::verb(&past)
+            .filter(|v| v.past == past && v.base != past)?
+            .base;
+        return Some(HedgePlan {
+            cut: verb.end(),
+            head: format!("Could I {base}"),
+            mark: None,
+        });
+    }
+    // Concise keeps a question a question: "Maybe it would be a good idea to back up the files
+    // before we upgrade?" is "Should we back up the files before we upgrade?".
+    if concise && sentence.ends_with('?') {
+        let m = good_idea_regex().find(sentence)?;
+        let body = &sentence[m.end()..];
+        if words(body) >= 3
+            && body
+                .split(|c: char| !c.is_alphabetic())
+                .any(|w| w.eq_ignore_ascii_case("we"))
+        {
+            return Some(HedgePlan {
+                cut: m.end(),
+                head: "Should we ".into(),
+                mark: None,
+            });
+        }
+    }
+    None
+}
+
+/// Hedge openers said plainly (Concise, Direct): "I hope you do not mind me asking, but have you
+/// had a chance to review the invoice?" is "Have you had a chance to review the invoice?", "I
+/// hate to ask, but could you possibly cover my shift?" is "Could you cover my shift?", "Sorry
+/// to bother you again, but I was hoping you might be able to help me with it." is "Could you
+/// help me with it?" (Concise) or "Please help me with it." (Direct), "Would you mind terribly
+/// if I borrowed your notes?" is "Could I borrow your notes?". Only at a sentence start, and
+/// only when a clause follows.
+pub(crate) fn hedge_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
+    if !matches!(req.mode, crate::Mode::Concise | crate::Mode::Direct) {
+        return vec![];
+    }
+    let text = req.text.as_str();
+    // The tagger reads a capitalized "Sorry," as a name; here it is the apology that opens a hedge.
+    let protected: Vec<TextRange> = protected
+        .iter()
+        .filter(|p| {
+            crate::byte_at(text, p.start_utf16)
+                .zip(crate::byte_at(text, p.end_utf16))
+                .and_then(|(a, b)| text.get(a..b))
+                .is_none_or(|word| !word.eq_ignore_ascii_case("sorry"))
+        })
+        .cloned()
+        .collect();
+    let protected = protected.as_slice();
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let mut edits = vec![];
+    let mut previous = usize::MAX;
+    for (i, t) in tokens.iter().enumerate() {
+        if t.sentence == previous || !t.is_word {
+            previous = t.sentence;
+            continue;
+        }
+        previous = t.sentence;
+        let Some(last) = tokens
+            .iter()
+            .skip(i)
+            .take_while(|n| n.sentence == t.sentence)
+            .last()
+        else {
+            continue;
+        };
+        let sentence = &text[t.start_byte..last.end_byte];
+        let Some(plan) = hedge_plan(req.mode, sentence) else {
+            continue;
+        };
+        let utf16 = |b: usize| text[..b].encode_utf16().count();
+        let (a, b) = (t.start_byte, t.start_byte + plan.cut);
+        let mut spans = vec![(a, b, plan.head)];
+        if let Some(mark) = plan.mark
+            && last.surface == "."
+        {
+            spans.push((last.start_byte, last.end_byte, mark.to_owned()));
+        }
+        if spans
+            .iter()
+            .any(|(a, b, _)| protected_at(protected, utf16(*a), utf16(*b)))
+        {
+            continue;
+        }
+        for (a, b, replacement) in spans {
+            if text[a..b] != replacement {
+                edits.push(edit(
+                    utf16(a),
+                    utf16(b),
+                    &text[a..b],
+                    replacement,
+                    "tone.plain_hedge",
+                    "Say it without the hedge.",
+                ));
+            }
+        }
+    }
+    edits
+}
+
+/// Insults that follow "What kind of": "What kind of idiot approved this?".
+const INSULT_NOUNS: &str = "idiot|moron|fool|imbecile|dimwit|jerk|clown";
+
+/// The sentences of `tokens` as (first word, last token) indexes, each with its byte range.
+fn sentence_spans(tokens: &[tokenizer::Token<'_>]) -> Vec<(usize, usize)> {
+    let mut spans: Vec<(usize, usize)> = vec![];
+    let mut current = None;
+    for (i, t) in tokens.iter().enumerate() {
+        match spans.last_mut() {
+            Some(span) if current == Some(t.sentence) => span.1 = i,
+            _ => {
+                current = Some(t.sentence);
+                spans.push((i, i));
+            }
+        }
+    }
+    spans.retain(|&(first, _)| tokens[first].is_word);
+    spans
+}
+
+/// Edits, relative to the start of `sentence`, that say a common insult frame kindly. Each keeps
+/// every name, number, time and object of the sentence, and keeps a question a question; none
+/// adds a negation or a question word the writer did not use.
+fn friendly_plan(sentence: &str) -> Vec<(usize, usize, String)> {
+    use regex::Regex;
+    use std::sync::OnceLock;
+    struct Frames {
+        shut_up: Regex,
+        kind_of: Regex,
+        deaf: Regex,
+        never_listen: Regex,
+        why_cant: Regex,
+        no_clue: Regex,
+        learn: Regex,
+        waste: Regex,
+        even: Regex,
+        bad_idea: Regex,
+    }
+    static FRAMES: OnceLock<Frames> = OnceLock::new();
+    let f = FRAMES.get_or_init(|| {
+        let new = |pattern: String| Regex::new(&pattern).expect("constant friendly frame");
+        Frames {
+            shut_up: new(r"(?i)^shut\s+up\s+and\s+(?P<verb>[a-z]+)\b".into()),
+            kind_of: new(format!(
+                r"(?i)^what\s+kind\s+of\s+(?:{INSULT_NOUNS})\s+(?P<verb>[a-z]+)\b"
+            )),
+            deaf: new(r"(?i),\s*are\s+you\s+(?P<word>deaf|blind)\s*\?$".into()),
+            never_listen: new(
+                r"(?i)^you\s+never\s+listen(?:\s+to\s+(?:me|anyone|anything))?,\s*do\s+you\s*\?$"
+                    .into(),
+            ),
+            why_cant: new(
+                r"(?i)^why\s+(?P<modal>can['’]t|won['’]t|couldn['’]t)\s+you\s+just\s+(?P<rest>\S)".into(),
+            ),
+            no_clue: new(
+                r"(?i)^(?P<subject>.+?)\s+(?:clearly\s+|obviously\s+|honestly\s+)?(?P<verb>has|have)\s+no\s+clue\s*[.!]$"
+                    .into(),
+            ),
+            learn: new(
+                r"(?i)^(?P<learn>learn)\s+(?:how\s+)?to\s+[^.!?]*\bbefore\s+you\b".into(),
+            ),
+            even: new(r"(?i)^did\s+you\s+(?P<even>even)\s+\S".into()),
+            bad_idea: new(
+                r"(?i)^(?:this|that|it)\s+is\s+an?\s+(?:dumb|stupid|silly|idiotic|ridiculous|pathetic)\s+(?P<noun>idea|plan|decision|approach|proposal)\s*[.!]$"
+                    .into(),
+            ),
+            waste: new(
+                r"(?i)\b(?P<verb>was|is)\s+(?:a|an)\s+(?:complete\s+|total\s+|utter\s+)?waste\s+of\s+(?:my\s+|our\s+|your\s+)?time\s*[.!]$"
+                    .into(),
+            ),
+        }
+    });
+    let ends = |marks: &[char]| sentence.ends_with(marks);
+    // "Shut up and send me the file." is "Please send me the file."
+    if let Some(c) = f.shut_up.captures(sentence)
+        && ends(&['.', '!'])
+        && let Some(verb) = c.name("verb")
+        && REQUEST_VERBS.contains(&verb.as_str().to_lowercase().as_str())
+    {
+        return vec![(0, verb.start(), "Please ".into())];
+    }
+    // "What kind of idiot approved this?" is "What was the thinking behind approving this?"
+    if let Some(c) = f.kind_of.captures(sentence)
+        && ends(&['?'])
+        && let Some(verb) = c.name("verb")
+        && let word = verb.as_str().to_lowercase()
+        && let Some(v) = crate::morphology::verb(&word)
+        && v.base != word
+        && (v.past == word || v.third == word)
+    {
+        return vec![(
+            0,
+            verb.end(),
+            format!("What was the thinking behind {}", v.gerund),
+        )];
+    }
+    // "…, are you deaf?" is "…, did you catch that?"
+    if let Some(c) = f.deaf.captures(sentence) {
+        let m = c.get(0).map_or(0, |m| m.start());
+        let said = if c["word"].eq_ignore_ascii_case("deaf") {
+            ", did you catch that?"
+        } else {
+            ", did you see that?"
+        };
+        return vec![(m, sentence.len(), said.into())];
+    }
+    // "You never listen, do you?" is "I feel like I'm not being heard. Does that sound fair?"
+    if f.never_listen.is_match(sentence) {
+        return vec![(
+            0,
+            sentence.len(),
+            "I feel like I'm not being heard. Does that sound fair?".into(),
+        )];
+    }
+    // "Why can't you just do what I asked?" asks what is in the way.
+    if let Some(c) = f.why_cant.captures(sentence)
+        && ends(&['?'])
+        && let (Some(modal), Some(rest)) = (c.name("modal"), c.name("rest"))
+    {
+        return vec![(
+            0,
+            rest.start(),
+            format!(
+                "Could you help me understand why you {}",
+                modal.as_str().to_lowercase()
+            ) + " ",
+        )];
+    }
+    // "Whoever wrote this code clearly has no clue." is said without the verdict.
+    if let Some(c) = f.no_clue.captures(sentence) {
+        let (Some(subject), Some(verb)) = (c.name("subject"), c.name("verb")) else {
+            return vec![];
+        };
+        let does = if verb.as_str().eq_ignore_ascii_case("has") {
+            "doesn't"
+        } else {
+            "don't"
+        };
+        return vec![(
+            subject.end(),
+            sentence.len(),
+            format!(" {does} seem to have the full picture."),
+        )];
+    }
+    // "Learn how to use the spreadsheet before you touch it again." asks for a moment's care.
+    if let Some(c) = f.learn.captures(sentence)
+        && ends(&['.', '!'])
+        && let Some(word) = c.name("learn")
+    {
+        return vec![(
+            word.start(),
+            word.end(),
+            "Please take a moment to learn".into(),
+        )];
+    }
+    // "Did you even read my message?" is "Did you read my message?"
+    if let Some(c) = f.even.captures(sentence)
+        && ends(&['?'])
+        && let Some(even) = c.name("even")
+    {
+        return vec![(even.start(), even.end() + 1, String::new())];
+    }
+    // "This is a dumb idea." is "I have doubts about this idea."
+    if let Some(c) = f.bad_idea.captures(sentence)
+        && let Some(noun) = c.name("noun")
+    {
+        return vec![(
+            0,
+            sentence.len(),
+            format!("I have doubts about this {}.", noun.as_str().to_lowercase()),
+        )];
+    }
+    // "This meeting was a complete waste of time." is "This meeting was less productive than expected."
+    if let Some(c) = f.waste.captures(sentence)
+        && let Some(verb) = c.name("verb")
+    {
+        return vec![(
+            verb.start(),
+            sentence.len(),
+            format!("{} less productive than expected.", verb.as_str()),
+        )];
+    }
+    vec![]
+}
+
+/// A common insult said kindly, for Friendly: a deterministic version of what the small model
+/// cannot do. "Shut up and send me the file." is "Please send me the file."; "What kind of idiot
+/// approved this?" is "What was the thinking behind approving this?"; "I told you three times
+/// already, are you deaf?" is "…, did you catch that?"; "Why can't you just do what I asked?" is
+/// "Could you help me understand why you can't do what I asked?"; "Whoever wrote this code
+/// clearly has no clue." is "Whoever wrote this code doesn't seem to have the full picture.";
+/// "This meeting was a complete waste of time." is "This meeting was less productive than I had
+/// hoped." Names, numbers and protected text are never touched.
+pub(crate) fn friendly_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
+    if req.mode != crate::Mode::Friendly {
+        return vec![];
+    }
+    let text = req.text.as_str();
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let utf16 = |b: usize| text[..b].encode_utf16().count();
+    let mut edits = vec![];
+    for (first, last) in sentence_spans(&tokens) {
+        let (start, end) = (tokens[first].start_byte, tokens[last].end_byte);
+        let plan = friendly_plan(&text[start..end]);
+        if plan
+            .iter()
+            .any(|&(a, b, _)| protected_at(protected, utf16(start + a), utf16(start + b)))
+        {
+            continue;
+        }
+        for (a, b, replacement) in plan {
+            let (a, b) = (start + a, start + b);
+            if text[a..b] != replacement {
+                edits.push(edit(
+                    utf16(a),
+                    utf16(b),
+                    &text[a..b],
+                    replacement,
+                    "tone.kind_words",
+                    "Say it without the insult.",
+                ));
+            }
+        }
+    }
+    edits
+}
+
 /// Sentence capitals and final punctuation, as Fix gives them, for a finished rewrite.
 /// Edits are in `req.text` coordinates; protected text is never touched.
 pub(crate) fn floor(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
@@ -921,6 +1359,266 @@ mod tests {
         ] {
             assert_eq!(direct(text), expected, "{text:?}");
         }
+    }
+
+    fn hedged(mode: crate::Mode, text: &str) -> String {
+        let req = Request {
+            text: text.into(),
+            mode,
+            ..Default::default()
+        };
+        apply(text, hedge_forms(&req, &[]))
+    }
+
+    #[test]
+    fn hedge_openers_are_said_plainly_in_concise_and_direct() {
+        use crate::Mode::{Concise, Direct};
+        for (mode, text, expected) in [
+            (
+                Concise,
+                "I hope you do not mind me asking, but have you had a chance to review the invoice?",
+                "Have you had a chance to review the invoice?",
+            ),
+            (
+                Direct,
+                "I hope you don\u{2019}t mind me asking, but have you had a chance to review the invoice?",
+                "Have you had a chance to review the invoice?",
+            ),
+            (
+                Concise,
+                "I hate to ask, but could you possibly cover my shift on Saturday?",
+                "Could you cover my shift on Saturday?",
+            ),
+            (
+                Direct,
+                "I hate to ask, but could you possibly cover my shift on Saturday?",
+                "Could you cover my shift on Saturday?",
+            ),
+            (
+                Concise,
+                "Sorry to bother you again, but I was hoping you might be able to help me with one more thing.",
+                "Could you help me with one more thing?",
+            ),
+            (
+                Direct,
+                "Sorry to bother you again, but I was hoping you might be able to help me with one more thing.",
+                "Please help me with one more thing.",
+            ),
+            (
+                Concise,
+                "Sorry, I may be wrong, but I believe the total might be off by a bit.",
+                "I believe the total might be off by a bit.",
+            ),
+            (
+                Direct,
+                "I\u{2019}m not sure, but the client might prefer the blue version.",
+                "The client might prefer the blue version.",
+            ),
+            (
+                Direct,
+                "I don't know, I guess we might want to think about hiring another designer.",
+                "I guess we might want to think about hiring another designer.",
+            ),
+            (
+                Concise,
+                "Would you mind terribly if I borrowed your notes from the lecture?",
+                "Could I borrow your notes from the lecture?",
+            ),
+            (
+                Direct,
+                "Would you mind if I took the last slot?",
+                "Could I take the last slot?",
+            ),
+            (
+                Concise,
+                "Maybe it would be a good idea to back up the files before we upgrade?",
+                "Should we back up the files before we upgrade?",
+            ),
+            // The second sentence of a message is handled too.
+            (
+                Direct,
+                "Hello. I\u{2019}m not sure, but the report is late.",
+                "Hello. The report is late.",
+            ),
+        ] {
+            assert_eq!(hedged(mode, text), expected, "{mode:?}: {text}");
+        }
+        // Nothing changes without a clause behind the hedge, in the other tones, or when the
+        // doubt is the point of the sentence.
+        for (mode, text) in [
+            (Concise, "I\u{2019}m not sure, but."),
+            (Concise, "I am not sure the design works."),
+            (Direct, "I don't know whether the invoice was paid."),
+            (
+                crate::Mode::Friendly,
+                "I hate to ask, but could you possibly cover my shift?",
+            ),
+            (
+                crate::Mode::Professional,
+                "I hate to ask, but could you possibly cover my shift?",
+            ),
+            // A suggestion without a "we" in it, or a verb whose past is its base, stays.
+            (Concise, "Maybe it would be a good idea to rest?"),
+            (Direct, "Would you mind if I read your notes?"),
+            (Direct, "Would you mind if I put the box here?"),
+        ] {
+            assert_eq!(hedged(mode, text), text, "{mode:?}: {text}");
+        }
+    }
+
+    #[test]
+    fn a_sorry_the_tagger_took_for_a_name_still_goes_with_its_hedge() {
+        let text = "Sorry, I may be wrong, but I believe the total might be off by a bit.";
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Direct,
+            ..Default::default()
+        };
+        let sorry = [TextRange {
+            start_utf16: 0,
+            end_utf16: 5,
+        }];
+        assert_eq!(
+            apply(text, hedge_forms(&req, &sorry)),
+            "I believe the total might be off by a bit."
+        );
+    }
+
+    #[test]
+    fn a_hedge_around_a_protected_name_is_left_alone() {
+        let text = "I hate to ask, but could you possibly cover Priya's shift?";
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Concise,
+            ..Default::default()
+        };
+        let head = [TextRange {
+            start_utf16: 0,
+            end_utf16: 3,
+        }];
+        assert!(hedge_forms(&req, &head).is_empty());
+        assert_eq!(
+            apply(text, hedge_forms(&req, &[])),
+            "Could you cover Priya's shift?"
+        );
+    }
+
+    fn kindly(text: &str) -> String {
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Friendly,
+            ..Default::default()
+        };
+        apply(text, friendly_forms(&req, &[]))
+    }
+
+    #[test]
+    fn friendly_says_a_common_insult_kindly() {
+        for (text, expected) in [
+            ("Shut up and send me the file.", "Please send me the file."),
+            (
+                "What kind of idiot approved this?",
+                "What was the thinking behind approving this?",
+            ),
+            (
+                "What kind of moron signs off on Priya's budget?",
+                "What was the thinking behind signing off on Priya's budget?",
+            ),
+            (
+                "I told you three times already, are you deaf?",
+                "I told you three times already, did you catch that?",
+            ),
+            (
+                "Check the 4:30 pm slot again, are you blind?",
+                "Check the 4:30 pm slot again, did you see that?",
+            ),
+            (
+                "You never listen, do you?",
+                "I feel like I'm not being heard. Does that sound fair?",
+            ),
+            (
+                "Why can't you just do what I asked?",
+                "Could you help me understand why you can't do what I asked?",
+            ),
+            (
+                "Whoever wrote this code clearly has no clue.",
+                "Whoever wrote this code doesn't seem to have the full picture.",
+            ),
+            (
+                "The vendors have no clue.",
+                "The vendors don't seem to have the full picture.",
+            ),
+            (
+                "Learn how to use the spreadsheet before you touch it again.",
+                "Please take a moment to learn how to use the spreadsheet before you touch it again.",
+            ),
+            (
+                "This meeting was a complete waste of time.",
+                "This meeting was less productive than expected.",
+            ),
+            (
+                "Honestly, that call was a waste of my time!",
+                "Honestly, that call was less productive than expected.",
+            ),
+            ("Did you even read my message?", "Did you read my message?"),
+            ("This is a dumb idea.", "I have doubts about this idea."),
+            // Two sentences: each is handled on its own.
+            (
+                "Hi. Shut up and call me at 5 pm. Did you even see it?",
+                "Hi. Please call me at 5 pm. Did you see it?",
+            ),
+        ] {
+            assert_eq!(kindly(text), expected, "{text}");
+        }
+        // Anything else stays: other insults, other verbs, questions that are not the frame, and
+        // the other tones.
+        for text in [
+            "Shut up and listen.",
+            "Shut up.",
+            "What kind of idiot would do that?",
+            "What kind of person approved this?",
+            "Why can't you join the call?",
+            "The team has no clue about the date yet, so we wait.",
+            "Learn how to code in Rust.",
+            "The workshop was a waste of time because of the audio.",
+            "Did you even read my message? Please answer.",
+            "Are you deaf to feedback?",
+        ] {
+            let expected = if text == "Did you even read my message? Please answer." {
+                "Did you read my message? Please answer."
+            } else {
+                text
+            };
+            assert_eq!(kindly(text), expected, "{text}");
+        }
+        for mode in [
+            crate::Mode::Professional,
+            crate::Mode::Concise,
+            crate::Mode::Direct,
+        ] {
+            let text = "Shut up and send me the file.";
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Default::default()
+            };
+            assert!(friendly_forms(&req, &[]).is_empty(), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn a_kinder_frame_never_rewrites_a_protected_word() {
+        let text = "What kind of idiot approved this?";
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Friendly,
+            ..Default::default()
+        };
+        let verb = [TextRange {
+            start_utf16: 22,
+            end_utf16: 30,
+        }];
+        assert!(friendly_forms(&req, &verb).is_empty());
     }
 
     #[test]
