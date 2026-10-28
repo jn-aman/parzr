@@ -11,7 +11,8 @@
     "benchmarks/typo-fuzz/src/*.txt",
     "benchmarks/names/corpus.jsonl",
     "benchmarks/names/heldout.jsonl",
-    "benchmarks/everyday/items.jsonl"
+    "benchmarks/everyday/items.jsonl",
+    "benchmarks/tone/regression.jsonl"
   ],
   "files": {
     "benchmarks/english-100-clean.jsonl": {
@@ -157,6 +158,10 @@
     "benchmarks/everyday/items.jsonl": {
       "sha256": "7063e9311e9cfaeb81ef6a0490a0546112a72c2fc0267b445390f428deb753cf",
       "bytes": 725760
+    },
+    "benchmarks/tone/regression.jsonl": {
+      "sha256": "552a4cd7528a824654cf2b27d154373ca13728ae287c08e8e70a978da9e237e7",
+      "bytes": 358032
     }
   }
 }
