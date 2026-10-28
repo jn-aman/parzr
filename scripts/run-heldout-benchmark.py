@@ -48,23 +48,40 @@ def split_of(item):
     return 'test' if int(hashlib.sha256(item['input'].encode()).hexdigest(), 16) % 10 < 3 else 'dev'
 
 
+# A typing check (the gec layer) scores short-word swaps within a typing budget and answers "context.pending" when
+# the sentence needs the model longer; the app then looks again. The runner does the same (every 0.1 s, at most 10 s),
+# so a layer scores what the typing route settles on, the same on a fast Mac and a loaded CI runner, while latency
+# records each check's first answer (what the writer waits for).
+SETTLE = {'follow_ups': 100, 'interval': 0.1}
+
+
 class Engine:
     def __init__(self, path, extra):
-        self.extra, self.ms = extra, []
+        self.extra, self.ms, self.follow_ups = extra, [], 0
         self.proc = subprocess.Popen([path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1,
                                      env=quality_gates.engine_env())
+
+    def ask(self, req):
+        self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + '\n'); self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            raise RuntimeError('engine exited')
+        return json.loads(line)
 
     def check(self, item):
         req = {'text': item['input'], **self.extra}
         if item.get('dialect'):
             req['dialect'] = item['dialect']
         started = time.perf_counter()
-        self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + '\n'); self.proc.stdin.flush()
-        line = self.proc.stdout.readline()
-        if not line:
-            raise RuntimeError('engine exited')
+        resp = self.ask(req)
         self.ms.append((time.perf_counter() - started) * 1000)
-        return json.loads(line)
+        follow = 0
+        while 'context.pending' in (resp.get('warnings') or []) and follow < SETTLE['follow_ups']:
+            time.sleep(SETTLE['interval'])
+            resp = self.ask(req)
+            follow += 1
+        self.follow_ups += follow
+        return resp
 
     def close(self):
         """Ends the engine; returns its peak resident memory in MB."""
@@ -143,6 +160,7 @@ def main():
         total = collections.Counter(); [total.update({k: v for k, v in c.items()}) for k, c in by_cat.items() if '/' not in k]
         summary['layers'][layer] = {
             'seconds': round(time.time() - t0, 1),
+            'follow_ups': eng.follow_ups,
             'fixed': total['fixed'], 'flagged': total['flagged'], 'wrong': total['wrong'], 'missed': total['missed'],
             'fix_rate': round(total['fixed'] / max(1, len(errors)), 4),
             'catch_rate': round((total['fixed'] + total['flagged']) / max(1, len(errors)), 4),
