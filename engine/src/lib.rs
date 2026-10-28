@@ -37,6 +37,8 @@ pub mod tables;
 mod tokenizer;
 #[cfg(feature = "local-model")]
 mod tone_format;
+#[cfg_attr(not(feature = "local-model"), allow(dead_code))]
+mod tone_guard;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
@@ -1146,8 +1148,11 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
                     edits.push(e);
                 }
             }
-            if matches!(req.mode, Mode::Direct | Mode::Concise)
-                && (rule.id.ends_with(".request") || rule.id.ends_with(".hedged_request"))
+            // Direct turns a request into an instruction. Concise does so only for the wrapper
+            // of a statement ("I was wondering if you could send it?"): a question stays one.
+            if (req.mode == Mode::Direct && rule.id.ends_with(".request")
+                || matches!(req.mode, Mode::Direct | Mode::Concise)
+                    && rule.id.ends_with(".hedged_request"))
                 && let Some((offset, c)) = req.text[m_end..]
                     .char_indices()
                     .find(|(_, c)| ['?', '!', '.', '\n'].contains(c))

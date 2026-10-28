@@ -590,6 +590,18 @@ const PADDING: &[&str] = &[
     "don't hesitate to",
     "do not hesitate to",
     "dont hesitate to",
+    // Courtesy that a plain request does without ("Would you be so kind as to let me know" is
+    // "Would you let me know", "I hope this message finds you well" is "I hope you're well").
+    "hate to ask",
+    "sorry to ask",
+    "sorry to bother you again",
+    "sorry i may be wrong but",
+    "at your convenience",
+    "be so kind as to",
+    "this message finds you",
+    "this email finds you",
+    "this note finds you",
+    "this finds you",
 ];
 /// Words that turn a statement into its opposite. A rewrite must keep the same polarity.
 const NEGATION: &[&str] = &[
@@ -770,6 +782,8 @@ const PHRASAL: &[(&str, &str)] = &[
     ("free up", "release"),
     ("run into", "encounter"),
     ("come up", "arise"),
+    ("move forward", "proceed"),
+    ("make a decision", "decide"),
     ("give up", "quit"),
     ("in charge of", "responsible"),
     ("decide to use", "choose"),
@@ -812,6 +826,7 @@ const PHRASAL: &[(&str, &str)] = &[
 /// through their lemma.
 const SYNONYMS: &[&str] = &[
     "get receive obtain gotten",
+    "come arrive",
     "send forward share email",
     "help assist support aid assistance",
     "need require necessary needed",
@@ -2086,6 +2101,10 @@ pub(crate) fn keeps_meaning(
     {
         return Err(format!("adds “{}”, which is rude", w.surface));
     }
+    // The details a change of tone leaves as written (Fix mode answers to its own checks).
+    if mode != Mode::Fix {
+        crate::tone_guard::kept_details(source, output)?;
+    }
     // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
     // an instruction), and it never answers the message ("Sure, I'd love to take a look!").
     // An emoji after the question mark ("Free for lunch? ☕") still ends a question.
@@ -3132,6 +3151,46 @@ mod tests {
             assert!(!ok(mode, src, "The budget is not $450."), "{mode:?}");
             assert!(!ok(mode, src, "The budget is still $540."), "{mode:?}");
         }
+    }
+
+    #[test]
+    fn courtesy_phrases_and_their_plain_words_say_the_same() {
+        // Said plainly, the sentence still says what it said.
+        for (src, out, mode) in [
+            (
+                "Please take a look at your convenience and send me any comments.",
+                "Please take a look and send me any comments.",
+                Mode::Direct,
+            ),
+            (
+                "In order to move forward with the migration, we need to make a decision regarding the database vendor.",
+                "To proceed with the migration, we need to decide on the database vendor.",
+                Mode::Direct,
+            ),
+            (
+                "I hope this message finds you well.",
+                "I hope you are well.",
+                Mode::Direct,
+            ),
+            (
+                "Would you be so kind as to let me know if the room is free?",
+                "Would you let me know if the room is free?",
+                Mode::Direct,
+            ),
+            (
+                "Did the package come?",
+                "Did the package arrive?",
+                Mode::Professional,
+            ),
+        ] {
+            assert_eq!(keeps_meaning(mode, src, out, "", &[], &[]), Ok(()), "{src}");
+        }
+        // But a negation or a number is still checked.
+        assert!(!ok(
+            Mode::Direct,
+            "Please take a look at your convenience.",
+            "Please do not take a look."
+        ));
     }
 
     #[test]

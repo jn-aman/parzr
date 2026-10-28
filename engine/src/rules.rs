@@ -481,6 +481,40 @@ mod tests {
         }
     }
     #[test]
+    fn concise_keeps_a_question_a_question_and_direct_turns_it_into_an_instruction() {
+        use crate::Mode::{Concise, Direct};
+        for (input, concise, direct) in [
+            (
+                "Could you please send the files again?",
+                "Could you send the files again?",
+                "Send the files again.",
+            ),
+            (
+                "Would you let me know if the room is free?",
+                "Would you let me know if the room is free?",
+                "Let me know if the room is free.",
+            ),
+            (
+                "Can you look at the pull request?",
+                "Can you look at the pull request?",
+                "Look at the pull request.",
+            ),
+        ] {
+            assert_eq!(tone(input, Concise), concise, "{input}");
+            assert_eq!(tone(input, Direct), direct, "{input}");
+        }
+        // A statement that wraps a request is still said as an instruction.
+        assert_eq!(
+            tone("I was wondering if you could send me the file.", Concise),
+            "Please send me the file."
+        );
+        // Not a request for an action of "you".
+        assert_eq!(
+            tone("Can you make it Friday?", Concise),
+            "Can you make it Friday?"
+        );
+    }
+    #[test]
     fn every_rule_has_provenance_and_fixtures() {
         let grammar: Vec<Rule> =
             serde_json::from_str(include_str!("../rules/grammar.json")).unwrap();

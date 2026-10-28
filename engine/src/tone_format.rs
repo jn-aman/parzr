@@ -56,14 +56,143 @@ const SUBJECTS: &[&str] = &[
     "i", "we", "they", "he", "she", "i'm", "we're", "i'll", "we'll",
 ];
 
+/// Who or what a negative opener asks about ("can't you", "isn't it", "don't they", "aren't we").
+const ASKED_ABOUT: &[&str] = &[
+    "you",
+    "u",
+    "we",
+    "i",
+    "he",
+    "she",
+    "they",
+    "it",
+    "this",
+    "that",
+    "there",
+    "someone",
+    "anyone",
+    "somebody",
+    "anybody",
+    "everyone",
+    "everybody",
+    "these",
+    "those",
+    "the",
+    "my",
+    "your",
+    "our",
+    "his",
+    "her",
+    "their",
+];
+
 /// Chat laughter a Professional rewrite leaves out.
-const LAUGHTER: &[&str] = &["lol", "lmao", "lmfao", "rofl", "haha", "hahaha", "hehe"];
+const LAUGHTER: &[&str] = &[
+    "lol", "lmao", "lmfao", "rofl", "haha", "hahaha", "hehe", "omg",
+];
+/// What follows "ur" when it stands for "you are" ("ur right", "ur the best", "ur going to");
+/// before anything else it is "your" ("ur email").
+const UR_PREDICATES: &[&str] = &[
+    "right",
+    "wrong",
+    "correct",
+    "welcome",
+    "going",
+    "not",
+    "the",
+    "a",
+    "an",
+    "so",
+    "very",
+    "really",
+    "too",
+    "always",
+    "never",
+    "just",
+    "still",
+    "already",
+    "ready",
+    "able",
+    "done",
+    "sure",
+    "being",
+    "doing",
+    "getting",
+    "coming",
+    "late",
+    "early",
+    "such",
+    "all",
+    "probably",
+    "definitely",
+    "totally",
+    "absolutely",
+    "also",
+    "only",
+    "now",
+    "here",
+    "there",
+    "perfect",
+    "fine",
+    "ok",
+    "okay",
+    "good",
+    "great",
+    "awesome",
+    "amazing",
+    "kind",
+    "nice",
+    "sweet",
+    "funny",
+    "crazy",
+    "invited",
+    "free",
+    "busy",
+    "supposed",
+    "allowed",
+    "in",
+    "on",
+    "at",
+    "from",
+    "with",
+    "gonna",
+    "welcome",
+];
+/// Words before "gotta" that give it its subject: "I gotta run" is "I have to run".
+const GOTTA_SUBJECTS: &[&str] = &[
+    "i", "you", "we", "they", "and", "but", "so", "just", "really", "now", "also", "then", "if",
+    "that", "because", "who", "which", "what", "when", "as", "or", "still", "all",
+];
+/// Words that follow a sentence-opening "ya" when it means "yes" ("ya, I can", "ya I can"), as
+/// against "ya know" or "ya coming?", which are "you".
+const YA_YES_BEFORE: &[&str] = &[
+    "i",
+    "we",
+    "he",
+    "she",
+    "they",
+    "it",
+    "that",
+    "sure",
+    "definitely",
+    "totally",
+    "exactly",
+    "thanks",
+    "please",
+    "no",
+    "of",
+];
+
 /// Chat shorthand a Professional rewrite spells out, with what it stands for.
 const SHORTHAND: &[(&str, &str)] = &[
     ("u", "you"),
     ("pls", "please"),
     ("plz", "please"),
     ("thx", "thanks"),
+    // Said of a doubt, not a negation: "I am unsure" keeps the writer's "idk" free of a "not".
+    ("idk", "I am unsure"),
+    ("brb", "I am stepping away briefly"),
+    ("omg", "wow"),
     ("tmrw", "tomorrow"),
     ("tmr", "tomorrow"),
     ("tmw", "tomorrow"),
@@ -157,22 +286,67 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
             }
             continue;
         }
-        let Some(&(_, full)) = SHORTHAND.iter().find(|(s, _)| *s == lower) else {
-            continue;
-        };
-        // "U" alone is a letter or a name ("Plan U"); only the lowercase chat form is "you".
-        if lower == "u" && t.surface != "u" {
-            continue;
-        }
         let first = tokens[..i]
             .iter()
             .rev()
             .find(|p| p.is_word || [".", "!", "?"].contains(&p.surface))
             .is_none_or(|p| p.sentence != t.sentence);
+        // The word's own neighbours, for the shorthand whose meaning depends on them.
+        let before = i
+            .checked_sub(1)
+            .map(|k| tokens[k].surface.to_lowercase())
+            .unwrap_or_default();
+        let next = tokens
+            .get(i + 1..)
+            .and_then(|rest| rest.iter().find(|n| n.is_word))
+            .filter(|n| n.sentence == t.sentence)
+            .map(|n| n.surface.to_lowercase());
+        let full: String = match lower.as_str() {
+            // "ya, I can" is "yes"; "see ya" and "ya know" are "you".
+            "ya" => {
+                let yes = first
+                    && (tokens.get(i + 1).is_some_and(|n| n.surface == ",")
+                        || next.as_deref().is_some_and(|n| YA_YES_BEFORE.contains(&n)));
+                if yes { "yes" } else { "you" }.to_owned()
+            }
+            // "gotta run" is "I have to run"; "we gotta run" is "we have to run"; "she's gotta" is "she's got to".
+            "gotta" => if before.ends_with("'s")
+                || before.ends_with("’s")
+                || before.ends_with("'ve")
+                || before.ends_with("’ve")
+            {
+                "got to"
+            } else if matches!(before.as_str(), "he" | "she" | "it") {
+                "has to"
+            } else if first || !GOTTA_SUBJECTS.contains(&before.as_str()) && !tokens[i - 1].is_word
+            {
+                "I have to"
+            } else {
+                "have to"
+            }
+            .to_owned(),
+            // "ur right" is "you are right"; "ur email" is "your email".
+            "ur" => if next.as_deref().is_some_and(|n| UR_PREDICATES.contains(&n)) {
+                "you are"
+            } else {
+                "your"
+            }
+            .to_owned(),
+            _ => {
+                let Some(&(_, full)) = SHORTHAND.iter().find(|(s, _)| *s == lower) else {
+                    continue;
+                };
+                // "U" alone is a letter or a name ("Plan U"); only the lowercase chat form is "you".
+                if lower == "u" && t.surface != "u" {
+                    continue;
+                }
+                full.to_owned()
+            }
+        };
         let replacement = if first && t.surface.starts_with(char::is_uppercase) {
-            upper_first(full)
+            upper_first(&full)
         } else {
-            full.to_owned()
+            full
         };
         if replacement != t.surface {
             edits.push(edit(
@@ -313,6 +487,56 @@ pub(crate) fn direct_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
         }
     }
     edits
+}
+
+/// Sign-off phrases a letter or message closes with ("Thanks,", "Best regards,", "See you Monday,").
+const SIGN_OFF: &str = r"(?:thanks(?:\s+(?:a\s+lot|again|so\s+much))?|thank\s+you(?:\s+(?:again|so\s+much))?|many\s+thanks|with\s+thanks|(?:(?:best|kind|warm|warmest|with\s+best|with\s+kind|with\s+warm)\s+)?regards|best(?:\s+wishes)?|cheers|(?:yours\s+)?(?:sincerely|faithfully|truly)|respectfully|cordially|warmly|enjoy|talk\s+soon|see\s+you(?:\s+\w+)?|take\s+care)";
+/// The opening words of a greeting ("Hi", "Dear", "Good morning").
+const GREETING: &str = r"(?:hi|hello|hey|dear|greetings|good\s+(?:morning|afternoon|evening))";
+
+/// The greeting and the sign-off of a letter or message: byte ranges a tone rewrite leaves as
+/// the writer wrote them, as it leaves the line breaks between them and the body. "Hi Dana,"
+/// and "Cheers,\nLee" are not content to reword, and the model drops or merges them.
+pub(crate) fn letter_frame(text: &str) -> Vec<(usize, usize)> {
+    static GREETING_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static SIGN_OFF_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let greeting = GREETING_RE.get_or_init(|| {
+        // "Hi Dana,", "Good morning Ms. Alvarez," or "Hello," on a line of their own, or "Hey Sam,"
+        // opening a message.
+        regex::Regex::new(&format!(r"(?i)^\s*{GREETING}\b[^,\n!]{{0,32}}[,!]"))
+            .expect("constant greeting pattern")
+    });
+    let sign_off = SIGN_OFF_RE.get_or_init(|| {
+        // "Thanks,\nOmar" and "…last night. Best, Maya": the phrase, a comma, and a name of up to
+        // three words that ends the message.
+        regex::Regex::new(&format!(
+            r"(?i)(?:^|\n|[.!?][ \t]+){SIGN_OFF}[ \t]*,[ \t]*\n?[ \t]*[\p{{L}}][\p{{L}}.'’-]*(?:[ \t]+[\p{{L}}][\p{{L}}.'’-]*){{0,2}}[ \t]*$"
+        ))
+        .expect("constant sign-off pattern")
+    });
+    let mut spans = vec![];
+    if let Some(m) = greeting.find(text) {
+        // The greeting is the first line's words up to its comma; leading space and the line break
+        // after it are not part of it.
+        let found = m.as_str();
+        let end = m.end();
+        let start = m.start() + (found.len() - found.trim_start().len());
+        if start < end && end - start <= 40 {
+            spans.push((start, end));
+        }
+    }
+    if let Some(m) = sign_off.find(text) {
+        let found = m.as_str();
+        let lead = found.len()
+            - found
+                .trim_start_matches(['\n', '.', '!', '?', ' ', '\t'])
+                .len();
+        let (start, end) = (m.start() + lead, m.end());
+        if spans.last().is_none_or(|&(_, e)| start >= e) {
+            spans.push((start, end));
+        }
+    }
+    spans
 }
 
 fn opener_regex() -> &'static regex::Regex {
@@ -497,6 +721,13 @@ fn final_mark(
     }) {
         return None;
     }
+    // A sign-off at the end ("Thanks, remy", "Cheers,\nLee") is a name, not a sentence.
+    if letter_frame(text)
+        .iter()
+        .any(|&(from, to)| to == body.len() && from > 0)
+    {
+        return None;
+    }
     let line = body.rsplit('\n').next().unwrap_or(body);
     let line_words = line.split_whitespace().count();
     // A closing line of a letter or a list item, not a sentence: "Thanks,\nDana", "- tests".
@@ -524,6 +755,12 @@ fn final_mark(
         words
             .get(lead)
             .is_some_and(|w| QUESTION_OPENERS.contains(&w.as_str()))
+            // "can't you do it", "isn't it done": a negative opener asks only before its subject.
+            // "Can't open the file" and "Don't forget the milk" are statements and commands.
+            && (!words[lead].ends_with("n't")
+                || words
+                    .get(lead + 1)
+                    .is_some_and(|w| ASKED_ABOUT.contains(&w.as_str())))
             && !words
                 .iter()
                 .skip(lead + 2)
@@ -603,6 +840,19 @@ mod tests {
         assert_eq!(
             floored("the build is broken again, can someone look"),
             "The build is broken again, can someone look?"
+        );
+        // A negative contraction opens a question only before its subject.
+        for text in [
+            "can't make it tomorrow, got a dentist appointment at 9am",
+            "can't open the file, it says it's corrupted",
+            "don't forget to bring the charger",
+        ] {
+            assert!(floored(text).ends_with('.'), "{text}");
+        }
+        assert_eq!(floored("isn't it ready by now"), "Isn't it ready by now?");
+        assert_eq!(
+            floored("can't you send it today"),
+            "Can't you send it today?"
         );
         assert_eq!(
             floored("i tried that, it did not work"),
@@ -754,5 +1004,113 @@ mod tests {
         );
         assert_eq!(professional("haha, see u at 7 lol"), "see you at 7");
         assert_eq!(professional("lol"), "lol");
+    }
+
+    #[test]
+    fn a_letter_frame_is_its_greeting_and_its_sign_off() {
+        let frame = |text: &str| -> Vec<String> {
+            letter_frame(text)
+                .into_iter()
+                .map(|(a, b)| text[a..b].to_owned())
+                .collect()
+        };
+        assert_eq!(
+            frame("Hi Dana,\n\nThe files are attached.\n\nThanks,\nOmar"),
+            ["Hi Dana,", "Thanks,\nOmar"]
+        );
+        assert_eq!(
+            frame("Good morning Ms. Alvarez,\n\nSee you at ten."),
+            ["Good morning Ms. Alvarez,"]
+        );
+        assert_eq!(
+            frame("Hello,\n\nI would like to cancel.\n\nRegards,\nM. Okonkwo"),
+            ["Hello,", "Regards,\nM. Okonkwo"]
+        );
+        assert_eq!(
+            frame("Hi team, the build is green again. Cheers, Jo"),
+            ["Hi team,", "Cheers, Jo"]
+        );
+        assert_eq!(
+            frame("hey jules, did the package come? thanks, remy"),
+            ["hey jules,", "thanks, remy"]
+        );
+        assert_eq!(
+            frame("Hey Rhea, the meeting is at 4. Talk soon, Dev"),
+            ["Hey Rhea,", "Talk soon, Dev"]
+        );
+        assert_eq!(
+            frame("Hello Ines,\n\nWe have received your payment.\n\nWith thanks,\nBilling"),
+            ["Hello Ines,", "With thanks,\nBilling"]
+        );
+        assert_eq!(
+            frame("Hi Noor,\n\nWelcome to the team.\n\nSee you Monday,\nAlex"),
+            ["Hi Noor,", "See you Monday,\nAlex"]
+        );
+        // Not a frame: a body that merely starts like one or ends with thanks.
+        assert!(frame("Hello world is a program.").is_empty());
+        assert!(frame("I said hi to everyone.").is_empty());
+        assert!(frame("Thanks, I will send the report tomorrow morning.").is_empty());
+        assert!(frame("Send it today.").is_empty());
+    }
+
+    #[test]
+    fn professional_spells_out_the_rest_of_the_chat_shorthand() {
+        for (text, expected) in [
+            // omg goes like laughter does (the floor then gives the next word its capital).
+            (
+                "omg the demo went great, everyone loved it",
+                "the demo went great, everyone loved it",
+            ),
+            ("OMG the demo went great", "the demo went great"),
+            ("that was omg so good", "that was so good"),
+            ("omg", "wow"),
+            // idk is a doubt, said without a negation.
+            (
+                "idk, maybe try restarting the router first",
+                "I am unsure, maybe try restarting the router first",
+            ),
+            ("IDK if he is coming", "I am unsure if he is coming"),
+            (
+                "brb, grabbing my charger",
+                "I am stepping away briefly, grabbing my charger",
+            ),
+            ("Brb", "I am stepping away briefly"),
+            // ya is yes at the start of a reply, you elsewhere.
+            ("ya i can cover thursday", "yes i can cover thursday"),
+            ("Ya, I can cover Thursday", "Yes, I can cover Thursday"),
+            ("see ya at the meeting", "see you at the meeting"),
+            ("ya know what I mean", "you know what I mean"),
+            // gotta takes its subject, or is given "I".
+            (
+                "gotta run, my train leaves at 6:15",
+                "I have to run, my train leaves at 6:15",
+            ),
+            ("Gotta run", "I have to run"),
+            ("we gotta run", "we have to run"),
+            ("ok, gotta run", "ok, I have to run"),
+            ("she's gotta run", "she's got to run"),
+            ("she gotta run", "she has to run"),
+            // ur is "you are" before a predicate and "your" before a noun.
+            (
+                "ur right, i should have asked",
+                "you are right, i should have asked",
+            ),
+            ("Ur the best", "You are the best"),
+            ("ur going to love it", "you are going to love it"),
+            ("send ur email", "send your email"),
+            ("Ur invoice is late", "Your invoice is late"),
+        ] {
+            assert_eq!(professional(text), expected, "{text:?}");
+        }
+        // Words that merely contain the shorthand, and ones beside a dash or dot, stay.
+        for text in [
+            "The yacht gotten there",
+            "Omega gotta-go",
+            "burr is not ur-text",
+            "Visit ya.example.com",
+            "The idk-test passed",
+        ] {
+            assert_eq!(professional(text), text, "{text:?}");
+        }
     }
 }

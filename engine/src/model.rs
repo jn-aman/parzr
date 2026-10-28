@@ -686,6 +686,10 @@ fn worked_examples(mode: Mode) -> &'static [(&'static str, &'static str)] {
                 "Is the staging server down again?",
                 "Is the staging server down again?",
             ),
+            (
+                "Sorry to bother you, but could you maybe forward the contract this week?",
+                "Please forward the contract this week.",
+            ),
         ],
         Mode::Fix => &[],
     }
@@ -754,6 +758,14 @@ fn generate_with(
         } else {
             drop_new_greeting(&masked, &output)
         };
+        // Friendly, Concise and Direct keep the writer's contractions ("isn't" stays "isn't"):
+        // the model spells them out, which makes a Concise rewrite longer. Professional spells
+        // them out on purpose (rules/tone.json).
+        let output = if matches!(req.mode, Mode::Friendly | Mode::Concise | Mode::Direct) {
+            keep_contractions(&masked, &output)
+        } else {
+            output
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -767,6 +779,91 @@ fn generate_with(
     let suffix = &passage[passage.trim_end().len()..];
     let body = continuation(req, result.trim());
     Ok(format!("{prefix}{body}{suffix}"))
+}
+
+/// Contractions and what they stand for. `bare` ones may end a clause ("it is what I am.") as
+/// readily as they may be followed by a word, so they are put back only before a word.
+const CONTRACTIONS: &[(&str, &str, bool)] = &[
+    ("isn't", "is not", false),
+    ("aren't", "are not", false),
+    ("wasn't", "was not", false),
+    ("weren't", "were not", false),
+    ("don't", "do not", false),
+    ("doesn't", "does not", false),
+    ("didn't", "did not", false),
+    ("can't", "cannot", false),
+    ("can't", "can not", false),
+    ("couldn't", "could not", false),
+    ("wouldn't", "would not", false),
+    ("shouldn't", "should not", false),
+    ("won't", "will not", false),
+    ("haven't", "have not", false),
+    ("hasn't", "has not", false),
+    ("hadn't", "had not", false),
+    ("mustn't", "must not", false),
+    ("I'm", "I am", true),
+    ("you're", "you are", true),
+    ("we're", "we are", true),
+    ("they're", "they are", true),
+    ("I'll", "I will", true),
+    ("you'll", "you will", true),
+    ("we'll", "we will", true),
+    ("they'll", "they will", true),
+];
+/// A rewrite of `source` that keeps the contractions the writer used: where the source wrote
+/// "isn't" and never "is not", an "is not" the model wrote in its place goes back to "isn't"
+/// (as many times as the model dropped the contraction).
+fn keep_contractions(source: &str, output: &str) -> String {
+    static EXPANDED: std::sync::OnceLock<Vec<regex::Regex>> = std::sync::OnceLock::new();
+    let plain = |t: &str| t.replace('\u{2019}', "'").to_lowercase();
+    let (said, wrote) = (plain(source), plain(output));
+    let curly = source.contains('\u{2019}');
+    let patterns = EXPANDED.get_or_init(|| {
+        CONTRACTIONS
+            .iter()
+            .map(|(_, expanded, _)| {
+                regex::Regex::new(&format!(r"(?i)\b{}\b", regex::escape(expanded)))
+                    .expect("constant contraction pattern")
+            })
+            .collect()
+    });
+    let mut result = output.to_owned();
+    for ((contracted, expanded, before_word), pattern) in CONTRACTIONS.iter().zip(patterns) {
+        let contracted_lower = contracted.to_lowercase();
+        let dropped = said
+            .matches(&contracted_lower)
+            .count()
+            .saturating_sub(wrote.matches(&contracted_lower).count());
+        if dropped == 0 || said.contains(&expanded.to_lowercase()) {
+            continue;
+        }
+        let mut left = dropped;
+        let mut text = String::with_capacity(result.len());
+        let mut at = 0;
+        for m in pattern.find_iter(&result) {
+            let follows_word = result[m.end()..]
+                .strip_prefix(' ')
+                .is_some_and(|rest| rest.starts_with(char::is_alphanumeric));
+            if left == 0 || *before_word && !follows_word {
+                continue;
+            }
+            left -= 1;
+            let mut word = contracted.to_string();
+            if curly {
+                word = word.replace('\'', "\u{2019}");
+            }
+            // "Is not" opens a sentence: "Isn't".
+            if m.as_str().starts_with(char::is_uppercase) && !contracted.starts_with('I') {
+                word = crate::upper_first(&word);
+            }
+            text.push_str(&result[at..m.start()]);
+            text.push_str(&word);
+            at = m.end();
+        }
+        text.push_str(&result[at..]);
+        result = text;
+    }
+    result
 }
 
 /// Greetings a rewrite may open with.
@@ -909,6 +1006,32 @@ fn kept_spans(req: &Request) -> Vec<crate::TextRange> {
                     .chars()
                     .all(|c| c.is_ascii_digit() || ".,:/-".contains(c));
             !number && !calendar(text)
+        })
+        .map(|mut r| {
+            // "https://example.org/start," is the link and a comma: the comma is the sentence's
+            // and the model may move it, so only the link itself is kept.
+            if let (Some(a), Some(b)) = (
+                byte_at(&req.text, r.start_utf16),
+                byte_at(&req.text, r.end_utf16),
+            ) {
+                let text = &req.text[a..b];
+                let lower = text.to_ascii_lowercase();
+                if lower.starts_with("http://")
+                    || lower.starts_with("https://")
+                    || lower.starts_with("www.")
+                {
+                    const MARKS: [char; 8] = [',', '.', ';', ':', '!', '?', '\'', '"'];
+                    let mut link = text.trim_end_matches(MARKS);
+                    // A ")" with no "(" before it closes the sentence's bracket, not the link.
+                    while link.ends_with(')') && !link.contains('(') {
+                        link = link[..link.len() - 1].trim_end_matches(MARKS);
+                    }
+                    if link.len() < text.len() && link.len() > "http://".len() {
+                        r.end_utf16 -= text[link.len()..].encode_utf16().count();
+                    }
+                }
+            }
+            r
         })
         .collect()
 }
@@ -1399,7 +1522,7 @@ fn restore(
         } else {
             l.text.clone()
         };
-        result = result.replace(&l.marker, &text);
+        result = collapse_marks_after(&result, &l.marker, &text, masked);
     }
     // Any piece of a placeholder left over ("… by 5pm. ZXQPARZRKEEP", a marker the model cut short or made up)
     // must never reach the writer's text.
@@ -1407,6 +1530,38 @@ fn restore(
         return Err(LOST.into());
     }
     Ok(result)
+}
+
+/// `result` with each `marker` replaced by `text`. A link or a name stands where the model
+/// wrote its placeholder, with the writer's own comma behind it, and the model may add a mark
+/// of its own ("start,," or "widgets,."): of two marks that follow the text together, the second
+/// ends the clause and the first goes, unless the writer wrote the pair.
+fn collapse_marks_after(result: &str, marker: &str, text: &str, masked: &str) -> String {
+    let wrote_pair = |marks: &str| masked.contains(&format!("{marker}{marks}"));
+    let mut out = String::with_capacity(result.len());
+    let mut rest = result;
+    while let Some(at) = rest.find(marker) {
+        out.push_str(&rest[..at]);
+        out.push_str(text);
+        rest = &rest[at + marker.len()..];
+        let mut chars = rest.chars();
+        if let (Some(first), Some(second)) = (chars.next(), chars.next())
+            && matches!(first, ',' | ';' | ':')
+            && matches!(second, ',' | ';' | ':' | '.' | '!' | '?')
+            && !text.ends_with([',', ';', ':', '.', '!', '?'])
+            && !wrote_pair(&rest[..first.len_utf8() + second.len_utf8()])
+        {
+            // ",," keeps one comma; ",." keeps the full stop.
+            out.push(if matches!(second, '.' | '!' | '?') {
+                second
+            } else {
+                first
+            });
+            rest = &rest[first.len_utf8() + second.len_utf8()..];
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 fn continuation<'a>(req: &Request, output: &'a str) -> &'a str {
@@ -1667,6 +1822,41 @@ fn plausible(original: &str, replacement: &str) -> bool {
 /// letters in every mode: an edit that changes more than case there is dropped, together with
 /// the other half of a move. "aman" to "Am" passes the closeness test in Fix mode, so this runs
 /// before it.
+/// A tone rewrite leaves the frame of a letter as the writer wrote it: its greeting and sign-off
+/// ("Hi Dana,", "Cheers,\nLee") and its line breaks (a paragraph break stays two line breaks). The
+/// model merges paragraphs into one line and drops a sign-off as if it were padding; an edit that
+/// touches either is left out, with any edit linked to it.
+fn keep_structure(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    if req.mode == Mode::Fix {
+        return all;
+    }
+    let frame = crate::tone_format::letter_frame(&req.text);
+    let touches = |e: &Edit| {
+        let (Some(a), Some(b)) = (
+            byte_at(&req.text, e.start_utf16),
+            byte_at(&req.text, e.end_utf16),
+        ) else {
+            return true;
+        };
+        let breaks = |t: &str| t.matches('\n').count();
+        breaks(&e.original) != breaks(&e.replacement)
+            || frame.iter().any(|&(from, to)| {
+                if a == b {
+                    a > from && a < to
+                } else {
+                    a < to && b > from
+                }
+            })
+    };
+    let dropped: Vec<_> = all
+        .iter()
+        .filter(|e| touches(e))
+        .filter_map(|e| e.group_id.clone())
+        .collect();
+    all.into_iter()
+        .filter(|e| !touches(e) && !e.group_id.as_ref().is_some_and(|g| dropped.contains(g)))
+        .collect()
+}
 fn keep_names(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
     let tokens = crate::tokenizer::tokenize(&req.text, &req.tokens);
     let fixed: Vec<_> = fixed_words(req, &tokens)
@@ -2698,7 +2888,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         Mode::Fix => Err(error),
         _ => attempt(Some("")),
     })?;
-    let all = keep_names(req, all);
+    let all = keep_structure(req, keep_names(req, all));
     let (changes, withheld) = if req.mode == Mode::Fix {
         let mut kept = guard(&req.text, all);
         // "The team are working": British English lets a group noun take a plural verb.
@@ -2730,7 +2920,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
             .then(|| attempt_with(None, true).ok())
             .flatten()
-            .map(|(_, e)| drop_added_emphasis(req, keep_names(req, e)))
+            .map(|(_, e)| drop_added_emphasis(req, keep_structure(req, keep_names(req, e))))
             .filter(|e| {
                 let (failed2, gain2) = candidate_score(req, e, true);
                 // Never more failed segments than the first; better on tone, or as good with fewer
@@ -2796,6 +2986,127 @@ mod tests {
             println!("RAW {mode:?}: {raw:?}");
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
+        }
+    }
+
+    #[test]
+    fn a_link_is_kept_without_the_mark_that_ends_its_clause() {
+        let kept = |text: &str, mode: Mode| -> Vec<String> {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            kept_spans(&req)
+                .into_iter()
+                .map(|r| {
+                    let (a, b) = (
+                        byte_at(text, r.start_utf16).unwrap(),
+                        byte_at(text, r.end_utf16).unwrap(),
+                    );
+                    text[a..b].to_owned()
+                })
+                .collect()
+        };
+        assert_eq!(
+            kept(
+                "The docs live at https://docs.example.org/guide/start, in case.",
+                Mode::Friendly
+            ),
+            ["https://docs.example.org/guide/start"]
+        );
+        assert_eq!(
+            kept(
+                "See (https://example.org/a_b) now. Or www.example.org/x.",
+                Mode::Concise
+            ),
+            ["https://example.org/a_b", "www.example.org/x"]
+        );
+        assert_eq!(
+            kept(
+                "See https://en.wikipedia.org/wiki/Rust_(language).",
+                Mode::Concise
+            ),
+            ["https://en.wikipedia.org/wiki/Rust_(language)"]
+        );
+        // Fix mode keeps the span as it always did.
+        assert_eq!(
+            kept(
+                "The docs live at https://docs.example.org/guide/start, in case.",
+                Mode::Fix
+            ),
+            ["https://docs.example.org/guide/start,"]
+        );
+    }
+
+    #[test]
+    fn a_mark_the_model_adds_behind_a_restored_link_is_not_doubled() {
+        let marker = "ZXQPARZRKEEP0QXZ";
+        let link = "https://docs.example.org/guide/start";
+        for (masked, output, expected) in [
+            (
+                "The docs live at ZXQPARZRKEEP0QXZ, in case you need them.",
+                "The documents are at ZXQPARZRKEEP0QXZ,, just in case you need them.",
+                "The documents are at https://docs.example.org/guide/start, just in case you need them.",
+            ),
+            (
+                "the repo is at ZXQPARZRKEEP0QXZ, feel free to open an issue",
+                "The repo is at ZXQPARZRKEEP0QXZ,. Feel free to open an issue.",
+                "The repo is at https://docs.example.org/guide/start. Feel free to open an issue.",
+            ),
+            // The writer's own marks stay.
+            (
+                "See ZXQPARZRKEEP0QXZ, then ZXQPARZRKEEP0QXZ.",
+                "See ZXQPARZRKEEP0QXZ, then ZXQPARZRKEEP0QXZ.",
+                "See https://docs.example.org/guide/start, then https://docs.example.org/guide/start.",
+            ),
+        ] {
+            assert_eq!(collapse_marks_after(output, marker, link, masked), expected);
+        }
+    }
+
+    #[test]
+    fn a_rewrite_keeps_the_contractions_the_writer_used() {
+        for (source, output, expected) in [
+            (
+                "The printer isn't working again.",
+                "The printer is not working again.",
+                "The printer isn't working again.",
+            ),
+            (
+                "If the test fails, don't deploy.",
+                "If the test fails, do not deploy.",
+                "If the test fails, don't deploy.",
+            ),
+            (
+                "Don't open the attachment unless you know the sender.",
+                "Do not open the attachment unless you know the sender.",
+                "Don't open the attachment unless you know the sender.",
+            ),
+            (
+                "The update isn\u{2019}t ready, so please do not announce it yet.",
+                "The update is not ready, so please do not announce it yet.",
+                "The update isn\u{2019}t ready, so please do not announce it yet.",
+            ),
+            (
+                "I can't make it and I'm sorry.",
+                "I cannot make it, and I am sorry.",
+                "I can't make it, and I'm sorry.",
+            ),
+        ] {
+            assert_eq!(keep_contractions(source, output), expected, "{source}");
+        }
+        // Spelled out by the writer, or a contraction that ends its clause, or not theirs: unchanged.
+        for (source, output) in [
+            ("The printer is not working.", "The printer is not working."),
+            (
+                "The printer isn't working. It is not new.",
+                "The printer is not working. It is not new.",
+            ),
+            ("Who is it? I'm.", "Who is it? I am."),
+            ("It works.", "It does not work."),
+        ] {
+            assert_eq!(keep_contractions(source, output), output, "{source}");
         }
     }
 
