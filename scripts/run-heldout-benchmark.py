@@ -48,23 +48,44 @@ def split_of(item):
     return 'test' if int(hashlib.sha256(item['input'].encode()).hexdigest(), 16) % 10 < 3 else 'dev'
 
 
+# A typing check (the gec layer) scores short-word swaps within the typing budget and answers "context.pending" when a
+# sentence needs the model longer; the app then looks again, three times 0.9 s apart. The runner does the same, so a
+# layer scores what the writer ends up with on a fast Mac and on a loaded CI runner alike (on a Mac the first answer
+# settles nearly every item: main's sealed gec count moved between 518 and 521 across identical CI runs before this).
+# Latency records the first answer, what the writer waits for. The follow-ups are capped per layer so a runner that
+# never settles cannot stall the job; the summary records how many follow-ups a layer took.
+FOLLOW_UPS, FOLLOW_INTERVAL, FOLLOW_CAP_S = 3, 0.9, 300
+
+
 class Engine:
     def __init__(self, path, extra):
-        self.extra, self.ms = extra, []
+        self.extra, self.ms, self.follow_ups, self.follow_s = extra, [], 0, 0.0
         self.proc = subprocess.Popen([path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1,
                                      env=quality_gates.engine_env())
+
+    def ask(self, req):
+        self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + '\n'); self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            raise RuntimeError('engine exited')
+        return json.loads(line)
 
     def check(self, item):
         req = {'text': item['input'], **self.extra}
         if item.get('dialect'):
             req['dialect'] = item['dialect']
         started = time.perf_counter()
-        self.proc.stdin.write(json.dumps(req, ensure_ascii=False) + '\n'); self.proc.stdin.flush()
-        line = self.proc.stdout.readline()
-        if not line:
-            raise RuntimeError('engine exited')
+        resp = self.ask(req)
         self.ms.append((time.perf_counter() - started) * 1000)
-        return json.loads(line)
+        follow = 0
+        while 'context.pending' in (resp.get('warnings') or []) and follow < FOLLOW_UPS and self.follow_s < FOLLOW_CAP_S:
+            t = time.perf_counter()
+            time.sleep(FOLLOW_INTERVAL)
+            resp = self.ask(req)
+            self.follow_s += time.perf_counter() - t
+            follow += 1
+        self.follow_ups += follow
+        return resp
 
     def close(self):
         """Ends the engine; returns its peak resident memory in MB."""
@@ -143,6 +164,7 @@ def main():
         total = collections.Counter(); [total.update({k: v for k, v in c.items()}) for k, c in by_cat.items() if '/' not in k]
         summary['layers'][layer] = {
             'seconds': round(time.time() - t0, 1),
+            'follow_ups': eng.follow_ups, 'follow_up_seconds': round(eng.follow_s, 1),
             'fixed': total['fixed'], 'flagged': total['flagged'], 'wrong': total['wrong'], 'missed': total['missed'],
             'fix_rate': round(total['fixed'] / max(1, len(errors)), 4),
             'catch_rate': round((total['fixed'] + total['flagged']) / max(1, len(errors)), 4),
