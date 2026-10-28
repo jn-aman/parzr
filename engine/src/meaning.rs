@@ -1752,7 +1752,15 @@ const WANT: &[&str] = &[
 const UNSURE: &[&str] = &["unsure", "uncertain", "doubt", "doubtful", "unclear"];
 /// Ok when a hope stays a hope: "I hope we can work together again" is not "We can work
 /// together again", and a plain statement does not become a hope.
-fn same_mood(source: &str, output: &str) -> Result<(), String> {
+fn same_mood(mode: Mode, source: &str, output: &str) -> Result<(), String> {
+    // Concise and Direct count a hedge opener as padding: its doubt or hope goes with it.
+    let (source, output) = if matches!(mode, Mode::Concise | Mode::Direct) {
+        let plain = |text: &str| without_hedge_openers(text).unwrap_or_else(|| text.to_owned());
+        (plain(source), plain(output))
+    } else {
+        (source.to_owned(), output.to_owned())
+    };
+    let (source, output) = (source.as_str(), output.as_str());
     let wishes = |text: &str| -> (bool, bool) {
         let tokens = content_tokens(text, &[]);
         let all_keys: Vec<Vec<String>> = tokens.iter().map(|t| keys(&t.normalized, "")).collect();
@@ -2075,6 +2083,29 @@ pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), S
         None => Ok(()),
     }
 }
+/// The hedge openers Concise and Direct treat as padding, words, negations and modals included:
+/// "I don't know,", "I'm not sure,", "I may be wrong,", "I hope you don't mind me asking,",
+/// "sorry to bother you,", "I hate to ask," (each as a clause of its own), "no pressure",
+/// "whether or not", "I guess", "I think", "I believe", "maybe", "possibly", "perhaps", "if
+/// possible". The scorer's list (scripts/run-tone-regression.py HEDGE_OPENER) is the same.
+fn hedge_opener_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        // The first group names a doubt, a hope or an apology, which is padding only as a clause
+        // of its own ("I'm not sure, but ..."); "I'm not sure the design works" stays a doubt.
+        regex::Regex::new(
+            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible)\b",
+        )
+        .expect("constant hedge opener regex")
+    })
+}
+/// `text` without its hedge openers, or None when it has none.
+fn without_hedge_openers(text: &str) -> Option<String> {
+    let re = hedge_opener_regex();
+    re.is_match(text)
+        .then(|| re.replace_all(text, " ").into_owned())
+}
+
 /// Ok when `output` says what `source` says, as far as `mode` allows: the same negation, numbers
 /// and names in every mode; Concise may drop filler and redundant words but keeps the content
 /// words (only a third may go, in a sentence with three or more); Professional, Friendly and
@@ -2225,7 +2256,18 @@ pub(crate) fn keeps_meaning(
     }
     // Negations are counted: "start without me" is not "will not start without help".
     let negations = |w: &[Word]| w.iter().filter(|w| w.kind == Kind::Negation).count();
-    let (src_negations, out_negations) = (negations(&src), negations(&out));
+    // In Concise and Direct the negation of a hedge ("I don't know, ...", "I hope you do not mind
+    // me asking, but ...", "whether or not") is padding that goes with it: the count leaves
+    // those phrases out of the source and the rewrite alike.
+    let (src_negations, out_negations) = if matches!(mode, Mode::Concise | Mode::Direct) {
+        let counted = |text: &str, all: &[Word]| match without_hedge_openers(text) {
+            Some(rest) => negations(&words(&rest, &[])),
+            None => negations(all),
+        };
+        (counted(source, &src), counted(output, &out))
+    } else {
+        (negations(&src), negations(&out))
+    };
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
     if out_negations < src_negations {
         return Err("drops a negation".into());
@@ -2543,15 +2585,26 @@ pub(crate) fn keeps_meaning(
             .cloned()
             .collect()
     };
-    same_mood(source, output)?;
+    same_mood(mode, source, output)?;
     same_frames(
         &clauses(source, source_hints),
         &clauses(output, output_hints),
     )?;
     let (src_content, out_content) = (content(&src), content(&out));
+    // The words of a hedge opener ("hope", "mind", "asking") may go with it in Concise and Direct.
+    let opener_words: Vec<String> = if matches!(mode, Mode::Direct | Mode::Concise) {
+        hedge_opener_regex()
+            .find_iter(source)
+            .flat_map(|m| words(m.as_str(), &[]))
+            .map(|w| w.surface)
+            .collect()
+    } else {
+        vec![]
+    };
     let hedge = |w: &Word| {
         matches!(mode, Mode::Direct | Mode::Concise)
-            && w.keys.iter().any(|k| HEDGES.contains(&k.as_str()))
+            && (w.keys.iter().any(|k| HEDGES.contains(&k.as_str()))
+                || opener_words.contains(&w.surface))
     };
     let lost: Vec<&Word> = src_content
         .iter()
@@ -2891,6 +2944,70 @@ mod tests {
         Mode::Concise,
         Mode::Direct,
     ];
+
+    #[test]
+    fn concise_and_direct_may_drop_a_hedge_with_the_negation_it_carries() {
+        for (source, output) in [
+            (
+                "I don't know, I guess we might want to think about hiring another designer.",
+                "We should consider hiring another designer.",
+            ),
+            (
+                "I'm not sure, but I think the client might prefer the blue version.",
+                "The client might prefer the blue version.",
+            ),
+            (
+                "I hope you do not mind me asking, but have you had a chance to review the invoice?",
+                "Have you reviewed the invoice?",
+            ),
+            (
+                "I just wanted to quickly check in to see whether or not you had a chance to look at the proposal I sent over last week. No pressure at all.",
+                "I wanted to quickly check in to see if you had a chance to look at the proposal I sent last week.",
+            ),
+            (
+                "Sorry, I may be wrong, but I believe the total might be off by a bit.",
+                "I believe the total is off by a bit.",
+            ),
+        ] {
+            for mode in [Mode::Concise, Mode::Direct] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        // Everything else is checked as before: a negation outside the hedge, a hedge that
+        // is not on the list, and the other tones.
+        for (source, output) in [
+            (
+                "I'm not sure, but I think we should not ship on Friday.",
+                "We should ship on Friday.",
+            ),
+            (
+                "I don't know, I guess the invoice is not paid.",
+                "The invoice is paid.",
+            ),
+            ("The printer does not work, I guess.", "The printer works."),
+        ] {
+            for mode in [Mode::Concise, Mode::Direct] {
+                assert!(
+                    keeps_meaning(mode, source, output, "", &[], &[]).is_err(),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        assert!(!ok(
+            Mode::Friendly,
+            "I'm not sure, but I think the client might prefer the blue version.",
+            "The client might prefer the blue version."
+        ));
+        assert!(!ok(
+            Mode::Professional,
+            "I hope you do not mind me asking, but have you had a chance to review the invoice?",
+            "Have you reviewed the invoice?"
+        ));
+    }
 
     #[test]
     fn a_rewrite_adds_no_apology_no_loose_new_sentence_and_no_title_before_a_name() {

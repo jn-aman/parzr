@@ -885,6 +885,19 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // The model gets no instructions about names, so every name candidate is masked.
     let mut masked = protected.clone();
     masked.extend(name_guard_ranges(req));
+    crate::model::trace!(
+        "pipeline: masked from the model {:?}",
+        masked
+            .iter()
+            .filter_map(|r| {
+                let (a, b) = (
+                    crate::byte_at(&req.text, r.start_utf16)?,
+                    crate::byte_at(&req.text, r.end_utf16)?,
+                );
+                req.text.get(a..b)
+            })
+            .collect::<Vec<_>>()
+    );
     // A rewrite the model cannot write safely (it changed protected text, a name or the meaning)
     // leaves the corrected text, with a warning, instead of failing the whole check.
     match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
@@ -926,6 +939,13 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // said plainly (Friendly, Concise, Direct).
     let current = document.request(req, &fenced, req.mode);
     document.apply(&crate::tone_format::opener_forms(
+        &current,
+        &current.protected_ranges,
+    ))?;
+    // A hedge clause before a request or a claim ("I hate to ask, but could you possibly…",
+    // "I'm not sure, but…") goes in Concise and Direct, whatever the meaning guard made of it.
+    let current = document.request(req, &fenced, req.mode);
+    document.apply(&crate::tone_format::hedge_forms(
         &current,
         &current.protected_ranges,
     ))?;

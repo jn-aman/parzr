@@ -65,6 +65,13 @@ QUESTION_WORDS = {"who", "whose", "what", "which", "where", "when", "why", "how"
 CHAT_SPEAK = re.compile(r"(?<![\w.'’-])(?:u|ur|thx|lol|pls|plz|gonna|wanna|gotta|ya|omg|idk|tmrw|brb|haha|cuz)(?![\w.'’-])", re.I)
 NEGATION = re.compile(r"\b(?:not|never|no|cannot|unable|nobody|nothing|none|dont|doesnt|didnt|isnt|arent|wasnt|werent|havent|hasnt|hadnt|"
                       r"cant|couldnt|wont|wouldnt|shouldnt)\b|n['’]t\b", re.I)
+# Hedge openers that Concise and Direct treat as padding, negations included ("I don't know, ...", "I hope you do not mind me
+# asking, but ...", "whether or not", "No pressure at all."): stripped from the input and the output before their negations are
+# compared in those two modes, so removing one is not a flipped negation. The same list as engine/src/meaning.rs hedge_opener_regex.
+HEDGE_OPENER = re.compile(r"\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|"
+                          r"i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|"
+                          r"sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|"
+                          r"whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible)\b", re.I)
 # Words that start with a capital in a greeting or a sign-off but are not names.
 NOT_NAMES = {"morning", "afternoon", "evening", "i"}
 EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B50\u2B55][\uFE0F\U0001F3FB-\U0001F3FF]?"
@@ -260,8 +267,10 @@ def check(item, mode, response):
         fail("question_word_added", sorted(answered - asked - {stem(w) for w in words(text)}))
     if ends_question(text) and mode != "direct" and not ends_question(out):
         fail("question_mark")
-    if bool(NEGATION.search(text)) != bool(NEGATION.search(out)):
-        fail("negation_flipped", "dropped" if NEGATION.search(text) else "added")
+    # Concise and Direct treat a hedge opener as padding: its negation going with it is no flipped negation.
+    unhedged_in, unhedged_out = (HEDGE_OPENER.sub(" ", text), HEDGE_OPENER.sub(" ", out)) if mode in ("concise", "direct") else (text, out)
+    if bool(NEGATION.search(unhedged_in)) != bool(NEGATION.search(unhedged_out)):
+        fail("negation_flipped", "dropped" if NEGATION.search(unhedged_in) else "added")
     lost = sorted(names(text) - {stem(w) for w in words(out)})
     if lost:
         fail("name_dropped", lost)

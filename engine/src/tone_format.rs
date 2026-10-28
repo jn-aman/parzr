@@ -602,6 +602,217 @@ pub(crate) fn opener_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
     edits
 }
 
+/// A clause that only hedges or apologizes before a request or a claim, to be followed by
+/// "but" or a comma: "I'm not sure, but", "I may be wrong, but", "I hope you don't mind me
+/// asking, but", "Sorry to bother you again, but", "I hate to ask, but". Padding in Concise and
+/// Direct, words, negations and modals included (`meaning::hedge_opener_regex` is the same list).
+fn hedge_lead_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)",
+        )
+        .expect("constant hedge lead regex")
+    })
+}
+/// "I was hoping you might be able to help me with …": a request said as a hope.
+fn hoping_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^i(?:\s+was|\s+am|['’]m)\s+hoping\s+(?:that\s+)?you\s+(?:could|can|might\s+be\s+able\s+to|would\s+be\s+able\s+to|might|would)\s+(?:possibly\s+|maybe\s+|perhaps\s+)?(?P<verb>[a-z]+)\b",
+        )
+        .expect("constant hoping regex")
+    })
+}
+/// "could you possibly …": the adverb goes with the hedge.
+fn possibly_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(?P<modal>could|can|would|will)\s+you\s+(?:possibly|maybe|perhaps|kindly)\s+",
+        )
+        .expect("constant possibly regex")
+    })
+}
+/// "Would you mind terribly if I borrowed …": a request for permission.
+fn would_mind_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^would\s+you\s+mind\s+(?:(?:terribly|very\s+much|too\s+much|at\s+all)\s+)?if\s+i\s+(?P<verb>[a-z]+)\b",
+        )
+        .expect("constant would mind regex")
+    })
+}
+/// "Maybe it would be a good idea to …": a suggestion put as a question.
+fn good_idea_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)^maybe\s+it\s+would\s+be\s+a\s+good\s+idea\s+to\s+")
+            .expect("constant good idea regex")
+    })
+}
+
+/// How one sentence changes: the bytes before `cut` become `head`, and a final "." may become
+/// "?". The rest of the sentence stays as written.
+struct HedgePlan {
+    cut: usize,
+    head: String,
+    mark: Option<&'static str>,
+}
+fn hedge_plan(mode: crate::Mode, sentence: &str) -> Option<HedgePlan> {
+    let words = |s: &str| s.split_whitespace().count();
+    let concise = mode == crate::Mode::Concise;
+    let lead = hedge_lead_regex().find(sentence).map_or(0, |m| m.end());
+    let rest = &sentence[lead..];
+    if lead > 0 {
+        // A clause must follow the hedge ("I'm not sure, but." alone stays).
+        if words(rest) < 3 || !rest.starts_with(char::is_alphanumeric) {
+            return None;
+        }
+        // "I was hoping you might be able to help me with …" asks for the help.
+        if let Some(c) = hoping_regex().captures(rest) {
+            let verb = c.name("verb")?;
+            if REQUEST_VERBS.contains(&verb.as_str().to_lowercase().as_str())
+                && sentence.ends_with('.')
+            {
+                return Some(HedgePlan {
+                    cut: lead + verb.start(),
+                    head: if concise { "Could you " } else { "Please " }.into(),
+                    mark: concise.then_some("?"),
+                });
+            }
+        }
+        // "could you possibly cover …" is "Could you cover …".
+        if let Some(c) = possibly_regex().captures(rest) {
+            let modal = c.name("modal")?.as_str();
+            let cap = format!(
+                "{}{} you ",
+                modal[..1].to_uppercase(),
+                &modal[1..].to_lowercase()
+            );
+            return Some(HedgePlan {
+                cut: lead + c.get(0)?.end(),
+                head: cap,
+                mark: None,
+            });
+        }
+        let first = rest.chars().next()?.len_utf8();
+        return Some(HedgePlan {
+            cut: lead + first,
+            head: rest[..first].to_uppercase(),
+            mark: None,
+        });
+    }
+    // "Would you mind terribly if I borrowed my notes?" is "Could I borrow my notes?".
+    if let Some(c) = would_mind_regex().captures(sentence) {
+        let verb = c.name("verb")?;
+        let past = verb.as_str().to_lowercase();
+        let base = crate::morphology::verb(&past)
+            .filter(|v| v.past == past && v.base != past)?
+            .base;
+        return Some(HedgePlan {
+            cut: verb.end(),
+            head: format!("Could I {base}"),
+            mark: None,
+        });
+    }
+    // Concise keeps a question a question: "Maybe it would be a good idea to back up the files
+    // before we upgrade?" is "Should we back up the files before we upgrade?".
+    if concise && sentence.ends_with('?') {
+        let m = good_idea_regex().find(sentence)?;
+        let body = &sentence[m.end()..];
+        if words(body) >= 3
+            && body
+                .split(|c: char| !c.is_alphabetic())
+                .any(|w| w.eq_ignore_ascii_case("we"))
+        {
+            return Some(HedgePlan {
+                cut: m.end(),
+                head: "Should we ".into(),
+                mark: None,
+            });
+        }
+    }
+    None
+}
+
+/// Hedge openers said plainly (Concise, Direct): "I hope you do not mind me asking, but have you
+/// had a chance to review the invoice?" is "Have you had a chance to review the invoice?", "I
+/// hate to ask, but could you possibly cover my shift?" is "Could you cover my shift?", "Sorry
+/// to bother you again, but I was hoping you might be able to help me with it." is "Could you
+/// help me with it?" (Concise) or "Please help me with it." (Direct), "Would you mind terribly
+/// if I borrowed your notes?" is "Could I borrow your notes?". Only at a sentence start, and
+/// only when a clause follows.
+pub(crate) fn hedge_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
+    if !matches!(req.mode, crate::Mode::Concise | crate::Mode::Direct) {
+        return vec![];
+    }
+    let text = req.text.as_str();
+    // The tagger reads a capitalized "Sorry," as a name; here it is the apology that opens a hedge.
+    let protected: Vec<TextRange> = protected
+        .iter()
+        .filter(|p| {
+            crate::byte_at(text, p.start_utf16)
+                .zip(crate::byte_at(text, p.end_utf16))
+                .and_then(|(a, b)| text.get(a..b))
+                .is_none_or(|word| !word.eq_ignore_ascii_case("sorry"))
+        })
+        .cloned()
+        .collect();
+    let protected = protected.as_slice();
+    let tokens = tokenizer::tokenize(text, &req.tokens);
+    let mut edits = vec![];
+    let mut previous = usize::MAX;
+    for (i, t) in tokens.iter().enumerate() {
+        if t.sentence == previous || !t.is_word {
+            previous = t.sentence;
+            continue;
+        }
+        previous = t.sentence;
+        let Some(last) = tokens
+            .iter()
+            .skip(i)
+            .take_while(|n| n.sentence == t.sentence)
+            .last()
+        else {
+            continue;
+        };
+        let sentence = &text[t.start_byte..last.end_byte];
+        let Some(plan) = hedge_plan(req.mode, sentence) else {
+            continue;
+        };
+        let utf16 = |b: usize| text[..b].encode_utf16().count();
+        let (a, b) = (t.start_byte, t.start_byte + plan.cut);
+        let mut spans = vec![(a, b, plan.head)];
+        if let Some(mark) = plan.mark
+            && last.surface == "."
+        {
+            spans.push((last.start_byte, last.end_byte, mark.to_owned()));
+        }
+        if spans
+            .iter()
+            .any(|(a, b, _)| protected_at(protected, utf16(*a), utf16(*b)))
+        {
+            continue;
+        }
+        for (a, b, replacement) in spans {
+            if text[a..b] != replacement {
+                edits.push(edit(
+                    utf16(a),
+                    utf16(b),
+                    &text[a..b],
+                    replacement,
+                    "tone.plain_hedge",
+                    "Say it without the hedge.",
+                ));
+            }
+        }
+    }
+    edits
+}
+
 /// Sentence capitals and final punctuation, as Fix gives them, for a finished rewrite.
 /// Edits are in `req.text` coordinates; protected text is never touched.
 pub(crate) fn floor(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
@@ -921,6 +1132,148 @@ mod tests {
         ] {
             assert_eq!(direct(text), expected, "{text:?}");
         }
+    }
+
+    fn hedged(mode: crate::Mode, text: &str) -> String {
+        let req = Request {
+            text: text.into(),
+            mode,
+            ..Default::default()
+        };
+        apply(text, hedge_forms(&req, &[]))
+    }
+
+    #[test]
+    fn hedge_openers_are_said_plainly_in_concise_and_direct() {
+        use crate::Mode::{Concise, Direct};
+        for (mode, text, expected) in [
+            (
+                Concise,
+                "I hope you do not mind me asking, but have you had a chance to review the invoice?",
+                "Have you had a chance to review the invoice?",
+            ),
+            (
+                Direct,
+                "I hope you don\u{2019}t mind me asking, but have you had a chance to review the invoice?",
+                "Have you had a chance to review the invoice?",
+            ),
+            (
+                Concise,
+                "I hate to ask, but could you possibly cover my shift on Saturday?",
+                "Could you cover my shift on Saturday?",
+            ),
+            (
+                Direct,
+                "I hate to ask, but could you possibly cover my shift on Saturday?",
+                "Could you cover my shift on Saturday?",
+            ),
+            (
+                Concise,
+                "Sorry to bother you again, but I was hoping you might be able to help me with one more thing.",
+                "Could you help me with one more thing?",
+            ),
+            (
+                Direct,
+                "Sorry to bother you again, but I was hoping you might be able to help me with one more thing.",
+                "Please help me with one more thing.",
+            ),
+            (
+                Concise,
+                "Sorry, I may be wrong, but I believe the total might be off by a bit.",
+                "I believe the total might be off by a bit.",
+            ),
+            (
+                Direct,
+                "I\u{2019}m not sure, but the client might prefer the blue version.",
+                "The client might prefer the blue version.",
+            ),
+            (
+                Direct,
+                "I don't know, I guess we might want to think about hiring another designer.",
+                "I guess we might want to think about hiring another designer.",
+            ),
+            (
+                Concise,
+                "Would you mind terribly if I borrowed your notes from the lecture?",
+                "Could I borrow your notes from the lecture?",
+            ),
+            (
+                Direct,
+                "Would you mind if I took the last slot?",
+                "Could I take the last slot?",
+            ),
+            (
+                Concise,
+                "Maybe it would be a good idea to back up the files before we upgrade?",
+                "Should we back up the files before we upgrade?",
+            ),
+            // The second sentence of a message is handled too.
+            (
+                Direct,
+                "Hello. I\u{2019}m not sure, but the report is late.",
+                "Hello. The report is late.",
+            ),
+        ] {
+            assert_eq!(hedged(mode, text), expected, "{mode:?}: {text}");
+        }
+        // Nothing changes without a clause behind the hedge, in the other tones, or when the
+        // doubt is the point of the sentence.
+        for (mode, text) in [
+            (Concise, "I\u{2019}m not sure, but."),
+            (Concise, "I am not sure the design works."),
+            (Direct, "I don't know whether the invoice was paid."),
+            (
+                crate::Mode::Friendly,
+                "I hate to ask, but could you possibly cover my shift?",
+            ),
+            (
+                crate::Mode::Professional,
+                "I hate to ask, but could you possibly cover my shift?",
+            ),
+            // A suggestion without a "we" in it, or a verb whose past is its base, stays.
+            (Concise, "Maybe it would be a good idea to rest?"),
+            (Direct, "Would you mind if I read your notes?"),
+            (Direct, "Would you mind if I put the box here?"),
+        ] {
+            assert_eq!(hedged(mode, text), text, "{mode:?}: {text}");
+        }
+    }
+
+    #[test]
+    fn a_sorry_the_tagger_took_for_a_name_still_goes_with_its_hedge() {
+        let text = "Sorry, I may be wrong, but I believe the total might be off by a bit.";
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Direct,
+            ..Default::default()
+        };
+        let sorry = [TextRange {
+            start_utf16: 0,
+            end_utf16: 5,
+        }];
+        assert_eq!(
+            apply(text, hedge_forms(&req, &sorry)),
+            "I believe the total might be off by a bit."
+        );
+    }
+
+    #[test]
+    fn a_hedge_around_a_protected_name_is_left_alone() {
+        let text = "I hate to ask, but could you possibly cover Priya's shift?";
+        let req = Request {
+            text: text.into(),
+            mode: crate::Mode::Concise,
+            ..Default::default()
+        };
+        let head = [TextRange {
+            start_utf16: 0,
+            end_utf16: 3,
+        }];
+        assert!(hedge_forms(&req, &head).is_empty());
+        assert_eq!(
+            apply(text, hedge_forms(&req, &[])),
+            "Could you cover Priya's shift?"
+        );
     }
 
     #[test]
