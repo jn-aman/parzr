@@ -717,12 +717,11 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
 }
 /// `PARZR_TONE_TRACE=1` prints, to stderr, what each tone rewrite decided: the model's answer per
 /// attempt, the score that chose between attempts, and every sentence's meaning verdict. Read once;
-/// unset it costs one cached flag test per call.
+/// unset it costs one cached flag test per call. A development override: the shipped engine
+/// (built without the `dev-overrides` feature) never reads it.
 pub(crate) fn tone_trace() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| {
-        std::env::var_os("PARZR_TONE_TRACE").is_some_and(|v| v != "0" && !v.is_empty())
-    })
+    *ON.get_or_init(|| crate::overrides::var("PARZR_TONE_TRACE").is_some_and(|v| v != "0"))
 }
 macro_rules! trace {
     ($($arg:tt)*) => {
