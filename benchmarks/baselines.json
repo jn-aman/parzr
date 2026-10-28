@@ -95,28 +95,28 @@
     },
     "tone-regression": {
       "updated": "2026-10-28",
-      "reason": "First baseline of the tone regression set (310 items x 4 modes, local run on the engine at base-rule-audit): pass rates professional 285/310, friendly 291, concise 285, direct 292; the failures are the next fix queue (chat-speak left in Professional, rude text Friendly leaves alone, a question turned into a statement by Concise, and others); the ci performance entry follows the first CI run",
+      "reason": "Tone fix queue (branch tone-fixes): full local run professional 304/310, friendly 298, concise 304, direct 303 (from 285/291/285/292); no item that passed before fails",
       "items": 310,
       "modes": {
         "professional": {
           "items": 310,
-          "passed": 285,
-          "pass_rate": 0.9194
+          "passed": 304,
+          "pass_rate": 0.9806
         },
         "friendly": {
           "items": 310,
-          "passed": 291,
-          "pass_rate": 0.9387
+          "passed": 298,
+          "pass_rate": 0.9613
         },
         "concise": {
           "items": 310,
-          "passed": 285,
-          "pass_rate": 0.9194
+          "passed": 304,
+          "pass_rate": 0.9806
         },
         "direct": {
           "items": 310,
-          "passed": 292,
-          "pass_rate": 0.9419
+          "passed": 303,
+          "pass_rate": 0.9774
         }
       },
       "samples": {
@@ -144,6 +144,33 @@
               "items": 52,
               "passed": 48,
               "pass_rate": 0.9231
+            }
+          }
+        },
+        "6": {
+          "updated": "2026-10-28",
+          "reason": "Local sample of the tone regression set, every 6th item (52 of 310), after the tone fix queue: professional 52/52, friendly 52/52, concise 51/52, direct 49/52",
+          "items": 52,
+          "modes": {
+            "professional": {
+              "items": 52,
+              "passed": 52,
+              "pass_rate": 1.0
+            },
+            "friendly": {
+              "items": 52,
+              "passed": 52,
+              "pass_rate": 1.0
+            },
+            "concise": {
+              "items": 52,
+              "passed": 51,
+              "pass_rate": 0.9808
+            },
+            "direct": {
+              "items": 52,
+              "passed": 49,
+              "pass_rate": 0.9423
             }
           }
         }
