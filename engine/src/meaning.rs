@@ -2089,6 +2089,108 @@ fn rude_phrase_matches(text: &str) -> Vec<String> {
         .map(|m| m.as_str().to_owned())
         .collect()
 }
+/// Contractions a Professional rewrite spells out ("don't", "we're", "it's ready").
+fn contractions(text: &str) -> usize {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)\b(?:[a-z]+['’](?:t|re|m|ll|ve|d)|(?:it|that|there|here|what|let|he|she|who)['’]s)\b",
+        )
+        .expect("constant contraction regex")
+    })
+    .find_iter(text)
+    .count()
+}
+/// Whether `text` has something a Professional rewrite is for: chat shorthand, an insult, a
+/// contraction, a sentence that starts in lowercase, "!!" or "??", or no final mark. Text with
+/// none of these is already in the tone, and a rewrite that only rewords it ("help" to "assist
+/// you", "received" to "have received") is no improvement.
+#[cfg(feature = "local-model")]
+pub(crate) fn informal(text: &str) -> bool {
+    static REPEATED: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let repeated = REPEATED
+        .get_or_init(|| regex::Regex::new(r"[!?]{2,}").expect("constant repeated mark regex"));
+    let marks = tone_marks(text);
+    if marks.chat + marks.rude > 0 || contractions(text) > 0 || repeated.is_match(text) {
+        return true;
+    }
+    let tokens = tokenizer::tokenize(text, &[]);
+    let mut previous = usize::MAX;
+    for t in &tokens {
+        if t.sentence != previous
+            && t.is_word
+            && t.surface.chars().next().is_some_and(char::is_lowercase)
+        {
+            return true;
+        }
+        previous = t.sentence;
+    }
+    // The last mark of the body, before a sign-off ("Best,\nTheo") that has none.
+    let end = crate::tone_format::letter_frame(text)
+        .last()
+        .filter(|&&(start, _)| start > 0)
+        .map_or(text.len(), |&(start, _)| start);
+    !text[..end]
+        .trim_end()
+        .ends_with(['.', '!', '?', '…', '"', '\'', '”', '’', ')', ':', ';'])
+}
+/// Whether a rewrite of already formal text earns its place in Professional: it took out an
+/// insult, chat shorthand, an exclamation mark or a contraction, added a courtesy the writer left
+/// out ("Send me the numbers" to "Please send me the numbers"), or cut a hedge. A rewrite that
+/// only swaps words ("help" for "assist you", "whole" for "entire") earns nothing.
+pub(crate) fn earns_rewrite(source: &str, output: &str) -> bool {
+    static COURTESY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let courtesy = |text: &str| {
+        COURTESY
+            .get_or_init(|| {
+                regex::Regex::new(
+                    r"(?i)\b(?:please|kindly|could\s+you|would\s+you|appreciate|grateful)\b",
+                )
+                .expect("constant courtesy regex")
+            })
+            .find_iter(text)
+            .count()
+    };
+    let (s, o) = (tone_marks(source), tone_marks(output));
+    o.rude < s.rude
+        || o.chat < s.chat
+        || o.exclaims < s.exclaims
+        || contractions(output) < contractions(source)
+        || courtesy(output) > courtesy(source)
+        || o.hedges < s.hedges
+}
+/// Words of a message that already reads friendly: thanks, an exclamation mark or a warm word.
+pub(crate) fn reads_friendly(text: &str) -> bool {
+    const WARM: &[&str] = &[
+        "thanks",
+        "cheers",
+        "warm",
+        "warmly",
+        "glad",
+        "happy",
+        "delighted",
+        "wonderful",
+        "lovely",
+        "great",
+        "appreciate",
+        "appreciated",
+        "grateful",
+        "enjoyed",
+        "pleasure",
+        "love",
+        "loved",
+        "fantastic",
+        "awesome",
+        "excited",
+        "thrilled",
+        "kind",
+        "kindly",
+    ];
+    text.contains('!')
+        || text
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| WARM.contains(&w.to_lowercase().as_str()))
+}
 pub(crate) fn preamble(text: &str) -> Option<&str> {
     let text = text.trim_start();
     let head = text.split_once(':')?.0;
@@ -3066,6 +3168,80 @@ mod tests {
             "I hope you do not mind me asking, but have you had a chance to review the invoice?",
             "Have you reviewed the invoice?"
         ));
+    }
+
+    #[cfg(feature = "local-model")]
+    #[test]
+    fn text_is_informal_when_a_professional_rewrite_has_something_to_do() {
+        for text in [
+            "hey can u send me the invoice before lunch",
+            "That was a dumb idea.",
+            "I can't make the call today.",
+            "Please send it today. thanks.",
+            "Why is the invoice still wrong??",
+            "Thanks for the update",
+            "Dear Dr. Nakamura,\n\nPlease confirm the date\n\nSincerely,\nElena Park",
+        ] {
+            assert!(informal(text), "{text}");
+        }
+        for text in [
+            "Please confirm that you received the package.",
+            "Please let me know if there is anything else I can do to help.",
+            "Good morning Ms. Alvarez,\n\nI am writing to confirm our appointment on 12 June at 10:30 am. Please let me know if you need to reschedule.",
+            "Dear Dr. Nakamura,\n\nI would like to ask about the final project. May I visit your office hours on Wednesday?\n\nSincerely,\nElena Park",
+            "Thank you again for the warm welcome. The whole team enjoyed the visit.",
+            "He asked, \"Is it ready?\"",
+        ] {
+            assert!(!informal(text), "{text}");
+        }
+        assert!(earns_rewrite("Thanks!", "Thank you."));
+        assert!(earns_rewrite("I can't go.", "I cannot go."));
+        assert!(earns_rewrite(
+            "Send me the final numbers by Friday.",
+            "Please send me the final numbers by Friday."
+        ));
+        assert!(earns_rewrite(
+            "I think maybe we should move the meeting.",
+            "I think we should move the meeting."
+        ));
+        for (source, output) in [
+            (
+                "Please let me know if I can help.",
+                "Please let me know if I can assist you.",
+            ),
+            (
+                "Thank you again for the warm welcome. The whole team enjoyed the visit.",
+                "Thank you again for the warm welcome. The entire team enjoyed the visit.",
+            ),
+            (
+                "Please confirm that you received the package.",
+                "Please confirm that you have received the package.",
+            ),
+            (
+                "Please accept my sincere apologies for the confusion about the dates.",
+                "I sincerely apologize for the confusion regarding the dates.",
+            ),
+        ] {
+            assert!(!earns_rewrite(source, output), "{source}");
+        }
+    }
+
+    #[test]
+    fn a_message_reads_friendly_with_thanks_an_exclamation_or_a_warm_word() {
+        for text in [
+            "Thanks a ton for covering for me, you are a lifesaver!",
+            "Thank you again for the warm welcome.",
+            "Great to see the draft.",
+        ] {
+            assert!(reads_friendly(text), "{text}");
+        }
+        for text in [
+            "Please confirm that you received the package.",
+            "Thank you for the update.",
+            "The invoice is wrong again.",
+        ] {
+            assert!(!reads_friendly(text), "{text}");
+        }
     }
 
     #[test]

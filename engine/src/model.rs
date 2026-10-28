@@ -2713,9 +2713,12 @@ fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
     };
     let marks = crate::meaning::tone_marks(&req.text);
     let negative = marks.negative + marks.insulted() > 0;
-    // On a complaint "really" and "so" turn it up too ("I really hate it").
+    // On a complaint "really" and "so" turn it up too ("I really hate it"); so do they on a Friendly
+    // text that already reads friendly ("The whole team enjoyed the visit" is not "really enjoyed").
+    let turned_up =
+        negative || req.mode == Mode::Friendly && crate::meaning::reads_friendly(&req.text);
     let emphatic = |w: &str| {
-        crate::meaning::EMPHASIS.contains(&w) || negative && crate::meaning::BOOSTERS.contains(&w)
+        crate::meaning::EMPHASIS.contains(&w) || turned_up && crate::meaning::BOOSTERS.contains(&w)
     };
     all.into_iter()
         .filter(|e| {
@@ -4740,5 +4743,21 @@ mod tests {
         };
         let kept = drop_added_emphasis(&req, edits(text, output, Mode::Friendly, &[]));
         assert_eq!(apply_edits(text, &kept).unwrap().0, output);
+    }
+
+    #[test]
+    fn friendly_adds_no_booster_to_a_text_that_already_reads_friendly() {
+        let text = "Thank you again for the warm welcome. The whole team enjoyed the visit.";
+        let output =
+            "Thank you again for the warm welcome. The whole team really enjoyed the visit.";
+        for (mode, expected) in [(Mode::Friendly, text), (Mode::Concise, output)] {
+            let req = Request {
+                text: text.into(),
+                mode,
+                ..Request::default()
+            };
+            let kept = drop_added_emphasis(&req, edits(text, output, mode, &[]));
+            assert_eq!(apply_edits(text, &kept).unwrap().0, expected, "{mode:?}");
+        }
     }
 }

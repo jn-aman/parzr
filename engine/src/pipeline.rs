@@ -915,6 +915,21 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // A rewrite the model cannot write safely (it changed protected text, a name or the meaning)
     // leaves the corrected text, with a warning, instead of failing the whole check.
     match crate::model::rewrite(&document.request(req, &masked, req.mode)) {
+        // Text that is already formal (no chat shorthand, insult, contraction, lowercase start,
+        // "!!" or missing final mark in what the writer typed) is not reworded for its own sake: the
+        // small model swaps "help" for "assist you" and "received" for "have received", which is
+        // no gain (a rewrite that adds a courtesy or cuts a hedge is one), and a rewrite of such text
+        // that was withheld left nothing to report.
+        Ok(contextual)
+            if req.mode == Mode::Professional
+                && !crate::meaning::informal(&req.text)
+                && !crate::meaning::earns_rewrite(&document.text(), &contextual.text) =>
+        {
+            crate::model::trace!(
+                "pipeline: formal text, rewrite {:?} not kept",
+                contextual.text
+            );
+        }
         Ok(mut contextual) => {
             // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
             judge.screen(&document, &mut contextual.edits, &mut protected);
@@ -937,7 +952,18 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // clarity pack in Concise) say plainly what the model kept padded ("due to the fact that",
     // "on a daily basis"): the same deterministic pass the rules-only build runs.
     let current = document.request(req, &fenced, req.mode);
-    let wording = rewrite_once(&current, true)?;
+    let mut wording = rewrite_once(&current, true)?;
+    // Friendly's contractions ("you are" to "you're", "Thank you" to "Thanks") are for text that
+    // does not read friendly yet: a message that already thanks, cheers or praises, and that the
+    // model left alone, is not respelled.
+    if req.mode == Mode::Friendly
+        && document.text() == corrected
+        && crate::meaning::reads_friendly(&corrected)
+    {
+        wording.edits.retain(|e| {
+            !["friendly.thanks", "friendly.you_are", "friendly.i_am"].contains(&e.rule_id.as_str())
+        });
+    }
     if !wording.edits.is_empty() {
         document.apply(&wording.edits)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
