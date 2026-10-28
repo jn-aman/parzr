@@ -789,6 +789,13 @@ fn generate_with(
         } else {
             output
         };
+        // Concise and Direct also keep the writer's digits and add no "there" ("3 times" stays
+        // "3 times"; "I've been 3 times" is not "I've been there three times").
+        let output = if matches!(req.mode, Mode::Concise | Mode::Direct) {
+            drop_new_place(&masked, &keep_digits(&masked, &output))
+        } else {
+            output
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -887,6 +894,103 @@ fn keep_contractions(source: &str, output: &str) -> String {
         result = text;
     }
     result
+}
+
+/// Number words and the digits they stand for.
+const NUMBER_WORDS: &[(&str, &str)] = &[
+    ("two", "2"),
+    ("three", "3"),
+    ("four", "4"),
+    ("five", "5"),
+    ("six", "6"),
+    ("seven", "7"),
+    ("eight", "8"),
+    ("nine", "9"),
+    ("ten", "10"),
+    ("eleven", "11"),
+    ("twelve", "12"),
+    ("thirteen", "13"),
+    ("fourteen", "14"),
+    ("fifteen", "15"),
+    ("sixteen", "16"),
+    ("seventeen", "17"),
+    ("eighteen", "18"),
+    ("nineteen", "19"),
+    ("twenty", "20"),
+    ("thirty", "30"),
+    ("forty", "40"),
+    ("fifty", "50"),
+];
+/// A Concise or Direct rewrite keeps the digits the writer typed: where the source wrote "3" and
+/// the model wrote "three" in its place, the digit comes back (the word is longer, and Concise
+/// may not grow).
+fn keep_digits(source: &str, output: &str) -> String {
+    let digits = |text: &str, digit: &str| {
+        text.split_whitespace()
+            .filter(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == digit)
+            .count()
+    };
+    let mut result = output.to_owned();
+    for (word, digit) in NUMBER_WORDS {
+        let mut missing = digits(source, digit).saturating_sub(digits(&result, digit));
+        if missing == 0 {
+            continue;
+        }
+        let pattern = regex::Regex::new(&format!(r"(?i)\b{word}\b")).expect("constant number word");
+        // A number the writer spelled out is theirs to spell.
+        if pattern.is_match(source) {
+            continue;
+        }
+        let mut text = String::with_capacity(result.len());
+        let mut at = 0;
+        for m in pattern.find_iter(&result) {
+            if missing == 0 {
+                break;
+            }
+            missing -= 1;
+            text.push_str(&result[at..m.start()]);
+            text.push_str(digit);
+            at = m.end();
+        }
+        text.push_str(&result[at..]);
+        result = text;
+    }
+    result
+}
+/// A "there" or "here" the model put behind a verb of going that the writer did not say ("I've been
+/// 3 times" is "I've been there three times") goes: Concise and Direct do not add words.
+fn drop_new_place(source: &str, output: &str) -> String {
+    const GOING: &[&str] = &[
+        "been", "gone", "went", "go", "going", "goes", "visited", "stayed", "ate", "eaten", "eat",
+        "lived", "live",
+    ];
+    let words = |text: &str| -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    if words(source).iter().any(|w| w == "there" || w == "here") {
+        return output.to_owned();
+    }
+    let mut kept: Vec<String> = vec![];
+    let mut previous = String::new();
+    for token in output.split(' ') {
+        let bare = token
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase();
+        if (bare == "there" || bare == "here") && GOING.contains(&previous.as_str()) {
+            // A mark that followed it stays on the word before ("been there." is "been.").
+            let marks: String = token.chars().filter(|c| !c.is_alphanumeric()).collect();
+            if let Some(last) = kept.last_mut() {
+                last.push_str(&marks);
+            }
+            continue;
+        }
+        previous = bare;
+        kept.push(token.to_owned());
+    }
+    kept.join(" ")
 }
 
 /// Greetings a rewrite may open with.
@@ -3128,6 +3232,67 @@ mod tests {
             ),
         ] {
             assert_eq!(collapse_marks_after(output, marker, link, masked), expected);
+        }
+    }
+
+    #[test]
+    fn concise_and_direct_keep_the_digits_the_writer_typed() {
+        for (source, output, expected) in [
+            (
+                "I've been 3 times this month.",
+                "I've been three times this month.",
+                "I've been 3 times this month.",
+            ),
+            (
+                "Order 12 boxes and 2 pallets.",
+                "Order twelve boxes and two pallets.",
+                "Order 12 boxes and 2 pallets.",
+            ),
+            (
+                "Three people came, 3 stayed.",
+                "Three people came, three stayed.",
+                "Three people came, three stayed.",
+            ),
+            // The writer's own words, a digit the model kept, and numbers the source lacks stay.
+            (
+                "We ate three slices.",
+                "We ate three slices.",
+                "We ate three slices.",
+            ),
+            (
+                "Order 3 boxes.",
+                "Order 3 boxes and three pallets.",
+                "Order 3 boxes and three pallets.",
+            ),
+            ("Order 3 boxes.", "Order boxes.", "Order boxes."),
+        ] {
+            assert_eq!(keep_digits(source, output), expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn a_there_the_model_added_behind_a_verb_of_going_is_dropped() {
+        for (source, output, expected) in [
+            (
+                "I've been 3 times this month.",
+                "I've been there 3 times this month.",
+                "I've been 3 times this month.",
+            ),
+            ("We went twice.", "We went there twice.", "We went twice."),
+            ("I've been.", "I've been there.", "I've been."),
+            // The writer's own "there", and a "there" that is not behind a verb of going, stay.
+            (
+                "I've been there twice.",
+                "I've been there twice.",
+                "I've been there twice.",
+            ),
+            (
+                "Is a printer free?",
+                "Is there a printer free?",
+                "Is there a printer free?",
+            ),
+        ] {
+            assert_eq!(drop_new_place(source, output), expected, "{source}");
         }
     }
 
