@@ -715,6 +715,23 @@ fn infer(r: &Runtime, prompt: &str) -> Result<String, String> {
     }
     Ok(result)
 }
+/// `PARZR_TONE_TRACE=1` prints, to stderr, what each tone rewrite decided: the model's answer per
+/// attempt, the score that chose between attempts, and every sentence's meaning verdict. Read once;
+/// unset it costs one cached flag test per call.
+pub(crate) fn tone_trace() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var_os("PARZR_TONE_TRACE").is_some_and(|v| v != "0" && !v.is_empty())
+    })
+}
+macro_rules! trace {
+    ($($arg:tt)*) => {
+        if $crate::model::tone_trace() {
+            eprintln!("TRACE {}", format_args!($($arg)*));
+        }
+    };
+}
+pub(crate) use trace;
 fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
     generate_with(req, passage, careful, false)
 }
@@ -731,6 +748,12 @@ fn generate_with(
     // placeholders spelled out; only then restore lost names by position.
     for strict in [false, true] {
         let output = infer(&r, &prompt(req, &masked, &literals, strict, careful, shots))?;
+        trace!(
+            "  model said ({}{}{}): {output:?}",
+            if shots { "examples" } else { "plain" },
+            if careful.is_some() { ", careful" } else { "" },
+            if strict { ", strict" } else { "" }
+        );
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -2532,6 +2555,20 @@ fn segment_keeps(
     output: &str,
     elsewhere: &str,
 ) -> Result<(), String> {
+    let verdict = segment_verdict(req, shots, source, output, elsewhere);
+    trace!(
+        "  keeps_meaning {source:?} -> {output:?} ({}): {verdict:?}",
+        if shots { "examples" } else { "plain" }
+    );
+    verdict
+}
+fn segment_verdict(
+    req: &Request,
+    shots: bool,
+    source: &str,
+    output: &str,
+    elsewhere: &str,
+) -> Result<(), String> {
     crate::meaning::keeps_meaning(
         req.mode,
         source,
@@ -2806,6 +2843,7 @@ fn careful(req: &Request, segment: &crate::meaning::Segment) -> Option<Vec<Edit>
         context
     };
     let text = generate(&sub, &sub.text, Some(context)).ok()?;
+    trace!("  careful retry of {:?}: {text:?}", sub.text);
     let protected = kept_spans(&sub);
     let all = edits(&sub.text, &text, sub.mode, &protected);
     let touches = |e: &Edit| {
@@ -2823,15 +2861,16 @@ fn careful(req: &Request, segment: &crate::meaning::Segment) -> Option<Vec<Edit>
     let all = keep_names(&sub, all);
     let output = apply_edits(&sub.text, &all).ok()?.0;
     let elsewhere = outside(&req.text, segment.start, segment.end);
-    crate::meaning::keeps_meaning(
+    let verdict = crate::meaning::keeps_meaning(
         sub.mode,
         &sub.text,
         &output,
         &elsewhere,
         &hints(&sub.text),
         &hints(&output),
-    )
-    .ok()?;
+    );
+    trace!("  careful verdict: {output:?}: {verdict:?}");
+    verdict.ok()?;
     Some(
         all.into_iter()
             .map(|mut e| {
@@ -2882,11 +2921,15 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         Ok((text, all))
     };
     let attempt = |careful: Option<&str>| attempt_with(careful, false);
+    trace!("rewrite {:?} {:?}", req.mode, req.text);
     // A tone rewrite that loses or moves a protected element (a number, a link, a name) or runs
     // away is asked once more as a light edit before the request fails.
-    let (_, all) = attempt(None).or_else(|error| match req.mode {
-        Mode::Fix => Err(error),
-        _ => attempt(Some("")),
+    let (_, all) = attempt(None).or_else(|error| {
+        trace!("  attempt 1 failed: {error}");
+        match req.mode {
+            Mode::Fix => Err(error),
+            _ => attempt(Some("")),
+        }
     })?;
     let all = keep_structure(req, keep_names(req, all));
     let (changes, withheld) = if req.mode == Mode::Fix {
@@ -2904,6 +2947,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         let all = drop_added_emphasis(req, all);
         let (failed, gain) = candidate_score(req, &all, false);
         let first_output = apply_edits(&req.text, &all)?.0;
+        trace!("  attempt 1 (plain): {first_output:?} failed={failed} gain={gain}");
         // A Professional or Friendly second answer can only earn its place by removing an
         // insult, chat shorthand (Professional) or padding (Friendly), gain 2 or more: without
         // one in the text, it is not asked.
@@ -2917,10 +2961,22 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                     marks.padding / 2
                 }
                 >= 2;
-        let second = (reachable && (failed > 0 || weak(req.mode, &req.text, &first_output)))
+        let is_weak = weak(req.mode, &req.text, &first_output);
+        trace!(
+            "  marks {marks:?}; reachable={reachable} weak={is_weak} failed={failed}: attempt 2 {}",
+            if reachable && (failed > 0 || is_weak) {
+                "asked"
+            } else {
+                "not asked"
+            }
+        );
+        let second = (reachable && (failed > 0 || is_weak))
             .then(|| attempt_with(None, true).ok())
             .flatten()
-            .map(|(_, e)| drop_added_emphasis(req, keep_structure(req, keep_names(req, e))))
+            .map(|(t, e)| {
+                trace!("  attempt 2 (examples): {t:?}");
+                drop_added_emphasis(req, keep_structure(req, keep_names(req, e)))
+            })
             .filter(|e| {
                 let (failed2, gain2) = candidate_score(req, e, true);
                 // Never more failed segments than the first; better on tone, or as good with fewer
@@ -2928,7 +2984,14 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
                 // removes (an insult, chat shorthand, padding): rewording alone ("known for its delicious
                 // food") is how examples-led answers embellish neutral text.
                 let earned = !matches!(req.mode, Mode::Professional | Mode::Friendly) || gain2 >= 2;
-                earned && failed2 <= failed && (gain2 > gain || gain2 == gain && failed2 < failed)
+                let taken = earned
+                    && failed2 <= failed
+                    && (gain2 > gain || gain2 == gain && failed2 < failed);
+                trace!(
+                    "  attempt 2 score: failed={failed2} gain={gain2} earned={earned}: {}",
+                    if taken { "taken" } else { "discarded" }
+                );
+                taken
             });
         match second {
             Some(e) => meaning_guard(req, e, true),

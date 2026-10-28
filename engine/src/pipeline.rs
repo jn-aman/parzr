@@ -881,6 +881,7 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // What the writer is shown if the model's rewrite is withheld: this corrected text, and
     // whatever the mode's own rules do to it below.
     let corrected = document.text();
+    crate::model::trace!("pipeline: corrected {corrected:?}");
     // The model gets no instructions about names, so every name candidate is masked.
     let mut masked = protected.clone();
     masked.extend(name_guard_ranges(req));
@@ -896,6 +897,10 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
         }
         Err(error) => warnings.push(format!("Kept the corrected text. {error}")),
     }
+    crate::model::trace!(
+        "pipeline: after the model {:?} warnings={warnings:?}",
+        document.text()
+    );
     // The rewrite is finished writing, whatever the model managed: never formatted worse than
     // Fix (sentence capitals and a final mark, chat included), and a Professional one spells
     // out chat shorthand. Names and protected text are left as they are.
@@ -945,6 +950,15 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // padded phrase cut, a request made direct), that text is the version offered.
     // (Friendly's own rules only contract "thank you" to "thanks" or "you are" to "you're": that is
     // no rewrite.)
+    crate::model::trace!(
+        "pipeline: after the mode's rules {:?} (corrected text {})",
+        document.text(),
+        if document.text() == corrected {
+            "unchanged"
+        } else {
+            "changed"
+        }
+    );
     if req.mode != Mode::Friendly && document.text() != corrected {
         warnings.retain(|w| w != crate::model::TONE_WITHHELD);
     }
