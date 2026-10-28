@@ -384,6 +384,11 @@ const RUDE: &[&str] = &[
     "screwed",
     "nonsense",
     "shut",
+    "fool",
+    "foolish",
+    "imbecile",
+    "dimwit",
+    "loser",
 ];
 /// How a reply begins: a rewrite that starts like this answers the message instead of rewriting it.
 const REPLY_OPENERS: &[&str] = &[
@@ -2014,6 +2019,15 @@ pub(crate) struct ToneMarks {
     pub exclaims: usize,
     /// Negative evaluative words and negations ("wrong", "broken", "not").
     pub negative: usize,
+    /// Put-downs said without a rude word ("has no clue", "a waste of time", "Did you even read…"):
+    /// marks for Professional and Friendly, which soften them (`insulted`).
+    pub rude_phrases: usize,
+}
+impl ToneMarks {
+    /// Rude words and rude phrases together: what Professional and Friendly take out.
+    pub fn insulted(&self) -> usize {
+        self.rude + self.rude_phrases
+    }
 }
 pub(crate) fn tone_marks(text: &str) -> ToneMarks {
     let tokens: Vec<tokenizer::Token<'_>> = tokenizer::tokenize(text, &[])
@@ -2046,7 +2060,34 @@ pub(crate) fn tone_marks(text: &str) -> ToneMarks {
         marks.boosters += usize::from(BOOSTERS.contains(&w));
         marks.negative += usize::from(has(NEGATIVE) || negative(w));
     }
+    marks.rude_phrases = rude_phrase_matches(text).len();
     marks
+}
+/// Rudeness said without a rude word: a rhetorical question ("Did you even read my message?", "You
+/// never listen, do you?", "Why can't you just do what I asked?", "are you deaf?"), a put-down ("has
+/// no clue", "a waste of time", "Learn how to use it before you touch it again"). Each match is one
+/// mark, as a rude word is.
+fn rude_phrase_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(concat!(
+            r"\b(?:did\s+you\s+even\s+(?:read|look|listen|bother|check|try|think|see|open|notice)",
+            r"|you\s+never\s+(?:listen|read|check|learn|think|pay\s+attention)",
+            r"|why\s+(?:can['’]t|can\s*not|cannot|won['’]t|couldn['’]t)\s+you\s+just",
+            r"|are\s+you\s+(?:deaf|blind|dense|daft|even\s+(?:listening|reading|trying))",
+            r"|learn\s+(?:how\s+)?to\s+[^.!?]*\bbefore\s+you",
+            r"|(?:has|have)\s+no\s+(?:clue|idea\s+what\s+(?:they['’]re|he['’]s|she['’]s|you['’]re)\s+doing)",
+            r"|(?:a\s+)?(?:complete\s+|total\s+|utter\s+)?waste\s+of\s+(?:my\s+|our\s+|your\s+)?(?:time|effort|space)",
+            r")\b"
+        ))
+        .expect("constant rude phrase regex")
+    })
+}
+fn rude_phrase_matches(text: &str) -> Vec<String> {
+    rude_phrase_regex()
+        .find_iter(&text.to_lowercase())
+        .map(|m| m.as_str().to_owned())
+        .collect()
 }
 pub(crate) fn preamble(text: &str) -> Option<&str> {
     let text = text.trim_start();
@@ -2123,6 +2164,20 @@ pub(crate) fn keeps_meaning(
     let (src, out) = (words(source, source_hints), words(output, output_hints));
     let around = words(elsewhere, &[]);
     let rude = |w: &Word| mode != Mode::Fix && w.keys.iter().any(|k| RUDE.contains(&k.as_str()));
+    // A put-down said in a phrase ("a waste of time", "has no clue") is softened when the phrase is
+    // gone in Professional and Friendly; the words it was made of may go with it.
+    let phrases = rude_phrase_matches(source);
+    let phrase_softened = matches!(mode, Mode::Professional | Mode::Friendly)
+        && rude_phrase_matches(output).len() < phrases.len();
+    let phrase_words: Vec<String> = if phrase_softened {
+        phrases
+            .iter()
+            .flat_map(|p| words(p, &[]))
+            .map(|w| w.surface)
+            .collect()
+    } else {
+        vec![]
+    };
     let softened = src
         .iter()
         .any(|s| rude(s) && !out.iter().any(|o| matches(s, o)));
@@ -2609,7 +2664,11 @@ pub(crate) fn keeps_meaning(
     let lost: Vec<&Word> = src_content
         .iter()
         .filter(|s| {
-            !hedge(s) && !rude(s) && !said_otherwise(s) && !out.iter().any(|o| matches(s, o))
+            !hedge(s)
+                && !rude(s)
+                && !phrase_words.contains(&s.surface)
+                && !said_otherwise(s)
+                && !out.iter().any(|o| matches(s, o))
         })
         .collect();
     let added: Vec<&str> = out_content
@@ -3007,6 +3066,77 @@ mod tests {
             "I hope you do not mind me asking, but have you had a chance to review the invoice?",
             "Have you reviewed the invoice?"
         ));
+    }
+
+    #[test]
+    fn rude_phrases_count_as_rude_without_a_rude_word() {
+        for text in [
+            "Did you even read my message?",
+            "You never listen, do you?",
+            "Why can't you just do what I asked?",
+            "I told you three times already, are you deaf?",
+            "Learn how to use the spreadsheet before you touch it again.",
+            "Whoever wrote this code clearly has no clue.",
+            "This meeting was a complete waste of time.",
+            "That was a waste of my time.",
+        ] {
+            assert_eq!(tone_marks(text).rude_phrases, 1, "{text}");
+        }
+        // Their softened versions, and ordinary questions, carry none.
+        for text in [
+            "Did you get a chance to read my message?",
+            "Did you even get my message?",
+            "Why can't you join the call?",
+            "Would you learn how to use the spreadsheet with me?",
+            "Learn to code in Rust.",
+            "I don't think this meeting was very productive.",
+            "It is a waste.",
+        ] {
+            assert_eq!(tone_marks(text).rude_phrases, 0, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_softened_complaint_keeps_the_meaning_in_friendly_and_professional() {
+        for (source, output) in [
+            ("This is a dumb idea.", "I have doubts about this idea."),
+            (
+                "Did you even read my message?",
+                "Did you get a chance to read my message?",
+            ),
+            (
+                "Shut up and send me the file.",
+                "Could you send me the file, please?",
+            ),
+            (
+                "What kind of idiot approved this?",
+                "What was the reasoning behind approving this?",
+            ),
+            (
+                "This meeting was a complete waste of time.",
+                "This meeting was less productive than expected.",
+            ),
+            (
+                "I told you three times already, are you deaf?",
+                "I told you three times already, did you catch that?",
+            ),
+            (
+                "Why can't you just do what I asked?",
+                "Could you tell me why you did not do what I asked?",
+            ),
+            (
+                "Learn how to use the spreadsheet before you touch it again.",
+                "Please learn how to use the spreadsheet before you touch it again.",
+            ),
+        ] {
+            for mode in [Mode::Friendly, Mode::Professional] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source} -> {output}"
+                );
+            }
+        }
     }
 
     #[test]

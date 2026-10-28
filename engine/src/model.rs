@@ -2633,7 +2633,7 @@ fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
     let words = s.words.max(1) as i32;
     let changed = i32::from(wording(source) != wording(output));
     // A complaint turned up ("I really hate it", "Are you really that stupid?") is no softening.
-    let harsher = if s.negative + s.rude > 0 {
+    let harsher = if s.negative + s.insulted() > 0 {
         2 * more(s.boosters, o.boosters)
     } else {
         0
@@ -2641,14 +2641,14 @@ fn tone_gain(mode: Mode, source: &str, output: &str) -> i32 {
     match mode {
         Mode::Professional | Mode::Friendly => {
             // Rewording that leaves the insult in place has not reached the tone.
-            let reworded = if o.rude > 0 { 0 } else { changed };
+            let reworded = if o.insulted() > 0 { 0 } else { changed };
             let shorthand = if mode == Mode::Professional {
                 2 * less(s.chat, o.chat) - more(s.exclaims, o.exclaims)
             } else {
                 // Friendly: padding said plainly ("Just a quick note: …").
                 less(s.padding, o.padding) / 2
             };
-            3 * less(s.rude, o.rude) + reworded + shorthand
+            3 * less(s.insulted(), o.insulted()) + reworded + shorthand
                 - 2 * more(s.emphasis, o.emphasis)
                 - harsher
         }
@@ -2681,17 +2681,17 @@ fn weak(mode: Mode, source: &str, output: &str) -> bool {
         crate::meaning::tone_marks(output),
     );
     let unchanged = wording(source) == wording(output);
-    let complaint = s.rude + s.negative > 0;
+    let complaint = s.insulted() + s.negative > 0;
     match mode {
         Mode::Professional => {
-            unchanged && complaint || o.rude > 0 || o.chat > 0 || o.emphasis > s.emphasis
+            unchanged && complaint || o.insulted() > 0 || o.chat > 0 || o.emphasis > s.emphasis
         }
         // A padded message whose padding all stayed ("I wanted to take a moment to let you know…")
         // can be said more warmly and plainly.
         Mode::Friendly => {
             unchanged && complaint
                 || s.padding >= 3 && o.padding >= s.padding
-                || o.rude > 0
+                || o.insulted() > 0
                 || o.emphasis > s.emphasis
         }
         Mode::Concise | Mode::Direct => unchanged && s.words >= 8,
@@ -2712,7 +2712,7 @@ fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
             .collect()
     };
     let marks = crate::meaning::tone_marks(&req.text);
-    let negative = marks.negative + marks.rude > 0;
+    let negative = marks.negative + marks.insulted() > 0;
     // On a complaint "really" and "so" turn it up too ("I really hate it").
     let emphatic = |w: &str| {
         crate::meaning::EMPHASIS.contains(&w) || negative && crate::meaning::BOOSTERS.contains(&w)
@@ -2953,7 +2953,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         // one in the text, it is not asked.
         let marks = crate::meaning::tone_marks(&req.text);
         let reachable = !matches!(req.mode, Mode::Professional | Mode::Friendly)
-            || 3 * marks.rude
+            || 3 * marks.insulted()
                 + 1
                 + if req.mode == Mode::Professional {
                     2 * marks.chat

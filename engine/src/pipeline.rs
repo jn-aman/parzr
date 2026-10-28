@@ -878,6 +878,20 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
         document.apply(&floor)?;
         grammar(&mut document, req, &mut protected, &mut judge)?;
     }
+    // A common insult is said kindly before the model sees it (Friendly): the small model replies
+    // to "Shut up and send me the file." or keeps it. Then the model rewrites the kinder text.
+    let before_frames = document.text();
+    if req.mode == Mode::Friendly {
+        let mut fenced = protected.clone();
+        fenced.extend(name_guard_ranges(req));
+        let current = document.request(req, &fenced, Mode::Friendly);
+        let kind = crate::tone_format::friendly_forms(&current, &current.protected_ranges);
+        if !kind.is_empty() {
+            document.apply(&kind)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+        }
+    }
+    let framed = document.text() != before_frames;
     // What the writer is shown if the model's rewrite is withheld: this corrected text, and
     // whatever the mode's own rules do to it below.
     let corrected = document.text();
@@ -979,7 +993,8 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
             "changed"
         }
     );
-    if req.mode != Mode::Friendly && document.text() != corrected {
+    // (A Friendly insult already said kindly above is a rewrite.)
+    if framed || req.mode != Mode::Friendly && document.text() != corrected {
         warnings.retain(|w| w != crate::model::TONE_WITHHELD);
     }
     let edits = crate::wording::phrases(&req.text, document.plan(&req.text)?, &protected);
