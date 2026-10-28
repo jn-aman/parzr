@@ -100,6 +100,19 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "left early so that we could park": a purpose clause takes no comma. ("so that is why"
+        // has "that" for its subject: a verb follows it.)
+        if token.normalized == "so"
+            && tokens.get(i + 1).is_some_and(|t| t.normalized == "that")
+            && tokens.get(i + 2).is_some_and(|t| {
+                t.is_word
+                    && (!finite(t) || crate::clauses::subject_contraction(&t.normalized))
+                    && !AUX.contains(&t.normalized.as_str())
+                    && !t.normalized.ends_with("n't")
+            })
+        {
+            continue;
+        }
         if token.normalized == "so"
             && !tokens.get(i + 1).is_some_and(|t| {
                 [
@@ -128,21 +141,22 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
             .contains(&tokens[i - 1].normalized.as_str())
                 || ["be", "is", "are", "was", "were", "been", "being"]
                     .contains(&tokens[i - 1].normalized.as_str())
-                || tokens
-                    .get(i + 1)
-                    .is_none_or(|t| !t.is_word || ["for", "one"].contains(&t.normalized.as_str())))
+                || tokens.get(i + 1).is_none_or(|t| {
+                    !t.is_word || ["for", "one", "to"].contains(&t.normalized.as_str())
+                }))
         {
             continue;
         }
-        // "but also have": the adverb does not stand in for a subject.
-        let subject_at = if tokens
-            .get(i + 1)
-            .is_some_and(|t| ["also", "then"].contains(&t.normalized.as_str()))
-        {
-            i + 2
-        } else {
-            i + 1
-        };
+        // "but also have", "but still went down", "but also slightly hurt": adverbs do not stand
+        // in for a subject.
+        let mut subject_at = i + 1;
+        while tokens.get(subject_at).is_some_and(|t| {
+            t.is_word
+                && (["also", "then", "soon"].contains(&t.normalized.as_str())
+                    || crate::clauses::mid_adverb(&t.normalized))
+        }) {
+            subject_at += 1;
+        }
         if tokens.get(subject_at).is_none_or(shares_subject)
             || [
                 "and", "or", "but", "yet", "nor", "not", "even", "just", "do", "does", "did",
@@ -159,10 +173,35 @@ fn clause_commas(req: &Request, edits: &mut Vec<Edit>) {
             })
             .map(|n| n + 1)
             .unwrap_or(0);
+        // "Although it was cold but he came", "Because it rained so we left": the opening word
+        // already links the clauses and the doubled conjunction is dropped, so no comma goes
+        // before it.
+        if start == 0 || tokens[start - 1].sentence != token.sentence {
+            let first = tokens[start].normalized.as_str();
+            let second = tokens.get(start + 1).map_or("", |t| t.normalized.as_str());
+            if token.normalized == "but"
+                && (["although", "though"].contains(&first)
+                    || first == "even" && ["though", "if"].contains(&second))
+                || token.normalized == "so" && ["because", "since"].contains(&first)
+            {
+                continue;
+            }
+        }
+        // "not just a threat to our environment but to our values": a correlative, not two clauses.
+        if token.normalized == "but"
+            && tokens[start..i]
+                .iter()
+                .any(|t| ["just", "only", "merely", "simply"].contains(&t.normalized.as_str()))
+            && tokens[start..i].iter().any(|t| t.normalized == "not")
+        {
+            continue;
+        }
+        // The second clause ends at its first comma ("is new but evolving fast, and I would…").
         let end = (i + 1..tokens.len())
             .find(|&n| {
                 tokens[n].sentence != token.sentence
                     || ["but", "so"].contains(&tokens[n].normalized.as_str())
+                    || tokens[n].surface == ","
             })
             .unwrap_or(tokens.len());
         // A contracted subject ("so I'm") or a clause the plain check misses ("I'd love to")
@@ -346,11 +385,15 @@ fn dates_and_adverbs(req: &Request, edits: &mut Vec<Edit>) {
 
 /// A verb right after "but" means the clause shares its subject with the first ("He came but
 /// left early"), so there are no two independent clauses to separate.
+/// A verb form right after the conjunction: the clause goes on with the same subject ("but left
+/// early", "but slightly hurt that", "but also have").
 fn shares_subject(t: &Token<'_>) -> bool {
     !crate::clauses::subject_contraction(&t.normalized)
         && (finite(t)
-            || morphology::verb(&t.normalized).is_some_and(|v| v.base == t.normalized)
-                && crate::spelling::flags(&t.normalized) & 2 == 0)
+            || morphology::verb(&t.normalized).is_some_and(|v| {
+                v.base == t.normalized && crate::spelling::flags(&t.normalized) & 2 == 0
+                    || v.past == t.normalized
+            }))
 }
 pub fn finite(t: &Token<'_>) -> bool {
     [
@@ -360,19 +403,36 @@ pub fn finite(t: &Token<'_>) -> bool {
         "we've", "they've",
     ]
     .contains(&t.normalized.as_str())
-        || morphology::verb(&t.normalized)
-            .is_some_and(|v| t.normalized == v.third || t.normalized == v.past)
+        || morphology::verb(&t.normalized).is_some_and(|v| {
+            // The past of a verb that is also a plain word ("a bit hard", "a straight bet", "a shot")
+            // does not make a clause, for the verbs added to the table later. (With a subject
+            // before it and the tagger's word, it does: `clauses::tagged_past`.)
+            t.normalized == v.third
+                || t.normalized == v.past
+                    && !(morphology::extra(&v.base)
+                        && crate::spelling::flags(&t.normalized) & (2 | 8) != 0)
+        })
 }
 fn clause(tokens: &[Token<'_>]) -> bool {
-    let words: Vec<_> = tokens.iter().filter(|t| t.is_word).collect();
+    let words: Vec<(usize, &Token<'_>)> = tokens
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.is_word)
+        .collect();
     words.len() >= 3
-        && words.iter().enumerate().skip(1).take(10).any(|(i, t)| {
-            finite(t)
-                || (morphology::verb(&t.normalized)
-                    .is_some_and(|v| v.base == t.normalized && morphology::predicate(&v.base))
-                    && ["we", "you", "they", "people", "colleagues", "friends"]
-                        .contains(&words[i - 1].normalized.as_str()))
-        })
+        && words
+            .iter()
+            .enumerate()
+            .skip(1)
+            .take(10)
+            .any(|(i, (k, t))| {
+                finite(t)
+                    || crate::clauses::tagged_past(tokens, *k)
+                    || (morphology::verb(&t.normalized)
+                        .is_some_and(|v| v.base == t.normalized && morphology::predicate(&v.base))
+                        && ["we", "you", "they", "people", "colleagues", "friends"]
+                            .contains(&words[i - 1].1.normalized.as_str()))
+            })
 }
 /// Words that open a subordinate clause or a question, so a clause beginning with one is not a
 /// finished sentence.

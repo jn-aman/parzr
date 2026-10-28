@@ -2212,33 +2212,33 @@
   },
   {
     "id": "vcomp.idiom.suggest_person",
-    "pattern": "(?im)\\b(?P<target>(?P<v>suggest|suggests|suggested|suggesting)\\s+(?P<o>me|us|him|them))\\s+(?:the|a|an|some|any|your|my|our|their|his|something|anything)\\b",
-    "replacement": "${v} to ${o}",
+    "pattern": "(?im)\\b(?:suggest|suggests|suggested|suggesting)\\s+(?P<target>(?P<o>me|us|him|her|them)\\s+(?P<moved>(?:(?:the|a|an|some|any|your|my|our|their|his|her|its|this|that|these|those)(?: [A-Za-z][A-Za-z'’-]*){1,7}?|something|anything|everything|it|this|that|these|those)))(?:[.,;:!?)]|$|\\s+(?:in|for|on|about|with|at|by|from|so|and|or|but|because|please|today|tomorrow|yesterday|tonight|now|later|again|soon)\\b)",
+    "replacement": " to ${o}",
     "category": "Grammar",
     "confidence": 0.88,
-    "reason": "“Suggest” needs “to” before the person: “suggest to me”.",
+    "reason": "“Suggest” takes “to” after what is suggested: “suggest a book to me”.",
     "provenance": "parzr original rule",
     "positive": "Can you suggest me a good book?",
-    "negative": "Can you suggest a good book to me? She suggested the plan to us. Please suggest my name to them."
+    "negative": "Can you suggest a good book to me? She suggested the plan to us. Please suggest my name to them. Suggest me."
   },
   {
     "id": "vcomp.idiom.describe_person",
-    "pattern": "(?im)\\b(?P<target>(?P<v>describe|describes|described|describing)\\s+(?P<o>me|us|him|them))\\s+(?:the|a|an|some|any|your|my|our|their|his|something|anything)\\b",
-    "replacement": "${v} to ${o}",
+    "pattern": "(?im)\\b(?:describe|describes|described|describing)\\s+(?P<target>(?P<o>me|us|him|her|them)\\s+(?P<moved>(?:(?:the|a|an|some|any|your|my|our|their|his|her|its|this|that|these|those)(?: [A-Za-z][A-Za-z'’-]*){1,7}?|something|anything|everything|it|this|that|these|those)))(?:[.,;:!?)]|$|\\s+(?:in|for|on|about|with|at|by|from|so|and|or|but|because|please|today|tomorrow|yesterday|tonight|now|later|again|soon)\\b)",
+    "replacement": " to ${o}",
     "category": "Grammar",
     "confidence": 0.88,
-    "reason": "“Describe” needs “to” before the person: “describe to me”.",
+    "reason": "“Describe” takes “to” after what is described: “describe the problem to me”.",
     "provenance": "parzr original rule",
     "positive": "Please describe me the problem.",
-    "negative": "Please describe the problem to me. He described them as kind."
+    "negative": "Please describe the problem to me. He described them as kind. Describe me in three words."
   },
   {
     "id": "vcomp.idiom.mention_person",
-    "pattern": "(?im)\\b(?P<target>(?P<v>mention|mentions|mentioned|mentioning)\\s+(?P<o>me|us|him|them))\\s+(?:the|a|an|some|any|your|my|our|their|his|something|anything)\\b",
-    "replacement": "${v} to ${o}",
+    "pattern": "(?im)\\b(?:mention|mentions|mentioned|mentioning)\\s+(?P<target>(?P<o>me|us|him|her|them)\\s+(?P<moved>(?:(?:the|a|an|some|any|your|my|our|their|his|her|its|this|that|these|those)(?: [A-Za-z][A-Za-z'’-]*){1,7}?|something|anything|everything|it|this|that|these|those)))(?:[.,;:!?)]|$|\\s+(?:in|for|on|about|with|at|by|from|so|and|or|but|because|please|today|tomorrow|yesterday|tonight|now|later|again|soon)\\b)",
+    "replacement": " to ${o}",
     "category": "Grammar",
     "confidence": 0.88,
-    "reason": "“Mention” needs “to” before the person: “mention to me”.",
+    "reason": "“Mention” takes “to” after what is mentioned: “mention the price to me”.",
     "provenance": "parzr original rule",
     "positive": "He mentioned me the price.",
     "negative": "He mentioned the price to me. Please mention my name. Mention me in the post."

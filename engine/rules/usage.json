@@ -166,14 +166,14 @@
   },
   {
     "id": "usage.lie_down",
-    "pattern": "(?i)\\b(?:to|gonna|will|['’]ll|should|need to|want to|wanna|must|can|could|might|let me|go) (?P<target>lay) (?:down|on (?:the|a|my|his|her|their|our) (?:couch|bed|sofa|floor|beach|grass|ground|lawn|sand|carpet|rug|deck|bench|hammock)|in (?:bed|the sun|the shade|the grass|the hammock|the bath|the dark)|around)(?:[.!?,;]|$| (?:for|on|in|until|after|and|a|all)\\b)",
+    "pattern": "(?i)\\b(?:to|gonna|will|['’]ll|should|need to|want to|wanna|must|can|could|might|let me|go) (?P<target>lay) (?:down|on (?:the|a|my|his|her|their|our) (?:couch|bed|sofa|floor|beach|grass|ground|lawn|sand|carpet|rug|deck|bench|hammock)|in (?:bed|the sun|the shade|the grass|the hammock|the bath|the dark)|around)(?:[.!?,;]|$| (?:for|on|in|until|after|and|a (?:bit|little|while|moment|minute|second|few)|all (?:day|night|afternoon|morning|evening))\\b)",
     "replacement": "lie",
     "category": "Word choice",
     "confidence": 0.95,
     "reason": "To recline is “lie”; “lay” takes an object.",
     "provenance": "Parzr original real-word and usage rule",
     "positive": "I'm going to lay down for a nap.",
-    "negative": "Please lay down your pens. I need to lie down."
+    "negative": "Please lay down your pens. I need to lie down. We should lay down a rule. They will lay down all their arms."
   },
   {
     "id": "usage.lying_down",
@@ -2025,14 +2025,25 @@
   },
   {
     "id": "usage.explain_to",
-    "pattern": "(?i)\\b(?P<target>(?P<v>explain|explained|explaining|explains) (?P<o>me|him|her|us|them)) (?:the|this|that|how|what|why|where|when|it|your|my|his|our|their)\\b",
+    "pattern": "(?i)\\b(?P<target>(?P<v>explain|explained|explaining|explains) (?P<o>me|him|her|us|them)) (?:how|what|why|where|when|whether|if|who|which)\\b",
     "replacement": "${v} to ${o}",
     "category": "Word choice",
     "confidence": 0.95,
     "reason": "“Explain” takes “to” before the person.",
     "provenance": "Parzr original real-word and usage rule",
+    "positive": "Can you explain me how the process works?",
+    "negative": "Can you explain the process to me? Please explain it to them."
+  },
+  {
+    "id": "usage.explain_to_moved",
+    "pattern": "(?im)\\b(?:explain|explains|explained|explaining)\\s+(?P<target>(?P<o>me|us|him|her|them)\\s+(?P<moved>(?:(?:the|a|an|some|any|your|my|our|their|his|her|its|this|that|these|those)(?: [A-Za-z][A-Za-z'’-]*){1,7}?|something|anything|everything|it|this|that|these|those)))(?:[.,;:!?)]|$|\\s+(?:in|for|on|about|with|at|by|from|so|and|or|but|because|please|today|tomorrow|yesterday|tonight|now|later|again|soon)\\b)",
+    "replacement": " to ${o}",
+    "category": "Word choice",
+    "confidence": 0.95,
+    "reason": "“Explain” takes “to” before the person, after what is explained: “explain this to me”.",
+    "provenance": "Parzr original real-word and usage rule",
     "positive": "Can you explain me the process?",
-    "negative": "Can you explain the process to me?"
+    "negative": "Can you explain the process to me? Please explain it to them. Explain me, please."
   },
   {
     "id": "usage.said_told",

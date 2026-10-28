@@ -20,21 +20,27 @@ pub fn an_fits(word: &str) -> Option<bool> {
         return None;
     }
     let letters: Vec<char> = w.chars().take_while(|c| c.is_alphabetic()).collect();
-    // An abbreviation or a letter said by its name ("an MBA", "a URL", "an A").
-    if letters.iter().all(|c| c.is_uppercase()) && (letters.len() >= 2 || w.len() == 1) {
-        return Some("AEFHILMNORSX".contains(first));
-    }
     let l = w.to_lowercase();
+    // An abbreviation or a letter said by its name ("an MBA", "a URL", "an A"); a long ordinary
+    // word in capitals ("A FANTASTIC FUTURE") is just shouted and follows its sound.
+    if letters.iter().all(|c| c.is_uppercase())
+        && (letters.len() >= 2 || w.len() == 1)
+        && !(letters.len() >= 5 && spelling::ordinary(&l))
+    {
+        return acronym_an(&letters);
+    }
     let starts = |list: &[&str]| list.iter().any(|p| l.starts_with(p));
     match first.to_ascii_lowercase() {
         'a' | 'i' => Some(true),
         'e' => Some(!starts(&["eu", "ewe"])),
         'o' => Some(!starts(&["one", "once"])),
+        // "an unintentional", "an unidentified" are "un-" words; "a union", "a unit" say "yoo".
         'u' => Some(
             l.len() > 1
                 && !starts(&[
-                    "uni", "use", "usu", "uti", "ura", "ure", "uri", "uro", "ubiq", "uku", "unan",
-                    "uk", "ute",
+                    "unif", "unio", "uniq", "unit", "univ", "unic", "unil", "unip", "unis", "unix",
+                    "use", "usu", "uti", "ura", "ure", "uri", "uro", "ubiq", "uku", "unanim", "uk",
+                    "ute",
                 ]),
         ),
         // American English says "an herb".
@@ -44,6 +50,63 @@ pub fn an_fits(word: &str) -> Option<bool> {
         'x' | 'y' => None,
         _ => Some(false),
     }
+}
+/// Acronyms said as one word whose first letter is named with a vowel ("en", "ef", "el", "em",
+/// "ar", "ess", "eks"): "a RAM upgrade", not "an RAM". The longer ones are found by shape
+/// (`said_as_word`); the three-letter ones are too short for a shape, so they are listed.
+const SPOKEN_SHORT: [&str; 8] = ["RAM", "ROM", "LAN", "SIM", "MAC", "SAN", "NAS", "FAT"];
+/// Acronyms people say both ways ("a FAQ" as "fack", "an FAQ" as "eff-ay-cue"; "sequel" or "ess-cue-el"): either
+/// article is right, so neither is corrected.
+const EITHER_SOUND: [&str; 6] = ["FAQ", "SQL", "SAT", "SAP", "SOC", "NOC"];
+/// Letters that start a consonant cluster of an English word ("SC-uba", "SM-art", "ST-em").
+const ONSETS: [&str; 24] = [
+    "BL", "BR", "CH", "CL", "CR", "DR", "FL", "FR", "GL", "GR", "PL", "PR", "SC", "SH", "SK", "SL",
+    "SM", "SN", "SP", "ST", "SW", "TH", "TR", "TW",
+];
+/// Two consonants an English word can end in ("SMA-RT", "LA-MP", "FAA-NG").
+const CODAS: [&str; 24] = [
+    "ST", "SK", "SP", "LT", "LD", "ND", "NT", "NK", "RT", "RD", "RK", "RM", "RN", "LF", "LK", "LM",
+    "LP", "MP", "FT", "PT", "CT", "NS", "RS", "NG",
+];
+/// Whether an all-capital acronym of four to eight letters reads as a word ("NASA", "NATO",
+/// "FIFA", "SCUBA") rather than letter by letter ("NCAA", "HTML", "MSNBC", "NAACP"): a vowel
+/// opens it or follows its first consonant (or an English cluster), and it ends in a vowel, one
+/// consonant or a pair English words end in.
+fn said_as_word(letters: &[char]) -> bool {
+    if !(4..=8).contains(&letters.len()) || !letters.iter().all(char::is_ascii_uppercase) {
+        return false;
+    }
+    let vowel = |c: char| "AEIOU".contains(c);
+    let at = |i: usize| letters[i];
+    let cluster: String = [at(0), at(1)].iter().collect();
+    let onset = vowel(at(0)) || vowel(at(1)) || ONSETS.contains(&cluster.as_str()) && vowel(at(2));
+    // "Y" ends a word as a vowel does ("NIMBY").
+    let open = |c: char| vowel(c) || c == 'Y';
+    let end = letters.len() - 1;
+    let coda: String = [letters[end - 1], letters[end]].iter().collect();
+    let ends = open(letters[end]) || open(letters[end - 1]) || CODAS.contains(&coda.as_str());
+    onset && ends && letters.iter().any(|c| vowel(*c))
+}
+/// "an" or "a" before an acronym or a letter said by its name: None where people say it both ways.
+fn acronym_an(letters: &[char]) -> Option<bool> {
+    let word: String = letters.iter().collect();
+    if EITHER_SOUND.contains(&word.as_str()) {
+        return None;
+    }
+    let first = *letters.first()?;
+    // The letters of "NBA", "FBI" and "HR" begin with a vowel sound if their first letter is named so.
+    let named = "AEFHILMNORSX".contains(first);
+    if !named {
+        return Some(false);
+    }
+    // "A NASA mission", "a Europol unit": said as a word, the first sound is the word's, a
+    // consonant for the names of F, H, L, M, N, R, S and X and for "EU" said "yoo".
+    if SPOKEN_SHORT.contains(&word.as_str())
+        || said_as_word(letters) && (!"AEIO".contains(first) || word.starts_with("EU"))
+    {
+        return Some(false);
+    }
+    Some(true)
 }
 /// "a engineer", "an huge": the article's form follows the sound of the next word. Only an ordinary
 /// word that can follow an article counts, never a letter or code ("the letter a is").
@@ -128,9 +191,27 @@ fn article_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         if i > 0 && s[i - 1].end_byte == s[i].start_byte {
             continue;
         }
+        // "influenza A viruses": a capital A in mid-sentence is a label, not the article.
+        if s[i].surface == "A" && i > 0 {
+            continue;
+        }
         let w = s[i + 1].normalized.as_str();
         let after = &s[i + 2];
-        if s[i + 1].proper_name
+        // "a boys' football team", "a waiters' strike": the plural is a possessive.
+        let possessive =
+            ["'", "’"].contains(&after.surface) && after.start_byte == s[i + 1].end_byte;
+        // "a Worlds Ahead student": a capitalized plural in mid-sentence is a title or a name.
+        let title = s[i + 1].surface.starts_with(char::is_uppercase) && i > 0;
+        // "a hands-on experience", "a sales-driven team", "a needs-based grant": a plural that is
+        // the first part of a hyphenated modifier is part of the compound, not a noun of its own.
+        let compound = ["-", "‐"].contains(&after.surface)
+            && after.start_byte == s[i + 1].end_byte
+            && s.get(i + 3)
+                .is_some_and(|n| n.is_word && n.start_byte == after.end_byte);
+        if compound
+            || possessive
+            || title
+            || s[i + 1].proper_name
             || w.len() < 4
             || [
                 "news",
@@ -156,6 +237,10 @@ fn article_number(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 "sports",
                 "series",
                 "lots",
+                "masters",
+                "bachelors",
+                "mens",
+                "womens",
             ]
             .contains(&w)
             || after.is_word
@@ -193,6 +278,17 @@ fn subject_agreement(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(2) {
         // A determiner, its noun and a negated do at the start of the clause.
         if DET.contains(&word(s, i)) && clause_start(s, i) {
+            // "Tom and the dog don't agree", "Tom or the dog doesn't": a conjunction that joins two
+            // noun phrases makes a compound subject ("and": plural, "or": the nearer noun), so the
+            // last noun does not decide the helping verb.
+            if i > 0
+                && ["and", "or"].contains(&word(s, i - 1))
+                && !s[..i - 1]
+                    .iter()
+                    .any(|t| t.sentence == s[i].sentence && crate::punctuation::finite(t))
+            {
+                continue;
+            }
             let aux = word(s, i + 2);
             let fix = match (plural(&s[i + 1]), aux) {
                 (Some(false), "don't")
@@ -279,6 +375,369 @@ fn plural_form(t: &Token<'_>) -> bool {
         && singular_known(w)
         // "does" is a verb before it is the plural of "doe".
         && !morphology::verb(w).is_some_and(|v| ["be", "have", "do", "go"].contains(&v.base.as_str()))
+}
+/// The words from `start` that can make one noun phrase, as indexes: up to four nouns and
+/// adjectives with a plain space between them, stopping at anything else (a verb form, a function
+/// word, a mark, a hyphen).
+fn nominal_run(req: &Request, s: &[Token<'_>], start: usize) -> Vec<usize> {
+    let mut run: Vec<usize> = vec![];
+    for k in start..start + 6 {
+        let Some(t) = s.get(k) else { break };
+        let w = t.normalized.as_str();
+        if !t.is_word
+            || SUBJECTS.contains(&w)
+            || spelling::flags(w) & (2 | 8) == 0 && !crate::structure::looks_plural(w)
+            || [
+                "is", "are", "was", "were", "and", "or", "of", "to", "that", "who", "which", "the",
+                "a", "an", "not", "do", "does", "did", "has", "have", "had", "in", "on", "at",
+                "for", "with", "from", "by", "into", "onto", "over", "under", "about", "as",
+                "than", "if", "but", "so", "when", "while", "will", "can", "could", "would",
+                "should", "may", "might", "must",
+            ]
+            .contains(&w)
+            // A past form or an -ing form is the verb or a modifier that runs the phrase on
+            // ("those left", "those dealing", "these differing"), never the counted noun.
+            || participle_form(t)
+            || morphology::verb(w).is_some_and(|v| v.gerund == w)
+            // "these equipment needs servicing": a verb-first "-s" word after a noun is the verb,
+            // not a plural head ("these car keys" keeps "keys", a noun first).
+            || !run.is_empty()
+                && verb_third(t)
+                // "those higher costs.": after an adjective, or at the end, the "-s" word is the noun.
+                && run.last().is_some_and(|p| {
+                    !spelling::adjective(&s[*p])
+                        && !COMMON_ADJECTIVES.contains(&s[*p].normalized.as_str())
+                })
+                && s.get(k + 1).is_some_and(|n| n.is_word)
+            // "those document today", "this file now": a time or place adverb ends the phrase.
+            || !run.is_empty() && TIME_AND_PLACE_ADVERBS.contains(&w)
+            || run
+                .last()
+                .is_some_and(|p| req.text[s[*p].end_byte..t.start_byte] != *" ")
+        {
+            break;
+        }
+        run.push(k);
+        // The head of a plural compound is its first plural word ("library subject guides",
+        // "these children receive"), whether it ends in "-s" or not.
+        if plural(t) == Some(true) {
+            break;
+        }
+        // The head of a plural compound is its first plural word ("library subject guides").
+        if w.len() >= 4
+            && w.ends_with('s')
+            && !w.ends_with("ss")
+            && !w.ends_with("us")
+            && !w.ends_with("is")
+        {
+            break;
+        }
+    }
+    // A run that hit its limit with more words to come is a long compound or a clause: unclear.
+    if run.len() == 6 {
+        run.clear();
+    }
+    // A hyphen glued to the end of the last word makes it part of a longer word ("non-slip").
+    if run
+        .last()
+        .is_some_and(|k| req.text[s[*k].end_byte..].starts_with(['-', '(', '\'', '’']))
+    {
+        run.clear();
+    }
+    run
+}
+/// Whether a noun phrase ends before `next`: the end of the text, a mark, a conjunction, a verb or
+/// an adverb of time: anything but another noun that would run the phrase on.
+/// Whether the clause's own verb after the noun at `head` is singular ("Those guy at the front
+/// desk is so helpful", "Those guy needs help"): the first verb before a mark or a conjunction,
+/// looking past a prepositional phrase. A plural verb or no verb at all says no.
+fn singular_verb_follows(s: &[Token<'_>], head: usize) -> bool {
+    // "Those movie we saw was great": a subject pronoun right after the noun opens a reduced
+    // relative clause; it and its verb are skipped.
+    let mut skip = 0;
+    for (k, t) in s[head + 1..].iter().take(10).enumerate() {
+        let w = t.normalized.as_str();
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        if k == 0 && ["i", "we", "you", "they", "he", "she"].contains(&w) {
+            skip = 1;
+            continue;
+        }
+        // "on 5th", "in 2019": a number is part of the phrase.
+        if !t.is_word && t.surface.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        if !t.is_word || ["and", "or", "but", "that", "who", "which", "because", "so"].contains(&w)
+        {
+            return false;
+        }
+        if [
+            "is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't",
+        ]
+        .contains(&w)
+            || verb_third(t)
+        {
+            return true;
+        }
+        if [
+            "are", "were", "have", "do", "aren't", "weren't", "haven't", "don't", "will", "can",
+            "could", "would", "should", "must", "may", "might",
+        ]
+        .contains(&w)
+            || morphology::verb(w).is_some_and(|v| v.past == w && v.base != w)
+        {
+            return false;
+        }
+    }
+    false
+}
+/// Adverbs of time and place that end a noun phrase ("those files today", "this one here").
+const TIME_AND_PLACE_ADVERBS: [&str; 14] = [
+    "today",
+    "tomorrow",
+    "tonight",
+    "yesterday",
+    "now",
+    "again",
+    "here",
+    "there",
+    "later",
+    "soon",
+    "already",
+    "anymore",
+    "please",
+    "too",
+];
+fn ends_clause(next: Option<&Token<'_>>) -> bool {
+    next.is_none_or(|a| {
+        !a.is_word
+            || [
+                "and",
+                "or",
+                "but",
+                "so",
+                "who",
+                "today",
+                "tomorrow",
+                "tonight",
+                "yesterday",
+                "again",
+                "now",
+                "first",
+                "please",
+            ]
+            .contains(&a.normalized.as_str())
+            // "those cat on the fence", "those document signed today": a preposition or a
+            // participle after the noun ends the phrase too.
+            || crate::clauses::PREPOSITIONS.contains(&a.normalized.as_str())
+            || participle_form(a)
+            || spelling::flags(&a.normalized) & 2 == 0
+            || spelling::flags(&a.normalized) & 4 != 0 && spelling::flags(&a.normalized) & 2 != 0
+    })
+}
+/// Adjectives common enough to stand before a noun that the word may not be a head.
+const COMMON_ADJECTIVES: [&str; 30] = [
+    "new",
+    "old",
+    "big",
+    "small",
+    "good",
+    "bad",
+    "other",
+    "same",
+    "few",
+    "last",
+    "next",
+    "first",
+    "free",
+    "full",
+    "high",
+    "low",
+    "great",
+    "little",
+    "long",
+    "short",
+    "young",
+    "main",
+    "own",
+    "real",
+    "whole",
+    "different",
+    "popular",
+    "public",
+    "private",
+    "special",
+];
+/// Verbs and adjectives whose clause complement opens with "that" ("insist that", "clear that").
+const COMPLEMENT_WORDS: &[&str] = &[
+    "reveal",
+    "insist",
+    "recommend",
+    "argue",
+    "admit",
+    "ensure",
+    "show",
+    "indicate",
+    "suggest",
+    "note",
+    "claim",
+    "state",
+    "find",
+    "tell",
+    "assume",
+    "conclude",
+    "demonstrate",
+    "prove",
+    "report",
+    "announce",
+    "explain",
+    "notice",
+    "realize",
+    "remember",
+    "discover",
+    "learn",
+    "agree",
+    "decide",
+    "imply",
+    "confirm",
+    "doubt",
+    "deny",
+    "expect",
+    "predict",
+    "require",
+    "demand",
+    "order",
+    "propose",
+    "request",
+    "clear",
+    "true",
+    "possible",
+    "likely",
+    "certain",
+    "sure",
+    "obvious",
+    "evident",
+    "important",
+    "so",
+    "now",
+    "given",
+    "provided",
+    "shown",
+    "known",
+    "determine",
+    "hypothesize",
+    "hypothesise",
+    "observe",
+    "establish",
+    "see",
+    "hear",
+];
+/// A word that is the "-s" form of a verb ("rings", "leads"): after "this" in subject position it is
+/// the verb.
+/// Words that are a verb first ("requires", "leads"), not a countable noun ("pages"): the
+/// lexicon's noun flag is too loose to tell them apart.
+const VERB_FIRST: &[&str] = &[
+    "require",
+    "lead",
+    "ring",
+    "mean",
+    "help",
+    "work",
+    "need",
+    "cost",
+    "hold",
+    "result",
+    "turn",
+    "feel",
+    "look",
+    "stand",
+    "seem",
+    "make",
+    "take",
+    "give",
+    "keep",
+    "show",
+    "bring",
+    "set",
+    "put",
+    "include",
+    "involve",
+    "contain",
+    "provide",
+    "allow",
+    "cause",
+    "create",
+    "produce",
+    "support",
+    "suggest",
+    "indicate",
+    "reflect",
+    "represent",
+    "reveal",
+    "explain",
+    "describe",
+    "depend",
+    "rely",
+    "appear",
+    "become",
+    "remain",
+    "matter",
+    "change",
+    "prove",
+    "imply",
+    "affect",
+    "add",
+    "apply",
+    "fit",
+    "get",
+    "go",
+    "come",
+    "sound",
+    "taste",
+    "smell",
+    "happen",
+    "occur",
+    "exist",
+    "remind",
+    "prevent",
+    "enable",
+    "encourage",
+    "reduce",
+    "increase",
+    "improve",
+    "hurt",
+    "cut",
+    "sum",
+    "relate",
+    "tend",
+    "belong",
+    "differ",
+    "mention",
+];
+/// A word read as a verb before a noun: a core irregular or common verb, or one of `VERB_FIRST`.
+fn verb_first(base: &str) -> bool {
+    VERB_FIRST.contains(&base)
+        || [
+            "range", "form", "place", "plan", "start", "end", "run", "use", "call", "move",
+            "report", "record", "point", "count", "cover", "deal", "name", "sign", "note", "check",
+            "order", "offer", "test", "step", "visit", "watch", "hope", "wish", "vary", "differ",
+        ]
+        .contains(&base)
+        || morphology::predicate(base)
+        || morphology::irregular_base(base).is_some()
+}
+fn verb_third(t: &Token<'_>) -> bool {
+    morphology::verb(&t.normalized).is_some_and(|v| {
+        v.third == t.normalized && v.base != t.normalized && VERB_FIRST.contains(&v.base.as_str())
+    })
+}
+/// A word that is a verb's past or participle form and not its base ("left", "given", "chosen").
+fn participle_form(t: &Token<'_>) -> bool {
+    morphology::verb(&t.normalized).is_some_and(|v| {
+        t.normalized != v.base && (t.normalized == v.past || t.normalized == v.participle)
+    })
 }
 /// Words before "this" or "that" that make it a determiner: a preposition, or a verb taking an
 /// object ("print this pages"). Verbs of saying and thinking take a clause ("I think this works").
@@ -378,6 +837,37 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
                 "are", "were",
             ]
             .contains(&word(s, i - 1));
+        // "revealed that participants", "clear that genes", "are that radiologists": "that" opens a
+        // clause here, not a noun phrase.
+        let complement = d == "that"
+            && i > 0
+            && (["are", "were", "is", "was"].contains(&word(s, i - 1))
+                && s.get(n + 1).is_some_and(crate::punctuation::finite)
+                || COMPLEMENT_WORDS.contains(&word(s, i - 1))
+                || morphology::verb(word(s, i - 1))
+                    .is_some_and(|v| COMPLEMENT_WORDS.contains(&v.base.as_str())));
+        if complement {
+            continue;
+        }
+        // "skills that employers want", "the fun that other kids can't": after a noun "that" opens a
+        // relative clause. "I pondered this many times": "this" is an adverb before "many".
+        if d == "that"
+            && i > 0
+            && (crate::structure::looks_plural(word(s, i - 1))
+                || plural_form(&s[i - 1])
+                || spelling::flags(word(s, i - 1)) & 2 != 0
+                    && spelling::flags(word(s, i - 1)) & 4 == 0)
+        {
+            continue;
+        }
+        if ["this", "that"].contains(&d)
+            && [
+                "many", "much", "few", "long", "far", "little", "early", "late", "well",
+            ]
+            .contains(&word(s, i + 1))
+        {
+            continue;
+        }
         let that_ok = prep
             || object && plural_noun(noun)
             || i == 0 && (plural_noun(noun) || ["are", "were"].contains(&word(s, n + 1)));
@@ -396,6 +886,11 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "It is clear that genes play a part", "I am glad that birds came back": after an
+        // adjective "that" opens a clause, it is no demonstrative.
+        if d == "that" && i > 0 && !prep && spelling::flags(word(s, i - 1)) & 8 != 0 {
+            continue;
+        }
         // "see that final agreements are forwarded": a "that" with a clause after it is the
         // conjunction.
         if d == "that"
@@ -409,12 +904,98 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         {
             continue;
         }
+        // "those left behind", "those outside the movement", "those dealing with", "these non-slip
+        // mats", "these car keys", "these library subject guides": the noun phrase after a plural
+        // demonstrative runs to its last noun, and only a singular last noun that is no verb form
+        // and ends the phrase makes "these" wrong.
+        let singular_head = {
+            let run = nominal_run(req, s, i + 1);
+            let head = run.last().map(|k| &s[*k]);
+            let after = run.last().and_then(|k| s.get(k + 1));
+            !run.is_empty()
+                && head.is_some_and(|h| {
+                    singular_noun(h)
+                        // "these new and dangerous threats": a word that can be an adjective is no
+                        // head while another word may follow; the noun is further on.
+                        && !spelling::adjective(h)
+                        && !COMMON_ADJECTIVES.contains(&h.normalized.as_str())
+                        // "those outside the movement", "those in your family": a place word or
+                        // preposition is no noun to count.
+                        && ![
+                            "outside", "inside", "above", "below", "near", "close", "such",
+                            "around", "behind", "beyond", "among", "along", "across", "between",
+                            "within", "through", "over", "under", "up", "down", "out", "off",
+                            "in", "on", "at", "else", "only", "alike",
+                        ]
+                        .contains(&h.normalized.as_str())
+                        && ends_clause(after)
+                        // A word that is also a verb ("These mean", "those guy like it") is the
+                        // noun only when the phrase ends or a helping verb follows.
+                        && (spelling::flags(&h.normalized) & 4 == 0
+                            || after.is_none_or(|a| {
+                                !a.is_word
+                                    || [
+                                        "is", "was", "are", "were", "will", "can", "could",
+                                        "would", "should", "has", "had", "does", "did",
+                                    ]
+                                    .contains(&a.normalized.as_str())
+                                    // "those guy needs help": the "-s" verb after it is the verb.
+                                    || verb_third(a)
+                                    // "is these seat taken", "those document signed today", "those
+                                    // jacket you bought": what follows is no object, so the head is
+                                    // the noun, unless it is a common verb ("These include informed
+                                    // consent", "These range from", "these mean you have to wait").
+                                    || !verb_first(&h.normalized)
+                                        && (participle_form(a)
+                                            || crate::clauses::PREPOSITIONS
+                                                .contains(&a.normalized.as_str())
+                                            || TIME_AND_PLACE_ADVERBS
+                                                .contains(&a.normalized.as_str())
+                                            || spelling::flags(&a.normalized) & 8 != 0
+                                                && spelling::flags(&a.normalized) & 2 == 0
+                                            || ["i", "we", "you", "they", "he", "she"]
+                                                .contains(&a.normalized.as_str()))
+                            }))
+                })
+                && run.iter().all(|k| {
+                    let t = &s[*k];
+                    t.normalized.chars().all(char::is_alphabetic)
+                })
+                && !SUBJECTS.contains(&word(s, i + 1))
+        };
+        // "He found those book": a plural demonstrative before a countable singular noun is almost
+        // always a dropped plural ending, so the noun changes. Only a singular verb after the phrase
+        // ("Those guy is late") or a noun with no plural ("those furniture") points at the
+        // demonstrative instead.
+        if singular_head
+            && ["these", "those"].contains(&d)
+            && let Some(&head_k) = nominal_run(req, s, i + 1).last()
+            && !singular_verb_follows(s, head_k)
+            // "Is these seat taken?": the singular verb before it points at "these" too.
+            && !(i > 0
+                && ["is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't"]
+                    .contains(&word(s, i - 1)))
+            && let Some(plural) = crate::forms::countable_plural(&s[head_k].normalized)
+        {
+            push(
+                req,
+                edits,
+                span(s, head_k, head_k),
+                crate::match_case(&plural, s[head_k].surface),
+                "grammar.demonstrative_number",
+                "“These” and “those” go with a plural noun.",
+                0.9,
+            );
+            continue;
+        }
         let fix = match d {
-            "this" if plural_here && ends => "these",
+            // "any of this requires work", "this leads to": a verb in "-s" after "this" with more
+            // clause to come is the verb, not a plural noun.
+            "this" if plural_here && ends && !verb_third(noun) => "these",
             // "that" also opens a clause ("I know that kids love it"): only as a determiner.
             "that" if plural_here && ends && that_ok => "those",
-            "these" if singular_noun(noun) && ends => "this",
-            "those" if singular_noun(noun) && ends && word(s, n + 1) != "who" => "that",
+            "these" if singular_head => "this",
+            "those" if singular_head && word(s, n + 1) != "who" => "that",
             _ => continue,
         };
         push(
@@ -428,6 +1009,8 @@ fn demonstratives(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         );
     }
 }
+/// Adverbs that go with "few" and "little" and cannot take the comparative "fewer".
+const INTENSIFIERS: [&str; 6] = ["very", "so", "too", "quite", "really", "extremely"];
 /// "less complaints", "too much cooks", "an another": the quantifier follows the noun's number.
 fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
     for i in 0..s.len().saturating_sub(1) {
@@ -446,6 +1029,8 @@ fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             continue;
         }
         let fix = match q {
+            // "very less people" is "very few people" ("so few", "too few"), never "very fewer".
+            "less" if plural_form(next) && i > 0 && INTENSIFIERS.contains(&word(s, i - 1)) => "few",
             "less" if plural_form(next) => "fewer",
             "much" if plural_form(next) && !["thanks"].contains(&next.normalized.as_str()) => {
                 "many"
@@ -464,6 +1049,50 @@ fn quantifiers(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         );
     }
 }
+/// Nouns of quantity and grouping that follow "a" and take the number of what follows "of" ("a
+/// number of reasons are", "a lot of water is"), so "there is" or "there are" can be right.
+const PARTITIVES: [&str; 40] = [
+    "lot",
+    "few",
+    "couple",
+    "number",
+    "bunch",
+    "variety",
+    "total",
+    "lots",
+    "pair",
+    "dozen",
+    "ton",
+    "handful",
+    "range",
+    "host",
+    "majority",
+    "minority",
+    "series",
+    "set",
+    "group",
+    "mix",
+    "mixture",
+    "plethora",
+    "myriad",
+    "array",
+    "selection",
+    "collection",
+    "multitude",
+    "wealth",
+    "load",
+    "heap",
+    "stack",
+    "pile",
+    "batch",
+    "percentage",
+    "proportion",
+    "fraction",
+    "slew",
+    "raft",
+    "barrage",
+    "flood",
+];
 /// "There's three emails", "Is there any snacks", "There are a problem": the verb of "there is"
 /// agrees with the noun after it.
 fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
@@ -497,13 +1126,29 @@ fn there_be(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             }
             return s.get(n).filter(|t| plural_form(t)).map(|_| true);
         }
-        if ["a", "an", "one"].contains(&w)
-            && ![
-                "lot", "few", "couple", "number", "bunch", "variety", "total", "lots", "pair",
-                "dozen",
-            ]
-            .contains(&word(s, k + 1))
-        {
+        if ["a", "an", "one"].contains(&w) {
+            // "a large number of", "a wide range of", "a great many": the adjectives before a
+            // quantity noun do not make it one thing.
+            let mut head = k + 1;
+            while head < k + 3
+                && !PARTITIVES.contains(&word(s, head))
+                && word(s, head) != "many"
+                && s.get(head).is_some_and(|t| {
+                    spelling::adjective(t)
+                        || [
+                            "good", "fair", "great", "large", "small", "big", "wide", "decent",
+                            "huge", "vast", "healthy", "whole", "fine", "tidy", "sizeable",
+                            "quite",
+                        ]
+                        .contains(&t.normalized.as_str())
+                })
+            {
+                head += 1;
+            }
+            let h = word(s, head);
+            if PARTITIVES.contains(&h) || head > k + 1 && h == "many" {
+                return None;
+            }
             return Some(false);
         }
         None
@@ -597,4 +1242,116 @@ pub fn check(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>, question: bo
     quantifiers(req, s, edits);
     there_be(req, s, edits);
     opening_auxiliary(req, s, edits, question);
+}
+#[cfg(test)]
+mod tests {
+    use crate::Request;
+    fn fix(text: &str) -> String {
+        crate::pipeline::rewrite(&Request {
+            text: text.into(),
+            ..Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn acronyms_said_as_words_take_a_and_letters_take_an() {
+        // Said as a word, the first sound is the word's: "a NASA", "a RAM", "a LAN", "a SIM".
+        for noun in [
+            "NASA", "NATO", "FIFA", "NAFTA", "UNICEF", "UNESCO", "SCUBA", "SWAT", "NASDAQ",
+            "FAANG", "HIPAA", "LIDAR", "RAM", "ROM", "LAN", "SIM", "JSON", "PIN",
+        ] {
+            let right = format!("It was a {noun} decision.");
+            assert_eq!(fix(&right), right, "{right}");
+            let wrong = format!("It was an {noun} decision.");
+            assert_eq!(fix(&wrong), right, "{wrong}");
+        }
+        // Said letter by letter, a first letter named with a vowel sound takes "an".
+        for noun in [
+            "NBA", "NFL", "FBI", "MBA", "HR", "SMS", "MRI", "LLM", "HTML", "NCAA", "NHS", "SUV",
+            "RSVP", "NAACP", "MSNBC", "SMTP", "OPEC", "ASAP", "EU", "FDA", "XML",
+        ] {
+            let right = format!("It was an {noun} decision.");
+            assert_eq!(fix(&right), right, "{right}");
+            let wrong = format!("It was a {noun} decision.");
+            assert_eq!(fix(&wrong), right, "{wrong}");
+        }
+        // A letter or a word that begins with a "yoo" sound takes "a"; "URL" and "UFO" are such.
+        for (wrong, right) in [
+            ("Open an URL in a tab.", "Open a URL in a tab."),
+            ("We saw an UFO last night.", "We saw a UFO last night."),
+            ("He is an UN envoy.", "He is a UN envoy."),
+        ] {
+            assert_eq!(fix(wrong), right, "{wrong}");
+        }
+        // Said both ways ("fack" and "eff-ay-cue", "sequel" and "ess-cue-el"): neither is wrong.
+        for text in [
+            "Read a FAQ page first.",
+            "Read an FAQ page first.",
+            "Write a SQL query.",
+            "Write an SQL query.",
+            "Take a SAT prep class.",
+            "Take an SAT prep class.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // A long word in capitals is a shouted word, not an acronym.
+        assert_eq!(fix("A FANTASTIC FUTURE"), "A FANTASTIC FUTURE");
+        assert_eq!(fix("A EXCELLENT PLAN"), "An EXCELLENT PLAN");
+        // Ordinary words keep following the sound of the word.
+        assert_eq!(fix("She is a engineer."), "She is an engineer.");
+        assert_eq!(fix("It was an huge win."), "It was a huge win.");
+        assert_eq!(fix("He took an X-ray."), "He took an X-ray.");
+    }
+    #[test]
+    fn words_that_begin_with_un_take_an_and_those_that_begin_with_yoo_take_a() {
+        for text in [
+            "It was an unintentional slip.",
+            "That is an unanswerable question.",
+            "We work in an unincorporated area.",
+            "She wore an unidentified badge.",
+            "He gave an uninformed answer.",
+            "We joined a union.",
+            "It is a unique case.",
+            "Use a unit test.",
+            "Visit a university.",
+            "It was a unanimous vote.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        assert_eq!(
+            fix("It was a unintentional slip."),
+            "It was an unintentional slip."
+        );
+        assert_eq!(fix("We joined an union."), "We joined a union.");
+    }
+    #[test]
+    fn a_possessive_plural_a_label_or_a_title_after_a_is_no_plural_noun() {
+        for text in [
+            "Every school has a boys' football team.",
+            "I heard about a waiters' strike.",
+            "It is a Worlds Ahead student programme.",
+            "Specimens of influenza A viruses were tested.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+    }
+    #[test]
+    fn a_plural_that_starts_a_hyphenated_modifier_is_not_a_noun_of_its_own() {
+        for text in [
+            "It was a hands-on experience for the whole class.",
+            "We want a sales-driven culture.",
+            "She needs a systems-level view of the project.",
+            "It is a needs-based grant.",
+            "They kept it at an arms-length distance.",
+            "He wrote a thank-you note and a rules-based filter.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // One article, one noun: a plural noun after it is still made singular.
+        assert_eq!(
+            fix("We asked an experts in the field."),
+            "We asked an expert in the field."
+        );
+    }
 }

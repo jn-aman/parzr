@@ -827,8 +827,8 @@
   },
   {
     "id": "clarity.quantity.a_large_number_of",
-    "pattern": "(?i)\\b(?P<target>a (?:large|great|good|vast) number of)\\b",
-    "replacement": "many",
+    "pattern": "(?i)\\b(?P<target>a (?:large|great|good|vast) number(?:(?P<p> of (?:the|these|those|our|my|your|their|his|her|its|them|us|whom|which))|\\s+of))\\b",
+    "replacement": "many${p}",
     "category": "Style",
     "confidence": 0.75,
     "reason": "Shorter: say “many”.",

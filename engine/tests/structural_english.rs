@@ -92,6 +92,25 @@ const EXAMPLES: &[(&str, &str)] = &[
         "Last night, we visit the theater.",
         "Last night, we visited the theater.",
     ),
+    ("He has undid the knot.", "He has undone the knot."),
+    (
+        "We have withdrew the offer.",
+        "We have withdrawn the offer.",
+    ),
+    (
+        "They will overthrew the king.",
+        "They will overthrow the king.",
+    ),
+    (
+        "They have rebuild the bridge.",
+        "They have rebuilt the bridge.",
+    ),
+    ("I have woke up.", "I have woken up."),
+    ("They avoid to be late.", "They avoid being late."),
+    (
+        "She considered to be a doctor.",
+        "She considered being a doctor.",
+    ),
 ];
 
 const VALID: &[&str] = &[
@@ -125,6 +144,37 @@ const VALID: &[&str] = &[
     "My brother thinks I should stay.",
     "The people who work on the station repair need an updated schedule.",
     "We focus on the station repair and finish today.",
+    // A word that is a past form of one verb and the base of another stays after a modal.
+    "They might lay off some workers.",
+    "The company will lay out a plan.",
+    "We should lay down a rule.",
+    "They will found a company.",
+    "It would wound her.",
+    "The mill might ground the grain.",
+    "I will bind the pages.",
+    "Did she lay the carpet?",
+    "She wants to found a company.",
+    "They decided to saw the board.",
+    // Irregular participles, bases and prefixed forms are not respelled.
+    "She has bound the book.",
+    "The mill has ground the grain.",
+    "They have retaken the city.",
+    "He has undone the knot.",
+    "They have overthrown the king.",
+    "We have withdrawn the offer.",
+    "She has forgiven him.",
+    "They have rebuilt the bridge.",
+    "He has strung the lights.",
+    "We have struck a deal.",
+    "I had sunk the ship.",
+    "The bee will sting you.",
+    "The gate will swing open.",
+    "She will wake at six.",
+    // "to be" after a passive "considered" is right.
+    "He is considered to be an expert.",
+    "It was suggested to be careful.",
+    "The plan, considered to be risky, failed.",
+    "People considered to be experts were invited.",
 ];
 
 #[test]
@@ -383,4 +433,172 @@ fn nearby_typos_do_not_turn_object_nouns_into_verbs_or_drop_articles() {
         .unwrap();
         assert_eq!(result.text, expected, "{input}");
     }
+}
+
+fn fixed(text: &str) -> String {
+    rewrite(&Request {
+        text: text.into(),
+        ..Request::default()
+    })
+    .unwrap_or_else(|e| panic!("{text}: {e}"))
+    .text
+}
+fn assert_cases(cases: &[(&str, &str)]) {
+    let wrong: Vec<String> = cases
+        .iter()
+        .filter_map(|(input, want)| {
+            let got = fixed(input);
+            (got != *want).then(|| format!("{input:?}\n   want {want:?}\n   got  {got:?}"))
+        })
+        .collect();
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn an_inverted_question_agrees_with_the_head_of_the_noun_phrase_after_the_verb() {
+    assert_cases(&[
+        ("What is the office hours?", "What are the office hours?"),
+        ("Where is the office files?", "Where are the office files?"),
+        (
+            "What is your favorite colors?",
+            "What are your favorite colors?",
+        ),
+        // Correct text stays as typed: the head is the last noun, not the first word.
+        ("What are the office hours?", "What are the office hours?"),
+        ("Where is the sales report?", "Where is the sales report?"),
+        (
+            "Where is the user accounts page?",
+            "Where is the user accounts page?",
+        ),
+        ("Where are the keys left?", "Where are the keys left?"),
+        ("How do the kids play?", "How do the kids play?"),
+        (
+            "Why does the report summary include this?",
+            "Why does the report summary include this?",
+        ),
+        (
+            "How are things going over there?",
+            "How are things going over there?",
+        ),
+        ("Why are all the lights on?", "Why are all the lights on?"),
+        (
+            "Why do people like shopping?",
+            "Why do people like shopping?",
+        ),
+        (
+            "How do the educational institutions judge a student?",
+            "How do the educational institutions judge a student?",
+        ),
+        (
+            "What do Tom Stone, Anna Reed, and Mia Lane have in common?",
+            "What do Tom Stone, Anna Reed, and Mia Lane have in common?",
+        ),
+        (
+            "How does the sales report look?",
+            "How does the sales report look?",
+        ),
+        (
+            "My levels are about three times what are considered safe.",
+            "My levels are about three times what are considered safe.",
+        ),
+    ]);
+}
+
+#[test]
+fn a_relative_clause_between_subject_and_verb_does_not_decide_the_verb() {
+    assert_cases(&[
+        (
+            "So many people I know and admire is at a loss.",
+            "So many people I know and admire are at a loss.",
+        ),
+        (
+            "The students that is late left.",
+            "The students that are late left.",
+        ),
+        (
+            "So many people I know and admire are at a loss.",
+            "So many people I know and admire are at a loss.",
+        ),
+        (
+            "The students that are late left.",
+            "The students that are late left.",
+        ),
+        (
+            "Expertise, enthusiasm, and dedication were instrumental.",
+            "Expertise, enthusiasm, and dedication were instrumental.",
+        ),
+        (
+            "Some values such as trust and honesty, that were believed lost, can return.",
+            "Some values such as trust and honesty, that were believed lost, can return.",
+        ),
+        (
+            "In other words, the only thing that matters is using all your skills.",
+            "In other words, the only thing that matters is using all your skills.",
+        ),
+        (
+            "I'm 22 years old and my name is Dan.",
+            "I'm 22 years old and my name is Dan.",
+        ),
+        (
+            "Their whereabouts are not known.",
+            "Their whereabouts are not known.",
+        ),
+        (
+            "Tableaux are shown for illustration.",
+            "Tableaux are shown for illustration.",
+        ),
+        (
+            "But like most families with power, privilege, and money everything is not as it seems.",
+            "But like most families with power, privilege, and money everything is not as it seems.",
+        ),
+        // No antecedent: "that" is the subject, and "yes" is no plural.
+        ("Yes that works for me.", "Yes, that works for me."),
+        // "who" gets the plural of "is", never the infinitive.
+        ("People who is kind help.", "People who are kind help."),
+    ]);
+}
+
+#[test]
+fn latin_and_greek_plurals_take_a_plural_verb() {
+    assert_cases(&[
+        ("The phenomena was rare.", "The phenomena were rare."),
+        ("The criteria was clear.", "The criteria were clear."),
+        ("The phenomena were rare.", "The phenomena were rare."),
+        ("These phenomena are rare.", "These phenomena are rare."),
+        ("The phenomenon was rare.", "The phenomenon was rare."),
+        ("The alumni were pleased.", "The alumni were pleased."),
+    ]);
+}
+
+#[test]
+fn an_imperative_has_no_third_person_subject() {
+    assert_cases(&[
+        ("Come sit down.", "Come sit down."),
+        ("Come see us.", "Come see us."),
+        ("Keep it like this only.", "Keep it like this only."),
+        ("Leave it like that.", "Leave it like that."),
+        ("The manager like tea.", "The manager likes tea."),
+        (
+            "There is nothing like eating out.",
+            "There is nothing like eating out.",
+        ),
+        (
+            "When deciding, perhaps try a writing lesson.",
+            "When deciding, perhaps try a writing lesson.",
+        ),
+    ]);
+}
+
+#[test]
+fn one_of_the_nouns_who_were_agrees_with_the_noun_inside() {
+    assert_cases(&[
+        (
+            "One of the students who were late left.",
+            "One of the students who were late left.",
+        ),
+        (
+            "Each of the boxes were damaged.",
+            "Each of the boxes was damaged.",
+        ),
+    ]);
 }

@@ -20,6 +20,19 @@ final class CompatTests: XCTestCase {
     private func automaticEditor(_ surfaces: [Int: EditorSurface], focus: Int = 0) -> Int? {
         Compat.editableAncestor(focus, eligibility: { surfaces[$0]?.eligibility ?? .blocked }, parent: { surfaces[$0]?.parent })
     }
+    /// Option+Space over a page's static text (Brave, Chrome, Safari reading a message someone else wrote): the selection range is settable,
+    /// which once made the selection patchable and the apply fail with "the editor didn't accept the change". The rules the explicit path
+    /// uses (`AX.isWritable`) are the automatic ones with search allowed: static text under a web area is not an editor.
+    func testExplicitReadOnlyPageTextIsNotWritable() {
+        let explicit = { (s: EditorSurface) in Compat.editorEligibility(role: s.role, enabled: s.enabled, valueSettable: s.valueSettable, textSettable: s.textSettable, markerEditor: s.markerEditor, search: false) }
+        func writable(_ surfaces: [Int: EditorSurface]) -> Bool { Compat.editableAncestor(0, eligibility: { surfaces[$0].map(explicit) ?? .blocked }, parent: { surfaces[$0]?.parent }) != nil }
+        XCTAssertFalse(writable([0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1), 1: EditorSurface(role: "AXGroup", textSettable: false, parent: 2),
+                                 2: EditorSurface(role: "AXWebArea", valueSettable: false, textSettable: false)]))
+        XCTAssertFalse(writable([0: EditorSurface(role: "AXStaticText", textSettable: true, parent: 1), 1: EditorSurface(role: "AXWindow")]), "A settable selected text on static text is a caret, not an editor.")
+        XCTAssertTrue(writable([0: EditorSurface(role: "AXStaticText", textSettable: false, parent: 1), 1: EditorSurface(role: "AXTextArea", textSettable: true)]), "A text leaf inside a composer.")
+        XCTAssertTrue(writable([0: EditorSurface(role: "AXTextField", textSettable: true, search: true)]), "The shortcut may fix a search box.")
+        XCTAssertTrue(writable([0: EditorSurface(role: "AXGroup", valueSettable: true, textSettable: false, markerEditor: true)]), "A WebKit contenteditable exposes text markers and a settable value.")
+    }
     func testAutomaticStaticSelectableTextIsNotAnEditor() {
         // Readable or settable selection ranges do not establish that text can be changed.
         for role in ["AXStaticText", "AXInlineTextBox"] {

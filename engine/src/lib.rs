@@ -337,6 +337,44 @@ fn byte_at(text: &str, offset: usize) -> Option<usize> {
     }
     (n == offset).then_some(text.len())
 }
+/// The part of an edit's original range that really changes: the whole words its replacement
+/// repeats at the start or the end stay out of it ("ROM memory" to "ROM" changes " memory"). The
+/// edit's own range when it is an insertion, or when trimming would cut inside a word.
+fn changed_words(e: &Edit) -> (usize, usize) {
+    let (old, new): (Vec<char>, Vec<char>) = (
+        e.original.chars().collect(),
+        e.replacement.chars().collect(),
+    );
+    let word = |c: char| c.is_alphanumeric() || c == '\'' || c == '’';
+    let mut head = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
+    // The shared start counts only up to a word boundary.
+    while head > 0 && old.get(head).is_some_and(|c| word(*c)) && word(old[head - 1]) {
+        head -= 1;
+    }
+    let room = old.len().min(new.len()) - head;
+    let mut tail = old
+        .iter()
+        .rev()
+        .zip(new.iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(room);
+    while tail > 0
+        && tail < old.len()
+        && word(old[old.len() - tail])
+        && word(old[old.len() - tail - 1])
+    {
+        tail -= 1;
+    }
+    if head + tail >= old.len() || old.is_empty() {
+        return (e.start_utf16, e.end_utf16);
+    }
+    let units = |chars: &[char]| chars.iter().map(|c| c.len_utf16()).sum::<usize>();
+    (
+        e.start_utf16 + units(&old[..head]),
+        e.end_utf16 - units(&old[old.len() - tail..]),
+    )
+}
 fn overlaps(start: usize, end: usize, r: &TextRange) -> bool {
     if start == end {
         start >= r.start_utf16 && start < r.end_utf16
@@ -715,7 +753,13 @@ fn match_case(replacement: &str, original: &str) -> String {
         && original.chars().filter(|c| c.is_alphabetic()).count() > 1
     {
         replacement.to_uppercase()
-    } else if original.chars().next().is_some_and(char::is_uppercase) {
+    } else if original.chars().next().is_some_and(char::is_uppercase)
+        // The capital of "I do" is the pronoun's own: a replacement that moves it ("do I") is not
+        // a sentence start, which the caller adds where one is.
+        && !(original.len() > 1
+            && original.starts_with('I')
+            && !original[1..].starts_with(|c: char| c.is_alphabetic()))
+    {
         upper_first(replacement)
     } else {
         replacement.to_string()
@@ -924,7 +968,7 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
     // A capital inside a sentence may be a name ("Siller", "Princip"): only a misspelt proper noun
     // ("Febuary", "Britian") the system checker does not accept is respelled there; capitals
     // throughout only on longer words ("INITALIZED").
-    for t in tokens.iter().filter(|_| !tone_only) {
+    for (ti, t) in tokens.iter().enumerate().filter(|_| !tone_only) {
         // The writer's names and dictionary words (and links, code, file names) are never respelled.
         if protected
             .iter()
@@ -942,6 +986,13 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         else {
             continue;
         };
+        // "two childrens" is "two children": the possessive of an irregular plural is right only
+        // before the thing possessed ("my childrens school") or with its own apostrophe.
+        let correction = correction
+            .strip_suffix("'s")
+            .filter(|base| ["children", "women", "men", "people"].contains(base))
+            .filter(|_| !spelling::possessed_noun_follows(t, tokens.get(ti + 1)))
+            .unwrap_or(correction);
         let original = t.surface;
         let mut letters = original.chars();
         let capital = letters.next().is_some_and(|c| c.is_ascii_uppercase());
@@ -968,10 +1019,29 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
         {
             replacement = upper_first(&replacement);
         }
+        // "childrens' toys": the token already carries the apostrophe a possessive correction would
+        // add ("children's"), so the correction takes the typed one with it. Any other correction
+        // with an apostrophe would leave a stray mark ("children's'") and is dropped; a word in
+        // single quotes ('recieve') is no such case.
+        let mark = req.text[t.end_byte..]
+            .chars()
+            .next()
+            .filter(|c| ['\'', '’'].contains(c) && correction.contains('\''));
+        let mut end_utf16 = t.end_utf16;
+        if let Some(mark) = mark {
+            let after = req.text[t.end_byte + mark.len_utf8()..].chars().next();
+            if !correction.ends_with("'s") || after.is_some_and(char::is_alphanumeric) {
+                continue;
+            }
+            end_utf16 += 1;
+            if mark == '’' {
+                replacement = replacement.replace('\'', "’");
+            }
+        }
         if let Some(e) = make_edit(
             &req.text,
             t.start_utf16,
-            t.end_utf16,
+            end_utf16,
             replacement,
             "Spelling",
             "spelling.common_misspelling",
@@ -1506,15 +1576,18 @@ fn rewrite_once(req: &Request, tone_only: bool) -> Result<RewriteResult, String>
             || tagger_piece(e, r)
     };
     let blocked = |e: &Edit| {
+        // Whole words the edit leaves as they are do not count as touched: "ROM memory" to "ROM"
+        // changes only " memory", and "please RSVP" to "RSVP" only "please ".
+        let (from, to) = changed_words(e);
         protected
             .iter()
-            .any(|r| overlaps(e.start_utf16, e.end_utf16, r) && !exempt(e, r))
+            .any(|r| overlaps(from, to, r) && !exempt(e, r))
             || !case_only(e)
                 && !contraction(e)
                 && !apostrophe_only(e)
                 && if e.start_utf16 != e.end_utf16 {
                     guard.iter().any(|r| {
-                        overlaps(e.start_utf16, e.end_utf16, r)
+                        overlaps(from, to, r)
                             && !(slip(e) && first_word_guess(r))
                             && !tagger_piece(e, r)
                     })
@@ -1809,6 +1882,27 @@ pub unsafe extern "C" fn parzr_tone_guard_json(input: *const c_char) -> *mut c_c
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_capital_i_is_the_pronouns_not_a_sentence_start() {
+        // "Neither I do" is moved to "do I": only a sentence start is capitalized, by its caller.
+        assert_eq!(match_case("do I", "I do"), "do I");
+        assert_eq!(match_case("do I", "I"), "Do I");
+        assert_eq!(match_case("are not", "I'm not"), "are not");
+        assert_eq!(match_case("Is it", "It is"), "Is it");
+        assert_eq!(match_case("the", "The"), "The");
+        assert_eq!(match_case("do I", "Is"), "Do I");
+        assert_eq!(match_case("it", "IT'S"), "IT");
+    }
+    #[test]
+    fn affective_and_reins_are_words() {
+        for text in [
+            "She has seasonal affective disorder.",
+            "The affective response was strong.",
+            "He took the reins of the company.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
     #[test]
     fn the_slip_switch_defaults_on_and_requests_without_it_still_parse() {
         // The browser host and the LSP never send it: they keep the slip check.
@@ -2310,6 +2404,128 @@ mod tests {
         assert_eq!(fix_request(req.clone()), req.text);
     }
     #[test]
+    fn a_past_form_the_tagger_calls_a_verb_makes_a_clause() {
+        // "hit", "shut", "cost" are also nouns, so without a hint their past form makes no clause
+        // ("a straight bet"). The app's tagger reads them as verbs in a sentence, and then the two
+        // clauses take their comma.
+        let tagged = |text: &str, word: &str| -> Request {
+            let start = text.find(word).unwrap();
+            Request {
+                text: text.into(),
+                tokens: vec![TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + word.len(),
+                    pos: "Verb".into(),
+                    lemma: String::new(),
+                    name: false,
+                    ..TokenHint::default()
+                }],
+                ..Request::default()
+            }
+        };
+        for (text, word, expected) in [
+            (
+                "The storm hit the coast overnight and it knocked out the power.",
+                "hit",
+                "The storm hit the coast overnight, and it knocked out the power.",
+            ),
+            (
+                "They shut the office early so we all went home.",
+                "shut",
+                "They shut the office early, so we all went home.",
+            ),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), expected, "{text}");
+        }
+        // Without the hint the word may be a noun, and nothing changes.
+        let text = "He placed a straight bet and it paid off.";
+        assert_eq!(
+            fix_request(Request {
+                text: text.into(),
+                ..Request::default()
+            }),
+            text
+        );
+        // The tagger calls a participle a verb too; without a subject before it, no clause.
+        for (text, word) in [
+            (
+                "It often includes home movies and photographs shot by a couple for their own fun.",
+                "shot",
+            ),
+            (
+                "The car can be set up comfortably for street use and be set up for superb handling.",
+                "set",
+            ),
+            (
+                "Reading beat Derby County at Pride Park but still went down on goal difference.",
+                "beat",
+            ),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), text, "{text}");
+        }
+    }
+    #[test]
+    fn a_tagged_acronym_keeps_its_letters_and_loses_only_the_redundant_word() {
+        // The tagger calls an all-caps acronym a name; a rule that deletes the word beside it
+        // changes nothing of the name, so the edit stands. Changing the name itself still does not.
+        let tagged = |text: &str, word: &str| -> Request {
+            let start = text.find(word).unwrap();
+            Request {
+                text: text.into(),
+                tokens: vec![TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + word.len(),
+                    pos: "Noun".into(),
+                    lemma: String::new(),
+                    name: true,
+                    ..TokenHint::default()
+                }],
+                ..Request::default()
+            }
+        };
+        for (text, word, expected) in [
+            (
+                "Check the ROM memory before the update.",
+                "ROM",
+                "Check the ROM before the update.",
+            ),
+            (
+                "We use OCR recognition to read the scans.",
+                "OCR",
+                "We use OCR to read the scans.",
+            ),
+            ("Please RSVP by Friday.", "RSVP", "RSVP by Friday."),
+        ] {
+            assert_eq!(fix_request(tagged(text, word)), expected, "{text}");
+        }
+        // A name that a rule would respell is still left alone.
+        let text = "I met Jonh yesterday and we talked.";
+        assert_eq!(fix_request(tagged(text, "Jonh")), text);
+    }
+    #[test]
+    fn changed_words_leaves_out_the_words_an_edit_repeats() {
+        let edit = |original: &str, replacement: &str| Edit {
+            start_utf16: 10,
+            end_utf16: 10 + original.encode_utf16().count(),
+            replacement: replacement.into(),
+            original: original.into(),
+            category: "Style".into(),
+            rule_id: "test".into(),
+            explanation: String::new(),
+            confidence: 0.9,
+            group_id: None,
+        };
+        // "ROM memory" to "ROM": only " memory" (10 + 3 ..) changes.
+        assert_eq!(changed_words(&edit("ROM memory", "ROM")), (13, 20));
+        // "please RSVP" to "RSVP": only "please ".
+        assert_eq!(changed_words(&edit("please RSVP", "RSVP")), (10, 17));
+        // Letters inside a word are never trimmed: "Amans" to "Aman" changes the name.
+        assert_eq!(changed_words(&edit("Amans", "Aman")), (10, 15));
+        // An insertion, and a replacement that keeps nothing, keep their own range.
+        assert_eq!(changed_words(&edit("ROM", "ROMs")), (10, 13));
+        assert_eq!(changed_words(&edit("ROM", "RAM")), (10, 13));
+    }
+    #[test]
     fn tagged_and_dictionary_proper_nouns_get_capitals() {
         let named = |text: &str, words: &[&str]| -> Request {
             let tokens = words
@@ -2400,6 +2616,125 @@ mod tests {
                 && names::never_a_name("u")
         );
         assert!(!names::never_a_name("Li") && !names::never_a_name("aman"));
+    }
+    /// The pipeline's first pass on `text` with the tagger calling each of `words` a name, as the
+    /// system tagger does for a capitalized word it does not know.
+    fn tagged(text: &str, words: &[&str]) -> String {
+        let tokens = words
+            .iter()
+            .map(|w| {
+                let start = text.find(w).unwrap();
+                TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + w.len(),
+                    pos: "Noun".into(),
+                    lemma: String::new(),
+                    name: true,
+                    ..TokenHint::default()
+                }
+            })
+            .collect();
+        pipeline::rewrite(&Request {
+            text: text.into(),
+            tokens,
+            ..Request::default()
+        })
+        .unwrap()
+        .text
+    }
+    #[test]
+    fn a_closing_line_is_no_name_even_when_the_tagger_says_so() {
+        // "Sincerley" is capitalized and unknown, so the tagger calls it a name and a name takes
+        // no edit; before a signature it is a closing, and its misspelling is fixed.
+        assert_eq!(
+            tagged(
+                "Thanks for the update.\n\nSincerley,\nAman",
+                &["Sincerley", "Aman"]
+            ),
+            "Thanks for the update.\n\nSincerely,\nAman"
+        );
+        assert_eq!(
+            tagged("Sincerley,\nAman", &["Sincerley", "Aman"]),
+            "Sincerely,\nAman"
+        );
+        assert_eq!(
+            fix("Thanks for the update.\n\nBest regads,\nAman"),
+            "Thanks for the update.\n\nBest regards,\nAman"
+        );
+        assert_eq!(
+            fix("Thanks for the update.\n\nKind regads,\nPriya"),
+            "Thanks for the update.\n\nKind regards,\nPriya"
+        );
+        // The signature stays as typed, and a greeting line is a person, not a closing.
+        for (text, names) in [
+            ("Hi Sarha,\nSee you soon.\nAman", ["Sarha", "Aman"]),
+            (
+                "Thanks for the update.\n\nBest regards,\naman",
+                ["aman", "aman"],
+            ),
+            ("Dear Sarha,\nAman", ["Sarha", "Aman"]),
+        ] {
+            assert_eq!(tagged(text, &names).to_lowercase(), text.to_lowercase());
+        }
+    }
+    #[test]
+    fn two_to_four_capitals_are_an_acronym_unless_the_list_has_the_name() {
+        for acronym in ["PC", "CD", "DVD", "CEO", "API", "FBI", "NASA"] {
+            assert!(names::never_a_name(acronym), "{acronym}");
+        }
+        for name in ["Ali", "ALI", "AMAN", "Sam", "I", "Aman's"] {
+            assert!(!names::never_a_name(name), "{name}");
+        }
+        // The tagger's name guess on "PC" or "API" is dropped at the tokenizer.
+        let text = "The PC and the API are old.";
+        let hints: Vec<TokenHint> = ["PC", "API"]
+            .iter()
+            .map(|w| {
+                let start = text.find(w).unwrap();
+                TokenHint {
+                    start_utf16: start,
+                    end_utf16: start + w.len(),
+                    pos: "Noun".into(),
+                    name: true,
+                    ..TokenHint::default()
+                }
+            })
+            .collect();
+        assert!(
+            tokenizer::tokenize(text, &hints)
+                .iter()
+                .all(|t| !t.proper_name)
+        );
+    }
+    #[test]
+    fn a_possessive_correction_takes_the_apostrophe_the_word_already_has() {
+        // "childrens'" is "children's": the correction took the typed mark with it once, and left
+        // "children's'", then fought another rule about "those children's" until the check gave up.
+        for (input, expected) in [
+            (
+                "The childrens' toys are here.",
+                "The children's toys are here.",
+            ),
+            (
+                "Those childrens' books are old.",
+                "Those children's books are old.",
+            ),
+            (
+                "Those children's books are old.",
+                "Those children's books are old.",
+            ),
+            ("He said 'recieve' is wrong.", "He said 'receive' is wrong."),
+            // No noun follows: the plural. A noun follows: the possessive.
+            ("I have two childrens.", "I have two children."),
+            ("Both womens left early.", "Both women left early."),
+            (
+                "My childrens school is near.",
+                "My children's school is near.",
+            ),
+            ("The womens room is open.", "The women's room is open."),
+        ] {
+            assert_eq!(pipe(input), expected, "{input}");
+        }
     }
     #[test]
     fn surname_particles_join_name_parts() {

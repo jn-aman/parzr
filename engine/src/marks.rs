@@ -769,6 +769,22 @@ const NOT_NOUNS: &[&str] = &[
     "was",
     "were",
     "be",
+    // Helping verbs: after an edit the tagger's verb hint for them is gone ("The cats have
+    // arrived" must not read "have" as a noun and the cats' as a possessive).
+    "has",
+    "have",
+    "had",
+    "do",
+    "does",
+    "did",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "may",
+    "might",
+    "must",
     "today",
     "tomorrow",
     "tonight",
@@ -782,6 +798,14 @@ const NOT_NOUNS: &[&str] = &[
     "ago",
     "basis",
     "the",
+    // "the kids who hurt themselves": a relative word opens a clause, it is nobody's possession.
+    "who",
+    "whom",
+    "whose",
+    "which",
+    "that",
+    "where",
+    "when",
     "a",
     "an",
     "it",
@@ -1196,6 +1220,43 @@ const POSSESSIVE_WORDS: [(&str, &str); 13] = [
     ("our's", "ours"),
 ];
 const TIME_UNITS: [&str; 7] = ["day", "week", "month", "year", "hour", "night", "minute"];
+/// Weekday and month abbreviations: "Thu" and "Sat" are names in the lexicon, but "Thus" and
+/// "Sats" are not a name and an "s".
+const DATE_ABBREVIATIONS: [&str; 17] = [
+    "mon", "tue", "wed", "thu", "fri", "sat", "sun", "jan", "feb", "mar", "apr", "jun", "jul",
+    "aug", "sep", "oct", "nov",
+];
+/// Plurals that are not made with "s": their possessive is "men's", "children's", "people's", so
+/// the apostrophe after them is right even beside "those" or "many".
+const IRREGULAR_PLURALS: [&str; 24] = [
+    "men",
+    "women",
+    "children",
+    "people",
+    "mice",
+    "geese",
+    "feet",
+    "teeth",
+    "oxen",
+    "lice",
+    "dice",
+    "alumni",
+    "cacti",
+    "fungi",
+    "nuclei",
+    "radii",
+    "criteria",
+    "phenomena",
+    "bacteria",
+    "data",
+    "media",
+    "analyses",
+    "crises",
+    "theses",
+];
+/// Quantifiers that also follow an article in the singular ("the other party's", "a different
+/// team's"): they count only after a plural quantifier or a number ("all other employee's").
+const SINGULAR_AFTER_ARTICLE: [&str; 2] = ["other", "different"];
 const QUANTIFIERS: [&str; 30] = [
     "two",
     "three",
@@ -1271,6 +1332,15 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 .chars()
                 .next()
                 .map_or(1, char::len_utf8);
+            // "all Kelly's fans", "other people's stuff": a name or an irregular plural with "'s" is
+            // a possessive, never a plural written with an apostrophe.
+            let possessive_only = [
+                "people", "children", "men", "women", "mice", "feet", "teeth",
+            ]
+            .contains(&base)
+                || !acronym
+                    && t.surface.starts_with(char::is_uppercase)
+                    && !crate::starts_sentence(&req.text, t.start_byte, req);
             let noun = acronym
                 || spelling::flags(base) & 2 != 0
                     && !crate::punctuation::finite(t)
@@ -1302,7 +1372,8 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                         "this",
                         "one",
                     ]
-                    .contains(&base);
+                    .contains(&base)
+                    && !IRREGULAR_PLURALS.contains(&base);
             // "The dog's are barking": a plural verb after it makes it a plural.
             let plural_verb = next.is_some_and(|n| {
                 [
@@ -1312,8 +1383,22 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
             });
             // "two PR's", "so many photo's", "All employee's must".
             let counted = prev.is_some_and(|p| {
-                QUANTIFIERS.contains(&p.normalized.as_str())
-                    || p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
+                let number = |t: &Token<'_>| {
+                    t.surface.chars().all(|c| c.is_ascii_digit()) && t.surface != "1"
+                };
+                // "the other party's feelings" is one party's; "all other party's" is plural.
+                let plural_before = i.checked_sub(2).is_some_and(|j| {
+                    let b = &tokens[j];
+                    QUANTIFIERS.contains(&b.normalized.as_str())
+                        && !SINGULAR_AFTER_ARTICLE.contains(&b.normalized.as_str())
+                        || number(b)
+                        || NUMBERS.contains(&b.normalized.as_str())
+                });
+                if SINGULAR_AFTER_ARTICLE.contains(&p.normalized.as_str()) {
+                    plural_before
+                } else {
+                    QUANTIFIERS.contains(&p.normalized.as_str()) || number(p)
+                }
             });
             // "these PA's", "all ENA's products": an acronym keeps its apostrophe unless a number
             // counts it ("two PR's").
@@ -1321,7 +1406,22 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
                 p.surface.chars().all(|c| c.is_ascii_digit()) && p.surface != "1"
                     || NUMBERS.contains(&p.normalized.as_str())
             });
-            if noun && (plural_verb || counted) && (!acronym || numbered) {
+            // "Two people's lives": "people" is already plural, so a count before it does not make
+            // the "'s" a slip for a plural ("peoples" is a word of its own, with its own rule).
+            let irregular_plural = crate::structure::IRREGULAR_PLURALS.contains(&base)
+                || ["people", "children", "men", "women", "feet", "teeth"].contains(&base);
+            // "all Kelly's fans", "Many Alzheimer's drugs": a capitalized name inside a sentence takes
+            // "'s" as a possessive, whatever the word before it counts.
+            let named = !acronym
+                && !plural_verb
+                && t.surface.starts_with(char::is_uppercase)
+                && !crate::starts_sentence(text, t.start_byte, req);
+            if noun
+                && (plural_verb || counted && !possessive_only)
+                && (!acronym || numbered)
+                && !irregular_plural
+                && !named
+            {
                 let possessive_next = next.is_some_and(|n| {
                     n.is_word
                         && spelling::flags(&n.normalized) & 2 != 0
@@ -1455,6 +1555,8 @@ fn apostrophes(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
             && (crate::names::is_bundled_name(stem) || spelling::name_only(stem))
             && !crate::names::is_bundled_name(&t.normalized)
             && !spelling::name_only(&t.normalized)
+            // "Thus far": a weekday or month abbreviation ("Thu") and an "s" is no name and its own.
+            && !DATE_ABBREVIATIONS.contains(&stem)
             && next.is_some_and(|n| {
                 n.surface.starts_with(char::is_lowercase)
                     && spelling::flags(&n.normalized) & 2 != 0
@@ -1629,6 +1731,14 @@ fn colons(req: &Request, tokens: &[Token<'_>], edits: &mut Vec<Edit>) {
         let right_clause = crate::clauses::clause_at(tokens, i + 1, sentence_end).is_some();
         let (replacement, reason) =
             if ["because", "since", "although", "though"].contains(&n.normalized.as_str()) {
+                // "…the setup; because it was late, the site had no servers": the subordinate
+                // clause opens a sentence of its own, with its main clause after the comma.
+                if (i + 1..sentence_end).any(|c| {
+                    tokens[c].surface == ","
+                        && crate::clauses::clause_at(tokens, c + 1, sentence_end).is_some()
+                }) {
+                    continue;
+                }
                 (
                     "",
                     "A subordinate clause joins its sentence without a semicolon.",
@@ -1950,6 +2060,67 @@ mod tests {
         ] {
             assert_eq!(fix(text), text);
         }
+    }
+    #[test]
+    fn a_plural_before_a_relative_clause_is_no_possessive() {
+        // "the kids who hurt themselves": "who" opens a clause and "hurt" is its verb, so "kids"
+        // owns nothing (the rule used to read "who" as the possessed noun once "hurt" counted as
+        // a verb).
+        for text in [
+            "The kids who hurt themselves were fine by lunch.",
+            "The kids that hurt themselves cried.",
+            "My parents who set the table left early.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        assert_eq!(fix("My parents house is big."), "My parents' house is big.");
+    }
+    #[test]
+    fn an_irregular_plural_or_a_single_other_party_keeps_its_possessive() {
+        // "those men's", "these people's": the plural itself takes the 's, and the old rule that
+        // dropped it here fought the "childrens" fix until the check gave up.
+        for text in [
+            "Those children's books are old.",
+            "Those men's boots are by the door.",
+            "These women's shoes are on sale.",
+            "Many people's plans changed.",
+            "All the mice's nests were empty.",
+            "Some alumni's gifts arrived late.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // "the other party's": one party. "All other" and a number make the plural.
+        for text in [
+            "We should consider the other party's feelings.",
+            "A different team's schedule applies.",
+            "Each other player's score counts.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // After "all other" and a number it is a plural again, and its verb says so.
+        assert_eq!(
+            fix("All other employee's are late."),
+            "All other employees are late."
+        );
+        assert_eq!(
+            fix("The cat's are fighting again."),
+            "The cats are fighting again."
+        );
+        // A name mid-sentence keeps its 's: dropping it only started a round with the name rule.
+        for text in [
+            "I found that they were all Kelly's fans.",
+            "Many Alzheimer's drugs are being studied.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // A word that is one itself is not a first name and an "s" ("Thus far", not "Thu's far").
+        for text in ["Thus far we have done well.", "Thus far, nothing broke."] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        assert_eq!(
+            fix("Sarahs laptop is on the desk."),
+            "Sarah's laptop is on the desk."
+        );
     }
     #[test]
     fn colons_semicolons_and_quotes() {

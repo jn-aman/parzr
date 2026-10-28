@@ -8,46 +8,46 @@
   },
   "suites": {
     "heldout-test": {
-      "updated": "2026-10-27",
-      "reason": "CI run 40451959493 on rules-expansion (19 packs, 14,052 rules): rules fixed 425/686 (62.0%, was 58.6%), gec 521 (76.0%, was 72.3%), false alarms 1 and 1 as before; the rules layer's median rose to 5.8 ms on CI's runner (p95 27.7 ms, memory 329 MB) with the six wave-3 packs, a cost the quality gain is worth",
+      "updated": "2026-10-28",
+      "reason": "Audit wave (PR #37) measured by the held-out runner that looks again at a pending typing answer, as the app does (CI run 40616442815): gec 524 (was 521 first-answer; the keyboard_slip items the runner's load used to decide), rules 424 (one agreement/this_these item of the audit, within tolerance)",
       "layers": {
         "rules": {
           "errors": 686,
           "clean": 287,
-          "fixed": 425,
-          "fix_rate": 0.6195,
+          "fixed": 424,
+          "fix_rate": 0.6181,
           "false_alarms": 1,
           "false_alarm_rate": 0.0035
         },
         "gec": {
           "errors": 686,
           "clean": 287,
-          "fixed": 521,
-          "fix_rate": 0.7595,
+          "fixed": 524,
+          "fix_rate": 0.7638,
           "false_alarms": 1,
           "false_alarm_rate": 0.0035
         }
       }
     },
     "typo-fuzz-test": {
-      "updated": "2026-10-26",
-      "reason": "CI verify of release/0.5.4 daedab6 (run 40369739926): with the eight rule packs the typo-fuzz test set fixes 81.1% (rules) and 85.9% (gec) at the same three false alarms; the rules layer's peak memory is the 768-pattern compiled cache and 99k-literal prefilter (313 MB, from 78), latency within the old tolerance (p50 1.6 ms, p95 4.4 ms)",
+      "updated": "2026-10-28",
+      "reason": "Audit wave (PR #37) with the held-out runner that looks again at a pending typing answer (CI run 40616442815): rules 8781 (was 8734), gec 9294 (was 9244)",
       "layers": {
         "rules": {
           "errors": 10765,
           "clean": 200,
-          "fixed": 8734,
-          "fix_rate": 0.8113,
-          "false_alarms": 3,
-          "false_alarm_rate": 0.015
+          "fixed": 8781,
+          "fix_rate": 0.8157,
+          "false_alarms": 2,
+          "false_alarm_rate": 0.01
         },
         "gec": {
           "errors": 10765,
           "clean": 200,
-          "fixed": 9244,
-          "fix_rate": 0.8587,
-          "false_alarms": 3,
-          "false_alarm_rate": 0.015
+          "fixed": 9294,
+          "fix_rate": 0.8634,
+          "false_alarms": 2,
+          "false_alarm_rate": 0.01
         }
       }
     },

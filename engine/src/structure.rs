@@ -62,6 +62,15 @@ const CLAUSE_OPENERS: [&str; 41] = [
     "know",
     "believe",
 ];
+/// Counting words that stand before a noun.
+const NUMBER_WORDS: [&str; 20] = [
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+    "dozen", "hundred", "thousand", "million", "both", "several", "many", "few", "other",
+];
+/// Verbs that open a command with a bare verb after them ("Come sit down", "Go get it").
+const IMPERATIVE_FRAMES: [&str; 9] = [
+    "come", "go", "run", "hurry", "help", "wait", "stay", "please", "let",
+];
 /// Sentence openers that front a place or time phrase and so invert the clause.
 const FRONTED: [&str; 24] = [
     "round", "inside", "outside", "in", "on", "at", "under", "over", "behind", "beside", "near",
@@ -158,6 +167,52 @@ fn pair_with_i(tokens: &[Token<'_>], i: usize) -> bool {
                 .contains(&tokens[i - 4].normalized.as_str())
             && opens(i - 4)
 }
+/// Plural nouns that take no "-s": the Latin and Greek plurals ("phenomena", "criteria", "bacteria")
+/// and the Germanic ones the tagger may call singular. "Data" and "media" are left out on purpose:
+/// they pass for one mass as often as for many items.
+pub(crate) const IRREGULAR_PLURALS: &[&str] = &[
+    "phenomena",
+    "criteria",
+    "bacteria",
+    "alumni",
+    "alumnae",
+    "stimuli",
+    "nuclei",
+    "fungi",
+    "cacti",
+    "radii",
+    "syllabi",
+    "curricula",
+    "memoranda",
+    "addenda",
+    "errata",
+    "strata",
+    "millennia",
+    "genera",
+    "corpora",
+    "vertebrae",
+    "larvae",
+    "hypotheses",
+    "analyses",
+    "diagnoses",
+    "theses",
+    "crises",
+    "oases",
+    "parentheses",
+    "appendices",
+    "matrices",
+    "vertices",
+    "indices",
+    "mice",
+    "geese",
+    "oxen",
+    "lice",
+    "tableaux",
+    "whereabouts",
+    "belongings",
+    "outskirts",
+    "congratulations",
+];
 pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     let word = subject.normalized.as_str();
     // "Physics was my worst class", "Statistics are…": a field ending in -ics may take either.
@@ -194,6 +249,10 @@ pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
     {
         return Some(true);
     }
+    // Latin and Greek plurals have no "-s" for the dictionary or the suffix test to see.
+    if IRREGULAR_PLURALS.contains(&word) {
+        return Some(true);
+    }
     if [
         "he",
         "she",
@@ -221,6 +280,8 @@ pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
         "whose",
         "there",
         "here",
+        // "None were", "none was": either number.
+        "none",
         "fish",
         "sheep",
         "deer",
@@ -266,6 +327,121 @@ pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
         return Some(false);
     }
     None
+}
+/// The number of the real subject when the word before the verb at `i` belongs to a relative clause
+/// that sits between the subject and its verb: "students that are" (the plural noun before "that"
+/// gives the number, not "that"), and "people I know and admire are" (a bare relative clause whose
+/// own verbs end right before the verb). None when no such clause is there.
+fn relative_subject(tokens: &[Token<'_>], i: usize) -> Option<bool> {
+    let p = tokens.get(i.checked_sub(1)?)?;
+    let noun = |k: usize| -> Option<bool> {
+        let n = tokens.get(k)?;
+        (n.is_word
+            && n.sentence == p.sentence
+            && !SUBJECT_PRONOUNS.contains(&n.normalized.as_str())
+            && !function_word(&n.normalized))
+        .then(|| plural(n))
+        .flatten()
+    };
+    if ["that", "which"].contains(&p.normalized.as_str()) {
+        // Only a plural antecedent is clear: "that" after one is the relative pronoun. "Yes that
+        // works" has no antecedent, and a short "-s" word ("yes") is not a plural.
+        let antecedent = i.checked_sub(2)?;
+        let a = &tokens[antecedent];
+        let regular = a.normalized.len() >= 5 && a.normalized.ends_with('s');
+        return noun(antecedent).filter(|plural| *plural).filter(|_| {
+            regular
+                || IRREGULAR_PLURALS.contains(&a.normalized.as_str())
+                || ["people", "children", "men", "women", "police"].contains(&a.normalized.as_str())
+        });
+    }
+    // "people I know and admire": walk back over the verbs joined by "and" to the subject pronoun.
+    let mut j = i - 1;
+    loop {
+        let x = &tokens[j];
+        if !x.is_word || morphology::verb(&x.normalized).is_none() {
+            return None;
+        }
+        if j >= 2 && tokens[j - 1].normalized == "and" && tokens[j - 2].is_word {
+            j -= 2;
+            continue;
+        }
+        break;
+    }
+    if j < 2 || !SUBJECT_PRONOUNS.contains(&tokens[j - 1].normalized.as_str()) {
+        return None;
+    }
+    noun(j - 2)
+}
+/// Pronouns that can open a relative clause with no relative word ("the people we know").
+const SUBJECT_PRONOUNS: [&str; 7] = ["i", "you", "we", "they", "he", "she", "it"];
+/// The head of the noun phrase that starts at `start`, after the inverted auxiliary `aux`: the last
+/// of up to four nouns and adjectives in a row ("your future plans", "the office hours"). The run
+/// stops at a word that can only be the rest of the clause: after "do" a bare verb ("Do the kids
+/// play"), after "is" or "are" a participle or an -ing form ("Where are the keys left"), after "have"
+/// a participle. The first word when no longer phrase is there.
+fn noun_phrase_head(tokens: &[Token<'_>], start: usize, aux: &str) -> usize {
+    let Some(first) = tokens.get(start) else {
+        return start;
+    };
+    let predicate = |t: &Token<'_>| {
+        morphology::verb(&t.normalized).is_some_and(|v| {
+            let w = t.normalized.as_str();
+            match aux {
+                "do" | "does" => w == v.base && v.third != w,
+                "has" | "have" => w == v.participle && w != v.base,
+                _ => (w == v.participle || w == v.gerund || w == v.past) && w != v.base,
+            }
+        })
+    };
+    // A first word that is only the rest of the clause ("what are considered safe") has no phrase.
+    if predicate(first) && !["do", "does"].contains(&aux) {
+        return start;
+    }
+    let mut end = start;
+    while let Some(t) = tokens.get(end) {
+        let nominal = t.is_word
+            && t.sentence == first.sentence
+            && !function_word(&t.normalized)
+            && ![
+                "that", "which", "who", "whom", "whose", "of", "in", "on", "at", "for", "to",
+                "with", "from", "by", "into", "about", "is", "are", "was", "were", "do", "does",
+                "did", "has", "have", "had", "be", "will", "can", "should", "would", "must", "not",
+                "no", "it", "they", "we", "you", "i", "he", "she", "this", "these", "those",
+            ]
+            .contains(&t.normalized.as_str())
+            && (spelling::flags(&t.normalized) & (2 | 8) != 0
+                || plural(t).is_some()
+                || looks_plural(&t.normalized))
+            // The first word is the phrase's own start, whatever it could also be. A name's capital
+            // marks it a noun ("Sharon Stone"); after "do" the clause has one bare verb and the
+            // run decides below which it is.
+            && (end == start
+                || ["do", "does"].contains(&aux)
+                || t.surface.starts_with(char::is_uppercase)
+                || !predicate(t));
+        if !nominal || end >= start + 4 {
+            break;
+        }
+        end += 1;
+    }
+    // After "do" the last bare verb in the run is the predicate ("do the kids play", "does the sales
+    // report look"): the phrase ends before it.
+    if ["do", "does"].contains(&aux)
+        && let Some(cut) = (start + 1..end).rfind(|k| {
+            predicate(&tokens[*k]) && !tokens[*k].surface.starts_with(char::is_uppercase)
+        })
+    {
+        end = cut;
+    }
+    // A trailing adjective is the complement ("Why is the staff members late"), not the head.
+    while end > start + 1
+        && spelling::flags(&tokens[end - 1].normalized) & 2 == 0
+        && !looks_plural(&tokens[end - 1].normalized)
+    {
+        end -= 1;
+    }
+    end.saturating_sub(1).max(start)
 }
 /// A subject that can sit between an inverted auxiliary and its verb ("did she called"): a
 /// pronoun or a name, never a common word that might itself be the verb ("play games").
@@ -322,12 +498,15 @@ fn function_word(w: &str) -> bool {
         "what",
         "than",
         "as",
+        "perhaps",
+        "maybe",
+        "please",
     ]
     .contains(&w)
 }
 /// A regular plural of a known noun that the dictionary does not flag as plural ("teenagers",
 /// "photographs", "lives").
-fn looks_plural(word: &str) -> bool {
+pub(crate) fn looks_plural(word: &str) -> bool {
     if word.len() < 5
         || !word.ends_with('s')
         || word.ends_with("ss")
@@ -467,6 +646,22 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             ]
             .contains(&governor)
             {
+                // "He is considered to be an expert", "a plan suggested to be safe": a passive or
+                // reduced passive, where "to be" is the right complement. A subject pronoun before
+                // the verb ("she considered to be") makes it active.
+                let before = prev
+                    .checked_sub(2)
+                    .map_or("", |k| tokens[k].normalized.as_str());
+                let passive = [
+                    "is", "are", "was", "were", "am", "be", "been", "being", "get", "gets", "got",
+                ]
+                .contains(&before)
+                    || w == "be"
+                        && ["considered", "suggested"].contains(&governor)
+                        && !["i", "we", "you", "they", "he", "she"].contains(&before);
+                if passive {
+                    continue;
+                }
                 if let Some(edit) = make_edit(
                     &req.text,
                     tokens[prev].start_utf16,
@@ -555,6 +750,30 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         let name_subject = auxiliary_base
             && (tokens[prev].surface.starts_with(char::is_uppercase)
                 || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
+        // "strength of will is important", "his own will remains": a noun, not a modal.
+        let noun_modal = auxiliary_base
+            && prev > 0
+            && [
+                "of", "the", "a", "an", "my", "his", "her", "their", "our", "your", "its", "this",
+                "that", "free", "strong", "good", "own",
+            ]
+            .contains(&tokens[prev - 1].normalized.as_str());
+        // "Should hackers be denied access?", "as must courses in the minor": the modal comes
+        // first, so a plural noun after it is the subject.
+        let inverted_modal = auxiliary_base
+            && w == v.third
+            && (spelling::flags(w) | spelling::flags(&v.base)) & 2 != 0
+            && (prev == 0
+                // "..., should hackers be denied": a verb right after the noun makes it the subject.
+                || tokens.get(i + 1).is_some_and(|n| {
+                    ["be", "been", "have", "get", "become"].contains(&n.normalized.as_str())
+                })
+                || tokens[prev - 1].sentence != t.sentence
+                || [
+                    "as", "than", "so", "nor", "neither", "and", "but", "or", "when", "if",
+                ]
+                .contains(&tokens[prev - 1].normalized.as_str())
+                || crate::starts_sentence(&req.text, tokens[prev].start_byte, req));
         // "do sports", "need to do is", "can do lots of": do is the main verb with an object or a
         // complement, so what follows is not a verb to de-inflect. After a form of "be" ("I was do
         // tired") it is a slip for "so", and "tired" stays an adjective.
@@ -573,10 +792,12 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                     && (spelling::flags(w) & 2 != 0 || looks_plural(w)));
         if auxiliary_base
             && !name_subject
+            && !noun_modal
+            && !inverted_modal
             && !nominal_what
             && !wh_inversion
             && !main_do
-            && w != "saw"
+            && !morphology::also_base(w)
             && w != v.base
             && [v.third.as_str(), &v.past, &v.participle].contains(&w)
         {
@@ -601,7 +822,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 .get(i + 1)
                 .map(|t| t.normalized.as_str())
                 .unwrap_or("");
+            // "had like a mohawk": "like" is a preposition here, not a bare verb.
             if next != "to"
+                && w != "like"
                 && (w != "saw" || ["the", "a", "an", "this", "that", "it", "them"].contains(&next))
                 && (w == v.past
                     || [
@@ -696,7 +919,11 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 || crate::starts_sentence(&req.text, tokens[prev - 1].start_byte, req))
             && !full_name_statement(&tokens, prev - 1)
         {
-            if w != v.base {
+            // "Did you saw it?" is "see": only the homographs a writer rarely means as a base
+            // ("did she lay the carpet", "did it wound him") stay.
+            let keeps = morphology::also_base(w) && !["saw", "found"].contains(&w);
+            // "How the team did it is unclear": "did" is the main verb and "is" the sentence's own.
+            if w != v.base && !keeps && !["is", "are", "was", "were", "am"].contains(&w) {
                 emit(
                     req,
                     t,
@@ -720,7 +947,8 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 emit(
                     req,
                     t,
-                    &v.base,
+                    // The plural of "is" is "are": "be" is only the infinitive.
+                    if v.base == "be" { "are" } else { &v.base },
                     "grammar.relative_plural",
                     "Match the relative-clause verb to its plural antecedent.",
                     edits,
@@ -742,16 +970,29 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         {
             let mut subject = i + 1;
             while subject < tokens.len()
-                && ["the", "a", "an", "my", "our", "your", "their", "his", "her"]
-                    .contains(&tokens[subject].normalized.as_str())
+                && [
+                    "the", "a", "an", "my", "our", "your", "their", "his", "her", "all", "both",
+                    "some", "any", "these", "those", "many", "several", "few", "most", "other",
+                    "more", "half",
+                ]
+                .contains(&tokens[subject].normalized.as_str())
             {
                 subject += 1;
             }
+            // The verb agrees with the head of the noun phrase after it ("your future plans", "the
+            // office hours"), which is its last noun, not its first word.
+            let subject = noun_phrase_head(&tokens, subject, w);
             if let Some(s) = tokens.get(subject)
+                // "What are HID lights?": an acronym before its noun is a modifier, not the subject.
+                && !(s.surface.len() > 1
+                    && s.surface.chars().all(char::is_uppercase)
+                    && tokens.get(subject + 1).is_some_and(|x| x.is_word))
                 && let Some(pl) = plural(s)
                 && !tokens
                     .get(subject + 1)
-                    .is_some_and(|x| ["and", "or"].contains(&x.normalized.as_str()))
+                    .is_some_and(|x| ["and", "or", ","].contains(&x.normalized.as_str()))
+                // British English lets a group noun take a plural verb ("Where are the team?").
+                && !(req.dialect == "british" && !pl && COLLECTIVE.contains(&s.normalized.as_str()))
             {
                 let replacement = match (w, pl) {
                     // "Where was I?": "I" takes "was" and "am", never "were" or "are".
@@ -919,9 +1160,28 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         {
             continue;
         }
-        let Some(mut is_plural) = plural(p) else {
+        // "values such as these, that were believed": after a comma the antecedent is not the word
+        // before; and "the only thing that matters is": a verb after "that" is not the subject.
+        if ["that", "which"].contains(&p.normalized.as_str())
+            && i >= 2
+            && tokens[i - 2].surface == ","
+        {
+            continue;
+        }
+        if i >= 3
+            && ["that", "which", "who"].contains(&tokens[i - 2].normalized.as_str())
+            && morphology::verb(&p.normalized).is_some_and(|x| p.normalized == x.third)
+        {
+            continue;
+        }
+        let Some(mut is_plural) = relative_subject(&tokens, i).or_else(|| plural(p)) else {
             continue;
         };
+        // "These news are good", "These entry were": a singular-looking noun after a plural
+        // demonstrative is a mismatch the demonstrative rule owns; the verb is no evidence.
+        if !is_plural && i >= 2 && ["these", "those"].contains(&tokens[i - 2].normalized.as_str()) {
+            continue;
+        }
         // British English lets a group noun take a plural verb ("The team are working on it").
         if req.dialect == "british" && !is_plural && COLLECTIVE.contains(&p.normalized.as_str()) {
             continue;
@@ -963,8 +1223,35 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && i - 1 - and <= 3
             && and > 0
             && tokens[and + 1..i - 1].iter().all(|x| x.is_word)
-            && plural(&tokens[and - 1]).is_some()
-            && !tokens[..and - 1]
+            // "enthusiasm, and dedication were": a comma before "and" ends a list; the item is the
+            // word before it. A plain adjective is no item ("years old and my name is").
+            // In a comma list the last item follows "and" at once or after one determiner.
+            && (tokens[and - 1].surface != ","
+                || i - 1 == and + 1
+                || ["the", "a", "an", "my", "our", "your", "his", "her", "their", "this", "that"]
+                    .contains(&tokens[and + 1].normalized.as_str()))
+            && let left = if tokens[and - 1].surface == "," && and > 1 {
+                and - 2
+            } else {
+                and - 1
+            }
+            && plural(&tokens[left]).is_some()
+            && !spelling::adjective(&tokens[left])
+            // A list that opens its sentence: a verb earlier in it ("X is at Y, Z, and his work is")
+            // makes the "and" join two clauses.
+            && (left == and - 1
+                || !tokens[..left]
+                    .iter()
+                    .any(|x| {
+                        x.sentence == t.sentence
+                            && [
+                                "is", "are", "was", "were", "has", "have", "had", "do", "does",
+                                "did", "can", "could", "will", "would", "should", "may", "might",
+                                "must",
+                            ]
+                            .contains(&x.normalized.as_str())
+                    }))
+            && !tokens[..left]
                 .iter()
                 .rev()
                 .take_while(|x| {
@@ -979,6 +1266,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                             "were", "has", "have", "had",
                         ]
                         .contains(&x.normalized.as_str())
+                        // "I'm 22 years old and my name is": a contracted verb is a clause before it.
+                        || x.normalized.ends_with("'m")
+                        || x.normalized.ends_with("'re")
                 })
         {
             is_plural = true;
@@ -1038,9 +1328,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                 "for", "near", "off", "among", "around", "behind", "beside", "under", "over",
                 "inside", "outside", "across", "through", "during", "within", "toward", "towards",
                 "into", "onto", "upon", "along", "against", "above", "below", "beyond", "without",
-                "except", "like", "than", "such", "after", "before", "see", "sees", "saw", "watch",
-                "watched", "hear", "heard", "make", "makes", "made", "let", "lets", "help",
-                "helps", "helped", "feel", "felt", "notice", "noticed", "have", "had",
+                "except", "like", "than", "such", "as", "after", "before", "see", "sees", "saw",
+                "watch", "watched", "hear", "heard", "make", "makes", "made", "let", "lets",
+                "help", "helps", "helped", "feel", "felt", "notice", "noticed", "have", "had",
             ]
             .contains(&x.normalized.as_str())
                 || morphology::verb(&x.normalized).is_some_and(|v| x.normalized == v.gerund)
@@ -1132,6 +1422,13 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
         .max()
         .map_or(frame, |at| &frame[at..]);
+        // A reported or relative clause ("told me that he loves me", "the letter in which you say")
+        // has its own time: the time word before it belongs to the clause outside.
+        let frame = [" that ", " which ", " whom ", " who ", " whose "]
+            .iter()
+            .filter_map(|c| frame.rfind(c).map(|at| at + c.len()))
+            .max()
+            .map_or(frame, |at| &frame[at..]);
         let markers = ["yesterday", "last week", "last month", "last night"];
         let present_frame = markers
             .iter()
@@ -1189,7 +1486,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             } else {
                 p.normalized.as_str()
             };
-            let is_plural = is_plural || paired_i;
+            // "These are", "Those were": the demonstrative is plural, though "plural" does not mark
+            // it (that would make "These prints show" read "prints" as a verb to de-inflect).
+            let is_plural = is_plural || paired_i || ["these", "those"].contains(&head);
             let replacement = match (w, is_plural, head) {
                 // "Me and him are": the pronoun rules fix the subject first.
                 _ if named || ["me", "him", "us", "them"].contains(&head) => None,
@@ -1215,6 +1514,9 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
         } else if w == v.third
             && is_plural
             && !name_subject
+            // "These four studies": a number before a plural noun is its determiner, not a subject.
+            && !(NUMBER_WORDS.contains(&p.normalized.as_str())
+                && (spelling::flags(w) & 2 != 0 || looks_plural(w)))
             && !["read", "put", "cut", "let"].contains(&w)
         {
             emit(
@@ -1296,7 +1598,23 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
                             && morphology::verb(&x.normalized)
                                 .is_some_and(|v| x.normalized == v.past && v.past != v.base)
                     });
-            if !subjunctive && !compound && !narrative && !dropped_do {
+            // "Come sit down", "Keep it like this": an imperative has no third-person subject, so
+            // the word before is a verb of command, and "like" after its object is a preposition.
+            let imperative = (i == 1 || tokens[i - 2].sentence != t.sentence)
+                && IMPERATIVE_FRAMES.contains(&p.normalized.as_str())
+                || w == "like"
+                    && i >= 2
+                    && (["it", "this", "that", "them", "him", "her", "me", "us"]
+                        .contains(&p.normalized.as_str())
+                        && morphology::verb(&tokens[i - 2].normalized).is_some()
+                        && tokens[i - 2].sentence == t.sentence
+                        // "nothing like eating", "something like this": "like" is a preposition.
+                        || [
+                            "nothing", "something", "anything", "everything", "somewhere",
+                            "anywhere",
+                        ]
+                        .contains(&p.normalized.as_str()));
+            if !subjunctive && !compound && !narrative && !dropped_do && !imperative {
                 emit(
                     req,
                     t,

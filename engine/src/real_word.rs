@@ -3,7 +3,7 @@
 //! word pairs on both sides strongly prefer the other word. Spelling cannot see these; only
 //! context can, so the evidence is the bundled word-pair counts and the bar is high.
 use crate::tokenizer::Token;
-use crate::{context, spelling};
+use crate::{context, morphology, spelling};
 
 /// QWERTY rows with their horizontal offsets in key widths.
 const ROWS: [(&str, f32); 3] = [("qwertyuiop", 0.0), ("asdfghjkl", 0.25), ("zxcvbnm", 0.75)];
@@ -204,11 +204,167 @@ fn after_subject(tokens: &[Token<'_>], index: usize) -> Option<String> {
         .is_none_or(|s| score - s.0 >= 0.5)
         .then_some(cand)
 }
+/// Words that name a part or a quantity and take "of", never a condition after them: "a lot of",
+/// "most of", "one of", "the rest of".
+const PARTITIVES: &[&str] = &[
+    "lot", "lots", "bit", "bunch", "couple", "kind", "sort", "type", "number", "piece", "pair",
+    "set", "part", "rest", "most", "many", "few", "some", "none", "half", "both", "plenty", "ton",
+    "tons", "list", "group", "variety", "series", "range", "one",
+];
+/// Words of quantity that also stand before a real condition ("eats a lot if food is free"): a
+/// clause with a verb after "if" keeps it there, unlike after "most" or "one".
+const LOOSE_PARTITIVES: &[&str] = &[
+    "lot", "lots", "bit", "bunch", "couple", "plenty", "ton", "tons",
+];
+/// Words that open a subject: after "if" they start a clause ("if the shop asks", "if they ask").
+const SUBJECT_OPENERS: &[&str] = &[
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "there",
+    "the",
+    "a",
+    "an",
+    "my",
+    "your",
+    "his",
+    "her",
+    "our",
+    "their",
+    "this",
+    "that",
+    "these",
+    "those",
+    "some",
+    "any",
+    "no",
+    "every",
+    "each",
+    "someone",
+    "anyone",
+    "everyone",
+    "nobody",
+    "somebody",
+    "anybody",
+    "everybody",
+];
+/// Whether the words after `tokens[index]` read as a clause with a finite verb (a subject, then a
+/// verb within a few words, before any punctuation): what a conjunction like "if" introduces.
+fn clause_follows(tokens: &[Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let mut words = tokens[index + 1..]
+        .iter()
+        .take_while(|t| t.sentence == token.sentence && t.is_word);
+    let Some(subject) = words.next() else {
+        return false;
+    };
+    (SUBJECT_OPENERS.contains(&subject.normalized.as_str())
+        || spelling::flags(&subject.normalized) & 2 != 0)
+        && words.take(5).any(|t| {
+            FINITE.contains(&t.normalized.as_str())
+                || morphology::verb(&t.normalized)
+                    .is_some_and(|v| v.third == t.normalized || v.past == t.normalized)
+        })
+}
+/// "a lot if apples", "plenty if room", "lots if friends": "if" right after a word of quantity
+/// and before a bare noun phrase that ends the clause is "of". The clause after a real "if"
+/// ("if apples are cheap", "if necessary") carries a verb or an adjective, so only a noun that
+/// is followed by the end of the sentence, a mark or a preposition counts.
+fn quantity_if(tokens: &[Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let same = |t: &Token<'_>| t.sentence == token.sentence && t.paragraph == token.paragraph;
+    let Some(before) = index.checked_sub(1).map(|i| &tokens[i]) else {
+        return false;
+    };
+    if token.surface != "if"
+        || !same(before)
+        || ![
+            "lot", "lots", "plenty", "bunch", "couple", "number", "pair", "rest",
+        ]
+        .contains(&before.normalized.as_str())
+    {
+        return false;
+    }
+    let mut at = index + 1;
+    if tokens.get(at).is_some_and(|t| {
+        same(t)
+            && ["the", "a", "an", "my", "your", "our", "their", "his", "her"]
+                .contains(&t.normalized.as_str())
+    }) {
+        at += 1;
+    }
+    let Some(_noun) = tokens.get(at).filter(|t| {
+        same(t)
+            && t.is_word
+            && t.surface.starts_with(char::is_lowercase)
+            && spelling::ordinary(&t.normalized)
+            && spelling::flags(&t.normalized) & 2 != 0
+            && !SUBJECT_OPENERS.contains(&t.normalized.as_str())
+            // "if necessary", "if possible", "if needed": the tails of a real condition.
+            && !["necessary", "possible", "needed", "required", "desired", "wanted", "applicable",
+                "available", "appropriate", "relevant", "anything", "everything", "so", "not", "ever"]
+            .contains(&t.normalized.as_str())
+            && !["ible", "able", "ary", "ed"].iter().any(|e| t.normalized.ends_with(e))
+    }) else {
+        return false;
+    };
+    tokens.get(at + 1).is_none_or(|t| {
+        !same(t)
+            || !t.is_word
+            || ["in", "on", "at", "for", "to", "from", "with", "of", "by"]
+                .contains(&t.normalized.as_str())
+    })
+}
+/// A word the sentence builds a construction around, so that it is right where it stands and a
+/// keyboard slip is not the reading: "neither ... nor" (and "nor" opening a sentence) and an
+/// "if" that opens a condition ("Keep a copy if the shop asks"), never one after a quantity
+/// ("a lot if apples").
+fn licensed(tokens: &[Token<'_>], index: usize) -> bool {
+    let token = &tokens[index];
+    let same = |t: &Token<'_>| t.sentence == token.sentence && t.paragraph == token.paragraph;
+    match token.normalized.as_str() {
+        "nor" => {
+            index == 0
+                || !same(&tokens[index - 1])
+                || tokens[..index]
+                    .iter()
+                    .rev()
+                    .take_while(|t| same(t))
+                    .any(|t| {
+                        [
+                            "neither", "not", "no", "never", "nobody", "nothing", "none",
+                            "nowhere", "hardly", "barely", "cannot", "without",
+                        ]
+                        .contains(&t.normalized.as_str())
+                            || t.normalized.ends_with("n't")
+                    })
+        }
+        "if" => {
+            let partitive = index
+                .checked_sub(1)
+                .map(|i| &tokens[i])
+                .is_some_and(|p| same(p) && PARTITIVES.contains(&p.normalized.as_str()));
+            let loose = index
+                .checked_sub(1)
+                .map(|i| &tokens[i])
+                .is_some_and(|p| LOOSE_PARTITIVES.contains(&p.normalized.as_str()));
+            (!partitive || loose) && clause_follows(tokens, index)
+        }
+        _ => false,
+    }
+}
 /// The slip's replacement, when the pair counts on both sides back one candidate overwhelmingly.
 /// Bars tuned on the authored set (engine/tests/real_word.json) and BEA dev; see the commit log.
 pub fn fix(tokens: &[Token<'_>], index: usize) -> Option<String> {
     if let Some(but) = clause_but(tokens, index) {
         return Some(but.into());
+    }
+    if quantity_if(tokens, index) {
+        return Some("of".into());
     }
     let token = &tokens[index];
     let word = token.normalized.as_str();
@@ -221,6 +377,7 @@ pub fn fix(tokens: &[Token<'_>], index: usize) -> Option<String> {
         || ["ot", "fro", "ew"].contains(&word)
         || spelling::hinglish(word)
         || spelling::lowercase_name(tokens, index)
+        || licensed(tokens, index)
     {
         return None;
     }
@@ -309,6 +466,48 @@ mod tests {
         assert!(wrong.is_empty(), "wrong rewrites: {wrong:?}");
         // Recall is reported, not promised; this floor catches a regression of the mechanism.
         assert!(fixed >= 20, "only {fixed} slips fixed");
+    }
+    #[test]
+    fn a_construction_the_sentence_builds_keeps_its_word() {
+        // "neither ... nor" and a sentence-opening "nor" are right as typed.
+        for text in [
+            "Neither the manager nor the staff knew the answer.",
+            "He neither called nor wrote back.",
+            "She could not sing nor dance.",
+            "Nor did the plan work.",
+            "There is no tea nor coffee left.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // An "if" that opens a condition is right where the words after it are a clause.
+        for text in [
+            "Keep a copy if the shop asks for it.",
+            "Call me if the printer jams again.",
+            "We can leave early if they agree.",
+            "Ask if the office is open on Sunday.",
+            "Do we need friends or family members if technology can care for us?",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
+        // After a quantity the same letters are a slip of "of", and are still fixed.
+        assert_eq!(
+            fix("We ate a lot if the cake."),
+            "We ate a lot of the cake."
+        );
+        assert_eq!(fix("Most if them left early."), "Most of them left early.");
+        // A quantity before a bare noun phrase that ends the clause is "of", too.
+        assert_eq!(fix("I want a lot if apples."), "I want a lot of apples.");
+        assert_eq!(fix("There is plenty if room."), "There is plenty of room.");
+        assert_eq!(fix("He has lots if friends."), "He has lots of friends.");
+        // A condition after a quantity keeps its "if".
+        for text in [
+            "I will pay a lot if necessary.",
+            "She saves a lot if possible.",
+            "He eats a lot if food is free.",
+            "It hurts a lot if you press.",
+        ] {
+            assert_eq!(fix(text), text, "{text}");
+        }
     }
     #[test]
     fn the_reported_miss_is_fixed() {
