@@ -207,55 +207,55 @@
     },
     "tone-regression-3": {
       "updated": "2026-10-30",
-      "reason": "Third independent tone set (150 items, written without reading sets 1 or 2 or the engine's tone rules): full-set measurement of generalisation at v0.5.9, 82.0/81.3/96.0/98.0 after fixing 15 item specs the first run showed were unsound",
+      "reason": "Tone fix wave 4 (the deterministic findings of set 3): full set 123/122/144/147 to 132/124/149/150 of 150; no request that passed before fails",
       "items": 150,
       "modes": {
         "professional": {
           "items": 150,
-          "passed": 123,
-          "pass_rate": 0.82
+          "passed": 132,
+          "pass_rate": 0.88
         },
         "friendly": {
           "items": 150,
-          "passed": 122,
-          "pass_rate": 0.8133
+          "passed": 124,
+          "pass_rate": 0.8267
         },
         "concise": {
           "items": 150,
-          "passed": 144,
-          "pass_rate": 0.96
+          "passed": 149,
+          "pass_rate": 0.9933
         },
         "direct": {
           "items": 150,
-          "passed": 147,
-          "pass_rate": 0.98
+          "passed": 150,
+          "pass_rate": 1.0
         }
       },
       "samples": {
         "3": {
           "updated": "2026-10-30",
-          "reason": "Sample (--every 3, what CI scores) of the third tone set at v0.5.9: 40/42/46/49 of 50",
+          "reason": "Tone fix wave 4 (the deterministic findings of set 3): --every 3 sample 40/42/46/49 to 44/43/49/50 of 50; no request that passed before fails",
           "items": 50,
           "modes": {
             "professional": {
               "items": 50,
-              "passed": 40,
-              "pass_rate": 0.8
+              "passed": 44,
+              "pass_rate": 0.88
             },
             "friendly": {
               "items": 50,
-              "passed": 42,
-              "pass_rate": 0.84
+              "passed": 43,
+              "pass_rate": 0.86
             },
             "concise": {
               "items": 50,
-              "passed": 46,
-              "pass_rate": 0.92
+              "passed": 49,
+              "pass_rate": 0.98
             },
             "direct": {
               "items": 50,
-              "passed": 49,
-              "pass_rate": 0.98
+              "passed": 50,
+              "pass_rate": 1.0
             }
           }
         }
