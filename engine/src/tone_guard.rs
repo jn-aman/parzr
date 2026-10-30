@@ -265,6 +265,32 @@ fn times(source: &str, output: &str) -> Result<(), String> {
             });
         }
     }
+    // "dinner at 7" is not "dinner at 7 PM": a bare hour after a preposition gets no am or pm.
+    static BARE: OnceLock<Regex> = OnceLock::new();
+    let bare = BARE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:at|by|until|till|around|before|after)\s+(\d{1,2})\b(?:\s?[ap]\.?m\b|:\d)?",
+        )
+        .expect("constant bare hour pattern")
+    });
+    for c in bare.captures_iter(source) {
+        let whole = c.get(0).map_or("", |m| m.as_str());
+        let Some(hour) = c.get(1).and_then(|m| m.as_str().parse::<u32>().ok()) else {
+            continue;
+        };
+        let typed_suffix =
+            whole.trim_end().to_ascii_lowercase().ends_with(['m']) || whole.contains(':');
+        if !typed_suffix
+            && out
+                .iter()
+                .any(|&(h, m, s)| h == hour && m == 0 && s.is_some())
+            && !src
+                .iter()
+                .any(|&(h, m, s)| h == hour && m == 0 && s.is_some())
+        {
+            return Err(format!("gives {hour} an am or pm it did not have"));
+        }
+    }
     Ok(())
 }
 
@@ -572,6 +598,11 @@ mod tests {
                 "We meet at 6:30 pm.",
                 "We meet at 6:30.",
                 "drops the am or pm",
+            ),
+            (
+                "wanna grab dinner at 7 after the gym?",
+                "Would you like to grab dinner at 7 PM after the gym?",
+                "gives a bare hour an am or pm",
             ),
             (
                 "Thank you for your letter of 4 March.",
