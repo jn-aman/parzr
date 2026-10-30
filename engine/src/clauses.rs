@@ -406,9 +406,16 @@ fn has_noun(tokens: &[Token<'_>], a: usize, b: usize) -> bool {
 }
 /// "can you", "is the slot", "did Maya": an auxiliary before its subject opens a question.
 pub(crate) fn inverted_question(tokens: &[Token<'_>], j: usize, end: usize) -> bool {
-    let (a, b) = (word(tokens, j), word(tokens, j + 1));
+    let (a, mut b) = (word(tokens, j), word(tokens, j + 1));
     if j + 2 >= end || !(AUXILIARIES.contains(&a) || NEGATED.contains(&a)) {
         return false;
+    }
+    // "Is not the discount supposed to apply": the spelled-out "isn't the discount".
+    if b == "not" && !["do", "does", "did", "have", "has", "had", "am"].contains(&a) {
+        if j + 3 >= end {
+            return false;
+        }
+        b = word(tokens, j + 2);
     }
     let pronoun = ["you", "i", "we", "they", "he", "she", "it", "there"].contains(&b);
     match a {
@@ -1879,6 +1886,9 @@ fn extra_comma(req: &Request, tokens: &[Token<'_>], s: usize, e: usize, edits: &
             && !(AUXILIARIES.contains(&word(tokens, r))
                 && r + 1 < end
                 && SUBJECTS.contains(&word(tokens, r + 1)))
+            // "…something, but isn't the discount supposed to apply": a question with its own
+            // subject, which `coordinated` puts the comma before.
+            && !inverted_question(tokens, r, end)
         {
             delete(
                 edits,
@@ -2063,6 +2073,17 @@ mod tests {
             "He walked into the meeting, coffee in hand.",
             "We sold the old car, no regrets at all.",
             "They cancelled the picnic, because of storms in the forecast.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
+    fn a_comma_before_a_question_with_its_own_subject_is_neither_added_nor_removed() {
+        // The two rules once undid each other until "Corrections did not stabilize".
+        for text in [
+            "I may be missing something, but isn't the discount supposed to apply to orders over 200 euros?",
+            "I might be wrong, but aren't the invoices due on Friday?",
+            "I might be wrong, but is not the invoice due on Friday?",
         ] {
             assert_eq!(fix(text), text);
         }

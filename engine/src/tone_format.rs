@@ -186,6 +186,7 @@ const YA_YES_BEFORE: &[&str] = &[
 /// Chat shorthand a Professional rewrite spells out, with what it stands for.
 const SHORTHAND: &[(&str, &str)] = &[
     ("u", "you"),
+    ("abt", "about"),
     ("pls", "please"),
     ("plz", "please"),
     ("thx", "thanks"),
@@ -210,7 +211,7 @@ const SHORTHAND: &[(&str, &str)] = &[
     ("hrs", "hours"),
 ];
 
-fn edit(
+pub(crate) fn edit(
     start: usize,
     end: usize,
     original: &str,
@@ -231,7 +232,7 @@ fn edit(
     }
 }
 
-fn protected_at(protected: &[TextRange], start: usize, end: usize) -> bool {
+pub(crate) fn protected_at(protected: &[TextRange], start: usize, end: usize) -> bool {
     protected.iter().any(|p| overlaps(start, end, p))
 }
 
@@ -251,6 +252,31 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
         // "u-turn", "U.S.", "rn.": only a word standing alone.
         let after = &req.text[t.end_byte..];
         let before = &req.text[..t.start_byte];
+        // "come w/ me", "send it b4 noon": the slash or the digit is part of the shorthand
+        // (the tokenizer splits them off; "w/o" is a word of its own).
+        let spelled = match t.surface {
+            "w" if after.starts_with("/ ") || after == "/" => Some(("w/", "with")),
+            "b" if after
+                .strip_prefix('4')
+                .is_some_and(|rest| rest.chars().next().is_none_or(|c| !c.is_alphanumeric())) =>
+            {
+                Some(("b4", "before"))
+            }
+            _ => None,
+        };
+        if let Some((typed, full)) =
+            spelled.filter(|_| !before.ends_with(['-', '/', '_', '@', '#']))
+        {
+            edits.push(edit(
+                t.start_utf16,
+                t.end_utf16 + 1,
+                typed,
+                full.into(),
+                "tone.professional_shorthand",
+                "Spell out chat shorthand in professional writing.",
+            ));
+            continue;
+        }
         if after.starts_with(['-', '.', '\'', '’', '/', '_', '@'])
             && !after.starts_with(". ")
             && !after.trim_end().eq(".")
@@ -325,6 +351,13 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
                 "have to"
             }
             .to_owned(),
+            // "r u coming" is "are you coming"; a lone "R" is a letter.
+            "r" if next
+                .as_deref()
+                .is_some_and(|n| ["u", "you", "we", "they", "ya"].contains(&n)) =>
+            {
+                "are".to_owned()
+            }
             // "ur right" is "you are right"; "ur email" is "your email".
             "ur" => if next.as_deref().is_some_and(|n| UR_PREDICATES.contains(&n)) {
                 "you are"
@@ -371,7 +404,7 @@ fn upper_first(word: &str) -> String {
 
 /// Actions a request asks the reader to do: "can you send me the file?" asks for a sending,
 /// while "can you make it Friday?" or "can you see the error?" asks a question.
-const REQUEST_VERBS: &[&str] = &[
+pub(crate) const REQUEST_VERBS: &[&str] = &[
     "send", "review", "check", "look", "take", "share", "update", "fix", "call", "email", "help",
     "grab", "add", "merge", "approve", "confirm", "sign", "schedule", "move", "test", "ping",
     "forward", "upload", "submit", "finish", "complete", "prepare", "write", "draft", "give",
@@ -599,7 +632,79 @@ pub(crate) fn opener_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
             "Say it without the padded opener.",
         ));
     }
+    if req.mode == crate::Mode::Concise {
+        edits.extend(bare_greeting(req, &tokens, protected));
+    }
     edits
+}
+
+/// A chat greeting that opens a message and says no more than hello, with its comma ("hey, are you
+/// coming to the offsite?", "hi there are you free"), goes in Concise when a clause follows it.
+/// "Hi Maria, ..." greets a person and stays.
+fn bare_greeting(
+    req: &Request,
+    tokens: &[tokenizer::Token<'_>],
+    protected: &[TextRange],
+) -> Option<Edit> {
+    let text = req.text.as_str();
+    let words: Vec<usize> = (0..tokens.len()).filter(|&i| tokens[i].is_word).collect();
+    let first = *words.first()?;
+    if first != 0 || !req.sentence_start {
+        return None;
+    }
+    let lower = |i: usize| tokens[i].surface.to_lowercase();
+    if !["hey", "hi", "hello", "yo", "hiya", "heya"].contains(&lower(0).as_str()) {
+        return None;
+    }
+    let mut next = 1;
+    if tokens
+        .get(next)
+        .is_some_and(|t| t.is_word && lower(next) == "there")
+    {
+        next += 1;
+    }
+    if tokens.get(next).is_some_and(|t| t.surface == ",") {
+        next += 1;
+    }
+    let rest = tokens.get(next)?;
+    // At least a short clause must follow.
+    if !rest.is_word || tokens[next..].iter().filter(|t| t.is_word).count() < 3 {
+        return None;
+    }
+    // A capitalized word that is no ordinary word, or one with a comma behind it, is the person
+    // greeted ("Hi Maria, can you", "Hey Will, are you").
+    let name = rest.surface.starts_with(char::is_uppercase)
+        && (!crate::spelling::ordinary(&rest.surface.to_lowercase())
+            || tokens.get(next + 1).is_some_and(|t| t.surface == ","));
+    // "Hi team,", "Hello everyone,": a word or two and a comma are the people greeted.
+    let salutation = tokens[next..]
+        .iter()
+        .position(|t| t.surface == ",")
+        .is_some_and(|comma| {
+            tokens[next..next + comma]
+                .iter()
+                .filter(|t| t.is_word)
+                .count()
+                <= 2
+        });
+    if name || salutation || text[tokens[next - 1].end_byte..rest.start_byte].contains('\n') {
+        return None;
+    }
+    let (a, b) = (tokens[0].start_byte, rest.start_byte);
+    let width = rest.surface.chars().next().map_or(0, char::len_utf8);
+    let end = b + width;
+    let utf16 = |x: usize| text[..x].encode_utf16().count();
+    if protected_at(protected, utf16(a), utf16(end)) {
+        return None;
+    }
+    Some(edit(
+        utf16(a),
+        utf16(end),
+        &text[a..end],
+        rest.surface[..width].to_uppercase(),
+        "tone.plain_opener",
+        "Leave out the greeting.",
+    ))
 }
 
 /// A clause that only hedges or apologizes before a request or a claim, to be followed by
@@ -610,7 +715,7 @@ fn hedge_lead_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
         regex::Regex::new(
-            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)",
+            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)|^(?:if\s+(?:it['’]s|that['’]s)\s+(?:not\s+too\s+much\s+trouble|ok|okay|alright|fine)\s*,\s*)",
         )
         .expect("constant hedge lead regex")
     })
@@ -664,7 +769,10 @@ struct HedgePlan {
 fn hedge_plan(mode: crate::Mode, sentence: &str) -> Option<HedgePlan> {
     let words = |s: &str| s.split_whitespace().count();
     let concise = mode == crate::Mode::Concise;
-    let lead = hedge_lead_regex().find(sentence).map_or(0, |m| m.end());
+    let lead = hedge_lead_regex()
+        .find(sentence)
+        .map_or(0, |m| m.end())
+        .max(crate::meaning::hedge_lead(sentence).unwrap_or(0));
     let rest = &sentence[lead..];
     if lead > 0 {
         // A clause must follow the hedge ("I'm not sure, but." alone stays).
@@ -817,7 +925,7 @@ pub(crate) fn hedge_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
 const INSULT_NOUNS: &str = "idiot|moron|fool|imbecile|dimwit|jerk|clown";
 
 /// The sentences of `tokens` as (first word, last token) indexes, each with its byte range.
-fn sentence_spans(tokens: &[tokenizer::Token<'_>]) -> Vec<(usize, usize)> {
+pub(crate) fn sentence_spans(tokens: &[tokenizer::Token<'_>]) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = vec![];
     let mut current = None;
     for (i, t) in tokens.iter().enumerate() {
@@ -1186,6 +1294,25 @@ fn final_mark(
             .collect()
     };
     let asks = |words: &[String]| {
+        if crate::tone_guard::drops_its_subject(words) {
+            return false;
+        }
+        // "hey r u coming": "r" is "are" before its subject.
+        let spelled: Vec<String> = words
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                let subject = words
+                    .get(i + 1)
+                    .is_some_and(|n| ["u", "you", "we", "they", "ya"].contains(&n.as_str()));
+                if w == "r" && subject {
+                    "are".to_owned()
+                } else {
+                    w.clone()
+                }
+            })
+            .collect();
+        let words = &spelled[..];
         let lead = words
             .iter()
             .take_while(|w| LEAD_INS.contains(&w.as_str()))
@@ -1222,7 +1349,13 @@ fn final_mark(
             && (words.first().is_some_and(|w| WH.contains(&w.as_str()))
                 || words.get(1).is_some_and(|w| WHO.contains(&w.as_str())))
     };
-    let mark = if asks(&words_of(&last)) || clause.len() > 2 && clause_asks(&words_of(clause)) {
+    // "can u call me when ur free, need to talk abt the lease": one question and then a need
+    // stated; the mark would put the need under the question.
+    let states_need = last.iter().any(|t| t.surface == ",")
+        && crate::tone_guard::says_something(&words_of(clause));
+    let mark = if (asks(&words_of(&last)) && !states_need)
+        || clause.len() > 2 && clause_asks(&words_of(clause))
+    {
         "?"
     } else {
         "."
@@ -1260,6 +1393,109 @@ mod tests {
         apply(text, professional_forms(&req, &[]))
     }
 
+    #[test]
+    fn a_statement_with_its_subject_left_out_or_a_need_after_a_request_is_no_question() {
+        // chat2-04 and chat2-05 of the second tone set: the floor wrote a "?".
+        for (text, expected) in [
+            (
+                "thx Marcus, ur the best. will send the files tmrw",
+                "THX Marcus, ur the best. Will send the files tmrw.",
+            ),
+            (
+                "can u call me when ur free, need to talk abt the lease",
+                "Can u call me when ur free, need to talk abt the lease.",
+            ),
+            (
+                "could do Friday if that works for you",
+                "Could do Friday if that works for you.",
+            ),
+            // Asked questions keep theirs.
+            (
+                "will you send the files tomorrow",
+                "Will you send the files tomorrow?",
+            ),
+            ("can u call me when ur free", "Can u call me when ur free?"),
+            (
+                "hey r u coming to the offsite on the 22nd",
+                "Hey r u coming to the offsite on the 22nd?",
+            ),
+            (
+                "the build is broken again, can someone look",
+                "The build is broken again, can someone look?",
+            ),
+        ] {
+            assert_eq!(floored(text), expected, "{text}");
+        }
+    }
+    #[test]
+    fn concise_leaves_out_a_bare_greeting_but_not_one_that_greets_a_person() {
+        let concise = |text: &str| {
+            let req = Request {
+                text: text.into(),
+                mode: crate::Mode::Concise,
+                ..Default::default()
+            };
+            apply(text, opener_forms(&req, &[]))
+        };
+        for (text, expected) in [
+            (
+                "Hey, are you coming to the offsite on the 22nd?",
+                "Are you coming to the offsite on the 22nd?",
+            ),
+            (
+                "hey are you coming to the offsite?",
+                "Are you coming to the offsite?",
+            ),
+            (
+                "Hey there, can you send the file?",
+                "Can you send the file?",
+            ),
+            ("Yo, the build is green again.", "The build is green again."),
+            // A person greeted, a lone greeting and a letter's salutation line stay.
+            (
+                "Hi Maria, can you send the file?",
+                "Hi Maria, can you send the file?",
+            ),
+            ("Hey Will, are you free?", "Hey Will, are you free?"),
+            ("Hey there!", "Hey there!"),
+            (
+                "Hi team, the build is green again.",
+                "Hi team, the build is green again.",
+            ),
+            (
+                "Hello everyone,\n\nPlease be advised.",
+                "Hello everyone,\n\nPlease be advised.",
+            ),
+            (
+                "Hi all, FYI the office is closed.",
+                "Hi all, FYI the office is closed.",
+            ),
+            (
+                "Hi,\n\nPlease send the file.",
+                "Hi,\n\nPlease send the file.",
+            ),
+        ] {
+            assert_eq!(concise(text), expected, "{text}");
+        }
+    }
+    #[test]
+    fn professional_spells_out_abt_b4_w_slash_and_r_u() {
+        for (text, expected) in [
+            (
+                "we need to talk abt the lease",
+                "we need to talk about the lease",
+            ),
+            ("send it b4 noon", "send it before noon"),
+            ("come w/ me to the store", "come with me to the store"),
+            ("r u coming to the party", "are you coming to the party"),
+            ("hey r u free", "hey are you free"),
+            // Not shorthand: a letter, "w/o", a version tag.
+            ("plan R is ready", "plan R is ready"),
+            ("tea w/o sugar", "tea w/o sugar"),
+        ] {
+            assert_eq!(professional(text), expected, "{text}");
+        }
+    }
     #[test]
     fn chat_gets_sentence_capitals_and_a_final_mark() {
         assert_eq!(
@@ -1370,6 +1606,48 @@ mod tests {
         apply(text, hedge_forms(&req, &[]))
     }
 
+    #[test]
+    fn the_hedge_clauses_of_the_second_tone_set_are_said_plainly_too() {
+        use crate::Mode::{Concise, Direct};
+        for (text, expected) in [
+            (
+                "Sorry if this is the wrong place to ask, but does anyone have the password for the office?",
+                "Does anyone have the password for the office?",
+            ),
+            (
+                "Not sure if this makes sense, but we can't ship on Friday without the security audit.",
+                "We can't ship on Friday without the security audit.",
+            ),
+            (
+                "I might be overthinking this, but I wouldn't send the draft to the client before legal has seen it.",
+                "I wouldn't send the draft to the client before legal has seen it.",
+            ),
+            (
+                "I may be missing something, but isn't the discount supposed to apply to orders over 200 euros?",
+                "Isn't the discount supposed to apply to orders over 200 euros?",
+            ),
+            (
+                "If it's not too much trouble, could you send me the signed copy?",
+                "Could you send me the signed copy?",
+            ),
+            (
+                "Please correct me if I'm wrong, but the meeting was moved to 4:15 on Tuesday, right?",
+                "The meeting was moved to 4:15 on Tuesday, right?",
+            ),
+        ] {
+            for mode in [Concise, Direct] {
+                assert_eq!(hedged(mode, text), expected, "{mode:?} {text}");
+            }
+        }
+        // A clause that ends in "whether", a short "Sorry, but" and a claim of fact stay.
+        for text in [
+            "Just checking, in case it got buried, whether you had a chance to look at the proposal?",
+            "Sorry, but no.",
+            "We checked it, but the totals are probably wrong.",
+        ] {
+            assert_eq!(hedged(Concise, text), text);
+        }
+    }
     #[test]
     fn hedge_openers_are_said_plainly_in_concise_and_direct() {
         use crate::Mode::{Concise, Direct};

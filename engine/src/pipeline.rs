@@ -685,6 +685,13 @@ fn grammar(
         if pass.is_empty() {
             return Ok(());
         }
+        #[cfg(feature = "local-model")]
+        crate::model::trace!(
+            "pipeline: grammar pass {:?}",
+            pass.iter()
+                .map(|e| (e.start_utf16, &e.original, &e.replacement, &e.rule_id))
+                .collect::<Vec<_>>()
+        );
         document.apply(&pass)?;
     }
     if !rewrite_once(&document.request(req, protected, Mode::Fix), false)?
@@ -881,6 +888,18 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // A common insult is said kindly before the model sees it (Friendly): the small model replies
     // to "Shut up and send me the file." or keeps it. Then the model rewrites the kinder text.
     let before_frames = document.text();
+    // A sentence that only insults is cut, and the insult inside the others is replaced
+    // (Professional and Friendly), before the model sees the text.
+    if matches!(req.mode, Mode::Professional | Mode::Friendly) {
+        let mut fenced = protected.clone();
+        fenced.extend(name_guard_ranges(req));
+        let current = document.request(req, &fenced, req.mode);
+        let said = crate::tone_insult::insult_forms(&current, &current.protected_ranges);
+        if !said.is_empty() {
+            document.apply(&said)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+        }
+    }
     if req.mode == Mode::Friendly {
         let mut fenced = protected.clone();
         fenced.extend(name_guard_ranges(req));
@@ -927,6 +946,19 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
         {
             crate::model::trace!(
                 "pipeline: formal text, rewrite {:?} not kept",
+                contextual.text
+            );
+        }
+        // Friendly text that already reads warm (thanks, an exclamation, a warm word) is not
+        // reworded for its own sake either: "Thank you so much" is not better as "Thanks so much".
+        Ok(contextual)
+            if req.mode == Mode::Friendly
+                && !framed
+                && crate::meaning::warm(&req.text)
+                && !crate::meaning::earns_warmth(&document.text(), &contextual.text) =>
+        {
+            crate::model::trace!(
+                "pipeline: warm text, rewrite {:?} not kept",
                 contextual.text
             );
         }

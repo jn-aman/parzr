@@ -2071,7 +2071,7 @@ fn rude_phrase_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
         regex::Regex::new(concat!(
-            r"\b(?:did\s+you\s+even\s+(?:read|look|listen|bother|check|try|think|see|open|notice)",
+            r"\b(?:did\s+you\s+even\s+(?:read|look|listen|bother|check|try|think|see|open|notice|test|run|review|proofread|double-check)",
             r"|you\s+never\s+(?:listen|read|check|learn|think|pay\s+attention)",
             r"|why\s+(?:can['’]t|can\s*not|cannot|won['’]t|couldn['’]t)\s+you\s+just",
             r"|are\s+you\s+(?:deaf|blind|dense|daft|even\s+(?:listening|reading|trying))",
@@ -2101,8 +2101,8 @@ fn contractions(text: &str) -> usize {
     .find_iter(text)
     .count()
 }
-/// Whether `text` has something a Professional rewrite is for: chat shorthand, an insult, a
-/// contraction, a sentence that starts in lowercase, "!!" or "??", or no final mark. Text with
+/// Whether `text` has something a Professional rewrite is for: chat shorthand, an insult (a rude
+/// word or a put-down said in a phrase), a contraction, a sentence that starts in lowercase, "!!" or "??", or no final mark. Text with
 /// none of these is already in the tone, and a rewrite that only rewords it ("help" to "assist
 /// you", "received" to "have received") is no improvement.
 #[cfg(feature = "local-model")]
@@ -2111,7 +2111,7 @@ pub(crate) fn informal(text: &str) -> bool {
     let repeated = REPEATED
         .get_or_init(|| regex::Regex::new(r"[!?]{2,}").expect("constant repeated mark regex"));
     let marks = tone_marks(text);
-    if marks.chat + marks.rude > 0 || contractions(text) > 0 || repeated.is_match(text) {
+    if marks.chat + marks.insulted() > 0 || contractions(text) > 0 || repeated.is_match(text) {
         return true;
     }
     let tokens = tokenizer::tokenize(text, &[]);
@@ -2152,12 +2152,83 @@ pub(crate) fn earns_rewrite(source: &str, output: &str) -> bool {
             .count()
     };
     let (s, o) = (tone_marks(source), tone_marks(output));
-    o.rude < s.rude
+    // A courtesy earns the rewrite of a request ("Send me the numbers" to "Please send me the
+    // numbers"), not of a statement turned into one ("Someone must be present" to "Please ensure
+    // that someone is present").
+    let asks = sentences(source).iter().any(|sentence| {
+        let first = sentence
+            .split(|c: char| !c.is_alphabetic())
+            .find(|w| !w.is_empty())
+            .unwrap_or("")
+            .to_lowercase();
+        crate::morphology::verb(&first).is_some_and(|v| v.base == first)
+    });
+    o.insulted() < s.insulted()
         || o.chat < s.chat
         || o.exclaims < s.exclaims
         || contractions(output) < contractions(source)
-        || courtesy(output) > courtesy(source)
+        || asks && courtesy(output) > courtesy(source)
         || o.hedges < s.hedges
+}
+/// Whether `text` already reads warm: at least two of an exclamation mark and warm or thankful
+/// words, sentences that start in capitals, and nothing a friendlier tone removes (an insult,
+/// chat shorthand, a negative word, padding, "!!").
+pub(crate) fn warm(text: &str) -> bool {
+    const WARM: &[&str] = &[
+        "thank",
+        "thanks",
+        "cheers",
+        "warm",
+        "warmly",
+        "glad",
+        "happy",
+        "delighted",
+        "wonderful",
+        "lovely",
+        "great",
+        "appreciate",
+        "appreciated",
+        "grateful",
+        "enjoyed",
+        "pleasure",
+        "love",
+        "loved",
+        "fantastic",
+        "awesome",
+        "excited",
+        "thrilled",
+        "kind",
+    ];
+    let marks = tone_marks(text);
+    if marks.insulted() + marks.chat + marks.negative > 0 || marks.padding >= 3 {
+        return false;
+    }
+    if text.contains("!!") || text.contains("??") {
+        return false;
+    }
+    let tokens = tokenizer::tokenize(text, &[]);
+    let mut previous = usize::MAX;
+    for t in &tokens {
+        if t.sentence != previous
+            && t.is_word
+            && t.surface.chars().next().is_some_and(char::is_lowercase)
+        {
+            return false;
+        }
+        previous = t.sentence;
+    }
+    let words = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| WARM.contains(&w.to_lowercase().as_str()))
+        .count();
+    words + usize::from(text.contains('!')) >= 2
+}
+/// Whether a Friendly rewrite of text that already reads warm (`warm`) earns its place: it took
+/// out an insult, chat shorthand or padding. A rewrite that only rewords it ("Thank you so much"
+/// to "Thanks so much", "Great to see you" to "It's wonderful to see you") earns nothing.
+pub(crate) fn earns_warmth(source: &str, output: &str) -> bool {
+    let (s, o) = (tone_marks(source), tone_marks(output));
+    o.insulted() < s.insulted() || o.chat < s.chat || o.padding < s.padding
 }
 /// Words of a message that already reads friendly: thanks, an exclamation mark or a warm word.
 pub(crate) fn reads_friendly(text: &str) -> bool {
@@ -2230,23 +2301,119 @@ pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), S
 /// "I don't know,", "I'm not sure,", "I may be wrong,", "I hope you don't mind me asking,",
 /// "sorry to bother you,", "I hate to ask," (each as a clause of its own), "no pressure",
 /// "whether or not", "I guess", "I think", "I believe", "maybe", "possibly", "perhaps", "if
-/// possible". The scorer's list (scripts/run-tone-regression.py HEDGE_OPENER) is the same.
+/// possible", "if that's okay", "if it's not too much trouble". `hedge_clause_spans` adds the
+/// family of leading clauses that apologise, doubt or ask leave. The scorer's recogniser
+/// (scripts/run-tone-regression.py strip_hedge_openers) is the same.
 fn hedge_opener_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
         // The first group names a doubt, a hope or an apology, which is padding only as a clause
         // of its own ("I'm not sure, but ..."); "I'm not sure the design works" stays a doubt.
         regex::Regex::new(
-            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible)\b",
+            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble))\b",
         )
         .expect("constant hedge opener regex")
     })
 }
+/// What a leading clause says when it is an apology, a doubt, a question about permission or a
+/// minimiser: "Sorry for the silly question", "Forgive me if this has already been discussed",
+/// "I might be overthinking this", "Not sure if this makes sense", "I know this is a lot to ask",
+/// "Just checking, in case it got buried".
+fn hedge_marker_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(concat!(
+            r"(?i)\b(?:sorry|apolog(?:y|ies|ize|ise)|forgive|pardon|excuse\s+me",
+            r"|(?:i['’]m\s+|i\s+am\s+)?(?:not|n['’]t)\s+(?:sure|certain|an\s+expert)|unsure",
+            r"|(?:may|might|could)\s+(?:well\s+)?(?:be|have\s+been)\s+(?:\w+\s+){0,2}(?:wrong|missing|overthinking|mistaken|off|confused)",
+            r"|(?:only|just)\s+guessing|overthinking|probably|correct\s+me",
+            r"|(?:silly|stupid|dumb|quick|small|basic)\s+(?:question|ask)",
+            r"|just\s+(?:checking|wondering|a\s+thought)|a\s+(?:quick\s+)?thought|in\s+case",
+            r"|too\s+much\s+trouble|i\s+know\s+(?:this|that|you['’]re|it['’]s)|i\s+hate\s+to",
+            r"|no\s+(?:pressure|rush)|(?:don['’]t|do\s+not)\s+want\s+to\s+(?:push|bother|rush|nag|pester)",
+            r"|(?:a\s+bit|too)\s+early\s+to\s+say|hope\s+you\s+(?:don['’]t|do\s+not)\s+mind)\b"
+        ))
+        .expect("constant hedge marker regex")
+    })
+}
+/// Where a hedge clause ends: ", but", " but" or, after a parenthetical, ", whether".
+fn hedge_end_regex() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| {
+        regex::Regex::new(r"(?i)(?:\s*,\s*(?:but|whether)\b|\s+but\b)")
+            .expect("constant hedge end regex")
+    })
+}
+/// The leading clauses of `text` that hedge, apologise or ask leave before the request or claim
+/// ("Sorry for the silly question, but", "Forgive me if this has already been discussed, but",
+/// "Just checking, in case it got buried, whether"): from a sentence's start to its "but" or
+/// "whether", of three to fourteen words with no other sentence mark, and with a marker in it.
+fn hedge_clause_spans(text: &str) -> Vec<(usize, usize)> {
+    let mut out = vec![];
+    for end in hedge_end_regex().find_iter(text) {
+        let head = &text[..end.start()];
+        let from = head.rfind(['.', '!', '?', '\n']).map_or(0, |i| i + 1);
+        let clause = head[from..].trim_start();
+        let start = head.len() - clause.len();
+        let count = clause.split_whitespace().count();
+        let hedges = hedge_marker_regex().is_match(clause)
+            && !clause.to_lowercase().split_whitespace().any(|w| w == "but")
+            && !clause.contains([';', ':']);
+        if (3..=14).contains(&count) && hedges {
+            out.push((start, end.end()));
+        }
+    }
+    out
+}
+/// The end (in bytes) of the hedge clause that opens `sentence` and runs to its "but", with the
+/// space after it: where a plain version of the sentence starts. None for a sentence that does not
+/// open with one, or whose clause ends in "whether" (the sentence needs more than a cut).
+pub(crate) fn hedge_lead(sentence: &str) -> Option<usize> {
+    let (start, end) = *hedge_clause_spans(sentence).first()?;
+    let clause = &sentence[start..end];
+    let ends_in_but = clause
+        .trim_end()
+        .rsplit(|c: char| !c.is_alphabetic())
+        .next()
+        .is_some_and(|w| w.eq_ignore_ascii_case("but"));
+    (start == 0 && ends_in_but).then(|| {
+        end + sentence[end..]
+            .find(|c: char| !c.is_whitespace())
+            .unwrap_or(sentence.len() - end)
+    })
+}
+/// Every hedge opener of `text` as a byte range, overlapping ones merged.
+fn hedge_opener_spans(text: &str) -> Vec<(usize, usize)> {
+    let mut spans: Vec<(usize, usize)> = hedge_opener_regex()
+        .find_iter(text)
+        .map(|m| (m.start(), m.end()))
+        .chain(hedge_clause_spans(text))
+        .collect();
+    spans.sort_unstable();
+    let mut merged: Vec<(usize, usize)> = vec![];
+    for (a, b) in spans {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    merged
+}
 /// `text` without its hedge openers, or None when it has none.
 fn without_hedge_openers(text: &str) -> Option<String> {
-    let re = hedge_opener_regex();
-    re.is_match(text)
-        .then(|| re.replace_all(text, " ").into_owned())
+    let spans = hedge_opener_spans(text);
+    if spans.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    let mut at = 0;
+    for (a, b) in spans {
+        out.push_str(&text[at..a]);
+        out.push(' ');
+        at = b;
+    }
+    out.push_str(&text[at..]);
+    Some(out)
 }
 
 /// Ok when `output` says what `source` says, as far as `mode` allows: the same negation, numbers
@@ -2290,7 +2457,11 @@ pub(crate) fn keeps_meaning(
         return Err(format!("adds “{}”, which is rude", w.surface));
     }
     // The details a change of tone leaves as written (Fix mode answers to its own checks).
-    if mode != Mode::Fix {
+    // (A hedge opener is padding in Concise and Direct: its "if" and "I" go with it.)
+    if matches!(mode, Mode::Concise | Mode::Direct) {
+        let plain = |text: &str| without_hedge_openers(text).unwrap_or_else(|| text.to_owned());
+        crate::tone_guard::kept_details(&plain(source), &plain(output))?;
+    } else if mode != Mode::Fix {
         crate::tone_guard::kept_details(source, output)?;
     }
     // A rewrite keeps what kind of sentence it is: a question stays a question (Direct may turn a request into
@@ -2393,7 +2564,7 @@ pub(crate) fn keeps_meaning(
     }
     let opener = |t: &str| {
         let t = t.trim_start().to_lowercase();
-        REPLY_OPENERS.iter().any(|o| t.starts_with(o))
+        REPLY_OPENERS.iter().any(|o| t.starts_with(o)) || t.starts_with("no prob")
     };
     if opener(output) && !opener(source) {
         return Err("answers the message instead of rewriting it".into());
@@ -2416,14 +2587,34 @@ pub(crate) fn keeps_meaning(
     // In Concise and Direct the negation of a hedge ("I don't know, ...", "I hope you do not mind
     // me asking, but ...", "whether or not") is padding that goes with it: the count leaves
     // those phrases out of the source and the rewrite alike.
+    // "No prob", "no worries": an acknowledgement, not a negation of anything, in every mode.
+    let acknowledgement = |text: &str| -> Option<String> {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re = RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)\bno\s+(?:prob|problem|problemo|worries|worry|biggie|sweat)\b")
+                .expect("constant acknowledgement regex")
+        });
+        re.is_match(text)
+            .then(|| re.replace_all(text, " ").into_owned())
+    };
     let (src_negations, out_negations) = if matches!(mode, Mode::Concise | Mode::Direct) {
-        let counted = |text: &str, all: &[Word]| match without_hedge_openers(text) {
+        let counted = |text: &str, all: &[Word]| {
+            let plain = acknowledgement(text);
+            match without_hedge_openers(plain.as_deref().unwrap_or(text)) {
+                Some(rest) => negations(&words(&rest, &[])),
+                None => match plain {
+                    Some(rest) => negations(&words(&rest, &[])),
+                    None => negations(all),
+                },
+            }
+        };
+        (counted(source, &src), counted(output, &out))
+    } else {
+        let counted = |text: &str, all: &[Word]| match acknowledgement(text) {
             Some(rest) => negations(&words(&rest, &[])),
             None => negations(all),
         };
         (counted(source, &src), counted(output, &out))
-    } else {
-        (negations(&src), negations(&out))
     };
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
     if out_negations < src_negations {
@@ -2750,9 +2941,9 @@ pub(crate) fn keeps_meaning(
     let (src_content, out_content) = (content(&src), content(&out));
     // The words of a hedge opener ("hope", "mind", "asking") may go with it in Concise and Direct.
     let opener_words: Vec<String> = if matches!(mode, Mode::Direct | Mode::Concise) {
-        hedge_opener_regex()
-            .find_iter(source)
-            .flat_map(|m| words(m.as_str(), &[]))
+        hedge_opener_spans(source)
+            .into_iter()
+            .flat_map(|(a, b)| words(&source[a..b], &[]))
             .map(|w| w.surface)
             .collect()
     } else {
@@ -3099,6 +3290,119 @@ mod tests {
     fn ok(mode: Mode, a: &str, b: &str) -> bool {
         keeps_meaning(mode, a, b, "", &[], &[]).is_ok()
     }
+    #[test]
+    fn a_leading_clause_that_apologises_doubts_or_asks_leave_is_a_hedge_opener() {
+        for (text, hedge) in [
+            (
+                "Sorry for the silly question, but is the 11 am call still on?",
+                "Sorry for the silly question, but",
+            ),
+            (
+                "Forgive me if this has already been discussed, but did anyone confirm the order?",
+                "Forgive me if this has already been discussed, but",
+            ),
+            (
+                "Just checking, in case it got buried, whether you had a chance to look?",
+                "Just checking, in case it got buried, whether",
+            ),
+            (
+                "I might be overthinking this, but I wouldn't send the draft.",
+                "I might be overthinking this, but",
+            ),
+            (
+                "Sorry, I know this is a lot to ask, but could you maybe cover the shift?",
+                "Sorry, I know this is a lot to ask, but",
+            ),
+            (
+                "Not sure if this makes sense, but we can't ship on Friday.",
+                "Not sure if this makes sense, but",
+            ),
+            (
+                "I don't want to push, but could you send the file?",
+                "I don't want to push, but",
+            ),
+            (
+                "Just a thought, but maybe we could use the old logo?",
+                "Just a thought, but",
+            ),
+            (
+                "Thanks. I'm only guessing, but Hannah is free on the 14th.",
+                "I'm only guessing, but",
+            ),
+            (
+                "It's probably minor, but the printer keeps jamming.",
+                "It's probably minor, but",
+            ),
+            (
+                "Sorry if this is the wrong place to ask, but does anyone have the password?",
+                "Sorry if this is the wrong place to ask, but",
+            ),
+        ] {
+            let spans = hedge_opener_spans(text);
+            let found: Vec<&str> = spans.iter().map(|&(a, b)| &text[a..b]).collect();
+            assert!(found.contains(&hedge), "{text}: {found:?}");
+        }
+        // A trailing request for leave goes with the other hedges.
+        assert_eq!(
+            without_hedge_openers("Could you review it, if that's okay?").as_deref(),
+            Some("Could you review it,  ?")
+        );
+        // Plain "but" clauses, a lone apology, long clauses and statements of fact are not hedges.
+        for text in [
+            "We looked at it, but the numbers were wrong.",
+            "Sorry, but no.",
+            "I'm sorry for the delay, the invoice is attached.",
+            "The meeting is at 3, but I'm not sure.",
+            "The report was late. It's done now, but the totals are probably off by a lot of money in several departments across the whole group.",
+            "Sorry; this is probably a silly question, but where is it?",
+        ] {
+            assert!(hedge_clause_spans(text).is_empty(), "{text}");
+        }
+    }
+    #[test]
+    fn a_concise_or_direct_rewrite_may_drop_the_hedge_clauses_of_the_second_tone_set() {
+        for (source, output) in [
+            (
+                "Sorry for the silly question, but is the 11 am call still on?",
+                "Is the 11 am call still on?",
+            ),
+            (
+                "Forgive me if this has already been discussed, but did anyone confirm the catering order for 40 people?",
+                "Did anyone confirm the catering order for 40 people?",
+            ),
+            (
+                "Just checking, in case it got buried, whether you had a chance to look at the Hendricks proposal?",
+                "Did you get a chance to look at the Hendricks proposal?",
+            ),
+            (
+                "I might be overthinking this, but I wouldn't send the draft to the client before legal has seen it.",
+                "I wouldn't send the draft to the client before legal has seen it.",
+            ),
+            (
+                "Not sure if this makes sense, but we can't ship on Friday without the security audit.",
+                "We can't ship on Friday without the security audit.",
+            ),
+        ] {
+            for mode in [Mode::Concise, Mode::Direct] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?} {source}"
+                );
+            }
+        }
+        // What follows the hedge is still checked: a dropped negation or a new number fails.
+        assert!(!ok(
+            Mode::Concise,
+            "Not sure if this makes sense, but we can't ship on Friday.",
+            "We can ship on Friday."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "Sorry for the silly question, but is the 11 am call still on?",
+            "Is the 12 am call still on?"
+        ));
+    }
     const TONES: [Mode; 4] = [
         Mode::Professional,
         Mode::Friendly,
@@ -3179,6 +3483,7 @@ mod tests {
             "I can't make the call today.",
             "Please send it today. thanks.",
             "Why is the invoice still wrong??",
+            "Did you even read my email before replying?",
             "Thanks for the update",
             "Dear Dr. Nakamura,\n\nPlease confirm the date\n\nSincerely,\nElena Park",
         ] {
@@ -3195,6 +3500,11 @@ mod tests {
             assert!(!informal(text), "{text}");
         }
         assert!(earns_rewrite("Thanks!", "Thank you."));
+        // A put-down said in a phrase and then taken out earns the rewrite.
+        assert!(earns_rewrite(
+            "Did you even read my email before replying?",
+            "Did you read my email before replying?"
+        ));
         assert!(earns_rewrite("I can't go.", "I cannot go."));
         assert!(earns_rewrite(
             "Send me the final numbers by Friday.",
@@ -3224,6 +3534,50 @@ mod tests {
         ] {
             assert!(!earns_rewrite(source, output), "{source}");
         }
+    }
+
+    #[test]
+    fn a_courtesy_added_to_a_statement_earns_nothing_but_one_added_to_a_request_does() {
+        assert!(!earns_rewrite(
+            "The delivery is scheduled for Thursday. Someone must be present to sign.",
+            "The delivery is scheduled for Thursday. Please ensure that someone is present to sign."
+        ));
+        assert!(earns_rewrite(
+            "Send the signed copy by Friday.",
+            "Please send the signed copy by Friday."
+        ));
+    }
+
+    #[test]
+    fn text_that_already_reads_warm_keeps_its_wording_in_friendly() {
+        for text in [
+            "Thank you so much for covering my shift, Dana! I owe you one.",
+            "Happy birthday, Tomas! Hope you have a wonderful day.",
+            "Great to see you at the barbecue on Saturday, Ines. Thanks for bringing the salad!",
+            "Thanks again for dinner last night. It was lovely to catch up.",
+            "Thank you for the lovely flowers. They brightened up the whole office.",
+        ] {
+            assert!(warm(text), "{text}");
+        }
+        assert!(!earns_warmth(
+            "Thank you so much for covering my shift, Dana! I owe you one.",
+            "Thanks so much for covering my shift, Dana! I truly owe you one."
+        ));
+        // Curt, rude, shorthand and padded text is not warm yet, and taking an insult out earns.
+        for text in [
+            "Send me the slides by noon.",
+            "Thanks. Send me the slides by noon.",
+            "Thanks for nothing, this plan is stupid!",
+            "thanks so much!",
+            "Thanks, can u send the slides?",
+            "I'm furious! Thanks for nothing.",
+        ] {
+            assert!(!warm(text), "{text}");
+        }
+        assert!(earns_warmth(
+            "Thanks for the report, but this chart is stupid!",
+            "Thanks for the report! This chart could be clearer."
+        ));
     }
 
     #[test]
@@ -3633,6 +3987,33 @@ mod tests {
             assert!(ok(mode, "I hat it.", "I hate it."), "{mode:?}");
             assert!(ok(mode, "This is so bad.", "This is bad."), "{mode:?}");
             assert!(!ok(mode, "This is so bad.", "This is great."), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn no_prob_is_an_acknowledgement_not_a_negation() {
+        let keeps = |mode, a: &str, b: &str| keeps_meaning(mode, a, b, "", &[], &[]);
+        for mode in TONES {
+            for output in [
+                "No problem, I can take the 8am shift on Sunday.",
+                "No prob, I can take the 8 am shift on Sunday.",
+            ] {
+                assert_eq!(
+                    keeps(mode, "no prob, I can take the 8am shift on Sunday.", output),
+                    Ok(()),
+                    "{mode:?} {output}"
+                );
+            }
+            // A real negation still counts.
+            assert!(
+                keeps(
+                    mode,
+                    "No worries, I can't take the 8am shift on Sunday.",
+                    "No worries, I can take the 8am shift on Sunday."
+                )
+                .is_err(),
+                "{mode:?}"
+            );
         }
     }
 

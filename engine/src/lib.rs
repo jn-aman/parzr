@@ -39,6 +39,8 @@ mod tokenizer;
 mod tone_format;
 #[cfg_attr(not(feature = "local-model"), allow(dead_code))]
 mod tone_guard;
+#[cfg(feature = "local-model")]
+mod tone_insult;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
@@ -2009,6 +2011,16 @@ mod tests {
             text = pass.text;
         }
         text
+    }
+    #[test]
+    fn chat_spellings_are_not_slips_of_a_frequent_word() {
+        // "abt" is "about" in chat, not a near miss of "at".
+        for text in [
+            "We need to talk abt the lease today.",
+            "Call me abt the invoice.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
     }
     #[test]
     fn frequent_word_replaces_rare_near_misses_in_fitting_slots() {

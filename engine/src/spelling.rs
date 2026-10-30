@@ -534,7 +534,8 @@ pub fn slot_fix(
                 )
             });
     }
-    if !(2..=3).contains(&word.len()) {
+    // "abt" is the chat spelling of "about", not a slip of "at".
+    if !(2..=3).contains(&word.len()) || chat(word) || names::is_shorthand(word) {
         return None;
     }
     let unknown = !lexicon().ordinary(word);
@@ -1407,6 +1408,26 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize, homographs: bool) -> bool {
                     || homographs && HINGLISH_BESIDE.contains(&t.normalized.as_str()))
                 && !SLIP_HINDI.contains(&t.normalized.as_str())
         })
+}
+/// A plural noun that says who "you", "we" or "they" means ("you guys", "we folks"): after the
+/// pronoun it is no verb in the "-s" form.
+pub(crate) fn appositive(word: &str) -> bool {
+    [
+        "guys",
+        "folks",
+        "gals",
+        "ladies",
+        "gentlemen",
+        "kids",
+        "friends",
+        "colleagues",
+        "teammates",
+        "devs",
+        "engineers",
+        "managers",
+        "students",
+    ]
+    .contains(&word)
 }
 /// Chat spellings people type on purpose ("lil", "wanna", "imma"): a register, not a slip, so Fix
 /// never respells them.

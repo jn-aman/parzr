@@ -668,6 +668,13 @@ fn adverb_position(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
             let Some(m) = morphology::verb(verb) else {
                 continue;
             };
+            // "You people never answer", "we guys always meet": a plural noun right after a
+            // plural pronoun names who the pronoun means, it is no verb.
+            if ["you", "we", "they"].contains(&word(s, i))
+                && (spelling::flags(verb) & 16 != 0 || spelling::appositive(verb))
+            {
+                continue;
+            }
             // "I would never bet", "we will always remember": a helping verb is followed by its
             // adverb.
             if ["be", "have", "do"].contains(&m.base.as_str())

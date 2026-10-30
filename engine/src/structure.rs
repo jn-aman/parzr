@@ -1518,6 +1518,8 @@ pub fn check(req: &Request, edits: &mut Vec<Edit>) {
             && !(NUMBER_WORDS.contains(&p.normalized.as_str())
                 && (spelling::flags(w) & 2 != 0 || looks_plural(w)))
             && !["read", "put", "cut", "let"].contains(&w)
+            // "You guys always arrive", "we folks meet": a plural noun that says who the pronoun means.
+            && !(["you", "we", "they"].contains(&p.normalized.as_str()) && spelling::appositive(w))
         {
             emit(
                 req,
