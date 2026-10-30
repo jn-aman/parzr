@@ -2866,6 +2866,40 @@ fn drop_added_emphasis(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
         .collect()
 }
 
+/// A comma the model put around a date in a Concise rewrite and no word changed with ("Monday 25
+/// December" to "Monday, 25 December"): a rewrite for brevity never grows by punctuation alone.
+fn drop_added_commas(req: &Request, all: Vec<Edit>) -> Vec<Edit> {
+    if req.mode != Mode::Concise {
+        return all;
+    }
+    all.into_iter()
+        .filter(|e| {
+            let dated = |s: &str| {
+                s.split(|c: char| !c.is_alphanumeric())
+                    .any(|w| calendar(w) || w.chars().any(|c| c.is_ascii_digit()))
+            };
+            // The edit and the words on either side of it ("Monday" before an inserted comma).
+            let around = |e: &Edit| -> String {
+                let (a, b) = (
+                    byte_at(&req.text, e.start_utf16).unwrap_or(0),
+                    byte_at(&req.text, e.end_utf16).unwrap_or(req.text.len()),
+                );
+                let before = req.text[..a].split_whitespace().next_back().unwrap_or("");
+                let after = req.text[b..].split_whitespace().next().unwrap_or("");
+                format!("{before} {} {after}", e.original)
+            };
+            if !dated(&around(e)) && !dated(&e.replacement) {
+                return true;
+            }
+            let letters =
+                |s: &str| -> Vec<char> { s.chars().filter(|c| c.is_alphanumeric()).collect() };
+            !(letters(&e.original) == letters(&e.replacement)
+                && e.replacement.matches(',').count() > e.original.matches(',').count()
+                && e.replacement.replace(',', "") == e.original.replace(',', ""))
+        })
+        .collect()
+}
+
 fn guard_segments(
     req: &Request,
     all: Vec<Edit>,
@@ -3078,7 +3112,7 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
         // its tone, gets one more attempt with worked examples. The candidate whose checked
         // segments move the text further is kept (the first on a tie, then the one with fewer
         // failed segments), and is guarded as usual, retries included.
-        let all = drop_added_emphasis(req, all);
+        let all = drop_added_commas(req, drop_added_emphasis(req, all));
         let (failed, gain) = candidate_score(req, &all, false);
         let first_output = apply_edits(&req.text, &all)?.0;
         trace!("  attempt 1 (plain): {first_output:?} failed={failed} gain={gain}");
@@ -3109,7 +3143,10 @@ pub fn rewrite(req: &Request) -> Result<RewriteResult, String> {
             .flatten()
             .map(|(t, e)| {
                 trace!("  attempt 2 (examples): {t:?}");
-                drop_added_emphasis(req, keep_structure(req, keep_names(req, e)))
+                drop_added_commas(
+                    req,
+                    drop_added_emphasis(req, keep_structure(req, keep_names(req, e))),
+                )
             })
             .filter(|e| {
                 let (failed2, gain2) = candidate_score(req, e, true);
@@ -3184,6 +3221,45 @@ mod tests {
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
         }
+    }
+
+    #[test]
+    fn a_comma_alone_never_lengthens_a_concise_rewrite() {
+        let concise = |source: &str, target: &str, mode: Mode| {
+            let req = Request {
+                text: source.into(),
+                mode,
+                ..Request::default()
+            };
+            let kept = drop_added_commas(&req, edits(source, target, mode, &[]));
+            apply_edits(source, &kept).unwrap().0
+        };
+        assert_eq!(
+            concise(
+                "Closed on Monday 25 December and Tuesday 26 December.",
+                "Closed on Monday, 25 December, and Tuesday, 26 December.",
+                Mode::Concise
+            ),
+            "Closed on Monday 25 December and Tuesday 26 December."
+        );
+        // Other modes, and a comma that comes with a changed word, stay.
+        assert_eq!(
+            concise(
+                "Closed on Monday 25 December.",
+                "Closed on Monday, 25 December.",
+                Mode::Direct
+            ),
+            "Closed on Monday, 25 December."
+        );
+        assert_eq!(
+            concise("Please send it today.", "Send it today.", Mode::Concise),
+            "Send it today."
+        );
+        // A comma after a greeting is no date's.
+        assert_eq!(
+            concise("Hey are you free?", "Hey, are you free?", Mode::Concise),
+            "Hey, are you free?"
+        );
     }
 
     #[test]

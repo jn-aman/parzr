@@ -632,7 +632,79 @@ pub(crate) fn opener_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> 
             "Say it without the padded opener.",
         ));
     }
+    if req.mode == crate::Mode::Concise {
+        edits.extend(bare_greeting(req, &tokens, protected));
+    }
     edits
+}
+
+/// A chat greeting that opens a message and says no more than hello, with its comma ("hey, are you
+/// coming to the offsite?", "hi there are you free"), goes in Concise when a clause follows it.
+/// "Hi Maria, ..." greets a person and stays.
+fn bare_greeting(
+    req: &Request,
+    tokens: &[tokenizer::Token<'_>],
+    protected: &[TextRange],
+) -> Option<Edit> {
+    let text = req.text.as_str();
+    let words: Vec<usize> = (0..tokens.len()).filter(|&i| tokens[i].is_word).collect();
+    let first = *words.first()?;
+    if first != 0 || !req.sentence_start {
+        return None;
+    }
+    let lower = |i: usize| tokens[i].surface.to_lowercase();
+    if !["hey", "hi", "hello", "yo", "hiya", "heya"].contains(&lower(0).as_str()) {
+        return None;
+    }
+    let mut next = 1;
+    if tokens
+        .get(next)
+        .is_some_and(|t| t.is_word && lower(next) == "there")
+    {
+        next += 1;
+    }
+    if tokens.get(next).is_some_and(|t| t.surface == ",") {
+        next += 1;
+    }
+    let rest = tokens.get(next)?;
+    // At least a short clause must follow.
+    if !rest.is_word || tokens[next..].iter().filter(|t| t.is_word).count() < 3 {
+        return None;
+    }
+    // A capitalized word that is no ordinary word, or one with a comma behind it, is the person
+    // greeted ("Hi Maria, can you", "Hey Will, are you").
+    let name = rest.surface.starts_with(char::is_uppercase)
+        && (!crate::spelling::ordinary(&rest.surface.to_lowercase())
+            || tokens.get(next + 1).is_some_and(|t| t.surface == ","));
+    // "Hi team,", "Hello everyone,": a word or two and a comma are the people greeted.
+    let salutation = tokens[next..]
+        .iter()
+        .position(|t| t.surface == ",")
+        .is_some_and(|comma| {
+            tokens[next..next + comma]
+                .iter()
+                .filter(|t| t.is_word)
+                .count()
+                <= 2
+        });
+    if name || salutation || text[tokens[next - 1].end_byte..rest.start_byte].contains('\n') {
+        return None;
+    }
+    let (a, b) = (tokens[0].start_byte, rest.start_byte);
+    let width = rest.surface.chars().next().map_or(0, char::len_utf8);
+    let end = b + width;
+    let utf16 = |x: usize| text[..x].encode_utf16().count();
+    if protected_at(protected, utf16(a), utf16(end)) {
+        return None;
+    }
+    Some(edit(
+        utf16(a),
+        utf16(end),
+        &text[a..end],
+        rest.surface[..width].to_uppercase(),
+        "tone.plain_opener",
+        "Leave out the greeting.",
+    ))
 }
 
 /// A clause that only hedges or apologizes before a request or a claim, to be followed by
@@ -1350,6 +1422,57 @@ mod tests {
             ),
         ] {
             assert_eq!(floored(text), expected, "{text}");
+        }
+    }
+    #[test]
+    fn concise_leaves_out_a_bare_greeting_but_not_one_that_greets_a_person() {
+        let concise = |text: &str| {
+            let req = Request {
+                text: text.into(),
+                mode: crate::Mode::Concise,
+                ..Default::default()
+            };
+            apply(text, opener_forms(&req, &[]))
+        };
+        for (text, expected) in [
+            (
+                "Hey, are you coming to the offsite on the 22nd?",
+                "Are you coming to the offsite on the 22nd?",
+            ),
+            (
+                "hey are you coming to the offsite?",
+                "Are you coming to the offsite?",
+            ),
+            (
+                "Hey there, can you send the file?",
+                "Can you send the file?",
+            ),
+            ("Yo, the build is green again.", "The build is green again."),
+            // A person greeted, a lone greeting and a letter's salutation line stay.
+            (
+                "Hi Maria, can you send the file?",
+                "Hi Maria, can you send the file?",
+            ),
+            ("Hey Will, are you free?", "Hey Will, are you free?"),
+            ("Hey there!", "Hey there!"),
+            (
+                "Hi team, the build is green again.",
+                "Hi team, the build is green again.",
+            ),
+            (
+                "Hello everyone,\n\nPlease be advised.",
+                "Hello everyone,\n\nPlease be advised.",
+            ),
+            (
+                "Hi all, FYI the office is closed.",
+                "Hi all, FYI the office is closed.",
+            ),
+            (
+                "Hi,\n\nPlease send the file.",
+                "Hi,\n\nPlease send the file.",
+            ),
+        ] {
+            assert_eq!(concise(text), expected, "{text}");
         }
     }
     #[test]
