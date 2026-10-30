@@ -183,7 +183,7 @@ The English challenge was authored for Parzr's rules, so it shows regressions ra
 <details>
 <summary><b>Build from source</b></summary>
 
-Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.91+, CMake, Python 3.11+ and Node 22 for the integration tests. The app contains no model weights: it downloads the pinned model pack (`engine/models.json`) on first use into `~/Library/Application Support/Parzr/Models`. For tests and development, `scripts/model-pack.py fetch` puts the same pack, hash-checked, in `dist/models` (`--derive-fallback` rebuilds the essential pack from the pinned upstream sources if its release is unreachable; the slip and tone packs cannot be rebuilt that way, so a missing release fails; `scripts/convert-gector.py` rebuilds GECToR itself).
+Requires an Apple Silicon Mac on macOS 13+, Xcode command-line tools with Swift 6+, Rust 1.99+, CMake, Python 3.11+ and Node 22 for the integration tests. The app contains no model weights: it downloads the pinned model pack (`engine/models.json`) on first use into `~/Library/Application Support/Parzr/Models`. For tests and development, `scripts/model-pack.py fetch` puts the same pack, hash-checked, in `dist/models` (`--derive-fallback` rebuilds the essential pack from the pinned upstream sources if its release is unreachable; the slip and tone packs cannot be rebuilt that way, so a missing release fails; `scripts/convert-gector.py` rebuilds GECToR itself).
 
 ```sh
 python3 scripts/build.py         # dist/Parzr.app (ad-hoc signed)

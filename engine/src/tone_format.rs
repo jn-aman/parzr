@@ -808,7 +808,7 @@ fn hedge_plan(mode: crate::Mode, sentence: &str) -> Option<HedgePlan> {
             let cap = format!(
                 "{}{} you ",
                 modal[..1].to_uppercase(),
-                &modal[1..].to_lowercase()
+                modal[1..].to_lowercase()
             );
             return Some(HedgePlan {
                 cut: lead + c.get(0)?.end(),
