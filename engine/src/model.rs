@@ -829,6 +829,8 @@ fn generate_with(
     }
     let prefix = &passage[..passage.len() - passage.trim_start().len()];
     let suffix = &passage[passage.trim_end().len()..];
+    // A time keeps the way the writer spelled it ("4 pm" is not "4:00 PM") in every mode.
+    let result = keep_times(passage, &result);
     let body = continuation(req, result.trim());
     Ok(format!("{prefix}{body}{suffix}"))
 }
@@ -977,6 +979,70 @@ fn keep_digits(source: &str, output: &str) -> String {
         text.push_str(&result[at..]);
         result = text;
     }
+    result
+}
+/// A time of day as written: its minutes since midnight, and the span it covers in the text.
+/// "4 pm", "4pm", "4:00 PM", "4 p.m." and "16:00" are the same time; a bare "4:00" with no
+/// am/pm and a morning hour has no known value and is not a time here.
+fn times_of_day(text: &str) -> Vec<(u32, std::ops::Range<usize>)> {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)\b(\d{1,2})(?::([0-5]\d))?\s?([ap])(?:\.m\.?|m\b)|\b(0\d|1[3-9]|2[0-3]):([0-5]\d)\b",
+        )
+        .expect("constant time regex")
+    });
+    re.captures_iter(text)
+        .filter_map(|c| {
+            let whole = c.get(0)?;
+            let minutes = if let Some(h) = c.get(4) {
+                h.as_str().parse::<u32>().ok()? * 60 + c.get(5)?.as_str().parse::<u32>().ok()?
+            } else {
+                let hour: u32 = c.get(1)?.as_str().parse().ok()?;
+                let minute: u32 = c.get(2).map_or(Ok(0), |m| m.as_str().parse()).ok()?;
+                if !(1..=12).contains(&hour) {
+                    return None;
+                }
+                let pm = c.get(3)?.as_str().eq_ignore_ascii_case("p");
+                (hour % 12 + if pm { 12 } else { 0 }) * 60 + minute
+            };
+            Some((minutes, whole.range()))
+        })
+        .collect()
+}
+/// A rewrite keeps the way the writer spelled a time: "4 pm" the model wrote "4:00 PM", "8am" the
+/// model wrote "8:00 AM", comes back as the writer wrote it. Only a time of the same value is
+/// respelled, and a spelling the source also uses is left alone.
+fn keep_times(source: &str, output: &str) -> String {
+    let said = times_of_day(source);
+    if said.is_empty() {
+        return output.to_owned();
+    }
+    let spelled = |range: &std::ops::Range<usize>| source[range.clone()].to_owned();
+    let mut result = String::with_capacity(output.len());
+    let mut at = 0;
+    for (minutes, range) in times_of_day(output) {
+        let wrote = &output[range.clone()];
+        if said.iter().any(|(_, r)| source[r.clone()] == *wrote) {
+            continue;
+        }
+        let Some((_, original)) = said.iter().find(|(m, _)| *m == minutes) else {
+            continue;
+        };
+        let mut spelling = spelled(original);
+        // A sentence's full stop is not part of "p.m.": the output's own mark stays one.
+        let dotted = |t: &str| t.ends_with('.');
+        let mut end = range.end;
+        if dotted(wrote) && !dotted(&spelling) {
+            spelling.push('.');
+        } else if dotted(&spelling) && !dotted(wrote) && output[end..].starts_with('.') {
+            end += 1;
+        }
+        result.push_str(&output[at..range.start]);
+        result.push_str(&spelling);
+        at = end;
+    }
+    result.push_str(&output[at..]);
     result
 }
 /// A "there" or "here" the model put behind a verb of going that the writer did not say ("I've been
@@ -3427,6 +3493,53 @@ mod tests {
             ("Order 3 boxes.", "Order boxes.", "Order boxes."),
         ] {
             assert_eq!(keep_digits(source, output), expected, "{source}");
+        }
+    }
+
+    /// Tone set 3 (rude3-29): "Come to my office at 4 pm" came back as "4:00 PM" and the guard read a changed number.
+    /// A time the model respells goes back to the writer's spelling; a different time, or a spelling the writer also
+    /// used, stays as the model wrote it.
+    #[test]
+    fn a_time_keeps_the_way_the_writer_spelled_it() {
+        for (source, output, expected) in [
+            (
+                "Come to my office at 4 pm on Thursday.",
+                "Please come to my office at 4:00 PM on Thursday.",
+                "Please come to my office at 4 pm on Thursday.",
+            ),
+            (
+                "Dinner at 8am sharp.",
+                "Dinner is at 8:00 AM sharp.",
+                "Dinner is at 8am sharp.",
+            ),
+            ("Meet at 4 p.m.", "Meet at 4:00 PM.", "Meet at 4 p.m."),
+            ("Meet at 4pm.", "Meet at 4 p.m.", "Meet at 4pm."),
+            (
+                "The call is at 16:00.",
+                "The call is at 4 PM.",
+                "The call is at 16:00.",
+            ),
+            (
+                "Open from 9 am to 5 pm.",
+                "Open from 9:00 AM to 5:00 PM.",
+                "Open from 9 am to 5 pm.",
+            ),
+            // A time the writer did not write, or wrote both ways, is the model's.
+            ("Meet at 4 pm.", "Meet at 5 pm.", "Meet at 5 pm."),
+            (
+                "Meet at 4 pm, or 4:00 PM if you prefer.",
+                "Meet at 4:00 PM.",
+                "Meet at 4:00 PM.",
+            ),
+            ("Meet at 4:30 pm.", "Meet at 4:30 pm.", "Meet at 4:30 pm."),
+            ("Meet at 4:30 pm.", "Meet at 4 pm.", "Meet at 4 pm."),
+            (
+                "It was 4:00 yesterday.",
+                "It was 4:00 yesterday.",
+                "It was 4:00 yesterday.",
+            ),
+        ] {
+            assert_eq!(keep_times(source, output), expected, "{source}");
         }
     }
 
