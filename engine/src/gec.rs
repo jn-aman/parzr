@@ -1263,6 +1263,27 @@ fn on_a_surface(text: &str, end: usize, original: &str, replacement: &str) -> bo
                 .is_some_and(|w| SURFACES.contains(&w.as_str()))
     })
 }
+/// Words that open a restriction on the noun before them: the noun then names one thing the reader is told how to
+/// pick out ("the confirmation before we place the order", "the cake that she made", "the man who called"), and the
+/// definite article is how English says so.
+const RESTRICTING: [&str; 15] = [
+    "that", "which", "who", "whom", "whose", "before", "after", "we", "you", "they", "i", "he",
+    "she", "when", "where",
+];
+/// "the" deleted in front of a noun that a restriction follows (the one the model removes most often in clean text).
+fn deletes_a_restricted_the(text: &str, end: usize, original: &str, replacement: &str) -> bool {
+    if !original.trim().eq_ignore_ascii_case("the") || !replacement.trim().is_empty() {
+        return false;
+    }
+    let mut ahead = text[end..].split_whitespace().take(2).map(|w| {
+        w.trim_matches(|c: char| !c.is_alphabetic() && c != '\'' && c != '’')
+            .to_lowercase()
+    });
+    let (noun, next) = (ahead.next().unwrap_or_default(), ahead.next());
+    !noun.is_empty()
+        && !DETERMINERS.contains(&noun.as_str())
+        && next.is_some_and(|w| RESTRICTING.contains(&w.as_str()))
+}
 /// The model glued or split words into something that is no word ("I'm living" to "Ilive"): every
 /// alphabetic word it writes must be a known word or already in the text.
 fn invents_a_word(text: &str, replacement: &str) -> bool {
@@ -1660,6 +1681,7 @@ fn merge(
             || swaps_article(text, edit.1, original, &e.replacement)
             || thanks_for(text, edit.0, original)
             || on_a_surface(text, edit.1, original, &e.replacement)
+            || deletes_a_restricted_the(text, edit.1, original, &e.replacement)
             || invents_a_word(text, &e.replacement)
             || drops_meaning(text, edit, original, &e.replacement)
             || against_head_noun(&tokens, edit.0, &e.replacement, req.dialect == "british");
@@ -1970,6 +1992,29 @@ mod tests {
         assert_eq!(
             guarded("He is interested on music.", &[("on", "in")], vec![], &[]),
             ["on>in"]
+        );
+    }
+    /// "We need the confirmation before we place the order" lost its "the" (tone set 3, formal3-22): the model deletes
+    /// a "the" the writer wanted most often, and never rightly in front of a noun that a "before we ..." or "that ..."
+    /// picks out. A repeated "the the" is still removed.
+    #[test]
+    fn the_stays_before_a_noun_that_a_restriction_picks_out() {
+        for (text, from) in [
+            (
+                "We need the confirmation before we place the order.",
+                " the",
+            ),
+            ("She ate the cake that her sister made.", " the"),
+            ("Ask the person who called yesterday.", " the"),
+        ] {
+            assert!(
+                guarded(text, &[(from, "")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        assert_eq!(
+            guarded("I saw the the cat.", &[(" the", "")], vec![], &[]),
+            [" the>"]
         );
     }
     /// "no no no" became "No no" once GECToR deleted a copy and the sentence took its capital (everyday item
