@@ -1210,6 +1210,59 @@ fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement
     };
     determined && stem_of(&r)
 }
+/// Things a mark or a line is printed on, shown on or written on ("the error on your statement", "the date on the
+/// invoice", "the typo on the page"): "on" is the preposition for them and "in" the model's habit.
+const SURFACES: [&str; 28] = [
+    "statement",
+    "invoice",
+    "bill",
+    "receipt",
+    "form",
+    "page",
+    "screen",
+    "label",
+    "slide",
+    "sheet",
+    "spreadsheet",
+    "website",
+    "site",
+    "ticket",
+    "certificate",
+    "passport",
+    "card",
+    "chart",
+    "map",
+    "menu",
+    "list",
+    "timesheet",
+    "schedule",
+    "quote",
+    "estimate",
+    "dashboard",
+    "tab",
+    "packaging",
+];
+/// "on" made "in" before a surface (the error on your statement), after at most a determiner and a describing word.
+fn on_a_surface(text: &str, end: usize, original: &str, replacement: &str) -> bool {
+    if !original.trim().eq_ignore_ascii_case("on") || !replacement.trim().eq_ignore_ascii_case("in")
+    {
+        return false;
+    }
+    let ahead: Vec<String> = text[end..]
+        .split_whitespace()
+        .take(3)
+        .map(|w| w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase())
+        .collect();
+    let head = ahead
+        .iter()
+        .position(|w| !DETERMINERS.contains(&w.as_str()) && !w.is_empty());
+    head.is_some_and(|h| {
+        SURFACES.contains(&ahead[h].as_str())
+            || ahead
+                .get(h + 1)
+                .is_some_and(|w| SURFACES.contains(&w.as_str()))
+    })
+}
 /// The model glued or split words into something that is no word ("I'm living" to "Ilive"): every
 /// alphabetic word it writes must be a known word or already in the text.
 fn invents_a_word(text: &str, replacement: &str) -> bool {
@@ -1606,6 +1659,7 @@ fn merge(
             || writers_choice
             || swaps_article(text, edit.1, original, &e.replacement)
             || thanks_for(text, edit.0, original)
+            || on_a_surface(text, edit.1, original, &e.replacement)
             || invents_a_word(text, &e.replacement)
             || drops_meaning(text, edit, original, &e.replacement)
             || against_head_noun(&tokens, edit.0, &e.replacement, req.dialect == "british");
@@ -1893,6 +1947,29 @@ mod tests {
                 &[]
             ),
             ["build>building"]
+        );
+    }
+    /// "the error on your statement" became "the error in your statement" (tone set 3, formal3-29): what is printed on a
+    /// statement, an invoice or a page is "on" it, so the model's "in" is dropped before such a noun.
+    #[test]
+    fn on_stays_on_before_a_statement_an_invoice_or_a_page() {
+        for (text, from) in [
+            (
+                "Please accept my apologies for the error on your statement.",
+                "on",
+            ),
+            ("The date on the invoice is wrong.", "on"),
+            ("There is a typo on the last page.", "on"),
+        ] {
+            assert!(
+                guarded(text, &[(from, "in")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        // Before anything else the swap is the model's to make.
+        assert_eq!(
+            guarded("He is interested on music.", &[("on", "in")], vec![], &[]),
+            ["on>in"]
         );
     }
     /// "no no no" became "No no" once GECToR deleted a copy and the sentence took its capital (everyday item
