@@ -2564,7 +2564,7 @@ pub(crate) fn keeps_meaning(
     }
     let opener = |t: &str| {
         let t = t.trim_start().to_lowercase();
-        REPLY_OPENERS.iter().any(|o| t.starts_with(o))
+        REPLY_OPENERS.iter().any(|o| t.starts_with(o)) || t.starts_with("no prob")
     };
     if opener(output) && !opener(source) {
         return Err("answers the message instead of rewriting it".into());
@@ -2587,14 +2587,34 @@ pub(crate) fn keeps_meaning(
     // In Concise and Direct the negation of a hedge ("I don't know, ...", "I hope you do not mind
     // me asking, but ...", "whether or not") is padding that goes with it: the count leaves
     // those phrases out of the source and the rewrite alike.
+    // "No prob", "no worries": an acknowledgement, not a negation of anything, in every mode.
+    let acknowledgement = |text: &str| -> Option<String> {
+        static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re = RE.get_or_init(|| {
+            regex::Regex::new(r"(?i)\bno\s+(?:prob|problem|problemo|worries|worry|biggie|sweat)\b")
+                .expect("constant acknowledgement regex")
+        });
+        re.is_match(text)
+            .then(|| re.replace_all(text, " ").into_owned())
+    };
     let (src_negations, out_negations) = if matches!(mode, Mode::Concise | Mode::Direct) {
-        let counted = |text: &str, all: &[Word]| match without_hedge_openers(text) {
+        let counted = |text: &str, all: &[Word]| {
+            let plain = acknowledgement(text);
+            match without_hedge_openers(plain.as_deref().unwrap_or(text)) {
+                Some(rest) => negations(&words(&rest, &[])),
+                None => match plain {
+                    Some(rest) => negations(&words(&rest, &[])),
+                    None => negations(all),
+                },
+            }
+        };
+        (counted(source, &src), counted(output, &out))
+    } else {
+        let counted = |text: &str, all: &[Word]| match acknowledgement(text) {
             Some(rest) => negations(&words(&rest, &[])),
             None => negations(all),
         };
         (counted(source, &src), counted(output, &out))
-    } else {
-        (negations(&src), negations(&out))
     };
     // A softened sentence may gain a "not" ("a dumb idea" to "not a good idea"), never lose one.
     if out_negations < src_negations {
@@ -3967,6 +3987,33 @@ mod tests {
             assert!(ok(mode, "I hat it.", "I hate it."), "{mode:?}");
             assert!(ok(mode, "This is so bad.", "This is bad."), "{mode:?}");
             assert!(!ok(mode, "This is so bad.", "This is great."), "{mode:?}");
+        }
+    }
+
+    #[test]
+    fn no_prob_is_an_acknowledgement_not_a_negation() {
+        let keeps = |mode, a: &str, b: &str| keeps_meaning(mode, a, b, "", &[], &[]);
+        for mode in TONES {
+            for output in [
+                "No problem, I can take the 8am shift on Sunday.",
+                "No prob, I can take the 8 am shift on Sunday.",
+            ] {
+                assert_eq!(
+                    keeps(mode, "no prob, I can take the 8am shift on Sunday.", output),
+                    Ok(()),
+                    "{mode:?} {output}"
+                );
+            }
+            // A real negation still counts.
+            assert!(
+                keeps(
+                    mode,
+                    "No worries, I can't take the 8am shift on Sunday.",
+                    "No worries, I can take the 8am shift on Sunday."
+                )
+                .is_err(),
+                "{mode:?}"
+            );
         }
     }
 
