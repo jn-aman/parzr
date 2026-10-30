@@ -372,14 +372,14 @@
         "max_rss_mb": 832.6
       },
       "typo-fuzz-test/rules": {
-        "p50_ms": 1.6,
-        "p95_ms": 4.44,
-        "max_rss_mb": 312.8
+        "p50_ms": 1.71,
+        "p95_ms": 5.92,
+        "max_rss_mb": 290.7
       },
       "typo-fuzz-test/gec": {
-        "p50_ms": 56.61,
-        "p95_ms": 100.53,
-        "max_rss_mb": 755.2
+        "p50_ms": 56.77,
+        "p95_ms": 91.46,
+        "max_rss_mb": 832.9
       },
       "tone-regression/professional": {
         "p50_ms": 7204.85,
@@ -440,6 +440,11 @@
         "p50_ms": 8316.05,
         "p95_ms": 28474.49,
         "max_rss_mb": 1684.6
+      },
+      "names/engine": {
+        "p50_ms": 1.23,
+        "p95_ms": 3.43,
+        "max_rss_mb": 301.5
       }
     }
   }
