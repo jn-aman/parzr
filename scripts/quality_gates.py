@@ -14,6 +14,11 @@ import json, os, pathlib, platform, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 BASELINES = ROOT / 'benchmarks/baselines.json'
+# Suites whose p50/p95 latency comparison is informational: it prints the same line but never fails the run (peak memory and pass
+# rates stay hard gates). On the GPU-less CI runner the 0.8B tone model's latency varies by more than 1.5x between identical runs
+# (PR #41: Direct p95 22.7 s, 25.5 s and 21.1 s on the same code against a 16.0 s single-run baseline), and a 52-item sample's p95
+# is its third slowest item. Tone latency is measured locally (summary.json p50/p95); the everyday gate covers Fix-mode latency.
+LATENCY_INFORMATIONAL = ('tone-regression', 'tone-regression-2')
 
 
 _HOME = None
@@ -128,6 +133,9 @@ class Gate:
                 continue
             line = f'{self.suite}/{key} {metric}: {measured[metric]} (baseline {base[metric]} on {where})'
             if measured[metric] > max(base[metric] * factor, base[metric] + slack[metric]):
+                if metric != 'max_rss_mb' and self.suite in LATENCY_INFORMATIONAL:
+                    self.notes.append(f'{line} is more than {factor}x the baseline (over baseline, informational: tone latency never fails a run)')
+                    continue
                 # A dedicated CI runner fails; a local run shares the machine with other work, so it only warns.
                 (self.failures if release_gate() else self.notes).append(
                     f'{line} is more than {factor}x the baseline' + ('' if release_gate() else ' (warning only outside CI)'))
