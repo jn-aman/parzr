@@ -1165,7 +1165,8 @@ fn pluralizes_after_determiner(text: &str, at: usize, original: &str, replacemen
             .any(|w| DETERMINERS.contains(&w.to_lowercase().as_str()))
 }
 /// A word rewritten as another form of itself right after a determiner or possessive ("the build"
-/// to "the building"): the writer picked the part of speech.
+/// to "the building"): the writer picked the part of speech. A describing word or two in between
+/// ("the failing build", "a clean build", "the broken old build") leaves the word a noun.
 fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement: &str) -> bool {
     let (o, r) = (
         original.trim().to_lowercase(),
@@ -1174,11 +1175,28 @@ fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement
     if o.contains(' ') || r.contains(' ') || o == r {
         return false;
     }
-    let before = text[..at]
+    // The words just before the edit, nearest first, up to a determiner: the determiner may sit past
+    // one or two describing words (a participle or a dictionary adjective).
+    let back: Vec<String> = text[..at]
         .split_whitespace()
-        .next_back()
-        .unwrap_or("")
-        .to_lowercase();
+        .rev()
+        .take(3)
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphabetic() && c != '\'' && c != '’')
+                .to_lowercase()
+        })
+        .collect();
+    let describing = |w: &str| {
+        !w.is_empty()
+            && (["ing", "ed", "en"]
+                .iter()
+                .any(|s| w.ends_with(s) && w.len() > 4)
+                || spelling::flags(w) & 8 != 0)
+    };
+    let determined = back
+        .iter()
+        .enumerate()
+        .any(|(k, w)| DETERMINERS.contains(&w.as_str()) && back[..k].iter().all(|m| describing(m)));
     let stem_of = |w: &str| {
         ["ing", "ed", "en"].iter().any(|suffix| {
             w.strip_suffix(suffix).is_some_and(|stem| {
@@ -1190,7 +1208,7 @@ fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement
             })
         })
     };
-    DETERMINERS.contains(&before.as_str()) && stem_of(&r)
+    determined && stem_of(&r)
 }
 /// The model glued or split words into something that is no word ("I'm living" to "Ilive"): every
 /// alphabetic word it writes must be a known word or already in the text.
@@ -1851,6 +1869,31 @@ mod tests {
             confidence: 0.9,
             group_id: None,
         }
+    }
+    /// "take a look at the failing build" became "the failing building" (tone set 3, hedged3-15): after a determiner and a
+    /// describing word or two the word is still a noun, so a verb-form swap on it is the writer's to make, not an error.
+    #[test]
+    fn a_noun_after_a_determiner_and_a_describing_word_is_not_made_a_verb_form() {
+        for text in [
+            "Could you take a look at the failing build?",
+            "Please rerun a clean build tonight.",
+            "The broken old build is still red.",
+        ] {
+            assert!(
+                guarded(text, &[("build", "building")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        // Without a determiner in front the model's verb form is still applied.
+        assert_eq!(
+            guarded(
+                "He enjoys to build houses.",
+                &[("build", "building")],
+                vec![],
+                &[]
+            ),
+            ["build>building"]
+        );
     }
     /// "no no no" became "No no" once GECToR deleted a copy and the sentence took its capital (everyday item
     /// b002-0999): a word written twice on purpose keeps its copy, wherever the deleted copy sits, while a slip
