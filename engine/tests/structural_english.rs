@@ -175,6 +175,9 @@ const VALID: &[&str] = &[
     "It was suggested to be careful.",
     "The plan, considered to be risky, failed.",
     "People considered to be experts were invited.",
+    // The dictionary lists "lasagne" as a plural of "lasagna"; it is one dish.
+    "The lasagne was wonderful, and the kids are still talking about the dessert.",
+    "Lasagne was on the menu.",
 ];
 
 #[test]

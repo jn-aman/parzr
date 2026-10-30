@@ -184,7 +184,7 @@ const YA_YES_BEFORE: &[&str] = &[
 ];
 
 /// Chat shorthand a Professional rewrite spells out, with what it stands for.
-const SHORTHAND: &[(&str, &str)] = &[
+pub(crate) const SHORTHAND: &[(&str, &str)] = &[
     ("u", "you"),
     ("abt", "about"),
     ("pls", "please"),
@@ -370,7 +370,17 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
                     continue;
                 };
                 // "U" alone is a letter or a name ("Plan U"); only the lowercase chat form is "you".
-                if lower == "u" && t.surface != "u" {
+                // The check pass capitalises the chat "u" that opens a sentence ("U guys are the best"):
+                // a "U" that opens one and is followed by a lowercase word is that "u", not a letter.
+                let opens_a_sentence = first
+                    && t.surface == "U"
+                    && tokens.get(i + 1).is_some_and(|n| {
+                        n.is_word
+                            && n.sentence == t.sentence
+                            && n.surface.starts_with(char::is_lowercase)
+                            && !["of", "haul", "turn"].contains(&n.surface)
+                    });
+                if lower == "u" && t.surface != "u" && !opens_a_sentence {
                     continue;
                 }
                 full.to_owned()
@@ -1973,6 +1983,23 @@ mod tests {
         );
         assert_eq!(professional("Thx, will do asap"), "Thanks, will do ASAP");
         assert_eq!(professional("Plan U is the U-turn"), "Plan U is the U-turn");
+        // Tone set 3 (chat3-18, chat3-19): the check pass capitalised the chat "u" that opens a sentence, and "U guys"
+        // came out of Professional unexpanded. A "U" opening a sentence before a lowercase word is "You".
+        assert_eq!(
+            professional("Thanks!! U guys are the best, can't wait for Sunday."),
+            "Thanks!! You guys are the best, can't wait for Sunday."
+        );
+        assert_eq!(
+            professional("U free Thursday after 3? Need ur help with the move."),
+            "You free Thursday after 3? Need your help with the move."
+        );
+        assert_eq!(professional("U are right"), "You are right");
+        assert_eq!(professional("u free?"), "you free?");
+        // A letter, a name or an abbreviation that opens a sentence stays.
+        assert_eq!(professional("U Penn is hiring."), "U Penn is hiring.");
+        assert_eq!(professional("U of T is hiring."), "U of T is hiring.");
+        assert_eq!(professional("U."), "U.");
+        assert_eq!(professional("We chose Plan U."), "We chose Plan U.");
         assert_eq!(professional("u-boat"), "u-boat");
         assert_eq!(
             professional("lol that meeting was long"),

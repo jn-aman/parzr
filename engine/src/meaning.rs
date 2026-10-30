@@ -343,6 +343,23 @@ const FILLER: &[&str] = &[
 const QUESTION_WORDS: &[&str] = &[
     "who", "whose", "what", "which", "where", "when", "why", "how",
 ];
+/// The question word inside a contraction: "what's", "who's", "where's", "how's", "when's" (curly or
+/// straight apostrophe) and the chat spellings without one ("whats", "wheres") ask what "what", "where"
+/// ask. None for any other word.
+fn question_stem(normalized: &str) -> Option<&'static str> {
+    let bare = normalized
+        .strip_suffix("'s")
+        .or_else(|| {
+            ["whats", "whos", "wheres", "hows", "whens"]
+                .contains(&normalized)
+                .then(|| &normalized[..normalized.len() - 1])
+        })
+        .unwrap_or(normalized);
+    QUESTION_WORDS
+        .iter()
+        .copied()
+        .find(|&q| q == bare || (q == "who" && bare == "whom"))
+}
 const RUDE: &[&str] = &[
     "stupid",
     "dumb",
@@ -2301,7 +2318,9 @@ pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), S
 /// "I don't know,", "I'm not sure,", "I may be wrong,", "I hope you don't mind me asking,",
 /// "sorry to bother you,", "I hate to ask," (each as a clause of its own), "no pressure",
 /// "whether or not", "I guess", "I think", "I believe", "maybe", "possibly", "perhaps", "if
-/// possible", "if that's okay", "if it's not too much trouble". `hedge_clause_spans` adds the
+/// possible", "if that's okay", "if it's not too much trouble", "it might be a good idea to", and
+/// the trailing ones: ", though I could be wrong (about that)", ", but I may be mistaken", ", if
+/// that makes sense", ", or so I think", ", if I may,", "just a gentle reminder (that)". `hedge_clause_spans` adds the
 /// family of leading clauses that apologise, doubt or ask leave. The scorer's recogniser
 /// (scripts/run-tone-regression.py strip_hedge_openers) is the same.
 fn hedge_opener_regex() -> &'static regex::Regex {
@@ -2310,7 +2329,7 @@ fn hedge_opener_regex() -> &'static regex::Regex {
         // The first group names a doubt, a hope or an apology, which is padding only as a clause
         // of its own ("I'm not sure, but ..."); "I'm not sure the design works" stays a doubt.
         regex::Regex::new(
-            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble))\b",
+            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble)|(?:it|this|that)\s+(?:might|may|could|would)\s+(?:perhaps\s+|possibly\s+|well\s+)?be\s+(?:a\s+)?(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|if\s+that\s+makes\s+sense|if\s+i\s+may(?:\s+(?:say|ask|add|suggest)(?:\s+so)?)?|(?:just\s+)?a\s+(?:gentle|quick|friendly|brief|polite|small)\s+reminder(?:\s+that)?|or\s+so\s+i\s+(?:think|believe|guess|hope))\b",
         )
         .expect("constant hedge opener regex")
     })
@@ -2481,11 +2500,7 @@ pub(crate) fn keeps_meaning(
         let asks = |text: &str| -> Vec<&'static str> {
             let mut found: Vec<&'static str> = content_tokens(text, &[])
                 .iter()
-                .filter_map(|t| {
-                    QUESTION_WORDS.iter().copied().find(|&q| {
-                        q == t.normalized.as_str() || (q == "who" && t.normalized == "whom")
-                    })
-                })
+                .filter_map(|t| question_stem(&t.normalized))
                 .collect();
             found.sort_unstable();
             found.dedup();
@@ -3403,12 +3418,167 @@ mod tests {
             "Is the 12 am call still on?"
         ));
     }
+    /// Tone set 3 (hedged3-03, hedged3-35): "good" in "it might be a good idea to" and "wrong" in "though I could be wrong
+    /// about that" belong to the hedge, so dropping the hedge is not dropping a sentiment word. The same words in a
+    /// claim (or in Professional and Friendly, which keep the hedge) are still checked.
+    #[test]
+    fn concise_and_direct_may_drop_a_might_be_a_good_idea_opener_and_a_trailing_hedge() {
+        for (source, output) in [
+            (
+                "Perhaps it might be a good idea, in my humble opinion, to double-check the guest list before the invitations go out on Saturday.",
+                "Double-check the guest list before the invitations go out on Saturday.",
+            ),
+            (
+                "It may be a good idea to back up the folder before the update.",
+                "Back up the folder before the update.",
+            ),
+            (
+                "The new login page is a bit slow on mobile, I guess, though I could be wrong about that.",
+                "The new login page is slow on mobile.",
+            ),
+            (
+                "The invoice total looks off, but I may be mistaken.",
+                "The invoice total looks off.",
+            ),
+            (
+                "We should move the review to Thursday, if that makes sense.",
+                "We should move the review to Thursday.",
+            ),
+            (
+                "The vendor will probably deliver on Monday, or so I think.",
+                "The vendor will deliver on Monday.",
+            ),
+        ] {
+            for mode in [Mode::Concise, Mode::Direct] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        // The hedge spans: the opener, and the clause that trails a claim.
+        for (text, hedge) in [
+            (
+                "It might be a good idea to wait.",
+                "It might be a good idea to",
+            ),
+            (
+                "It is slow, though I could be wrong about that.",
+                "though I could be wrong about that",
+            ),
+            (
+                "It is slow, but I may be mistaken.",
+                "but I may be mistaken",
+            ),
+            (
+                "I could be wrong about that.",
+                "I could be wrong about that",
+            ),
+        ] {
+            let spans = hedge_opener_spans(text);
+            let found: Vec<&str> = spans.iter().map(|&(a, b)| &text[a..b]).collect();
+            assert!(found.contains(&hedge), "{text}: {found:?}");
+        }
+        // A claim is still a claim: "wrong" and "good" outside a hedge, and in the tones that keep the hedge.
+        assert!(!ok(
+            Mode::Concise,
+            "The totals in the report are wrong.",
+            "The totals in the report are."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "The page is slow, though I could be wrong about that.",
+            "The page is fast."
+        ));
+        assert!(!ok(
+            Mode::Friendly,
+            "The new login page is slow on mobile, though I could be wrong about that.",
+            "The new login page is slow on mobile."
+        ));
+        assert!(!ok(
+            Mode::Concise,
+            "Using the new template is a good idea for the client.",
+            "Using the new template for the client."
+        ));
+    }
     const TONES: [Mode; 4] = [
         Mode::Professional,
         Mode::Friendly,
         Mode::Concise,
         Mode::Direct,
     ];
+    /// Tone set 3 (hedged3-31): "just a gentle reminder, if I may, that the timesheet is due on the 15th" is a hedge
+    /// around the claim, so Concise and Direct may cut it ("if" and "gentle reminder" go with it); the claim's own
+    /// words and condition are still checked.
+    #[test]
+    fn a_gentle_reminder_if_i_may_is_a_hedge_opener() {
+        let source =
+            "Hi Tomasz, just a gentle reminder, if I may, that the timesheet is due on the 15th.";
+        for mode in [Mode::Concise, Mode::Direct] {
+            assert_eq!(
+                keeps_meaning(
+                    mode,
+                    source,
+                    "Hi Tomasz, the timesheet is due on the 15th.",
+                    "",
+                    &[],
+                    &[]
+                ),
+                Ok(()),
+                "{mode:?}"
+            );
+            assert!(
+                !ok(mode, source, "Hi Tomasz, the timesheet is due on the 16th."),
+                "{mode:?}"
+            );
+        }
+        // Professional and Friendly keep the hedge, and a condition that is not a hedge stays one.
+        assert!(!ok(
+            Mode::Friendly,
+            source,
+            "Hi Tomasz, the timesheet is due on the 15th."
+        ));
+        assert!(!ok(
+            Mode::Concise,
+            "Pay the invoice by Friday if the client approves it.",
+            "Pay the invoice by Friday."
+        ));
+    }
+    /// Tone set 3 (chat3-16): "what's the wifi password at your place?" became "What is the wifi password at your
+    /// place?" and the guard read "asks “what”, which the writer did not". A question word inside a contraction
+    /// ("what's", "who's", "where's", "how's", "when's", curly or straight, or "whats") is that question word on
+    /// both sides; a question word that really is new, or lost, still fails.
+    #[test]
+    fn a_question_word_in_a_contraction_is_the_question_word() {
+        for (source, output) in [
+            (
+                "what's the wifi password at your place?",
+                "What is the wifi password at your place?",
+            ),
+            ("What is the wifi password?", "What's the wifi password?"),
+            ("whats the plan for friday?", "What is the plan for Friday?"),
+            ("Who’s coming on Friday?", "Who is coming on Friday?"),
+            ("where's the report?", "Where is the report?"),
+            ("How’s the report going?", "How is the report going?"),
+            ("When's the review?", "When is the review?"),
+        ] {
+            for mode in TONES {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        for (source, output) in [
+            ("What's the plan?", "Where is the plan?"),
+            ("Who's coming on Friday?", "Is anyone coming on Friday?"),
+            ("Is the report ready?", "What is the report?"),
+        ] {
+            assert!(!ok(Mode::Professional, source, output), "{source}");
+        }
+    }
 
     #[test]
     fn concise_and_direct_may_drop_a_hedge_with_the_negation_it_carries() {

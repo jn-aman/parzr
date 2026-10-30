@@ -818,17 +818,36 @@ fn generate_with(
         } else {
             output
         };
+        // Concise leaves the writer's shorthand ("tmrw") as typed: spelled out it is longer.
+        let output = if req.mode == Mode::Concise {
+            keep_shorthand(&masked, &output)
+        } else {
+            output
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
                 break;
             }
             Err(error) if strict => return Err(error),
-            Err(_) => {}
+            // The model left out the writer's greeting and name ("Hi Tomasz," in front of a hedge it
+            // then cut): the salutation is the writer's own text, so it goes back in front of the
+            // answer instead of the answer being thrown away for the strict retry's copy.
+            Err(_) => {
+                if let Some(text) = reattach_salutation(&masked, &output, &literals)
+                    .and_then(|rebuilt| restore(&masked, &rebuilt, &literals, false).ok())
+                {
+                    trace!("  salutation put back in front of the answer: {text:?}");
+                    result = text;
+                    break;
+                }
+            }
         }
     }
     let prefix = &passage[..passage.len() - passage.trim_start().len()];
     let suffix = &passage[passage.trim_end().len()..];
+    // A time keeps the way the writer spelled it ("4 pm" is not "4:00 PM") in every mode.
+    let result = keep_times(passage, &result);
     let body = continuation(req, result.trim());
     Ok(format!("{prefix}{body}{suffix}"))
 }
@@ -861,6 +880,12 @@ const CONTRACTIONS: &[(&str, &str, bool)] = &[
     ("you'll", "you will", true),
     ("we'll", "we will", true),
     ("they'll", "they will", true),
+    // A question word's own contraction: "what's the plan" is not the longer "what is the plan".
+    ("what's", "what is", true),
+    ("who's", "who is", true),
+    ("where's", "where is", true),
+    ("how's", "how is", true),
+    ("when's", "when is", true),
 ];
 /// A rewrite of `source` that keeps the contractions the writer used: where the source wrote
 /// "isn't" and never "is not", an "is not" the model wrote in its place goes back to "isn't"
@@ -977,6 +1002,139 @@ fn keep_digits(source: &str, output: &str) -> String {
         text.push_str(&result[at..]);
         result = text;
     }
+    result
+}
+/// A time of day as written: its minutes since midnight, and the span it covers in the text.
+/// "4 pm", "4pm", "4:00 PM", "4 p.m." and "16:00" are the same time; a bare "4:00" with no
+/// am/pm and a morning hour has no known value and is not a time here.
+fn times_of_day(text: &str) -> Vec<(u32, std::ops::Range<usize>)> {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)\b(\d{1,2})(?::([0-5]\d))?\s?([ap])(?:\.m\.?|m\b)|\b(0\d|1[3-9]|2[0-3]):([0-5]\d)\b",
+        )
+        .expect("constant time regex")
+    });
+    re.captures_iter(text)
+        .filter_map(|c| {
+            let whole = c.get(0)?;
+            let minutes = if let Some(h) = c.get(4) {
+                h.as_str().parse::<u32>().ok()? * 60 + c.get(5)?.as_str().parse::<u32>().ok()?
+            } else {
+                let hour: u32 = c.get(1)?.as_str().parse().ok()?;
+                let minute: u32 = c.get(2).map_or(Ok(0), |m| m.as_str().parse()).ok()?;
+                if !(1..=12).contains(&hour) {
+                    return None;
+                }
+                let pm = c.get(3)?.as_str().eq_ignore_ascii_case("p");
+                (hour % 12 + if pm { 12 } else { 0 }) * 60 + minute
+            };
+            Some((minutes, whole.range()))
+        })
+        .collect()
+}
+/// A rewrite keeps the way the writer spelled a time: "4 pm" the model wrote "4:00 PM", "8am" the
+/// model wrote "8:00 AM", comes back as the writer wrote it. Only a time of the same value is
+/// respelled, and a spelling the source also uses is left alone.
+fn keep_times(source: &str, output: &str) -> String {
+    let said = times_of_day(source);
+    if said.is_empty() {
+        return output.to_owned();
+    }
+    let spelled = |range: &std::ops::Range<usize>| source[range.clone()].to_owned();
+    let mut result = String::with_capacity(output.len());
+    let mut at = 0;
+    for (minutes, range) in times_of_day(output) {
+        let wrote = &output[range.clone()];
+        if said.iter().any(|(_, r)| source[r.clone()] == *wrote) {
+            continue;
+        }
+        let Some((_, original)) = said.iter().find(|(m, _)| *m == minutes) else {
+            continue;
+        };
+        let mut spelling = spelled(original);
+        // A sentence's full stop is not part of "p.m.": the output's own mark stays one.
+        let dotted = |t: &str| t.ends_with('.');
+        let mut end = range.end;
+        if dotted(wrote) && !dotted(&spelling) {
+            spelling.push('.');
+        } else if dotted(&spelling) && !dotted(wrote) && output[end..].starts_with('.') {
+            end += 1;
+        }
+        result.push_str(&output[at..range.start]);
+        result.push_str(&spelling);
+        at = end;
+    }
+    result.push_str(&output[at..]);
+    result
+}
+/// A Concise rewrite may not grow: where it grew past what a final full stop or a spelled-out "u" costs,
+/// the chat shorthand the writer typed comes back in place of the model's longer word ("tmrw" for
+/// "tomorrow"), the biggest saving first, until the text is back within that. Professional spells
+/// shorthand out on purpose (tone_format.rs).
+fn keep_shorthand(source: &str, output: &str) -> String {
+    /// What a rewrite may add to the writer's length: a full stop, "u" for "you".
+    const ALLOWANCE: usize = 2;
+    let words = |text: &str| -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let growth = output
+        .chars()
+        .count()
+        .saturating_sub(source.chars().count());
+    if growth <= ALLOWANCE {
+        return output.to_owned();
+    }
+    let (said, wrote) = (words(source), words(output));
+    let count = |list: &[String], word: &str| list.iter().filter(|w| *w == word).count();
+    // (start, end, the shorthand in the writer's case, characters saved)
+    let mut candidates: Vec<(usize, usize, String, usize)> = vec![];
+    for (short, full) in crate::tone_format::SHORTHAND {
+        // Only a one-word expansion longer than the shorthand ("tomorrow"); "idk" and "rn" become phrases.
+        // A writer who spelled the word out as well keeps the model's choice.
+        if full.contains(' ')
+            || full.len() <= short.len()
+            || full.eq_ignore_ascii_case(short)
+            || count(&said, &full.to_lowercase()) > 0
+        {
+            continue;
+        }
+        let missing = count(&said, short)
+            .saturating_sub(count(&wrote, short))
+            .min(count(&wrote, &full.to_lowercase()));
+        let pattern = regex::Regex::new(&format!(r"(?i)\b{}\b", regex::escape(full)))
+            .expect("constant shorthand pattern");
+        for m in pattern.find_iter(output).take(missing) {
+            let back = if m.as_str().starts_with(char::is_uppercase) {
+                crate::upper_first(short)
+            } else {
+                (*short).to_owned()
+            };
+            candidates.push((m.start(), m.end(), back, full.len() - short.len()));
+        }
+    }
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.3));
+    let mut chosen = vec![];
+    let mut left = growth;
+    for c in candidates {
+        if left <= ALLOWANCE {
+            break;
+        }
+        left = left.saturating_sub(c.3);
+        chosen.push(c);
+    }
+    chosen.sort_by_key(|c| c.0);
+    let mut result = String::with_capacity(output.len());
+    let mut at = 0;
+    for (start, end, back, _) in chosen {
+        result.push_str(&output[at..start]);
+        result.push_str(&back);
+        at = end;
+    }
+    result.push_str(&output[at..]);
     result
 }
 /// A "there" or "here" the model put behind a verb of going that the writer did not say ("I've been
@@ -1628,6 +1786,64 @@ fn place_lost(masked: &str, output: &str, marker: &str) -> Option<String> {
     } else {
         format!("{head} {marker} {tail}")
     })
+}
+
+/// The salutation that opens `masked` ("Hi ZXQPARZRKEEP0QXZ,"): up to three plain greeting words, the
+/// placeholders that stand for the greeting and the name, and the mark that ends it. Returns the salutation
+/// with that mark and the whitespace after it, and the markers in it.
+fn salutation<'a>(masked: &'a str, literals: &'a [Literal]) -> Option<(&'a str, Vec<&'a str>)> {
+    let end = masked.find([',', '!', '\n'])?;
+    let head = &masked[..end];
+    let mut markers = vec![];
+    let mut plain = 0;
+    for word in head.split_whitespace() {
+        match literals.iter().find(|l| l.marker == word) {
+            Some(l) => markers.push(l.marker.as_str()),
+            None if plain < 2 && word.chars().all(char::is_alphabetic) => plain += 1,
+            None => return None,
+        }
+    }
+    if markers.is_empty() {
+        return None;
+    }
+    let after = &masked[end..];
+    let mark = after.chars().next()?.len_utf8();
+    let space = after[mark..].len() - after[mark..].trim_start().len();
+    Some((&masked[..end + mark + space], markers))
+}
+/// `output` with the salutation of `masked` put in front of it, when the model's answer left out
+/// the salutation's placeholders and nothing else is wrong with it: the answer was not a greeting
+/// of its own, and it holds none of the salutation's markers.
+fn reattach_salutation(masked: &str, output: &str, literals: &[Literal]) -> Option<String> {
+    let (salutation, markers) = salutation(masked, literals)?;
+    let body = output.trim_start();
+    if greeting(body).is_some()
+        || markers
+            .iter()
+            .any(|m| body.to_ascii_lowercase().contains(&m.to_ascii_lowercase()))
+    {
+        return None;
+    }
+    // On the same line a comma goes on into a lowercase word ("Hi Tomasz, the timesheet is due"),
+    // unless the word is "I", a name or an acronym.
+    let inline = salutation.trim_end().ends_with(',')
+        && !salutation[salutation.trim_end().len()..].contains('\n');
+    let first = body.split(|c: char| !c.is_alphanumeric()).next()?;
+    let keeps_capital = first == "I"
+        || first.chars().skip(1).any(char::is_uppercase)
+        || first.chars().count() == 1
+        || literals
+            .iter()
+            .any(|l| first.eq_ignore_ascii_case(&l.marker));
+    let body = if inline && !keeps_capital {
+        let mut chars = body.chars();
+        chars
+            .next()
+            .map(|c| c.to_lowercase().chain(chars).collect::<String>())?
+    } else {
+        body.to_owned()
+    };
+    Some(format!("{salutation}{body}"))
 }
 
 /// Puts the original text back behind every placeholder. When a placeholder is missing or
@@ -3430,6 +3646,155 @@ mod tests {
         }
     }
 
+    /// Tone set 3 (rude3-29): "Come to my office at 4 pm" came back as "4:00 PM" and the guard read a changed number.
+    /// A time the model respells goes back to the writer's spelling; a different time, or a spelling the writer also
+    /// used, stays as the model wrote it.
+    #[test]
+    fn a_time_keeps_the_way_the_writer_spelled_it() {
+        for (source, output, expected) in [
+            (
+                "Come to my office at 4 pm on Thursday.",
+                "Please come to my office at 4:00 PM on Thursday.",
+                "Please come to my office at 4 pm on Thursday.",
+            ),
+            (
+                "Dinner at 8am sharp.",
+                "Dinner is at 8:00 AM sharp.",
+                "Dinner is at 8am sharp.",
+            ),
+            ("Meet at 4 p.m.", "Meet at 4:00 PM.", "Meet at 4 p.m."),
+            ("Meet at 4pm.", "Meet at 4 p.m.", "Meet at 4pm."),
+            (
+                "The call is at 16:00.",
+                "The call is at 4 PM.",
+                "The call is at 16:00.",
+            ),
+            (
+                "Open from 9 am to 5 pm.",
+                "Open from 9:00 AM to 5:00 PM.",
+                "Open from 9 am to 5 pm.",
+            ),
+            // A time the writer did not write, or wrote both ways, is the model's.
+            ("Meet at 4 pm.", "Meet at 5 pm.", "Meet at 5 pm."),
+            (
+                "Meet at 4 pm, or 4:00 PM if you prefer.",
+                "Meet at 4:00 PM.",
+                "Meet at 4:00 PM.",
+            ),
+            ("Meet at 4:30 pm.", "Meet at 4:30 pm.", "Meet at 4:30 pm."),
+            ("Meet at 4:30 pm.", "Meet at 4 pm.", "Meet at 4 pm."),
+            (
+                "It was 4:00 yesterday.",
+                "It was 4:00 yesterday.",
+                "It was 4:00 yesterday.",
+            ),
+        ] {
+            assert_eq!(keep_times(source, output), expected, "{source}");
+        }
+    }
+
+    /// Tone set 3 (chat3-06, Concise): "wanna grab lunch tmrw?" came back with "tomorrow", four characters longer than
+    /// the shorthand, and Concise may not grow. The writer's shorthand goes back when the rewrite grew past what a full
+    /// stop or a spelled-out "u" costs; a word the writer spelled out and a phrase expansion are left alone.
+    #[test]
+    fn concise_leaves_the_shorthand_the_writer_typed() {
+        for (source, output, expected) in [
+            (
+                "Wanna grab lunch tmrw?",
+                "Wanna grab lunch tomorrow?",
+                "Wanna grab lunch tmrw?",
+            ),
+            (
+                "Thx for the msg, will reply tmrw.",
+                "Thanks for the message, will reply tomorrow.",
+                "Thx for the msg, will reply tmrw.",
+            ),
+            (
+                "Tmrw works for me.",
+                "Tomorrow works for me today.",
+                "Tmrw works for me today.",
+            ),
+            (
+                "Idk about tmrw.",
+                "I am unsure about tomorrow.",
+                "I am unsure about tmrw.",
+            ),
+            // "u" for "you" is the cost of a clean rewrite.
+            ("Can u send it?", "Can you send it?", "Can you send it?"),
+            // Spelled out by the writer, or not in the source at all: the model's words.
+            (
+                "Send it tomorrow or tmrw.",
+                "Send it tomorrow or tomorrow, please.",
+                "Send it tomorrow or tomorrow, please.",
+            ),
+            (
+                "Meet next week.",
+                "Meet tomorrow morning.",
+                "Meet tomorrow morning.",
+            ),
+        ] {
+            assert_eq!(keep_shorthand(source, output), expected, "{source}");
+        }
+    }
+
+    /// Tone set 3 (hedged3-31, Concise and Direct): the model answered "The timesheet is due on the 15th." and left out
+    /// "Hi Tomasz,"; the strict retry then copied the input, so the writer got the hedged text back unchanged. The
+    /// salutation is the writer's own words, so it goes back in front of the answer.
+    #[test]
+    fn a_greeting_the_model_left_out_goes_back_in_front_of_its_answer() {
+        let range = |a: usize, b: usize| crate::TextRange {
+            start_utf16: a,
+            end_utf16: b,
+        };
+        let put_back = |passage: &str, protected: &[crate::TextRange], answer: &str| {
+            let (masked, literals) = mask(passage, protected, &[]).unwrap();
+            let rebuilt = reattach_salutation(&masked, answer, &literals)?;
+            restore(&masked, &rebuilt, &literals, false).ok()
+        };
+        let passage =
+            "Hi Tomasz, just a gentle reminder, if I may, that the timesheet is due on the 15th.";
+        let name = [range(0, 2), range(3, 9)];
+        assert_eq!(
+            put_back(passage, &name, "The timesheet is due on the 15th.").as_deref(),
+            Some("Hi Tomasz, the timesheet is due on the 15th.")
+        );
+        // "I" and an acronym keep their capital; a greeting on its own line keeps the next line's.
+        assert_eq!(
+            put_back(passage, &name, "I need the timesheet by the 15th.").as_deref(),
+            Some("Hi Tomasz, I need the timesheet by the 15th.")
+        );
+        assert_eq!(
+            put_back(passage, &name, "PTO requests are due on the 15th.").as_deref(),
+            Some("Hi Tomasz, PTO requests are due on the 15th.")
+        );
+        let lined = "Hi Priya,\nplease send the file when you can.";
+        assert_eq!(
+            put_back(lined, &[range(0, 2), range(3, 8)], "Send the file.").as_deref(),
+            Some("Hi Priya,\nSend the file.")
+        );
+        // Nothing to put back: the answer greets by itself, or holds the markers, or the text has no salutation.
+        assert_eq!(
+            put_back(passage, &name, "Hello, the timesheet is due on the 15th."),
+            None
+        );
+        assert_eq!(
+            put_back(
+                "Send Tomasz the file.",
+                &[range(5, 11)],
+                "Send him the file."
+            ),
+            None
+        );
+        assert_eq!(
+            put_back(
+                "Tomasz sent the file, and the report is due.",
+                &[range(0, 6)],
+                "The report is due."
+            ),
+            None
+        );
+    }
+
     #[test]
     fn a_there_the_model_added_behind_a_verb_of_going_is_dropped() {
         for (source, output, expected) in [
@@ -3483,6 +3848,18 @@ mod tests {
                 "I can't make it and I'm sorry.",
                 "I cannot make it, and I am sorry.",
                 "I can't make it, and I'm sorry.",
+            ),
+            // Tone set 3 (chat3-16): a question word's contraction is the writer's too, and the longer
+            // "What is" costs Concise a word.
+            (
+                "What's the wifi password at your place?",
+                "What is the wifi password at your place?",
+                "What's the wifi password at your place?",
+            ),
+            (
+                "Who\u{2019}s coming and where's the agenda?",
+                "Who is coming and where is the agenda?",
+                "Who\u{2019}s coming and where\u{2019}s the agenda?",
             ),
         ] {
             assert_eq!(keep_contractions(source, output), expected, "{source}");

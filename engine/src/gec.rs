@@ -1165,7 +1165,8 @@ fn pluralizes_after_determiner(text: &str, at: usize, original: &str, replacemen
             .any(|w| DETERMINERS.contains(&w.to_lowercase().as_str()))
 }
 /// A word rewritten as another form of itself right after a determiner or possessive ("the build"
-/// to "the building"): the writer picked the part of speech.
+/// to "the building"): the writer picked the part of speech. A describing word or two in between
+/// ("the failing build", "a clean build", "the broken old build") leaves the word a noun.
 fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement: &str) -> bool {
     let (o, r) = (
         original.trim().to_lowercase(),
@@ -1174,11 +1175,28 @@ fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement
     if o.contains(' ') || r.contains(' ') || o == r {
         return false;
     }
-    let before = text[..at]
+    // The words just before the edit, nearest first, up to a determiner: the determiner may sit past
+    // one or two describing words (a participle or a dictionary adjective).
+    let back: Vec<String> = text[..at]
         .split_whitespace()
-        .next_back()
-        .unwrap_or("")
-        .to_lowercase();
+        .rev()
+        .take(3)
+        .map(|w| {
+            w.trim_matches(|c: char| !c.is_alphabetic() && c != '\'' && c != '’')
+                .to_lowercase()
+        })
+        .collect();
+    let describing = |w: &str| {
+        !w.is_empty()
+            && (["ing", "ed", "en"]
+                .iter()
+                .any(|s| w.ends_with(s) && w.len() > 4)
+                || spelling::flags(w) & 8 != 0)
+    };
+    let determined = back
+        .iter()
+        .enumerate()
+        .any(|(k, w)| DETERMINERS.contains(&w.as_str()) && back[..k].iter().all(|m| describing(m)));
     let stem_of = |w: &str| {
         ["ing", "ed", "en"].iter().any(|suffix| {
             w.strip_suffix(suffix).is_some_and(|stem| {
@@ -1190,7 +1208,81 @@ fn verb_form_after_determiner(text: &str, at: usize, original: &str, replacement
             })
         })
     };
-    DETERMINERS.contains(&before.as_str()) && stem_of(&r)
+    determined && stem_of(&r)
+}
+/// Things a mark or a line is printed on, shown on or written on ("the error on your statement", "the date on the
+/// invoice", "the typo on the page"): "on" is the preposition for them and "in" the model's habit.
+const SURFACES: [&str; 28] = [
+    "statement",
+    "invoice",
+    "bill",
+    "receipt",
+    "form",
+    "page",
+    "screen",
+    "label",
+    "slide",
+    "sheet",
+    "spreadsheet",
+    "website",
+    "site",
+    "ticket",
+    "certificate",
+    "passport",
+    "card",
+    "chart",
+    "map",
+    "menu",
+    "list",
+    "timesheet",
+    "schedule",
+    "quote",
+    "estimate",
+    "dashboard",
+    "tab",
+    "packaging",
+];
+/// "on" made "in" before a surface (the error on your statement), after at most a determiner and a describing word.
+fn on_a_surface(text: &str, end: usize, original: &str, replacement: &str) -> bool {
+    if !original.trim().eq_ignore_ascii_case("on") || !replacement.trim().eq_ignore_ascii_case("in")
+    {
+        return false;
+    }
+    let ahead: Vec<String> = text[end..]
+        .split_whitespace()
+        .take(3)
+        .map(|w| w.trim_matches(|c: char| !c.is_alphabetic()).to_lowercase())
+        .collect();
+    let head = ahead
+        .iter()
+        .position(|w| !DETERMINERS.contains(&w.as_str()) && !w.is_empty());
+    head.is_some_and(|h| {
+        SURFACES.contains(&ahead[h].as_str())
+            || ahead
+                .get(h + 1)
+                .is_some_and(|w| SURFACES.contains(&w.as_str()))
+    })
+}
+/// Words that open a restriction on the noun before them: the noun then names one thing the reader is told how to
+/// pick out ("the confirmation before we place the order", "the cake that she made", "the man who called"), and the
+/// definite article is how English says so.
+const RESTRICTING: [&str; 15] = [
+    "that", "which", "who", "whom", "whose", "before", "after", "we", "you", "they", "i", "he",
+    "she", "when", "where",
+];
+/// "the" deleted in front of a noun that a restriction follows (the one the model removes most often in clean text).
+fn deletes_a_restricted_the(text: &str, end: usize, original: &str, replacement: &str) -> bool {
+    if !original.trim().eq_ignore_ascii_case("the") || !replacement.trim().is_empty() {
+        return false;
+    }
+    let mut ahead = text[end..].split_whitespace().take(2).map(|w| {
+        w.trim_matches(|c: char| !c.is_alphabetic() && c != '\'' && c != '’')
+            .to_lowercase()
+    });
+    let (noun, next) = (ahead.next().unwrap_or_default(), ahead.next());
+    !noun.is_empty()
+        && !DETERMINERS.contains(&noun.as_str())
+        && next.is_some_and(|w| RESTRICTING.contains(&w.as_str()))
 }
 /// The model glued or split words into something that is no word ("I'm living" to "Ilive"): every
 /// alphabetic word it writes must be a known word or already in the text.
@@ -1588,6 +1680,8 @@ fn merge(
             || writers_choice
             || swaps_article(text, edit.1, original, &e.replacement)
             || thanks_for(text, edit.0, original)
+            || on_a_surface(text, edit.1, original, &e.replacement)
+            || deletes_a_restricted_the(text, edit.1, original, &e.replacement)
             || invents_a_word(text, &e.replacement)
             || drops_meaning(text, edit, original, &e.replacement)
             || against_head_noun(&tokens, edit.0, &e.replacement, req.dialect == "british");
@@ -1851,6 +1945,77 @@ mod tests {
             confidence: 0.9,
             group_id: None,
         }
+    }
+    /// "take a look at the failing build" became "the failing building" (tone set 3, hedged3-15): after a determiner and a
+    /// describing word or two the word is still a noun, so a verb-form swap on it is the writer's to make, not an error.
+    #[test]
+    fn a_noun_after_a_determiner_and_a_describing_word_is_not_made_a_verb_form() {
+        for text in [
+            "Could you take a look at the failing build?",
+            "Please rerun a clean build tonight.",
+            "The broken old build is still red.",
+        ] {
+            assert!(
+                guarded(text, &[("build", "building")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        // Without a determiner in front the model's verb form is still applied.
+        assert_eq!(
+            guarded(
+                "He enjoys to build houses.",
+                &[("build", "building")],
+                vec![],
+                &[]
+            ),
+            ["build>building"]
+        );
+    }
+    /// "the error on your statement" became "the error in your statement" (tone set 3, formal3-29): what is printed on a
+    /// statement, an invoice or a page is "on" it, so the model's "in" is dropped before such a noun.
+    #[test]
+    fn on_stays_on_before_a_statement_an_invoice_or_a_page() {
+        for (text, from) in [
+            (
+                "Please accept my apologies for the error on your statement.",
+                "on",
+            ),
+            ("The date on the invoice is wrong.", "on"),
+            ("There is a typo on the last page.", "on"),
+        ] {
+            assert!(
+                guarded(text, &[(from, "in")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        // Before anything else the swap is the model's to make.
+        assert_eq!(
+            guarded("He is interested on music.", &[("on", "in")], vec![], &[]),
+            ["on>in"]
+        );
+    }
+    /// "We need the confirmation before we place the order" lost its "the" (tone set 3, formal3-22): the model deletes
+    /// a "the" the writer wanted most often, and never rightly in front of a noun that a "before we ..." or "that ..."
+    /// picks out. A repeated "the the" is still removed.
+    #[test]
+    fn the_stays_before_a_noun_that_a_restriction_picks_out() {
+        for (text, from) in [
+            (
+                "We need the confirmation before we place the order.",
+                " the",
+            ),
+            ("She ate the cake that her sister made.", " the"),
+            ("Ask the person who called yesterday.", " the"),
+        ] {
+            assert!(
+                guarded(text, &[(from, "")], vec![], &[]).is_empty(),
+                "{text}"
+            );
+        }
+        assert_eq!(
+            guarded("I saw the the cat.", &[(" the", "")], vec![], &[]),
+            [" the>"]
+        );
     }
     /// "no no no" became "No no" once GECToR deleted a copy and the sentence took its capital (everyday item
     /// b002-0999): a word written twice on purpose keeps its copy, wherever the deleted copy sits, while a slip
