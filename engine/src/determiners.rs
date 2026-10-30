@@ -321,6 +321,7 @@ fn subject_agreement(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>) {
         };
         let next = &s[i + 2];
         if w != v.third
+            || spelling::appositive(w)
             || v.third == v.base
             || ["be", "have", "do"].contains(&v.base.as_str())
             || spelling::flags(&v.base) & 4 == 0

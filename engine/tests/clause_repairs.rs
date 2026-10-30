@@ -698,6 +698,10 @@ fn an_adverb_after_a_modal_or_auxiliary_is_already_in_place() {
         "I hate always being late.",
         "She vowed never again to quit.",
         "I wonder sometimes what happens next.",
+        // A plural noun after "you" or "we" says who the pronoun means.
+        "You people never answer your phones.",
+        "You guys always arrive late.",
+        "We students often meet there.",
     ]);
     check(&[
         ("I go always to the gym.", "I always go to the gym."),

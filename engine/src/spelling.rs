@@ -1409,6 +1409,26 @@ fn hindi_beside(tokens: &[Token<'_>], index: usize, homographs: bool) -> bool {
                 && !SLIP_HINDI.contains(&t.normalized.as_str())
         })
 }
+/// A plural noun that says who "you", "we" or "they" means ("you guys", "we folks"): after the
+/// pronoun it is no verb in the "-s" form.
+pub(crate) fn appositive(word: &str) -> bool {
+    [
+        "guys",
+        "folks",
+        "gals",
+        "ladies",
+        "gentlemen",
+        "kids",
+        "friends",
+        "colleagues",
+        "teammates",
+        "devs",
+        "engineers",
+        "managers",
+        "students",
+    ]
+    .contains(&word)
+}
 /// Chat spellings people type on purpose ("lil", "wanna", "imma"): a register, not a slip, so Fix
 /// never respells them.
 pub(crate) fn chat(word: &str) -> bool {
