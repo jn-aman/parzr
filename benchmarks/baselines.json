@@ -94,8 +94,8 @@
       }
     },
     "tone-regression": {
-      "updated": "2026-10-28",
-      "reason": "Tone fix wave 2: hedge openers, kind words for common insults, formal text left alone, digits kept (full set 304/298/304/303 to 310/310/310/310)",
+      "updated": "2026-10-30",
+      "reason": "Tone fix wave 3: set 1 stays 310/310",
       "items": 310,
       "modes": {
         "professional": {
@@ -121,8 +121,8 @@
       },
       "samples": {
         "6": {
-          "updated": "2026-10-28",
-          "reason": "Tone fix wave 2: hedge openers, kind words for common insults, formal text left alone, digits kept (every 6th item 52/52 in all four modes)",
+          "updated": "2026-10-30",
+          "reason": "Tone fix wave 3: CI sample stays 52/52",
           "items": 52,
           "modes": {
             "professional": {
@@ -151,55 +151,55 @@
     },
     "tone-regression-2": {
       "updated": "2026-10-30",
-      "reason": "First measurement of the second, independently written tone set at v0.5.8 (full set 116/112/129/135 of 150 in professional/friendly/concise/direct)",
+      "reason": "Tone fix wave 3: insult module, hedge-clause recogniser, engine bug fixes; 116/112/129/135 -> 144/148/143/145 of 150",
       "items": 150,
       "modes": {
         "professional": {
           "items": 150,
-          "passed": 116,
-          "pass_rate": 0.7733
+          "passed": 144,
+          "pass_rate": 0.96
         },
         "friendly": {
           "items": 150,
-          "passed": 112,
-          "pass_rate": 0.7467
+          "passed": 148,
+          "pass_rate": 0.9867
         },
         "concise": {
           "items": 150,
-          "passed": 129,
-          "pass_rate": 0.86
+          "passed": 143,
+          "pass_rate": 0.9533
         },
         "direct": {
           "items": 150,
-          "passed": 135,
-          "pass_rate": 0.9
+          "passed": 145,
+          "pass_rate": 0.9667
         }
       },
       "samples": {
         "3": {
           "updated": "2026-10-30",
-          "reason": "Set 2 sample as CI's runner measures it: 36/38/44/45 of 50; six verdicts flipped vs the local 38/39/43/45, all model-decided (rude2-16, rude2-19, rude2-04, polite2-19, hedged2-06)",
+          "reason": "Tone fix wave 3 CI sample, measured locally: 49/50/48/48 of 50 (CI's own measurement at v0.5.8 was 36/38/44/45; the suite has a 4-point tolerance for cross-machine drift)",
           "items": 50,
           "modes": {
             "professional": {
               "items": 50,
-              "passed": 36,
-              "pass_rate": 0.72
+              "passed": 49,
+              "pass_rate": 0.98
             },
             "friendly": {
               "items": 50,
-              "passed": 38,
-              "pass_rate": 0.76
+              "passed": 50,
+              "pass_rate": 1.0
             },
             "concise": {
               "items": 50,
-              "passed": 44,
-              "pass_rate": 0.88
+              "passed": 48,
+              "pass_rate": 0.96
             },
             "direct": {
               "items": 50,
-              "passed": 45,
-              "pass_rate": 0.9
+              "passed": 48,
+              "pass_rate": 0.96
             }
           }
         }
