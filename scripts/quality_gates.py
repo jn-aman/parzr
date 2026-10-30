@@ -3,7 +3,7 @@
 benchmarks/baselines.json holds the last accepted numbers of every gated suite (scripts/update-baselines.py writes it,
 on purpose, from summaries). A runner given a suite name compares its summary with that entry and fails when
   - a fix rate (the tone regression set: a mode's pass rate) drops more than `fix_rate_points` percentage points below the baseline
-    (`RATE_TOLERANCE_POINTS` widens that for a suite whose answers differ between machines: tone-regression-2, 4 points),
+    (`RATE_TOLERANCE_POINTS` widens that for a suite whose answers differ between machines: tone-regression-2 and tone-regression-3, 4 points each),
   - false alarms (or damaged names) rise by more than `false_alarm_items` items,
   - p50 or p95 latency, or the engine's peak memory, exceeds the baseline times `performance_factor`
     (latency also gets `latency_slack_ms`), compared only with a performance baseline measured on the same kind
@@ -19,12 +19,13 @@ BASELINES = ROOT / 'benchmarks/baselines.json'
 # rates stay hard gates). On the GPU-less CI runner the 0.8B tone model's latency varies by more than 1.5x between identical runs
 # (PR #41: Direct p95 22.7 s, 25.5 s and 21.1 s on the same code against a 16.0 s single-run baseline), and a 52-item sample's p95
 # is its third slowest item. Tone latency is measured locally (summary.json p50/p95); the everyday gate covers Fix-mode latency.
-LATENCY_INFORMATIONAL = ('tone-regression', 'tone-regression-2')
+LATENCY_INFORMATIONAL = ('tone-regression', 'tone-regression-2', 'tone-regression-3')
 # Per-suite pass-rate tolerance in percentage points, replacing `tolerance.fix_rate_points` for that suite. The second tone set is
 # the measurement of generalisation, so its 50-item sample sits on the model's borderline items: the 0.8B model's greedy answers
 # differ between a Mac and the runner there, and one or two verdicts move either way (CI run 41006663116: six verdicts flipped,
-# professional 38/50 locally against 36/50 on the runner). 4.0 points is two items of fifty.
-RATE_TOLERANCE_POINTS = {'tone-regression-2': 4.0}
+# professional 38/50 locally against 36/50 on the runner). The third tone set is a sample of the same size and the same kind of
+# measurement, so it gets the same tolerance. 4.0 points is two items of fifty.
+RATE_TOLERANCE_POINTS = {'tone-regression-2': 4.0, 'tone-regression-3': 4.0}
 
 
 _HOME = None

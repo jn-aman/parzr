@@ -18,7 +18,7 @@ PATTERNS = [
     'benchmarks/typo-fuzz/*.jsonl', 'benchmarks/typo-fuzz/src/*.txt',
     'benchmarks/names/corpus.jsonl', 'benchmarks/names/heldout.jsonl',
     'benchmarks/everyday/items.jsonl',
-    'benchmarks/tone/regression.jsonl', 'benchmarks/tone/regression-2.jsonl',
+    'benchmarks/tone/regression.jsonl', 'benchmarks/tone/regression-2.jsonl', 'benchmarks/tone/regression-3.jsonl',
 ]
 
 
