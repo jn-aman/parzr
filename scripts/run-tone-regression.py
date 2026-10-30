@@ -66,12 +66,55 @@ CHAT_SPEAK = re.compile(r"(?<![\w.'’-])(?:u|ur|thx|lol|pls|plz|gonna|wanna|got
 NEGATION = re.compile(r"\b(?:not|never|no|cannot|unable|nobody|nothing|none|dont|doesnt|didnt|isnt|arent|wasnt|werent|havent|hasnt|hadnt|"
                       r"cant|couldnt|wont|wouldnt|shouldnt)\b|n['’]t\b", re.I)
 # Hedge openers that Concise and Direct treat as padding, negations included ("I don't know, ...", "I hope you do not mind me
-# asking, but ...", "whether or not", "No pressure at all."): stripped from the input and the output before their negations are
-# compared in those two modes, so removing one is not a flipped negation. The same list as engine/src/meaning.rs hedge_opener_regex.
+# asking, but ...", "whether or not", "No pressure at all.", "if that's okay"): stripped from the input and the output before their
+# negations are compared in those two modes, so removing one is not a flipped negation. The same family as engine/src/meaning.rs
+# (hedge_opener_regex, plus the leading clauses of hedge_clause_spans): strip_hedge_openers below is that recogniser.
 HEDGE_OPENER = re.compile(r"\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|"
                           r"i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|"
                           r"sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|"
-                          r"whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible)\b", re.I)
+                          r"whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|"
+                          r"if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble))\b", re.I)
+# What a leading clause says when it apologises, doubts, asks leave or minimises ("Sorry for the silly question", "Forgive me if
+# this has already been discussed", "I might be overthinking this", "Just checking, in case it got buried").
+HEDGE_MARKER = re.compile(r"\b(?:sorry|apolog(?:y|ies|ize|ise)|forgive|pardon|excuse\s+me"
+                          r"|(?:i['’]m\s+|i\s+am\s+)?(?:not|n['’]t)\s+(?:sure|certain|an\s+expert)|unsure"
+                          r"|(?:may|might|could)\s+(?:well\s+)?(?:be|have\s+been)\s+(?:\w+\s+){0,2}(?:wrong|missing|overthinking|mistaken|off|confused)"
+                          r"|(?:only|just)\s+guessing|overthinking|probably|correct\s+me"
+                          r"|(?:silly|stupid|dumb|quick|small|basic)\s+(?:question|ask)"
+                          r"|just\s+(?:checking|wondering|a\s+thought)|a\s+(?:quick\s+)?thought|in\s+case"
+                          r"|too\s+much\s+trouble|i\s+know\s+(?:this|that|you['’]re|it['’]s)|i\s+hate\s+to"
+                          r"|no\s+(?:pressure|rush)|(?:don['’]t|do\s+not)\s+want\s+to\s+(?:push|bother|rush|nag|pester)"
+                          r"|(?:a\s+bit|too)\s+early\s+to\s+say|hope\s+you\s+(?:don['’]t|do\s+not)\s+mind)\b", re.I)
+HEDGE_END = re.compile(r"(?:\s*,\s*(?:but|whether)\b|\s+but\b)", re.I)
+
+
+def strip_hedge_openers(text):
+    """`text` with its hedge openers replaced by a space: the old list, and every clause from a sentence's start to its "but"
+    or ", whether" of three to fourteen words with no other sentence mark and a hedge marker in it."""
+    spans = [m.span() for m in HEDGE_OPENER.finditer(text)]
+    for end in HEDGE_END.finditer(text):
+        head = text[:end.start()]
+        start = max(head.rfind(c) for c in ".!?\n") + 1
+        clause = head[start:].lstrip()
+        start = len(head) - len(clause)
+        if 3 <= len(clause.split()) <= 14 and HEDGE_MARKER.search(clause) and "but" not in clause.lower().split() \
+                and ";" not in clause and ":" not in clause:
+            spans.append((start, end.end()))
+    merged = []
+    for a, b in sorted(spans):
+        if merged and a <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], b)
+        else:
+            merged.append([a, b])
+    out, at = [], 0
+    for a, b in merged:
+        out.append(text[at:a])
+        out.append(" ")
+        at = b
+    out.append(text[at:])
+    return "".join(out)
+
+
 # Words that start with a capital in a greeting or a sign-off but are not names.
 NOT_NAMES = {"morning", "afternoon", "evening", "i"}
 EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B50\u2B55][\uFE0F\U0001F3FB-\U0001F3FF]?"
@@ -268,7 +311,7 @@ def check(item, mode, response):
     if ends_question(text) and mode != "direct" and not ends_question(out):
         fail("question_mark")
     # Concise and Direct treat a hedge opener as padding: its negation going with it is no flipped negation.
-    unhedged_in, unhedged_out = (HEDGE_OPENER.sub(" ", text), HEDGE_OPENER.sub(" ", out)) if mode in ("concise", "direct") else (text, out)
+    unhedged_in, unhedged_out = (strip_hedge_openers(text), strip_hedge_openers(out)) if mode in ("concise", "direct") else (text, out)
     if bool(NEGATION.search(unhedged_in)) != bool(NEGATION.search(unhedged_out)):
         fail("negation_flipped", "dropped" if NEGATION.search(unhedged_in) else "added")
     lost = sorted(names(text) - {stem(w) for w in words(out)})

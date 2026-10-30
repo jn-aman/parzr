@@ -715,7 +715,7 @@ fn hedge_lead_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
         regex::Regex::new(
-            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)",
+            r"(?i)^(?:sorry,?\s+)?(?:i\s+(?:may|might|could)\s+be\s+wrong|i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|i\s+hate\s+to\s+ask|sorry\s+to\s+bother\s+you(?:\s+again)?)(?:\s*,\s*(?:but\s+)?|\s+but\s+)|^(?:if\s+(?:it['’]s|that['’]s)\s+(?:not\s+too\s+much\s+trouble|ok|okay|alright|fine)\s*,\s*)",
         )
         .expect("constant hedge lead regex")
     })
@@ -769,7 +769,10 @@ struct HedgePlan {
 fn hedge_plan(mode: crate::Mode, sentence: &str) -> Option<HedgePlan> {
     let words = |s: &str| s.split_whitespace().count();
     let concise = mode == crate::Mode::Concise;
-    let lead = hedge_lead_regex().find(sentence).map_or(0, |m| m.end());
+    let lead = hedge_lead_regex()
+        .find(sentence)
+        .map_or(0, |m| m.end())
+        .max(crate::meaning::hedge_lead(sentence).unwrap_or(0));
     let rest = &sentence[lead..];
     if lead > 0 {
         // A clause must follow the hedge ("I'm not sure, but." alone stays).
@@ -1603,6 +1606,48 @@ mod tests {
         apply(text, hedge_forms(&req, &[]))
     }
 
+    #[test]
+    fn the_hedge_clauses_of_the_second_tone_set_are_said_plainly_too() {
+        use crate::Mode::{Concise, Direct};
+        for (text, expected) in [
+            (
+                "Sorry if this is the wrong place to ask, but does anyone have the password for the office?",
+                "Does anyone have the password for the office?",
+            ),
+            (
+                "Not sure if this makes sense, but we can't ship on Friday without the security audit.",
+                "We can't ship on Friday without the security audit.",
+            ),
+            (
+                "I might be overthinking this, but I wouldn't send the draft to the client before legal has seen it.",
+                "I wouldn't send the draft to the client before legal has seen it.",
+            ),
+            (
+                "I may be missing something, but isn't the discount supposed to apply to orders over 200 euros?",
+                "Isn't the discount supposed to apply to orders over 200 euros?",
+            ),
+            (
+                "If it's not too much trouble, could you send me the signed copy?",
+                "Could you send me the signed copy?",
+            ),
+            (
+                "Please correct me if I'm wrong, but the meeting was moved to 4:15 on Tuesday, right?",
+                "The meeting was moved to 4:15 on Tuesday, right?",
+            ),
+        ] {
+            for mode in [Concise, Direct] {
+                assert_eq!(hedged(mode, text), expected, "{mode:?} {text}");
+            }
+        }
+        // A clause that ends in "whether", a short "Sorry, but" and a claim of fact stay.
+        for text in [
+            "Just checking, in case it got buried, whether you had a chance to look at the proposal?",
+            "Sorry, but no.",
+            "We checked it, but the totals are probably wrong.",
+        ] {
+            assert_eq!(hedged(Concise, text), text);
+        }
+    }
     #[test]
     fn hedge_openers_are_said_plainly_in_concise_and_direct() {
         use crate::Mode::{Concise, Direct};
