@@ -420,6 +420,26 @@
         "p50_ms": 7625.4,
         "p95_ms": 18360.39,
         "max_rss_mb": 1629.5
+      },
+      "tone-regression-3/professional": {
+        "p50_ms": 11924.75,
+        "p95_ms": 28113.47,
+        "max_rss_mb": 1684.6
+      },
+      "tone-regression-3/friendly": {
+        "p50_ms": 10357.35,
+        "p95_ms": 25770.47,
+        "max_rss_mb": 1684.6
+      },
+      "tone-regression-3/concise": {
+        "p50_ms": 8484.65,
+        "p95_ms": 22073.91,
+        "max_rss_mb": 1684.6
+      },
+      "tone-regression-3/direct": {
+        "p50_ms": 8316.05,
+        "p95_ms": 28474.49,
+        "max_rss_mb": 1684.6
       }
     }
   }
