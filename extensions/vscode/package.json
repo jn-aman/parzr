@@ -2,7 +2,7 @@
   "name": "parzr",
   "displayName": "Parzr",
   "description": "Offline writing assistance with minimal edits and deliberate tones.",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "publisher": "parzr",
   "license": "Apache-2.0",
   "engines": {
