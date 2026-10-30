@@ -2101,8 +2101,8 @@ fn contractions(text: &str) -> usize {
     .find_iter(text)
     .count()
 }
-/// Whether `text` has something a Professional rewrite is for: chat shorthand, an insult, a
-/// contraction, a sentence that starts in lowercase, "!!" or "??", or no final mark. Text with
+/// Whether `text` has something a Professional rewrite is for: chat shorthand, an insult (a rude
+/// word or a put-down said in a phrase), a contraction, a sentence that starts in lowercase, "!!" or "??", or no final mark. Text with
 /// none of these is already in the tone, and a rewrite that only rewords it ("help" to "assist
 /// you", "received" to "have received") is no improvement.
 #[cfg(feature = "local-model")]
@@ -2111,7 +2111,7 @@ pub(crate) fn informal(text: &str) -> bool {
     let repeated = REPEATED
         .get_or_init(|| regex::Regex::new(r"[!?]{2,}").expect("constant repeated mark regex"));
     let marks = tone_marks(text);
-    if marks.chat + marks.rude > 0 || contractions(text) > 0 || repeated.is_match(text) {
+    if marks.chat + marks.insulted() > 0 || contractions(text) > 0 || repeated.is_match(text) {
         return true;
     }
     let tokens = tokenizer::tokenize(text, &[]);
@@ -2152,7 +2152,7 @@ pub(crate) fn earns_rewrite(source: &str, output: &str) -> bool {
             .count()
     };
     let (s, o) = (tone_marks(source), tone_marks(output));
-    o.rude < s.rude
+    o.insulted() < s.insulted()
         || o.chat < s.chat
         || o.exclaims < s.exclaims
         || contractions(output) < contractions(source)
@@ -3179,6 +3179,7 @@ mod tests {
             "I can't make the call today.",
             "Please send it today. thanks.",
             "Why is the invoice still wrong??",
+            "Did you even read my email before replying?",
             "Thanks for the update",
             "Dear Dr. Nakamura,\n\nPlease confirm the date\n\nSincerely,\nElena Park",
         ] {
@@ -3195,6 +3196,11 @@ mod tests {
             assert!(!informal(text), "{text}");
         }
         assert!(earns_rewrite("Thanks!", "Thank you."));
+        // A put-down said in a phrase and then taken out earns the rewrite.
+        assert!(earns_rewrite(
+            "Did you even read my email before replying?",
+            "Did you read my email before replying?"
+        ));
         assert!(earns_rewrite("I can't go.", "I cannot go."));
         assert!(earns_rewrite(
             "Send me the final numbers by Friday.",
