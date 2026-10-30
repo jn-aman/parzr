@@ -204,6 +204,62 @@
           }
         }
       }
+    },
+    "tone-regression-3": {
+      "updated": "2026-10-30",
+      "reason": "Third independent tone set (150 items, written without reading sets 1 or 2 or the engine's tone rules): full-set measurement of generalisation at v0.5.9, 82.0/81.3/96.0/98.0 after fixing 15 item specs the first run showed were unsound",
+      "items": 150,
+      "modes": {
+        "professional": {
+          "items": 150,
+          "passed": 123,
+          "pass_rate": 0.82
+        },
+        "friendly": {
+          "items": 150,
+          "passed": 122,
+          "pass_rate": 0.8133
+        },
+        "concise": {
+          "items": 150,
+          "passed": 144,
+          "pass_rate": 0.96
+        },
+        "direct": {
+          "items": 150,
+          "passed": 147,
+          "pass_rate": 0.98
+        }
+      },
+      "samples": {
+        "3": {
+          "updated": "2026-10-30",
+          "reason": "Sample (--every 3, what CI scores) of the third tone set at v0.5.9: 40/42/46/49 of 50",
+          "items": 50,
+          "modes": {
+            "professional": {
+              "items": 50,
+              "passed": 40,
+              "pass_rate": 0.8
+            },
+            "friendly": {
+              "items": 50,
+              "passed": 42,
+              "pass_rate": 0.84
+            },
+            "concise": {
+              "items": 50,
+              "passed": 46,
+              "pass_rate": 0.92
+            },
+            "direct": {
+              "items": 50,
+              "passed": 49,
+              "pass_rate": 0.98
+            }
+          }
+        }
+      }
     }
   },
   "performance": {
@@ -272,6 +328,26 @@
         "p50_ms": 493.05,
         "p95_ms": 1445.28,
         "max_rss_mb": 1305.2
+      },
+      "tone-regression-3/professional": {
+        "p50_ms": 477.3,
+        "p95_ms": 971.29,
+        "max_rss_mb": 1288.3
+      },
+      "tone-regression-3/friendly": {
+        "p50_ms": 274.25,
+        "p95_ms": 772.97,
+        "max_rss_mb": 1288.3
+      },
+      "tone-regression-3/concise": {
+        "p50_ms": 287.4,
+        "p95_ms": 817.14,
+        "max_rss_mb": 1288.3
+      },
+      "tone-regression-3/direct": {
+        "p50_ms": 267.25,
+        "p95_ms": 948.71,
+        "max_rss_mb": 1288.3
       }
     },
     "ci": {

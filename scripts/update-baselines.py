@@ -7,12 +7,12 @@ give the gain back); lower one only for a deliberate, explained trade-off, never
 
 usage: update-baselines.py SUITE SUMMARY --reason TEXT [--quality-only | --performance-only] [--machine KEY]
 
-  SUITE     heldout-test | typo-fuzz-test | names | everyday | tone-regression | tone-regression-2
+  SUITE     heldout-test | typo-fuzz-test | names | everyday | tone-regression | tone-regression-2 | tone-regression-3
   SUMMARY   the run's summary: dist/qa/heldout/summary.json, dist/qa/typo-fuzz/summary.json,
             dist/qa/names/report.json, dist/qa/everyday/summary.json or dist/qa/tone-regression/summary.json
-            (tone-regression-2: dist/qa/tone-2/summary.json). Sealed test sets are scored only on CI:
+            (tone-regression-2: dist/qa/tone-2/summary.json; tone-regression-3: dist/qa/tone-3/summary.json). Sealed test sets are scored only on CI:
             download the verify job's artifact (gh run download RUN -n quality-summaries-SHA) and pass its file.
-  tone-regression and tone-regression-2 take a full run, or a sample run (--every N, what CI scores) which is kept under "samples" beside it.
+  tone-regression, tone-regression-2 and tone-regression-3 take a full run, or a sample run (--every N, what CI scores) which is kept under "samples" beside it.
   --machine the performance baseline to write (default: the one the summary was measured on, "ci" for CI's
             runners). Latency and memory are compared only between runs on the same kind of machine.
 
@@ -24,7 +24,7 @@ import argparse, datetime, json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import quality_gates  # noqa: E402
 
-TONE_SUITES = ('tone-regression', 'tone-regression-2')
+TONE_SUITES = ('tone-regression', 'tone-regression-2', 'tone-regression-3')
 SUITES = ('heldout-test', 'typo-fuzz-test', 'names', 'everyday') + TONE_SUITES
 
 
