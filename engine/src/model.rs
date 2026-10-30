@@ -863,6 +863,12 @@ const CONTRACTIONS: &[(&str, &str, bool)] = &[
     ("you'll", "you will", true),
     ("we'll", "we will", true),
     ("they'll", "they will", true),
+    // A question word's own contraction: "what's the plan" is not the longer "what is the plan".
+    ("what's", "what is", true),
+    ("who's", "who is", true),
+    ("where's", "where is", true),
+    ("how's", "how is", true),
+    ("when's", "when is", true),
 ];
 /// A rewrite of `source` that keeps the contractions the writer used: where the source wrote
 /// "isn't" and never "is not", an "is not" the model wrote in its place goes back to "isn't"
@@ -3596,6 +3602,18 @@ mod tests {
                 "I can't make it and I'm sorry.",
                 "I cannot make it, and I am sorry.",
                 "I can't make it, and I'm sorry.",
+            ),
+            // Tone set 3 (chat3-16): a question word's contraction is the writer's too, and the longer
+            // "What is" costs Concise a word.
+            (
+                "What's the wifi password at your place?",
+                "What is the wifi password at your place?",
+                "What's the wifi password at your place?",
+            ),
+            (
+                "Who\u{2019}s coming and where's the agenda?",
+                "Who is coming and where is the agenda?",
+                "Who\u{2019}s coming and where\u{2019}s the agenda?",
             ),
         ] {
             assert_eq!(keep_contractions(source, output), expected, "{source}");
