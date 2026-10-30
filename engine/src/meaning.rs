@@ -2071,7 +2071,7 @@ fn rude_phrase_regex() -> &'static regex::Regex {
     static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     RE.get_or_init(|| {
         regex::Regex::new(concat!(
-            r"\b(?:did\s+you\s+even\s+(?:read|look|listen|bother|check|try|think|see|open|notice)",
+            r"\b(?:did\s+you\s+even\s+(?:read|look|listen|bother|check|try|think|see|open|notice|test|run|review|proofread|double-check)",
             r"|you\s+never\s+(?:listen|read|check|learn|think|pay\s+attention)",
             r"|why\s+(?:can['’]t|can\s*not|cannot|won['’]t|couldn['’]t)\s+you\s+just",
             r"|are\s+you\s+(?:deaf|blind|dense|daft|even\s+(?:listening|reading|trying))",

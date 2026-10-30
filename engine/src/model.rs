@@ -1298,10 +1298,15 @@ fn fitting_emoji(text: &str, answer: &str) -> Option<&'static str> {
         .or_else(|| felt.first().and_then(|emoji| emoji.first()))
         .copied()
 }
+/// A rude word or a put-down said in a phrase is left in the rewrite ("Lol, did you even test this
+/// before pushing it?"): a message that still insults is not decorated with an emoji.
+fn still_insulting(text: &str) -> bool {
+    crate::meaning::tone_marks(text).insulted() > 0
+}
 /// One emoji to end a casual Friendly message with, chosen by the model (see `fitting_emoji`).
 /// None far more often than not.
 fn pick_emoji(req: &Request, text: &str) -> Option<&'static str> {
-    if !emoji_allowed(req) || felt(text).is_empty() {
+    if !emoji_allowed(req) || felt(text).is_empty() || still_insulting(text) {
         return None;
     }
     let r = runtime().ok()?;
@@ -3178,6 +3183,23 @@ mod tests {
             println!("RAW {mode:?}: {raw:?}");
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
+        }
+    }
+
+    #[test]
+    fn a_message_that_still_insults_gets_no_emoji() {
+        for text in [
+            "Lol, did you even test this before pushing it?",
+            "That was a dumb idea, lol.",
+            "Whoever wrote this has no clue.",
+        ] {
+            assert!(still_insulting(text), "{text}");
+        }
+        for text in [
+            "Thanks so much for the help, lol!",
+            "Did you get a chance to test this before pushing it?",
+        ] {
+            assert!(!still_insulting(text), "{text}");
         }
     }
 
