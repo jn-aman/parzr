@@ -731,6 +731,23 @@ macro_rules! trace {
     };
 }
 pub(crate) use trace;
+/// The prompt's own scaffolding in an answer: a label the prompt put before the text ("Sentence
+/// to edit:"), or the earlier text a retry was shown copied into what it should have edited. The
+/// answer is not a suggestion then (a Friendly "Hi team," became "Hi team,\n\nTeam,\nSentence to
+/// edit: Once again, ..."); it returns what was found.
+fn prompt_echo(source: &str, answer: &str, context: Option<&str>) -> Option<String> {
+    let (source, answer) = (source.to_lowercase(), answer.to_lowercase());
+    for label in ["earlier text:", "sentence to edit:", "text to edit:"] {
+        if answer.contains(label) && !source.contains(label) {
+            return Some(label.to_owned());
+        }
+    }
+    let context = context.map(|c| c.trim().to_lowercase()).unwrap_or_default();
+    (context.split_whitespace().count() >= 2
+        && answer.contains(&context)
+        && !source.contains(&context))
+    .then_some(context)
+}
 fn generate(req: &Request, passage: &str, careful: Option<&str>) -> Result<String, String> {
     generate_with(req, passage, careful, false)
 }
@@ -753,6 +770,12 @@ fn generate_with(
             if careful.is_some() { ", careful" } else { "" },
             if strict { ", strict" } else { "" }
         );
+        if let Some(label) = prompt_echo(&masked, &output, careful) {
+            trace!("  model echoed the prompt ({label:?}): rejected");
+            return Err(format!(
+                "The model repeated its instructions ({label}). This suggestion was withheld."
+            ));
+        }
         // The writer's own emoji are placeholders here; any emoji in the answer is the model's
         // (a Fix answer that replied to the text ends with one), and a tone rewrite only ever
         // gets the one `pick_emoji` chooses.
@@ -3156,6 +3179,46 @@ mod tests {
             let shots = generate_with(&req, &req.text, None, true);
             println!("RAW+SHOTS {mode:?}: {shots:?}");
         }
+    }
+
+    #[test]
+    fn an_answer_that_repeats_the_prompt_is_not_a_suggestion() {
+        // The retry's own labels, and the earlier text copied into the answer.
+        assert!(
+            prompt_echo(
+                "Once again the numbers are late.",
+                "Team,\nSentence to edit: Once again, the numbers are late.",
+                Some("Hi team,"),
+            )
+            .is_some()
+        );
+        assert!(prompt_echo("Send it.", "Text to edit:\nSend it.", None).is_some());
+        assert!(
+            prompt_echo(
+                "The numbers are late.",
+                "Hi team, The numbers are late.",
+                Some("Hi team,"),
+            )
+            .is_some()
+        );
+        // The writer's own words and a clean answer pass.
+        assert!(prompt_echo("Text to edit: send it.", "Text to edit: Send it.", None).is_none());
+        assert!(
+            prompt_echo(
+                "The numbers are late.",
+                "The numbers are late, please.",
+                Some("Hi team,"),
+            )
+            .is_none()
+        );
+        assert!(
+            prompt_echo(
+                "Hi team, send it.",
+                "Hi team, please send it.",
+                Some("Hi team,")
+            )
+            .is_none()
+        );
     }
 
     #[test]
