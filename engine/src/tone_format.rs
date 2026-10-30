@@ -186,6 +186,7 @@ const YA_YES_BEFORE: &[&str] = &[
 /// Chat shorthand a Professional rewrite spells out, with what it stands for.
 const SHORTHAND: &[(&str, &str)] = &[
     ("u", "you"),
+    ("abt", "about"),
     ("pls", "please"),
     ("plz", "please"),
     ("thx", "thanks"),
@@ -251,6 +252,31 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
         // "u-turn", "U.S.", "rn.": only a word standing alone.
         let after = &req.text[t.end_byte..];
         let before = &req.text[..t.start_byte];
+        // "come w/ me", "send it b4 noon": the slash or the digit is part of the shorthand
+        // (the tokenizer splits them off; "w/o" is a word of its own).
+        let spelled = match t.surface {
+            "w" if after.starts_with("/ ") || after == "/" => Some(("w/", "with")),
+            "b" if after
+                .strip_prefix('4')
+                .is_some_and(|rest| rest.chars().next().is_none_or(|c| !c.is_alphanumeric())) =>
+            {
+                Some(("b4", "before"))
+            }
+            _ => None,
+        };
+        if let Some((typed, full)) =
+            spelled.filter(|_| !before.ends_with(['-', '/', '_', '@', '#']))
+        {
+            edits.push(edit(
+                t.start_utf16,
+                t.end_utf16 + 1,
+                typed,
+                full.into(),
+                "tone.professional_shorthand",
+                "Spell out chat shorthand in professional writing.",
+            ));
+            continue;
+        }
         if after.starts_with(['-', '.', '\'', '’', '/', '_', '@'])
             && !after.starts_with(". ")
             && !after.trim_end().eq(".")
@@ -325,6 +351,13 @@ pub(crate) fn professional_forms(req: &Request, protected: &[TextRange]) -> Vec<
                 "have to"
             }
             .to_owned(),
+            // "r u coming" is "are you coming"; a lone "R" is a letter.
+            "r" if next
+                .as_deref()
+                .is_some_and(|n| ["u", "you", "we", "they", "ya"].contains(&n)) =>
+            {
+                "are".to_owned()
+            }
             // "ur right" is "you are right"; "ur email" is "your email".
             "ur" => if next.as_deref().is_some_and(|n| UR_PREDICATES.contains(&n)) {
                 "you are"
@@ -1186,6 +1219,25 @@ fn final_mark(
             .collect()
     };
     let asks = |words: &[String]| {
+        if crate::tone_guard::drops_its_subject(words) {
+            return false;
+        }
+        // "hey r u coming": "r" is "are" before its subject.
+        let spelled: Vec<String> = words
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                let subject = words
+                    .get(i + 1)
+                    .is_some_and(|n| ["u", "you", "we", "they", "ya"].contains(&n.as_str()));
+                if w == "r" && subject {
+                    "are".to_owned()
+                } else {
+                    w.clone()
+                }
+            })
+            .collect();
+        let words = &spelled[..];
         let lead = words
             .iter()
             .take_while(|w| LEAD_INS.contains(&w.as_str()))
@@ -1222,7 +1274,13 @@ fn final_mark(
             && (words.first().is_some_and(|w| WH.contains(&w.as_str()))
                 || words.get(1).is_some_and(|w| WHO.contains(&w.as_str())))
     };
-    let mark = if asks(&words_of(&last)) || clause.len() > 2 && clause_asks(&words_of(clause)) {
+    // "can u call me when ur free, need to talk abt the lease": one question and then a need
+    // stated; the mark would put the need under the question.
+    let states_need = last.iter().any(|t| t.surface == ",")
+        && crate::tone_guard::says_something(&words_of(clause));
+    let mark = if (asks(&words_of(&last)) && !states_need)
+        || clause.len() > 2 && clause_asks(&words_of(clause))
+    {
         "?"
     } else {
         "."
@@ -1260,6 +1318,58 @@ mod tests {
         apply(text, professional_forms(&req, &[]))
     }
 
+    #[test]
+    fn a_statement_with_its_subject_left_out_or_a_need_after_a_request_is_no_question() {
+        // chat2-04 and chat2-05 of the second tone set: the floor wrote a "?".
+        for (text, expected) in [
+            (
+                "thx Marcus, ur the best. will send the files tmrw",
+                "THX Marcus, ur the best. Will send the files tmrw.",
+            ),
+            (
+                "can u call me when ur free, need to talk abt the lease",
+                "Can u call me when ur free, need to talk abt the lease.",
+            ),
+            (
+                "could do Friday if that works for you",
+                "Could do Friday if that works for you.",
+            ),
+            // Asked questions keep theirs.
+            (
+                "will you send the files tomorrow",
+                "Will you send the files tomorrow?",
+            ),
+            ("can u call me when ur free", "Can u call me when ur free?"),
+            (
+                "hey r u coming to the offsite on the 22nd",
+                "Hey r u coming to the offsite on the 22nd?",
+            ),
+            (
+                "the build is broken again, can someone look",
+                "The build is broken again, can someone look?",
+            ),
+        ] {
+            assert_eq!(floored(text), expected, "{text}");
+        }
+    }
+    #[test]
+    fn professional_spells_out_abt_b4_w_slash_and_r_u() {
+        for (text, expected) in [
+            (
+                "we need to talk abt the lease",
+                "we need to talk about the lease",
+            ),
+            ("send it b4 noon", "send it before noon"),
+            ("come w/ me to the store", "come with me to the store"),
+            ("r u coming to the party", "are you coming to the party"),
+            ("hey r u free", "hey are you free"),
+            // Not shorthand: a letter, "w/o", a version tag.
+            ("plan R is ready", "plan R is ready"),
+            ("tea w/o sugar", "tea w/o sugar"),
+        ] {
+            assert_eq!(professional(text), expected, "{text}");
+        }
+    }
     #[test]
     fn chat_gets_sentence_capitals_and_a_final_mark() {
         assert_eq!(

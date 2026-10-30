@@ -534,7 +534,8 @@ pub fn slot_fix(
                 )
             });
     }
-    if !(2..=3).contains(&word.len()) {
+    // "abt" is the chat spelling of "about", not a slip of "at".
+    if !(2..=3).contains(&word.len()) || chat(word) || names::is_shorthand(word) {
         return None;
     }
     let unknown = !lexicon().ordinary(word);

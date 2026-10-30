@@ -2011,6 +2011,16 @@ mod tests {
         text
     }
     #[test]
+    fn chat_spellings_are_not_slips_of_a_frequent_word() {
+        // "abt" is "about" in chat, not a near miss of "at".
+        for text in [
+            "We need to talk abt the lease today.",
+            "Call me abt the invoice.",
+        ] {
+            assert_eq!(fix(text), text);
+        }
+    }
+    #[test]
     fn frequent_word_replaces_rare_near_misses_in_fitting_slots() {
         for (input, expected) in [
             ("This si do bad.", "This is so bad."),

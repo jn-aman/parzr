@@ -116,6 +116,36 @@ const STATEMENT_STARTS: &[&str] = &[
     "havent",
     "hasnt",
 ];
+/// A modal before a bare verb leaves the subject out ("will send the files tmrw", "can do Friday"):
+/// a statement of what the writer will do, where "will you send" and "can they do" ask.
+pub(crate) fn drops_its_subject(words: &[String]) -> bool {
+    let lead = words
+        .iter()
+        .take_while(|w| LEAD_INS.contains(&w.as_str()))
+        .count();
+    words.get(lead).is_some_and(|w| {
+        ["can", "could", "would", "will", "should", "shall", "may"].contains(&w.as_str())
+    }) && words.get(lead + 1).is_some_and(|w| {
+        !ASKED_ABOUT.contains(&w.as_str())
+            && crate::morphology::verb(w).is_some_and(|v| v.base == *w)
+    })
+}
+/// A clause that says something and asks nothing: it opens with a subject, a negated verb or a
+/// bare verb ("need to talk abt the lease"), at least three words long.
+pub(crate) fn says_something(words: &[String]) -> bool {
+    let lead = words
+        .iter()
+        .take_while(|w| LEAD_INS.contains(&w.as_str()))
+        .count();
+    let Some(first) = words.get(lead).map(String::as_str) else {
+        return false;
+    };
+    drops_its_subject(words)
+        || words.len() - lead >= 3
+            && !QUESTION_OPENERS.contains(&first)
+            && (STATEMENT_STARTS.contains(&first)
+                || crate::morphology::verb(first).is_some_and(|v| v.base == first))
+}
 /// A statement stays one: "cant open the file, it says its corrupted" does not end in "?".
 fn statement_stays(source: &str, output: &str, src: &[String]) -> Result<(), String> {
     if !ends_question(output) || source.contains('?') {
@@ -141,7 +171,7 @@ fn statement_stays(source: &str, output: &str, src: &[String]) -> Result<(), Str
     // A chat message that asks without its mark ("can u send it", "the build is down, is anyone on it").
     let asks = clauses.iter().any(|clause| {
         let first = clause[0].as_str();
-        QUESTION_OPENERS.contains(&first)
+        QUESTION_OPENERS.contains(&first) && !drops_its_subject(clause)
             || first.ends_with("n't")
                 && clause
                     .get(1)
@@ -169,14 +199,27 @@ fn statement_stays(source: &str, output: &str, src: &[String]) -> Result<(), Str
     let statement = clauses.first().is_some_and(|c| {
         let first = c[0].as_str();
         STATEMENT_STARTS.contains(&first)
+            || drops_its_subject(c)
             || first.ends_with("n't")
                 && !c.get(1).is_some_and(|w| ASKED_ABOUT.contains(&w.as_str()))
     });
     if statement && !asks && !addresses {
-        Err("turns a statement into a question".into())
-    } else {
-        Ok(())
+        return Err("turns a statement into a question".into());
     }
+    // The question mark is on a clause that only says something: "…when you are free, need to talk
+    // at the lease?" (the writer asked once and then stated a need).
+    let tail = output
+        .trim_end_matches(|c: char| c.is_whitespace() || !c.is_ascii() && !c.is_alphanumeric())
+        .rsplit(['.', '!', '?', '\n'])
+        .find(|s| s.chars().any(char::is_alphanumeric))
+        .and_then(|sentence| sentence.rsplit(',').next())
+        .map(words)
+        .unwrap_or_default();
+    let clause_count = last_sentence.split([',', ';']).count();
+    if clause_count > 1 && says_something(&tail) {
+        return Err("turns a statement into a question".into());
+    }
+    Ok(())
 }
 
 /// A clock time as written: hour, minute and the am or pm it carries, if any.
@@ -474,6 +517,43 @@ fn promises(src: &[String], out: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::kept_details;
+
+    #[test]
+    fn a_statement_without_its_subject_or_a_need_after_a_request_stays_a_statement() {
+        for (source, output) in [
+            (
+                "thx Marcus, ur the best. will send the files tmrw",
+                "Thanks Marcus, you're the best. Will send the files tomorrow?",
+            ),
+            (
+                "can u call me when ur free, need to talk abt the lease",
+                "Could you call me when you are free, need to talk about the lease?",
+            ),
+        ] {
+            assert_eq!(
+                kept_details(source, output),
+                Err("turns a statement into a question".into()),
+                "{source}"
+            );
+        }
+        // Questions keep their mark, and a request followed by a thank-you may take one.
+        for (source, output) in [
+            (
+                "will you send the files tomorrow",
+                "Will you send the files tomorrow?",
+            ),
+            (
+                "can u call me when ur free, thx",
+                "Could you call me when you are free?",
+            ),
+            (
+                "the build is down, is anyone on it",
+                "The build is down, is anyone on it?",
+            ),
+        ] {
+            assert_eq!(kept_details(source, output), Ok(()), "{source}");
+        }
+    }
 
     #[test]
     fn a_rewrite_keeps_what_the_writer_set_down() {
