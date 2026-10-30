@@ -126,6 +126,10 @@ fn questions_put_the_auxiliary_first() {
         "What you need is sleep.",
         "Do you know where the station is?",
         "I know what you mean.",
+        // A clause that opens with a wh-word and closes at a comma, then the question itself.
+        "When you are back, could we find half an hour to plan the March schedule?",
+        "Where you are, can we get a signal?",
+        "Whenever it is ready, will you let us know?",
     ]);
 }
 

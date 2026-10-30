@@ -459,6 +459,18 @@ fn question_order(req: &Request, s: &[Token<'_>], edits: &mut Vec<Edit>, questio
     } else {
         1
     };
+    // "When you are back, could we find half an hour?": a wh-word that opens a clause closed by a comma, and the
+    // question itself after it, is a "when" or "where" clause in statement order, not the question.
+    if let Some(comma) = (k + 1..s.len()).find(|&i| s[i].surface == ",")
+        && [
+            "am", "is", "are", "was", "were", "will", "can", "could", "should", "would", "have",
+            "has", "do", "does", "did", "may", "might", "shall", "must",
+        ]
+        .contains(&word(s, comma + 1))
+        && (SUBJECTS.contains(&word(s, comma + 2)) || DETERMINERS.contains(&word(s, comma + 2)))
+    {
+        return;
+    }
     // "Why you didn't tell me?": a do or a negated auxiliary moves too when a base verb follows
     // ("Why you do that?" keeps "do" as the main verb).
     let next = word(s, k + 2);
