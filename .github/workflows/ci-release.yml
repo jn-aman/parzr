@@ -506,6 +506,12 @@ jobs:
           done
           echo "Fetched $n previous update zip(s)"
       - name: Build, sign and verify the update feed
+        # What you see when Apple stalls: every child process of make-appcast.py (stapler and spctl reach Apple's
+        # servers) times out after five minutes, and the Sparkle download after 120 s, so a stalled check fails this step
+        # with a message naming the command instead of running into the job's 30-minute limit (the v0.5.9 build hung
+        # here, was cancelled with no log, and passed on a rerun). After such a failure, `gh run rerun <run-id> --failed`
+        # reruns only this job and the jobs that depend on it; release-build's artifacts are reused. The step's own
+        # timeout below ends a stall outside those children early too.
         # Writes dist/update/{Parzr-X.Y.Z.zip,*.delta,appcast.xml} and fails unless every signature, length and delta
         # checks out (and the app is stapled and Gatekeeper-approved). The EdDSA key reaches sign_update on stdin,
         # never a file or a log; sign_update comes from the pinned Sparkle tarball, re-hashed on every run.
@@ -513,6 +519,7 @@ jobs:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
           PARZR_CRITICAL: ${{ inputs.critical }}
           PARZR_NOTES: ${{ inputs.notes }}
+        timeout-minutes: 20
         run: |
           args=(--app dist/Parzr.app --version "${PARZR_RELEASE_TAG#v}" --out dist/update --prev-dir dist/prev-zips --notes "$PARZR_NOTES")
           prev=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${PARZR_RELEASE_TAG}^" 2>/dev/null || true)
