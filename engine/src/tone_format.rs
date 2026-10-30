@@ -211,7 +211,7 @@ const SHORTHAND: &[(&str, &str)] = &[
     ("hrs", "hours"),
 ];
 
-fn edit(
+pub(crate) fn edit(
     start: usize,
     end: usize,
     original: &str,
@@ -232,7 +232,7 @@ fn edit(
     }
 }
 
-fn protected_at(protected: &[TextRange], start: usize, end: usize) -> bool {
+pub(crate) fn protected_at(protected: &[TextRange], start: usize, end: usize) -> bool {
     protected.iter().any(|p| overlaps(start, end, p))
 }
 
@@ -404,7 +404,7 @@ fn upper_first(word: &str) -> String {
 
 /// Actions a request asks the reader to do: "can you send me the file?" asks for a sending,
 /// while "can you make it Friday?" or "can you see the error?" asks a question.
-const REQUEST_VERBS: &[&str] = &[
+pub(crate) const REQUEST_VERBS: &[&str] = &[
     "send", "review", "check", "look", "take", "share", "update", "fix", "call", "email", "help",
     "grab", "add", "merge", "approve", "confirm", "sign", "schedule", "move", "test", "ping",
     "forward", "upload", "submit", "finish", "complete", "prepare", "write", "draft", "give",
@@ -925,7 +925,7 @@ pub(crate) fn hedge_forms(req: &Request, protected: &[TextRange]) -> Vec<Edit> {
 const INSULT_NOUNS: &str = "idiot|moron|fool|imbecile|dimwit|jerk|clown";
 
 /// The sentences of `tokens` as (first word, last token) indexes, each with its byte range.
-fn sentence_spans(tokens: &[tokenizer::Token<'_>]) -> Vec<(usize, usize)> {
+pub(crate) fn sentence_spans(tokens: &[tokenizer::Token<'_>]) -> Vec<(usize, usize)> {
     let mut spans: Vec<(usize, usize)> = vec![];
     let mut current = None;
     for (i, t) in tokens.iter().enumerate() {

@@ -888,6 +888,18 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
     // A common insult is said kindly before the model sees it (Friendly): the small model replies
     // to "Shut up and send me the file." or keeps it. Then the model rewrites the kinder text.
     let before_frames = document.text();
+    // A sentence that only insults is cut, and the insult inside the others is replaced
+    // (Professional and Friendly), before the model sees the text.
+    if matches!(req.mode, Mode::Professional | Mode::Friendly) {
+        let mut fenced = protected.clone();
+        fenced.extend(name_guard_ranges(req));
+        let current = document.request(req, &fenced, req.mode);
+        let said = crate::tone_insult::insult_forms(&current, &current.protected_ranges);
+        if !said.is_empty() {
+            document.apply(&said)?;
+            grammar(&mut document, req, &mut protected, &mut judge)?;
+        }
+    }
     if req.mode == Mode::Friendly {
         let mut fenced = protected.clone();
         fenced.extend(name_guard_ranges(req));

@@ -39,6 +39,8 @@ mod tokenizer;
 mod tone_format;
 #[cfg_attr(not(feature = "local-model"), allow(dead_code))]
 mod tone_guard;
+#[cfg(feature = "local-model")]
+mod tone_insult;
 mod wording;
 pub use names::NameIndex;
 use regex::Regex;
