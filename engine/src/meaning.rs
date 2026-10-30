@@ -2152,12 +2152,83 @@ pub(crate) fn earns_rewrite(source: &str, output: &str) -> bool {
             .count()
     };
     let (s, o) = (tone_marks(source), tone_marks(output));
+    // A courtesy earns the rewrite of a request ("Send me the numbers" to "Please send me the
+    // numbers"), not of a statement turned into one ("Someone must be present" to "Please ensure
+    // that someone is present").
+    let asks = sentences(source).iter().any(|sentence| {
+        let first = sentence
+            .split(|c: char| !c.is_alphabetic())
+            .find(|w| !w.is_empty())
+            .unwrap_or("")
+            .to_lowercase();
+        crate::morphology::verb(&first).is_some_and(|v| v.base == first)
+    });
     o.insulted() < s.insulted()
         || o.chat < s.chat
         || o.exclaims < s.exclaims
         || contractions(output) < contractions(source)
-        || courtesy(output) > courtesy(source)
+        || asks && courtesy(output) > courtesy(source)
         || o.hedges < s.hedges
+}
+/// Whether `text` already reads warm: at least two of an exclamation mark and warm or thankful
+/// words, sentences that start in capitals, and nothing a friendlier tone removes (an insult,
+/// chat shorthand, a negative word, padding, "!!").
+pub(crate) fn warm(text: &str) -> bool {
+    const WARM: &[&str] = &[
+        "thank",
+        "thanks",
+        "cheers",
+        "warm",
+        "warmly",
+        "glad",
+        "happy",
+        "delighted",
+        "wonderful",
+        "lovely",
+        "great",
+        "appreciate",
+        "appreciated",
+        "grateful",
+        "enjoyed",
+        "pleasure",
+        "love",
+        "loved",
+        "fantastic",
+        "awesome",
+        "excited",
+        "thrilled",
+        "kind",
+    ];
+    let marks = tone_marks(text);
+    if marks.insulted() + marks.chat + marks.negative > 0 || marks.padding >= 3 {
+        return false;
+    }
+    if text.contains("!!") || text.contains("??") {
+        return false;
+    }
+    let tokens = tokenizer::tokenize(text, &[]);
+    let mut previous = usize::MAX;
+    for t in &tokens {
+        if t.sentence != previous
+            && t.is_word
+            && t.surface.chars().next().is_some_and(char::is_lowercase)
+        {
+            return false;
+        }
+        previous = t.sentence;
+    }
+    let words = text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| WARM.contains(&w.to_lowercase().as_str()))
+        .count();
+    words + usize::from(text.contains('!')) >= 2
+}
+/// Whether a Friendly rewrite of text that already reads warm (`warm`) earns its place: it took
+/// out an insult, chat shorthand or padding. A rewrite that only rewords it ("Thank you so much"
+/// to "Thanks so much", "Great to see you" to "It's wonderful to see you") earns nothing.
+pub(crate) fn earns_warmth(source: &str, output: &str) -> bool {
+    let (s, o) = (tone_marks(source), tone_marks(output));
+    o.insulted() < s.insulted() || o.chat < s.chat || o.padding < s.padding
 }
 /// Words of a message that already reads friendly: thanks, an exclamation mark or a warm word.
 pub(crate) fn reads_friendly(text: &str) -> bool {
@@ -3443,6 +3514,50 @@ mod tests {
         ] {
             assert!(!earns_rewrite(source, output), "{source}");
         }
+    }
+
+    #[test]
+    fn a_courtesy_added_to_a_statement_earns_nothing_but_one_added_to_a_request_does() {
+        assert!(!earns_rewrite(
+            "The delivery is scheduled for Thursday. Someone must be present to sign.",
+            "The delivery is scheduled for Thursday. Please ensure that someone is present to sign."
+        ));
+        assert!(earns_rewrite(
+            "Send the signed copy by Friday.",
+            "Please send the signed copy by Friday."
+        ));
+    }
+
+    #[test]
+    fn text_that_already_reads_warm_keeps_its_wording_in_friendly() {
+        for text in [
+            "Thank you so much for covering my shift, Dana! I owe you one.",
+            "Happy birthday, Tomas! Hope you have a wonderful day.",
+            "Great to see you at the barbecue on Saturday, Ines. Thanks for bringing the salad!",
+            "Thanks again for dinner last night. It was lovely to catch up.",
+            "Thank you for the lovely flowers. They brightened up the whole office.",
+        ] {
+            assert!(warm(text), "{text}");
+        }
+        assert!(!earns_warmth(
+            "Thank you so much for covering my shift, Dana! I owe you one.",
+            "Thanks so much for covering my shift, Dana! I truly owe you one."
+        ));
+        // Curt, rude, shorthand and padded text is not warm yet, and taking an insult out earns.
+        for text in [
+            "Send me the slides by noon.",
+            "Thanks. Send me the slides by noon.",
+            "Thanks for nothing, this plan is stupid!",
+            "thanks so much!",
+            "Thanks, can u send the slides?",
+            "I'm furious! Thanks for nothing.",
+        ] {
+            assert!(!warm(text), "{text}");
+        }
+        assert!(earns_warmth(
+            "Thanks for the report, but this chart is stupid!",
+            "Thanks for the report! This chart could be clearer."
+        ));
     }
 
     #[test]

@@ -949,6 +949,19 @@ fn tone(req: &Request, start: Instant) -> Result<RewriteResult, String> {
                 contextual.text
             );
         }
+        // Friendly text that already reads warm (thanks, an exclamation, a warm word) is not
+        // reworded for its own sake either: "Thank you so much" is not better as "Thanks so much".
+        Ok(contextual)
+            if req.mode == Mode::Friendly
+                && !framed
+                && crate::meaning::warm(&req.text)
+                && !crate::meaning::earns_warmth(&document.text(), &contextual.text) =>
+        {
+            crate::model::trace!(
+                "pipeline: warm text, rewrite {:?} not kept",
+                contextual.text
+            );
+        }
         Ok(mut contextual) => {
             // The model respells lowercase names the rules left alone ("ritesh's" to "Rish's").
             judge.screen(&document, &mut contextual.edits, &mut protected);
