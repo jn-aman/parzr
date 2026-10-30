@@ -685,6 +685,13 @@ fn grammar(
         if pass.is_empty() {
             return Ok(());
         }
+        #[cfg(feature = "local-model")]
+        crate::model::trace!(
+            "pipeline: grammar pass {:?}",
+            pass.iter()
+                .map(|e| (e.start_utf16, &e.original, &e.replacement, &e.rule_id))
+                .collect::<Vec<_>>()
+        );
         document.apply(&pass)?;
     }
     if !rewrite_once(&document.request(req, protected, Mode::Fix), false)?
