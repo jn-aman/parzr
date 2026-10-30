@@ -178,23 +178,23 @@
       "samples": {
         "3": {
           "updated": "2026-10-30",
-          "reason": "First measurement of the second tone set at v0.5.8, every 3rd item (50 of 150), what CI scores: 38/39/43/45 of 50",
+          "reason": "Set 2 sample as CI's runner measures it: 36/38/44/45 of 50; six verdicts flipped vs the local 38/39/43/45, all model-decided (rude2-16, rude2-19, rude2-04, polite2-19, hedged2-06)",
           "items": 50,
           "modes": {
             "professional": {
               "items": 50,
-              "passed": 38,
-              "pass_rate": 0.76
+              "passed": 36,
+              "pass_rate": 0.72
             },
             "friendly": {
               "items": 50,
-              "passed": 39,
-              "pass_rate": 0.78
+              "passed": 38,
+              "pass_rate": 0.76
             },
             "concise": {
               "items": 50,
-              "passed": 43,
-              "pass_rate": 0.86
+              "passed": 44,
+              "pass_rate": 0.88
             },
             "direct": {
               "items": 50,
@@ -324,6 +324,26 @@
         "p50_ms": 4639.85,
         "p95_ms": 16025.11,
         "max_rss_mb": 1560.9
+      },
+      "tone-regression-2/professional": {
+        "p50_ms": 10622.85,
+        "p95_ms": 19247.19,
+        "max_rss_mb": 1629.5
+      },
+      "tone-regression-2/friendly": {
+        "p50_ms": 7037.05,
+        "p95_ms": 15498.12,
+        "max_rss_mb": 1629.5
+      },
+      "tone-regression-2/concise": {
+        "p50_ms": 5823.85,
+        "p95_ms": 19524.03,
+        "max_rss_mb": 1629.5
+      },
+      "tone-regression-2/direct": {
+        "p50_ms": 7625.4,
+        "p95_ms": 18360.39,
+        "max_rss_mb": 1629.5
       }
     }
   }

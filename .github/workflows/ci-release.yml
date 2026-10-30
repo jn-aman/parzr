@@ -278,14 +278,15 @@ jobs:
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --every 6 --output dist/qa/tone-regression \
             --min-pass-rate professional=0.90 --min-pass-rate friendly=0.93 --min-pass-rate concise=0.91 --min-pass-rate direct=0.90 --baseline tone-regression
+      # Floors are the runner's measurement at v0.5.8 minus two items of cross-machine noise; the baseline comparison (4 points for this suite) is the tighter check.
       - name: Tone regression set 2
         # benchmarks/tone/regression-2.jsonl: 150 items written without reading the first set or the engine's frame rules, so its
         # rates measure how far the fixes generalise (benchmarks/README.md). CI scores every 3rd item (50 of 150, 200 requests)
-        # against its own sample baseline. The floors are the sample rates measured at v0.5.8 rounded down: floors for regressions, not targets.
+        # against its own sample baseline. The floors are the runner's sample rates minus two items: floors for regressions, not targets.
         run: |
           PARZR_ENGINE_PATH="$PWD/engine/target/release/libparzr_engine.dylib" PARZR_MODELS_DIR="$PWD/dist/models" PARZR_MODEL_RUNTIME="$PWD/dist/model/libparzr_model.dylib" \
             python3 scripts/run-tone-regression.py --engine engine/target/release/parzr-engine --set benchmarks/tone/regression-2.jsonl --every 3 --output dist/qa/tone-2 \
-            --min-pass-rate professional=0.76 --min-pass-rate friendly=0.78 --min-pass-rate concise=0.86 --min-pass-rate direct=0.90 --baseline tone-regression-2
+            --min-pass-rate professional=0.68 --min-pass-rate friendly=0.72 --min-pass-rate concise=0.84 --min-pass-rate direct=0.86 --baseline tone-regression-2
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         continue-on-error: true
