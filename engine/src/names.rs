@@ -602,7 +602,7 @@ impl NameIndex {
                     && !never_a_name(t.surface)
             {
                 STRONG
-            } else if name_word(b) {
+            } else if name_word(b) && !opening_courtesy(tokens, i) {
                 MEDIUM
             } else {
                 0
@@ -637,6 +637,23 @@ impl NameIndex {
                 }
             }
         }
+        // "Wi-Fi", "e-mail": a hyphenated word the dictionary has is one word, whatever the tagger
+        // thinks of its parts; "Jean-Luc" (two names) and the writer's own names stay names.
+        for i in 0..n.saturating_sub(2) {
+            let (a, dash, c) = (&tokens[i], &tokens[i + 1], &tokens[i + 2]);
+            if dash.surface == "-"
+                && a.is_word
+                && c.is_word
+                && a.end_byte == dash.start_byte
+                && dash.end_byte == c.start_byte
+                && spelling::known(&format!("{}-{}", a.surface, c.surface))
+                && !(is_bundled_name(base(&a.normalized)) && is_bundled_name(base(&c.normalized)))
+                && !hits[i..i + 3].iter().any(|h| *h)
+                && ![a, c].iter().any(|t| self.names.word(&t.normalized))
+            {
+                level[i..i + 3].fill(0);
+            }
+        }
         for i in 0..n {
             if level[i] == 0 && tokens[i].is_word && spelling::lowercase_name(tokens, i) {
                 level[i] = WEAK;
@@ -655,6 +672,43 @@ impl NameIndex {
         }
         level
     }
+}
+
+/// "Sorry, can you send it?", "Thanks, that works.": the courtesy or interjection that opens a
+/// sentence and is followed by its comma. A few of them are surnames or first names the tagger
+/// and the name list know ("Sorry", "Hope"), but written there with a comma they greet or
+/// apologise; the writer's own names still win elsewhere in `mark`.
+pub(crate) fn opening_courtesy(tokens: &[Token<'_>], i: usize) -> bool {
+    const COURTESY: [&str; 22] = [
+        "sorry",
+        "thanks",
+        "thank",
+        "hi",
+        "hello",
+        "hey",
+        "hiya",
+        "please",
+        "apologies",
+        "unfortunately",
+        "fortunately",
+        "sadly",
+        "honestly",
+        "hopefully",
+        "cheers",
+        "congrats",
+        "oops",
+        "pardon",
+        "welcome",
+        "ok",
+        "okay",
+        "yes",
+    ];
+    let opens = i == 0
+        || tokens[i - 1].paragraph != tokens[i].paragraph
+        || [".", "!", "?"].contains(&tokens[i - 1].surface);
+    opens
+        && COURTESY.contains(&tokens[i].normalized.as_str())
+        && tokens.get(i + 1).is_some_and(|next| next.surface == ",")
 }
 
 /// Function words that never follow a possessive as its noun.
@@ -937,6 +991,70 @@ mod tests {
         assert_eq!(level("see jain", &["Aman Jain"], "jain"), STRONG);
         assert_eq!(level("a jean-luc b", &["Jean-Luc"], "luc"), STRONG);
         assert_eq!(level("a well-knwon b", &[], "well"), 0);
+    }
+    /// Name levels with the tagger calling the listed words names, as the system tagger does for
+    /// "Sorry" and "Fi".
+    fn level_tagged(text: &str, tagged: &[&str]) -> Vec<(String, u8)> {
+        let hints: Vec<tokenizer::TokenHint> = tokenizer::tokenize(text, &[])
+            .iter()
+            .filter(|t| tagged.contains(&t.surface))
+            .map(|t| tokenizer::TokenHint {
+                start_utf16: t.start_utf16,
+                end_utf16: t.end_utf16,
+                pos: "Noun".into(),
+                lemma: String::new(),
+                name: true,
+                known: true,
+            })
+            .collect();
+        let req = Request {
+            text: text.into(),
+            ..Request::default()
+        };
+        let tokens = tokenizer::tokenize(text, &hints);
+        let levels = NameIndex::new(&req).mark(text, &tokens);
+        tokens
+            .iter()
+            .zip(levels)
+            .map(|(t, l)| (t.surface.to_string(), l))
+            .collect()
+    }
+    #[test]
+    fn a_courtesy_that_opens_a_sentence_is_not_a_name_the_model_must_keep() {
+        for text in [
+            "Sorry, this is probably a silly question.",
+            "Thanks, that works for me.",
+            "Please see below. Unfortunately, the build failed.",
+        ] {
+            let word = text
+                .split([' ', ','])
+                .find(|w| ["Sorry", "Thanks", "Unfortunately"].contains(w))
+                .unwrap();
+            let got = level_tagged(text, &[word]);
+            assert_eq!(got.iter().find(|(w, _)| w == word).unwrap().1, 0, "{text}");
+        }
+        // A tagged name that is no courtesy, and one the writer named, stay names.
+        assert_eq!(
+            level_tagged("Zorbax, this is late.", &["Zorbax"])[0].1,
+            STRONG
+        );
+        assert_eq!(level("Sorry, Hope is here", &["Hope"], "Hope"), STRONG);
+    }
+    #[test]
+    fn a_hyphenated_dictionary_word_is_not_a_name_but_two_names_are() {
+        for (text, word) in [
+            ("Please send the Wi-Fi password.", "Fi"),
+            ("The Wi-Fi is down.", "Fi"),
+        ] {
+            let got = level_tagged(text, &["Fi", "Wi"]);
+            assert!(
+                got.iter()
+                    .filter(|(w, _)| w == word || w == "Wi")
+                    .all(|(_, l)| *l == 0)
+            );
+        }
+        assert_eq!(level("a jean-luc b", &["Jean-Luc"], "luc"), STRONG);
+        assert!(level("ask Marie-Claire now", &[], "Claire") >= MEDIUM);
     }
     #[test]
     fn bundled_names_are_medium_but_ordinary_words_and_typos_are_not() {

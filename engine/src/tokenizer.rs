@@ -143,6 +143,12 @@ pub fn tokenize<'a>(text: &'a str, hints: &[TokenHint]) -> Vec<Token<'a>> {
         let opens = i == 0
             || tokens[i - 1].paragraph != t.paragraph
             || [".", "!", "?"].contains(&tokens[i - 1].surface);
+        // "Sorry, can you…": the tagger knows "Sorry" as a surname; an apology, thanks or greeting
+        // that opens a sentence before its comma is the courtesy.
+        if t.proper_name && crate::names::opening_courtesy(&tokens, i) {
+            tokens[i].proper_name = false;
+            continue;
+        }
         let mut letters = t.surface.chars();
         if t.proper_name
             && opens
