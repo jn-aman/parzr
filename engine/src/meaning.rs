@@ -2320,7 +2320,7 @@ pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), S
 /// "whether or not", "I guess", "I think", "I believe", "maybe", "possibly", "perhaps", "if
 /// possible", "if that's okay", "if it's not too much trouble", "it might be a good idea to", and
 /// the trailing ones: ", though I could be wrong (about that)", ", but I may be mistaken", ", if
-/// that makes sense", ", or so I think". `hedge_clause_spans` adds the
+/// that makes sense", ", or so I think", ", if I may,", "just a gentle reminder (that)". `hedge_clause_spans` adds the
 /// family of leading clauses that apologise, doubt or ask leave. The scorer's recogniser
 /// (scripts/run-tone-regression.py strip_hedge_openers) is the same.
 fn hedge_opener_regex() -> &'static regex::Regex {
@@ -2329,7 +2329,7 @@ fn hedge_opener_regex() -> &'static regex::Regex {
         // The first group names a doubt, a hope or an apology, which is padding only as a clause
         // of its own ("I'm not sure, but ..."); "I'm not sure the design works" stays a doubt.
         regex::Regex::new(
-            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble)|(?:it|this|that)\s+(?:might|may|could|would)\s+(?:perhaps\s+|possibly\s+|well\s+)?be\s+(?:a\s+)?(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|if\s+that\s+makes\s+sense|or\s+so\s+i\s+(?:think|believe|guess|hope))\b",
+            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble)|(?:it|this|that)\s+(?:might|may|could|would)\s+(?:perhaps\s+|possibly\s+|well\s+)?be\s+(?:a\s+)?(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|if\s+that\s+makes\s+sense|if\s+i\s+may(?:\s+(?:say|ask|add|suggest)(?:\s+so)?)?|(?:just\s+)?a\s+(?:gentle|quick|friendly|brief|polite|small)\s+reminder(?:\s+that)?|or\s+so\s+i\s+(?:think|believe|guess|hope))\b",
         )
         .expect("constant hedge opener regex")
     })
@@ -3508,6 +3508,43 @@ mod tests {
         Mode::Concise,
         Mode::Direct,
     ];
+    /// Tone set 3 (hedged3-31): "just a gentle reminder, if I may, that the timesheet is due on the 15th" is a hedge
+    /// around the claim, so Concise and Direct may cut it ("if" and "gentle reminder" go with it); the claim's own
+    /// words and condition are still checked.
+    #[test]
+    fn a_gentle_reminder_if_i_may_is_a_hedge_opener() {
+        let source =
+            "Hi Tomasz, just a gentle reminder, if I may, that the timesheet is due on the 15th.";
+        for mode in [Mode::Concise, Mode::Direct] {
+            assert_eq!(
+                keeps_meaning(
+                    mode,
+                    source,
+                    "Hi Tomasz, the timesheet is due on the 15th.",
+                    "",
+                    &[],
+                    &[]
+                ),
+                Ok(()),
+                "{mode:?}"
+            );
+            assert!(
+                !ok(mode, source, "Hi Tomasz, the timesheet is due on the 16th."),
+                "{mode:?}"
+            );
+        }
+        // Professional and Friendly keep the hedge, and a condition that is not a hedge stays one.
+        assert!(!ok(
+            Mode::Friendly,
+            source,
+            "Hi Tomasz, the timesheet is due on the 15th."
+        ));
+        assert!(!ok(
+            Mode::Concise,
+            "Pay the invoice by Friday if the client approves it.",
+            "Pay the invoice by Friday."
+        ));
+    }
     /// Tone set 3 (chat3-16): "what's the wifi password at your place?" became "What is the wifi password at your
     /// place?" and the guard read "asks “what”, which the writer did not". A question word inside a contraction
     /// ("what's", "who's", "where's", "how's", "when's", curly or straight, or "whats") is that question word on

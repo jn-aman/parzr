@@ -78,7 +78,9 @@ HEDGE_OPENER = re.compile(r"\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’
                           r"(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|"
                           r"(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|"
                           r"i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|"
-                          r"if\s+that\s+makes\s+sense|or\s+so\s+i\s+(?:think|believe|guess|hope))\b", re.I)
+                          r"if\s+that\s+makes\s+sense|if\s+i\s+may(?:\s+(?:say|ask|add|suggest)(?:\s+so)?)?|"
+                          r"(?:just\s+)?a\s+(?:gentle|quick|friendly|brief|polite|small)\s+reminder(?:\s+that)?|"
+                          r"or\s+so\s+i\s+(?:think|believe|guess|hope))\b", re.I)
 # What a leading clause says when it apologises, doubts, asks leave or minimises ("Sorry for the silly question", "Forgive me if
 # this has already been discussed", "I might be overthinking this", "Just checking, in case it got buried").
 HEDGE_MARKER = re.compile(r"\b(?:sorry|apolog(?:y|ies|ize|ise)|forgive|pardon|excuse\s+me"

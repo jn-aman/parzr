@@ -830,7 +830,18 @@ fn generate_with(
                 break;
             }
             Err(error) if strict => return Err(error),
-            Err(_) => {}
+            // The model left out the writer's greeting and name ("Hi Tomasz," in front of a hedge it
+            // then cut): the salutation is the writer's own text, so it goes back in front of the
+            // answer instead of the answer being thrown away for the strict retry's copy.
+            Err(_) => {
+                if let Some(text) = reattach_salutation(&masked, &output, &literals)
+                    .and_then(|rebuilt| restore(&masked, &rebuilt, &literals, false).ok())
+                {
+                    trace!("  salutation put back in front of the answer: {text:?}");
+                    result = text;
+                    break;
+                }
+            }
         }
     }
     let prefix = &passage[..passage.len() - passage.trim_start().len()];
@@ -1775,6 +1786,64 @@ fn place_lost(masked: &str, output: &str, marker: &str) -> Option<String> {
     } else {
         format!("{head} {marker} {tail}")
     })
+}
+
+/// The salutation that opens `masked` ("Hi ZXQPARZRKEEP0QXZ,"): up to three plain greeting words, the
+/// placeholders that stand for the greeting and the name, and the mark that ends it. Returns the salutation
+/// with that mark and the whitespace after it, and the markers in it.
+fn salutation<'a>(masked: &'a str, literals: &'a [Literal]) -> Option<(&'a str, Vec<&'a str>)> {
+    let end = masked.find([',', '!', '\n'])?;
+    let head = &masked[..end];
+    let mut markers = vec![];
+    let mut plain = 0;
+    for word in head.split_whitespace() {
+        match literals.iter().find(|l| l.marker == word) {
+            Some(l) => markers.push(l.marker.as_str()),
+            None if plain < 2 && word.chars().all(char::is_alphabetic) => plain += 1,
+            None => return None,
+        }
+    }
+    if markers.is_empty() {
+        return None;
+    }
+    let after = &masked[end..];
+    let mark = after.chars().next()?.len_utf8();
+    let space = after[mark..].len() - after[mark..].trim_start().len();
+    Some((&masked[..end + mark + space], markers))
+}
+/// `output` with the salutation of `masked` put in front of it, when the model's answer left out
+/// the salutation's placeholders and nothing else is wrong with it: the answer was not a greeting
+/// of its own, and it holds none of the salutation's markers.
+fn reattach_salutation(masked: &str, output: &str, literals: &[Literal]) -> Option<String> {
+    let (salutation, markers) = salutation(masked, literals)?;
+    let body = output.trim_start();
+    if greeting(body).is_some()
+        || markers
+            .iter()
+            .any(|m| body.to_ascii_lowercase().contains(&m.to_ascii_lowercase()))
+    {
+        return None;
+    }
+    // On the same line a comma goes on into a lowercase word ("Hi Tomasz, the timesheet is due"),
+    // unless the word is "I", a name or an acronym.
+    let inline = salutation.trim_end().ends_with(',')
+        && !salutation[salutation.trim_end().len()..].contains('\n');
+    let first = body.split(|c: char| !c.is_alphanumeric()).next()?;
+    let keeps_capital = first == "I"
+        || first.chars().skip(1).any(char::is_uppercase)
+        || first.chars().count() == 1
+        || literals
+            .iter()
+            .any(|l| first.eq_ignore_ascii_case(&l.marker));
+    let body = if inline && !keeps_capital {
+        let mut chars = body.chars();
+        chars
+            .next()
+            .map(|c| c.to_lowercase().chain(chars).collect::<String>())?
+    } else {
+        body.to_owned()
+    };
+    Some(format!("{salutation}{body}"))
 }
 
 /// Puts the original text back behind every placeholder. When a placeholder is missing or
@@ -3666,6 +3735,64 @@ mod tests {
         ] {
             assert_eq!(keep_shorthand(source, output), expected, "{source}");
         }
+    }
+
+    /// Tone set 3 (hedged3-31, Concise and Direct): the model answered "The timesheet is due on the 15th." and left out
+    /// "Hi Tomasz,"; the strict retry then copied the input, so the writer got the hedged text back unchanged. The
+    /// salutation is the writer's own words, so it goes back in front of the answer.
+    #[test]
+    fn a_greeting_the_model_left_out_goes_back_in_front_of_its_answer() {
+        let range = |a: usize, b: usize| crate::TextRange {
+            start_utf16: a,
+            end_utf16: b,
+        };
+        let put_back = |passage: &str, protected: &[crate::TextRange], answer: &str| {
+            let (masked, literals) = mask(passage, protected, &[]).unwrap();
+            let rebuilt = reattach_salutation(&masked, answer, &literals)?;
+            restore(&masked, &rebuilt, &literals, false).ok()
+        };
+        let passage =
+            "Hi Tomasz, just a gentle reminder, if I may, that the timesheet is due on the 15th.";
+        let name = [range(0, 2), range(3, 9)];
+        assert_eq!(
+            put_back(passage, &name, "The timesheet is due on the 15th.").as_deref(),
+            Some("Hi Tomasz, the timesheet is due on the 15th.")
+        );
+        // "I" and an acronym keep their capital; a greeting on its own line keeps the next line's.
+        assert_eq!(
+            put_back(passage, &name, "I need the timesheet by the 15th.").as_deref(),
+            Some("Hi Tomasz, I need the timesheet by the 15th.")
+        );
+        assert_eq!(
+            put_back(passage, &name, "PTO requests are due on the 15th.").as_deref(),
+            Some("Hi Tomasz, PTO requests are due on the 15th.")
+        );
+        let lined = "Hi Priya,\nplease send the file when you can.";
+        assert_eq!(
+            put_back(lined, &[range(0, 2), range(3, 8)], "Send the file.").as_deref(),
+            Some("Hi Priya,\nSend the file.")
+        );
+        // Nothing to put back: the answer greets by itself, or holds the markers, or the text has no salutation.
+        assert_eq!(
+            put_back(passage, &name, "Hello, the timesheet is due on the 15th."),
+            None
+        );
+        assert_eq!(
+            put_back(
+                "Send Tomasz the file.",
+                &[range(5, 11)],
+                "Send him the file."
+            ),
+            None
+        );
+        assert_eq!(
+            put_back(
+                "Tomasz sent the file, and the report is due.",
+                &[range(0, 6)],
+                "The report is due."
+            ),
+            None
+        );
     }
 
     #[test]
