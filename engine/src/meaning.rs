@@ -2301,7 +2301,9 @@ pub(crate) fn borrows(example: &str, source: &str, output: &str) -> Result<(), S
 /// "I don't know,", "I'm not sure,", "I may be wrong,", "I hope you don't mind me asking,",
 /// "sorry to bother you,", "I hate to ask," (each as a clause of its own), "no pressure",
 /// "whether or not", "I guess", "I think", "I believe", "maybe", "possibly", "perhaps", "if
-/// possible", "if that's okay", "if it's not too much trouble". `hedge_clause_spans` adds the
+/// possible", "if that's okay", "if it's not too much trouble", "it might be a good idea to", and
+/// the trailing ones: ", though I could be wrong (about that)", ", but I may be mistaken", ", if
+/// that makes sense", ", or so I think". `hedge_clause_spans` adds the
 /// family of leading clauses that apologise, doubt or ask leave. The scorer's recogniser
 /// (scripts/run-tone-regression.py strip_hedge_openers) is the same.
 fn hedge_opener_regex() -> &'static regex::Regex {
@@ -2310,7 +2312,7 @@ fn hedge_opener_regex() -> &'static regex::Regex {
         // The first group names a doubt, a hope or an apology, which is padding only as a clause
         // of its own ("I'm not sure, but ..."); "I'm not sure the design works" stays a doubt.
         regex::Regex::new(
-            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble))\b",
+            r"(?i)\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’]m|\s+am)\s+not\s+(?:sure|certain)|not\s+(?:sure|certain)|i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble)|(?:it|this|that)\s+(?:might|may|could|would)\s+(?:perhaps\s+|possibly\s+|well\s+)?be\s+(?:a\s+)?(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|if\s+that\s+makes\s+sense|or\s+so\s+i\s+(?:think|believe|guess|hope))\b",
         )
         .expect("constant hedge opener regex")
     })
@@ -3401,6 +3403,90 @@ mod tests {
             Mode::Direct,
             "Sorry for the silly question, but is the 11 am call still on?",
             "Is the 12 am call still on?"
+        ));
+    }
+    /// Tone set 3 (hedged3-03, hedged3-35): "good" in "it might be a good idea to" and "wrong" in "though I could be wrong
+    /// about that" belong to the hedge, so dropping the hedge is not dropping a sentiment word. The same words in a
+    /// claim (or in Professional and Friendly, which keep the hedge) are still checked.
+    #[test]
+    fn concise_and_direct_may_drop_a_might_be_a_good_idea_opener_and_a_trailing_hedge() {
+        for (source, output) in [
+            (
+                "Perhaps it might be a good idea, in my humble opinion, to double-check the guest list before the invitations go out on Saturday.",
+                "Double-check the guest list before the invitations go out on Saturday.",
+            ),
+            (
+                "It may be a good idea to back up the folder before the update.",
+                "Back up the folder before the update.",
+            ),
+            (
+                "The new login page is a bit slow on mobile, I guess, though I could be wrong about that.",
+                "The new login page is slow on mobile.",
+            ),
+            (
+                "The invoice total looks off, but I may be mistaken.",
+                "The invoice total looks off.",
+            ),
+            (
+                "We should move the review to Thursday, if that makes sense.",
+                "We should move the review to Thursday.",
+            ),
+            (
+                "The vendor will probably deliver on Monday, or so I think.",
+                "The vendor will deliver on Monday.",
+            ),
+        ] {
+            for mode in [Mode::Concise, Mode::Direct] {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        // The hedge spans: the opener, and the clause that trails a claim.
+        for (text, hedge) in [
+            (
+                "It might be a good idea to wait.",
+                "It might be a good idea to",
+            ),
+            (
+                "It is slow, though I could be wrong about that.",
+                "though I could be wrong about that",
+            ),
+            (
+                "It is slow, but I may be mistaken.",
+                "but I may be mistaken",
+            ),
+            (
+                "I could be wrong about that.",
+                "I could be wrong about that",
+            ),
+        ] {
+            let spans = hedge_opener_spans(text);
+            let found: Vec<&str> = spans.iter().map(|&(a, b)| &text[a..b]).collect();
+            assert!(found.contains(&hedge), "{text}: {found:?}");
+        }
+        // A claim is still a claim: "wrong" and "good" outside a hedge, and in the tones that keep the hedge.
+        assert!(!ok(
+            Mode::Concise,
+            "The totals in the report are wrong.",
+            "The totals in the report are."
+        ));
+        assert!(!ok(
+            Mode::Direct,
+            "The page is slow, though I could be wrong about that.",
+            "The page is fast."
+        ));
+        assert!(!ok(
+            Mode::Friendly,
+            "The new login page is slow on mobile, though I could be wrong about that.",
+            "The new login page is slow on mobile."
+        ));
+        assert!(!ok(
+            Mode::Concise,
+            "Using the new template is a good idea for the client.",
+            "Using the new template for the client."
         ));
     }
     const TONES: [Mode; 4] = [

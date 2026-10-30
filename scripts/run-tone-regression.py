@@ -73,7 +73,12 @@ HEDGE_OPENER = re.compile(r"\b(?:(?:i\s+(?:do\s+not|don['’]t)\s+know|i(?:['’
                           r"i\s+(?:may|might|could)\s+be\s+wrong|i\s+hope\s+you\s+(?:do\s+not|don['’]t)\s+mind(?:\s+(?:me|my)\s+ask(?:ing)?)?|"
                           r"sorry\s+to\s+bother\s+you(?:\s+again)?|i\s+hate\s+to\s+ask)(?:\s*,\s*(?:but\b)?|\s+but\b)|no\s+pressure(?:\s+at\s+all)?|"
                           r"whether\s+or\s+not|i\s+guess|i\s+think|i\s+believe|maybe|possibly|perhaps|if\s+possible|"
-                          r"if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble))\b", re.I)
+                          r"if\s+(?:that|it)(?:['’]s|\s+is)\s+(?:ok|okay|alright|all\s+right|fine|not\s+too\s+much\s+trouble)|"
+                          r"(?:it|this|that)\s+(?:might|may|could|would)\s+(?:perhaps\s+|possibly\s+|well\s+)?be\s+(?:a\s+)?"
+                          r"(?:good|great|nice|wise|better|sensible)\s+(?:idea|thing)(?:\s+to)?|"
+                          r"(?:(?:though|although|but)\s+i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)(?:\s+(?:about|on)\s+(?:that|this|it))?|"
+                          r"i\s+(?:could|may|might)\s+be\s+(?:wrong|mistaken)\s+(?:about|on)\s+(?:that|this|it))|"
+                          r"if\s+that\s+makes\s+sense|or\s+so\s+i\s+(?:think|believe|guess|hope))\b", re.I)
 # What a leading clause says when it apologises, doubts, asks leave or minimises ("Sorry for the silly question", "Forgive me if
 # this has already been discussed", "I might be overthinking this", "Just checking, in case it got buried").
 HEDGE_MARKER = re.compile(r"\b(?:sorry|apolog(?:y|ies|ize|ise)|forgive|pardon|excuse\s+me"
