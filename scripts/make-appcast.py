@@ -23,6 +23,8 @@ SPARKLE_SHA256 = '52bf9e88cdd972fc0c81501377a880e90d47031bd8ca5462488f843e2609e1
 SPARKLE_URL = f'https://github.com/sparkle-project/Sparkle/releases/download/{SPARKLE_VERSION}/Sparkle-{SPARKLE_VERSION}.tar.xz'
 MIN_OS = '13.0'
 MAX_DELTAS = 8
+RUN_TIMEOUT = 300       # seconds one child process may take; the whole build step has taken 3 to 5 minutes in all
+DOWNLOAD_TIMEOUT = 120  # seconds a download may wait for the connection or for the next bytes
 NS = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
 SP = '{%s}' % NS['sparkle']
 
@@ -168,14 +170,35 @@ def self_test():
     assert found and not ed25519_verify_data(public, found[1], found[0])
     other, _ = _ed25519_sign(bytes(32), body)
     assert not ed25519_verify_data(other, s, body)
+    # A child process that stalls (stapler and spctl call Apple's servers) fails with a message naming it, not a hang.
+    try:
+        run(['sleep', '5'], timeout=1)
+    except SystemExit as e:
+        assert 'sleep 5 did not finish within 1 s' in str(e.code) and 'rerun the job' in str(e.code), e.code
+    else:
+        raise AssertionError('run() did not stop a stalled command')
+    assert run(['echo', 'ok'], timeout=5) == 'ok\n'
 
 
 # ---- tools ----
-def run(cmd, **kw):
-    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+def run(cmd, timeout=RUN_TIMEOUT, **kw):
+    """Runs a command and returns its stdout; dies on a non-zero exit, or when it takes longer than `timeout` seconds
+    (a stalled network check, such as Apple's notarization or Gatekeeper service, must fail the step, not hang it)."""
+    name = ' '.join(map(str, cmd[:3]))
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, **kw)
+    except subprocess.TimeoutExpired:
+        die(f"{name} did not finish within {timeout} s (Apple's notarization or Gatekeeper service may be slow; rerun the job)")
     if r.returncode:
-        die(f'{" ".join(map(str, cmd[:3]))} failed: {(r.stderr or r.stdout).strip()[-600:]}')
+        die(f'{name} failed: {(r.stderr or r.stdout).strip()[-600:]}')
     return r.stdout
+
+
+def download(url, dest):
+    """Saves a URL to a file. The timeout applies to the connection and to every wait for more bytes, so a stalled server
+    raises OSError (TimeoutError) instead of hanging."""
+    with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as r, open(dest, 'wb') as f:
+        shutil.copyfileobj(r, f)
 
 
 def sparkle_bin(given):
@@ -191,7 +214,11 @@ def sparkle_bin(given):
     tarball = cache / 'sparkle.tar.xz'
     if not tarball.is_file() or hashlib.sha256(tarball.read_bytes()).hexdigest() != SPARKLE_SHA256:
         tarball.unlink(missing_ok=True)
-        urllib.request.urlretrieve(SPARKLE_URL, tarball)
+        try:
+            download(SPARKLE_URL, tarball)
+        except OSError as e:
+            tarball.unlink(missing_ok=True)
+            die(f'could not download the Sparkle tarball from {SPARKLE_URL} within {DOWNLOAD_TIMEOUT} s per read: {e}')
     data = tarball.read_bytes()
     got = hashlib.sha256(data).hexdigest()
     check(got == SPARKLE_SHA256, f'Sparkle tarball sha256 {got} != pinned {SPARKLE_SHA256}')
@@ -427,7 +454,7 @@ def cmd_verify(a):
         dest = work / url.rsplit('/', 1)[1]
         for attempt in range(4):  # the release CDN can lag a few seconds right after publishing
             try:
-                urllib.request.urlretrieve(url, dest)
+                download(url, dest)
                 return dest
             except OSError as e:
                 if attempt == 3:
