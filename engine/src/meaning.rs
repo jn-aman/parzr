@@ -343,6 +343,23 @@ const FILLER: &[&str] = &[
 const QUESTION_WORDS: &[&str] = &[
     "who", "whose", "what", "which", "where", "when", "why", "how",
 ];
+/// The question word inside a contraction: "what's", "who's", "where's", "how's", "when's" (curly or
+/// straight apostrophe) and the chat spellings without one ("whats", "wheres") ask what "what", "where"
+/// ask. None for any other word.
+fn question_stem(normalized: &str) -> Option<&'static str> {
+    let bare = normalized
+        .strip_suffix("'s")
+        .or_else(|| {
+            ["whats", "whos", "wheres", "hows", "whens"]
+                .contains(&normalized)
+                .then(|| &normalized[..normalized.len() - 1])
+        })
+        .unwrap_or(normalized);
+    QUESTION_WORDS
+        .iter()
+        .copied()
+        .find(|&q| q == bare || (q == "who" && bare == "whom"))
+}
 const RUDE: &[&str] = &[
     "stupid",
     "dumb",
@@ -2483,11 +2500,7 @@ pub(crate) fn keeps_meaning(
         let asks = |text: &str| -> Vec<&'static str> {
             let mut found: Vec<&'static str> = content_tokens(text, &[])
                 .iter()
-                .filter_map(|t| {
-                    QUESTION_WORDS.iter().copied().find(|&q| {
-                        q == t.normalized.as_str() || (q == "who" && t.normalized == "whom")
-                    })
-                })
+                .filter_map(|t| question_stem(&t.normalized))
                 .collect();
             found.sort_unstable();
             found.dedup();
@@ -3495,6 +3508,40 @@ mod tests {
         Mode::Concise,
         Mode::Direct,
     ];
+    /// Tone set 3 (chat3-16): "what's the wifi password at your place?" became "What is the wifi password at your
+    /// place?" and the guard read "asks “what”, which the writer did not". A question word inside a contraction
+    /// ("what's", "who's", "where's", "how's", "when's", curly or straight, or "whats") is that question word on
+    /// both sides; a question word that really is new, or lost, still fails.
+    #[test]
+    fn a_question_word_in_a_contraction_is_the_question_word() {
+        for (source, output) in [
+            (
+                "what's the wifi password at your place?",
+                "What is the wifi password at your place?",
+            ),
+            ("What is the wifi password?", "What's the wifi password?"),
+            ("whats the plan for friday?", "What is the plan for Friday?"),
+            ("Who’s coming on Friday?", "Who is coming on Friday?"),
+            ("where's the report?", "Where is the report?"),
+            ("How’s the report going?", "How is the report going?"),
+            ("When's the review?", "When is the review?"),
+        ] {
+            for mode in TONES {
+                assert_eq!(
+                    keeps_meaning(mode, source, output, "", &[], &[]),
+                    Ok(()),
+                    "{mode:?}: {source}"
+                );
+            }
+        }
+        for (source, output) in [
+            ("What's the plan?", "Where is the plan?"),
+            ("Who's coming on Friday?", "Is anyone coming on Friday?"),
+            ("Is the report ready?", "What is the report?"),
+        ] {
+            assert!(!ok(Mode::Professional, source, output), "{source}");
+        }
+    }
 
     #[test]
     fn concise_and_direct_may_drop_a_hedge_with_the_negation_it_carries() {
