@@ -184,7 +184,7 @@ const YA_YES_BEFORE: &[&str] = &[
 ];
 
 /// Chat shorthand a Professional rewrite spells out, with what it stands for.
-const SHORTHAND: &[(&str, &str)] = &[
+pub(crate) const SHORTHAND: &[(&str, &str)] = &[
     ("u", "you"),
     ("abt", "about"),
     ("pls", "please"),

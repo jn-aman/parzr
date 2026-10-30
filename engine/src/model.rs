@@ -818,6 +818,12 @@ fn generate_with(
         } else {
             output
         };
+        // Concise leaves the writer's shorthand ("tmrw") as typed: spelled out it is longer.
+        let output = if req.mode == Mode::Concise {
+            keep_shorthand(&masked, &output)
+        } else {
+            output
+        };
         match restore(&masked, &output, &literals, strict) {
             Ok(text) => {
                 result = text;
@@ -1046,6 +1052,75 @@ fn keep_times(source: &str, output: &str) -> String {
         }
         result.push_str(&output[at..range.start]);
         result.push_str(&spelling);
+        at = end;
+    }
+    result.push_str(&output[at..]);
+    result
+}
+/// A Concise rewrite may not grow: where it grew past what a final full stop or a spelled-out "u" costs,
+/// the chat shorthand the writer typed comes back in place of the model's longer word ("tmrw" for
+/// "tomorrow"), the biggest saving first, until the text is back within that. Professional spells
+/// shorthand out on purpose (tone_format.rs).
+fn keep_shorthand(source: &str, output: &str) -> String {
+    /// What a rewrite may add to the writer's length: a full stop, "u" for "you".
+    const ALLOWANCE: usize = 2;
+    let words = |text: &str| -> Vec<String> {
+        text.split(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}')
+            .filter(|w| !w.is_empty())
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let growth = output
+        .chars()
+        .count()
+        .saturating_sub(source.chars().count());
+    if growth <= ALLOWANCE {
+        return output.to_owned();
+    }
+    let (said, wrote) = (words(source), words(output));
+    let count = |list: &[String], word: &str| list.iter().filter(|w| *w == word).count();
+    // (start, end, the shorthand in the writer's case, characters saved)
+    let mut candidates: Vec<(usize, usize, String, usize)> = vec![];
+    for (short, full) in crate::tone_format::SHORTHAND {
+        // Only a one-word expansion longer than the shorthand ("tomorrow"); "idk" and "rn" become phrases.
+        // A writer who spelled the word out as well keeps the model's choice.
+        if full.contains(' ')
+            || full.len() <= short.len()
+            || full.eq_ignore_ascii_case(short)
+            || count(&said, &full.to_lowercase()) > 0
+        {
+            continue;
+        }
+        let missing = count(&said, short)
+            .saturating_sub(count(&wrote, short))
+            .min(count(&wrote, &full.to_lowercase()));
+        let pattern = regex::Regex::new(&format!(r"(?i)\b{}\b", regex::escape(full)))
+            .expect("constant shorthand pattern");
+        for m in pattern.find_iter(output).take(missing) {
+            let back = if m.as_str().starts_with(char::is_uppercase) {
+                crate::upper_first(short)
+            } else {
+                (*short).to_owned()
+            };
+            candidates.push((m.start(), m.end(), back, full.len() - short.len()));
+        }
+    }
+    candidates.sort_by_key(|c| std::cmp::Reverse(c.3));
+    let mut chosen = vec![];
+    let mut left = growth;
+    for c in candidates {
+        if left <= ALLOWANCE {
+            break;
+        }
+        left = left.saturating_sub(c.3);
+        chosen.push(c);
+    }
+    chosen.sort_by_key(|c| c.0);
+    let mut result = String::with_capacity(output.len());
+    let mut at = 0;
+    for (start, end, back, _) in chosen {
+        result.push_str(&output[at..start]);
+        result.push_str(&back);
         at = end;
     }
     result.push_str(&output[at..]);
@@ -3546,6 +3621,50 @@ mod tests {
             ),
         ] {
             assert_eq!(keep_times(source, output), expected, "{source}");
+        }
+    }
+
+    /// Tone set 3 (chat3-06, Concise): "wanna grab lunch tmrw?" came back with "tomorrow", four characters longer than
+    /// the shorthand, and Concise may not grow. The writer's shorthand goes back when the rewrite grew past what a full
+    /// stop or a spelled-out "u" costs; a word the writer spelled out and a phrase expansion are left alone.
+    #[test]
+    fn concise_leaves_the_shorthand_the_writer_typed() {
+        for (source, output, expected) in [
+            (
+                "Wanna grab lunch tmrw?",
+                "Wanna grab lunch tomorrow?",
+                "Wanna grab lunch tmrw?",
+            ),
+            (
+                "Thx for the msg, will reply tmrw.",
+                "Thanks for the message, will reply tomorrow.",
+                "Thx for the msg, will reply tmrw.",
+            ),
+            (
+                "Tmrw works for me.",
+                "Tomorrow works for me today.",
+                "Tmrw works for me today.",
+            ),
+            (
+                "Idk about tmrw.",
+                "I am unsure about tomorrow.",
+                "I am unsure about tmrw.",
+            ),
+            // "u" for "you" is the cost of a clean rewrite.
+            ("Can u send it?", "Can you send it?", "Can you send it?"),
+            // Spelled out by the writer, or not in the source at all: the model's words.
+            (
+                "Send it tomorrow or tmrw.",
+                "Send it tomorrow or tomorrow, please.",
+                "Send it tomorrow or tomorrow, please.",
+            ),
+            (
+                "Meet next week.",
+                "Meet tomorrow morning.",
+                "Meet tomorrow morning.",
+            ),
+        ] {
+            assert_eq!(keep_shorthand(source, output), expected, "{source}");
         }
     }
 
