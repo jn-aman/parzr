@@ -12,7 +12,8 @@
     "benchmarks/names/corpus.jsonl",
     "benchmarks/names/heldout.jsonl",
     "benchmarks/everyday/items.jsonl",
-    "benchmarks/tone/regression.jsonl"
+    "benchmarks/tone/regression.jsonl",
+    "benchmarks/tone/regression-2.jsonl"
   ],
   "files": {
     "benchmarks/english-100-clean.jsonl": {
@@ -162,6 +163,10 @@
     "benchmarks/tone/regression.jsonl": {
       "sha256": "552a4cd7528a824654cf2b27d154373ca13728ae287c08e8e70a978da9e237e7",
       "bytes": 358032
+    },
+    "benchmarks/tone/regression-2.jsonl": {
+      "sha256": "ed18bdf561d9ebba79cca34e153587077ce2759a3da71a2368b8095dd4596039",
+      "bytes": 174313
     }
   }
 }

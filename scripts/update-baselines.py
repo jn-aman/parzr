@@ -7,11 +7,12 @@ give the gain back); lower one only for a deliberate, explained trade-off, never
 
 usage: update-baselines.py SUITE SUMMARY --reason TEXT [--quality-only | --performance-only] [--machine KEY]
 
-  SUITE     heldout-test | typo-fuzz-test | names | everyday | tone-regression
+  SUITE     heldout-test | typo-fuzz-test | names | everyday | tone-regression | tone-regression-2
   SUMMARY   the run's summary: dist/qa/heldout/summary.json, dist/qa/typo-fuzz/summary.json,
-            dist/qa/names/report.json, dist/qa/everyday/summary.json or dist/qa/tone-regression/summary.json. Sealed test sets are scored only on CI:
+            dist/qa/names/report.json, dist/qa/everyday/summary.json or dist/qa/tone-regression/summary.json
+            (tone-regression-2: dist/qa/tone-2/summary.json). Sealed test sets are scored only on CI:
             download the verify job's artifact (gh run download RUN -n quality-summaries-SHA) and pass its file.
-  tone-regression takes a full run, or a sample run (--every N, what CI scores) which is kept under "samples" beside it.
+  tone-regression and tone-regression-2 take a full run, or a sample run (--every N, what CI scores) which is kept under "samples" beside it.
   --machine the performance baseline to write (default: the one the summary was measured on, "ci" for CI's
             runners). Latency and memory are compared only between runs on the same kind of machine.
 
@@ -23,7 +24,8 @@ import argparse, datetime, json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import quality_gates  # noqa: E402
 
-SUITES = ('heldout-test', 'typo-fuzz-test', 'names', 'everyday', 'tone-regression')
+TONE_SUITES = ('tone-regression', 'tone-regression-2')
+SUITES = ('heldout-test', 'typo-fuzz-test', 'names', 'everyday') + TONE_SUITES
 
 
 def quality(suite, s):
@@ -36,7 +38,7 @@ def quality(suite, s):
         return {'controls': s['controls'], 'control_fixed': s['control_fixed'], 'control_recall': round(s['control_recall'], 4),
                 'errors': s['errors'], 'damaged': {k: breakdown.get(k, {}).get('damaged', 0) for k in ('all', 'case:lower', 'heldout')},
                 'names': {k: breakdown.get(k, {}).get('total', 0) for k in ('all', 'case:lower', 'heldout')}}
-    if suite == 'tone-regression':
+    if suite in TONE_SUITES:
         return {'items': s['items'], 'modes': {m: {'items': d['items'], 'passed': d['passed'], 'pass_rate': d['pass_rate']} for m, d in s['modes'].items()}}
     return {'items': s['items'], 'paths': {p: {'counts': d['counts'], 'correct_rate': d['correct_rate']} for p, d in s['paths'].items()}}
 
@@ -47,7 +49,7 @@ def performance(suite, s):
                 for layer, d in s['layers'].items()}
     if suite == 'names':
         return {'engine': {'p50_ms': s['latency']['p50_ms'], 'p95_ms': s['latency']['p95_ms'], 'max_rss_mb': s.get('max_rss_mb')}}
-    if suite == 'tone-regression':
+    if suite in TONE_SUITES:
         return {m: {'p50_ms': d['latency']['p50_ms'], 'p95_ms': d['latency']['p95_ms'], 'max_rss_mb': s.get('max_rss_mb')} for m, d in s['modes'].items()}
     return {p: {'p50_ms': d['latency']['p50_ms'], 'p95_ms': d['latency']['p95_ms'], 'max_rss_mb': s.get('max_rss_mb')} for p, d in s['paths'].items()}
 
@@ -71,7 +73,7 @@ def main():
     stamp = {'updated': datetime.date.today().isoformat(), 'reason': args.reason}
     if not args.performance_only:
         old = data['suites'].get(args.suite)
-        if args.suite == 'tone-regression' and s.get('every', 1) > 1:
+        if args.suite in TONE_SUITES and s.get('every', 1) > 1:
             # A sample run (--every N, what CI scores) is recorded beside the full set's numbers, never over them.
             if old is None:
                 sys.exit('Record the full tone regression set first (a run without --every)')
