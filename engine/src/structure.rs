@@ -291,6 +291,8 @@ pub(crate) fn plural(subject: &Token<'_>) -> Option<bool> {
         // American English treats "data" and "media" as one mass as often as many items.
         "data",
         "media",
+        // The dictionary lists "lasagne" as the plural of "lasagna"; on a menu it is one dish.
+        "lasagne",
     ]
     .contains(&word)
     {

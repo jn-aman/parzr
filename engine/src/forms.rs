@@ -996,6 +996,7 @@ const NUMBERLESS: &[&str] = &[
 ];
 /// Nouns that are mostly uncountable or keep one form ("many anime", "various content").
 const MASS: &[&str] = &[
+    "lasagne",
     "music",
     "anime",
     "content",
