@@ -439,7 +439,7 @@ fn framed(form: &str, f: &Frame<'_, '_>, text: &str, token: &Token<'_>) -> bool 
         // "Were just parking now": no question opens this way.
         "were" => {
             let rest = &text[token.end_byte..];
-            let sentence_end = rest.find(['.', '!', '?', '\n']).map_or(rest.len(), |i| i);
+            let sentence_end = rest.find(['.', '!', '?', '\n']).unwrap_or(rest.len());
             f.clause_start(true)
                 && !rest[sentence_end..].starts_with('?')
                 && (gerund(next)

@@ -662,7 +662,7 @@ mod tests {
             }
             rows.push((t.elapsed().as_micros(), covered, n, c.rule.id.clone()));
         }
-        rows.sort_by(|a, b| b.0.cmp(&a.0));
+        rows.sort_by_key(|row| std::cmp::Reverse(row.0));
         let total: u128 = rows.iter().map(|r| r.0).sum();
         println!(
             "text {} bytes; {} rules, {candidates} candidates; windows {:?}; matching total {} ms",

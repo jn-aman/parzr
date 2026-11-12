@@ -254,7 +254,7 @@ The maintainer-only `baseline-harper` feature (harper-core and about 500 crates 
 
 | Tool | Pinned in | Version |
 |---|---|---|
-| Rust | `rust-toolchain.toml` and `dtolnay/rust-toolchain` (`toolchain: '1.91.0'`) in `ci-release.yml` | 1.91.0 |
+| Rust | `rust-toolchain.toml` and `dtolnay/rust-toolchain` (`toolchain: '1.99.1'`) in `ci-release.yml` | 1.99.1 |
 | Node | `NODE_VERSION` in `ci-release.yml`, `node-version` in `website.yml` | 22.23.3 |
 | Xcode | `XCODE_DEVELOPER_DIR` in `ci-release.yml` (exported as `DEVELOPER_DIR`; the job fails if the runner image lacks it) | 26.6 on `macos-26` |
 | Sparkle tools | `SPARKLE_VERSION`/`SPARKLE_SHA256` in `scripts/make-appcast.py` | 2.9.6 |
