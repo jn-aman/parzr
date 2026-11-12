@@ -13,7 +13,7 @@ name = "parzr-engine"
 path = "src/main.rs"
 
 [dependencies]
-harper-core = { version = "=1.7.0", default-features = false, features = ["concurrent"], optional = true }
+harper-core = { version = "=2.13.0", default-features = false, features = ["concurrent"], optional = true }
 regex = "1.11"
 aho-corasick = "1.1"
 serde = { version = "1", features = ["derive"] }
